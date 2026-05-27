@@ -2,15 +2,15 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import YAML from "yaml";
 
-export function createTemplateService({ configDir, configPath, workflowPath, templatesPath }) {
+export function createTemplateService({ configDir, templatesPath }) {
   function defaultRegistry() {
     return {
-      default: "default",
+      default: "image-adjust",
       templates: [{
-        id: "default",
-        name: "Default",
-        yaml: path.relative(configDir, configPath),
-        workflow: path.relative(configDir, workflowPath)
+        id: "image-adjust",
+        name: "Image Adjust",
+        yaml: "templates/image-adjust/app_build.yaml",
+        workflow: "templates/image-adjust/api.json"
       }]
     };
   }

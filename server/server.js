@@ -26,13 +26,11 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
 const configDir = path.join(root, "config");
 const uploadDir = path.join(root, "uploads");
-const configPath = process.env.APP_BUILD_YAML || path.join(configDir, "app_build.yaml");
-const workflowPath = process.env.COMFY_WORKFLOW_JSON || path.join(configDir, "api.json");
 const templatesPath = path.join(configDir, "templates.json");
 const port = Number(process.env.PORT || 8787);
 const comfyTimeoutMs = Number(process.env.COMFY_TIMEOUT_MS || 10 * 60 * 1000);
 const activeRuns = new Map();
-const templates = createTemplateService({ configDir, configPath, workflowPath, templatesPath });
+const templates = createTemplateService({ configDir, templatesPath });
 
 async function assertTemplateWorkflow(config, template) {
   const workflow = JSON.parse(await readFile(template.workflowPath, "utf8"));

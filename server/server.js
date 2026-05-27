@@ -1,6 +1,6 @@
 import http from "node:http";
 import { randomUUID } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -8,6 +8,7 @@ import {
   interruptComfy,
   normalizeComfyTarget,
   normalizeValues,
+  parseDataUrl,
   queuePrompt,
   uploadImageToComfy,
   uploadedImageUrl,
@@ -26,6 +27,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
 const configDir = path.join(root, "config");
 const uploadDir = path.join(root, "uploads");
+const inputDir = path.join(root, "input");
+const outputDir = path.join(root, "output");
+const outputHistoryPath = path.join(outputDir, "history.json");
 const templatesPath = path.join(configDir, "templates.json");
 const port = Number(process.env.PORT || 8787);
 const comfyTimeoutMs = Number(process.env.COMFY_TIMEOUT_MS || 10 * 60 * 1000);
@@ -62,6 +66,7 @@ async function handleRun(req, res) {
     const request = mapValuesToRequest(config, normalized);
     const responseRequest = {};
     const patchOptions = {
+      inputDir,
       uploadDir,
       uploadImageToComfy,
       uploadedImageUrl,
@@ -69,7 +74,7 @@ async function handleRun(req, res) {
     };
     for (const [id, value] of Object.entries(request)) {
       const patchedValue = await setWorkflowValue(workflow, id, value, target, abortController.signal, patchOptions);
-      responseRequest[id] = value?.kind === "upload" ? patchedValue : value;
+      responseRequest[id] = value?.kind === "upload" || value?.kind === "input-image" ? patchedValue : value;
     }
 
     const clientId = randomUUID();
@@ -83,14 +88,25 @@ async function handleRun(req, res) {
       const status = history?.status ? ` Status: ${JSON.stringify(history.status)}` : "";
       throw new Error(`ComfyUI finished prompt ${queued.prompt_id}, but no images were found for output node(s) in this template.${status}`);
     }
+    const historyItem = await archiveOutputRun({
+      runId,
+      promptId: queued.prompt_id,
+      template,
+      address: target.label,
+      target,
+      config,
+      history,
+      values: body.values || {}
+    });
     send(res, 200, {
       runId,
       promptId: queued.prompt_id,
       template: template.id,
       address: target.label,
       request: responseRequest,
-      outputs,
-      rawOutputs: history?.outputs || {}
+      outputs: historyItem.outputs,
+      rawOutputs: history?.outputs || {},
+      historyItem
     });
   } finally {
     activeRuns.delete(runId);
@@ -140,6 +156,198 @@ async function handleComfyView(req, res, url) {
   res.end(Buffer.from(await response.arrayBuffer()));
 }
 
+function safeInputName(rawName = "") {
+  return path.basename(String(rawName)).replace(/[^\w.-]+/g, "_");
+}
+
+function safeOutputName(rawName = "") {
+  return path.basename(String(rawName)).replace(/[^\w.-]+/g, "_");
+}
+
+function inputImageUrl(filename) {
+  return `/api/input-image?name=${encodeURIComponent(filename)}`;
+}
+
+async function listInputImages() {
+  await mkdir(inputDir, { recursive: true });
+  const entries = await readdir(inputDir, { withFileTypes: true });
+  return entries
+    .filter(entry => entry.isFile() && /\.(png|jpe?g|webp|gif)$/i.test(entry.name))
+    .map(entry => ({
+      name: entry.name,
+      url: inputImageUrl(entry.name)
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+async function handleInputUpload(req, res) {
+  const body = JSON.parse(await readBody(req) || "{}");
+  const parsed = parseDataUrl(body.dataUrl);
+  if (!parsed) {
+    send(res, 400, { error: "Invalid image data" });
+    return;
+  }
+  const extension = parsed.mimeType.includes("jpeg") ? "jpg" : parsed.mimeType.split("/")[1] || "png";
+  const originalName = safeInputName(body.filename || `input.${extension}`);
+  const base = originalName.replace(/\.[^.]+$/, "") || "input";
+  const filename = `${base}_${Date.now()}.${extension}`;
+  await mkdir(inputDir, { recursive: true });
+  await writeFile(path.join(inputDir, filename), parsed.buffer);
+  send(res, 200, {
+    image: {
+      name: filename,
+      url: inputImageUrl(filename)
+    },
+    images: await listInputImages()
+  });
+}
+
+async function handleInputImage(req, res, url) {
+  const filename = safeInputName(url.searchParams.get("name"));
+  if (!filename) {
+    send(res, 400, { error: "Missing image name" });
+    return;
+  }
+  const filePath = path.join(inputDir, filename);
+  if (!filePath.startsWith(inputDir)) {
+    send(res, 400, { error: "Invalid image path" });
+    return;
+  }
+  const data = await readFile(filePath);
+  const ext = path.extname(filename).toLowerCase();
+  const contentType = ext === ".jpg" || ext === ".jpeg"
+    ? "image/jpeg"
+    : ext === ".webp"
+      ? "image/webp"
+      : ext === ".gif"
+        ? "image/gif"
+        : "image/png";
+  res.writeHead(200, { "content-type": contentType, "cache-control": "no-store" });
+  res.end(data);
+}
+
+function outputImageUrl(filename) {
+  return `/api/output-image?name=${encodeURIComponent(filename)}`;
+}
+
+async function readOutputHistory() {
+  try {
+    const raw = await readFile(outputHistoryPath, "utf8");
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+async function writeOutputHistory(items) {
+  await mkdir(outputDir, { recursive: true });
+  await writeFile(outputHistoryPath, JSON.stringify(items.slice(0, 50), null, 2));
+}
+
+function trimHistoryValues(values = {}) {
+  return Object.fromEntries(Object.entries(values).map(([key, value]) => [
+    key,
+    typeof value === "string" && value.length > 200000 ? "" : value
+  ]));
+}
+
+async function archiveOutputRun({ runId, promptId, template, address, target, config, history, values }) {
+  await mkdir(outputDir, { recursive: true });
+  const outputIds = Object.values(config.output || {}).map(item => String(item.id));
+  const archivedOutputs = [];
+  let index = 0;
+
+  for (const nodeId of outputIds) {
+    const images = history?.outputs?.[nodeId]?.images || [];
+    for (const image of images) {
+      const query = new URLSearchParams({
+        filename: image.filename,
+        subfolder: image.subfolder || "",
+        type: image.type || "output"
+      });
+      const response = await fetch(`${target.httpBase}/view?${query.toString()}`, {
+        headers: target.headers
+      });
+      if (!response.ok) continue;
+      const originalName = safeOutputName(image.filename || `output_${index}.png`);
+      const ext = path.extname(originalName) || ".png";
+      const base = originalName.replace(/\.[^.]+$/, "") || "output";
+      const filename = `${Date.now()}_${runId}_${index}_${base}${ext}`;
+      await writeFile(path.join(outputDir, filename), Buffer.from(await response.arrayBuffer()));
+      archivedOutputs.push({
+        nodeId,
+        filename,
+        originalFilename: image.filename,
+        url: outputImageUrl(filename)
+      });
+      index += 1;
+    }
+  }
+
+  const item = {
+    id: runId,
+    templateId: template.id,
+    templateName: template.name || template.id,
+    address,
+    promptId,
+    createdAt: new Date().toISOString(),
+    outputs: archivedOutputs,
+    status: "success",
+    values: trimHistoryValues(values),
+    result: {
+      runId,
+      promptId,
+      template: template.id,
+      address,
+      outputs: archivedOutputs
+    }
+  };
+  const current = await readOutputHistory();
+  await writeOutputHistory([item, ...current]);
+  return item;
+}
+
+async function handleOutputImage(req, res, url) {
+  const filename = safeOutputName(url.searchParams.get("name"));
+  if (!filename) {
+    send(res, 400, { error: "Missing output image name" });
+    return;
+  }
+  const filePath = path.join(outputDir, filename);
+  if (!filePath.startsWith(outputDir)) {
+    send(res, 400, { error: "Invalid output image path" });
+    return;
+  }
+  const data = await readFile(filePath);
+  const ext = path.extname(filename).toLowerCase();
+  const contentType = ext === ".jpg" || ext === ".jpeg"
+    ? "image/jpeg"
+    : ext === ".webp"
+      ? "image/webp"
+      : ext === ".gif"
+        ? "image/gif"
+        : "image/png";
+  res.writeHead(200, { "content-type": contentType, "cache-control": "no-store" });
+  res.end(data);
+}
+
+async function handleDeleteOutputHistory(req, res) {
+  const body = JSON.parse(await readBody(req) || "{}");
+  const current = await readOutputHistory();
+  const targetItem = current.find(item => item.id === body.id);
+  const next = current.filter(item => item.id !== body.id);
+  if (targetItem) {
+    await Promise.all((targetItem.outputs || []).map(output => (
+      output.filename
+        ? rm(path.join(outputDir, safeOutputName(output.filename)), { force: true })
+        : Promise.resolve()
+    )));
+  }
+  await writeOutputHistory(next);
+  send(res, 200, { history: next });
+}
+
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://${req.headers.host}`);
@@ -169,6 +377,18 @@ const server = http.createServer(async (req, res) => {
       await handleCancel(req, res);
     } else if (req.method === "GET" && url.pathname === "/api/comfy-view") {
       await handleComfyView(req, res, url);
+    } else if (req.method === "GET" && url.pathname === "/api/input-images") {
+      send(res, 200, { images: await listInputImages() });
+    } else if (req.method === "POST" && url.pathname === "/api/input-images") {
+      await handleInputUpload(req, res);
+    } else if (req.method === "GET" && url.pathname === "/api/input-image") {
+      await handleInputImage(req, res, url);
+    } else if (req.method === "GET" && url.pathname === "/api/output-history") {
+      send(res, 200, { history: await readOutputHistory() });
+    } else if (req.method === "POST" && url.pathname === "/api/output-history/delete") {
+      await handleDeleteOutputHistory(req, res);
+    } else if (req.method === "GET" && url.pathname === "/api/output-image") {
+      await handleOutputImage(req, res, url);
     } else {
       send(res, 404, { error: "Not found" });
     }

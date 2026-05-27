@@ -34,5 +34,5 @@ output:
     id: "12"
 
 server:
-  address: "127.0.0.1:8188"
+  address: "http://127.0.0.1:8188"
   comfy_folder: "/content/ComfyUI"

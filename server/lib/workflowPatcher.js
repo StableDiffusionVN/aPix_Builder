@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 export function flattenInputIds(config) {
@@ -85,9 +85,57 @@ export async function persistDataUrl(uploadDir, dataUrl, index) {
   return filePath;
 }
 
+function mimeTypeForFile(filename) {
+  const ext = path.extname(filename).toLowerCase();
+  if (ext === ".jpg" || ext === ".jpeg") return "image/jpeg";
+  if (ext === ".webp") return "image/webp";
+  if (ext === ".gif") return "image/gif";
+  return "image/png";
+}
+
+async function inputImageToUpload(inputDir, value) {
+  const filename = path.basename(value.name || value.filename || "");
+  if (!filename) throw new Error("Input image is missing filename");
+  const filePath = path.join(inputDir, filename);
+  if (!filePath.startsWith(inputDir)) throw new Error("Invalid input image path");
+  return {
+    kind: "upload",
+    index: Date.now(),
+    mimeType: mimeTypeForFile(filename),
+    buffer: await readFile(filePath)
+  };
+}
+
 export async function setWorkflowValue(workflow, id, value, target, signal, options = {}) {
   const { nodeInputs, section, field } = resolveWorkflowInput(workflow, id);
-  const { uploadDir, uploadImageToComfy, uploadedImageUrl, urlUploadMode } = options;
+  const { inputDir, uploadDir, uploadImageToComfy, uploadedImageUrl, urlUploadMode } = options;
+
+  if (value?.kind === "input-image") {
+    const upload = await inputImageToUpload(inputDir, value);
+    if (section === "inputs" && field.toLowerCase() === "url") {
+      const uploaded = await uploadImageToComfy(target, upload, signal);
+      if ("Load_url" in nodeInputs) nodeInputs.Load_url = true;
+      if ("mode" in nodeInputs) nodeInputs.mode = "Url";
+      if ("image" in nodeInputs) nodeInputs.image = "None";
+      nodeInputs[field] = uploadedImageUrl(target, uploaded);
+      return nodeInputs[field];
+    }
+    if (section === "inputs" && "image" in nodeInputs) {
+      const uploaded = await uploadImageToComfy(target, upload, signal);
+      if ("Load_url" in nodeInputs) nodeInputs.Load_url = false;
+      if ("Url" in nodeInputs) nodeInputs.Url = "";
+      if ("url" in nodeInputs) nodeInputs.url = "";
+      if ("mode" in nodeInputs) nodeInputs.mode = "Image";
+      nodeInputs.image = uploaded.name || uploaded.filename || uploaded.image || uploaded;
+      return nodeInputs.image;
+    }
+    nodeInputs[field] = await persistDataUrl(
+      uploadDir,
+      `data:${upload.mimeType};base64,${upload.buffer.toString("base64")}`,
+      upload.index
+    );
+    return nodeInputs[field];
+  }
 
   if (value?.kind === "upload") {
     if (section === "inputs" && field.toLowerCase() === "url") {

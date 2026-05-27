@@ -1,4 +1,5 @@
-import { RefreshCcw, Upload } from "lucide-react";
+import { useEffect, useState } from "react";
+import { RefreshCcw, Upload, X } from "lucide-react";
 
 const inputTypes = new Set(["text", "image", "image_mask", "slider", "dropdown", "seed", "checkbox", "number", "radio", "file", "colorpicker", "date", "json"]);
 
@@ -25,6 +26,59 @@ export function StaticBlock({ item }) {
 export function DynamicField({ item, value, onChange }) {
   const ui = item.ui || {};
   const label = ui.label || item.key;
+  const [isDraggingFile, setIsDraggingFile] = useState(false);
+  const [inputImages, setInputImages] = useState([]);
+  const selectedInputName = value?.kind === "input-image" ? value.name : "";
+  const selectedImageUrl = value?.startsWith?.("data:image") ? value : value?.kind === "input-image" ? value.url : "";
+
+  async function refreshInputImages() {
+    try {
+      const response = await fetch("/api/input-images");
+      if (!response.ok) return;
+      const data = await response.json();
+      setInputImages(data.images || []);
+    } catch {
+      setInputImages([]);
+    }
+  }
+
+  useEffect(() => {
+    if (ui.type === "image" || ui.type === "image_mask" || ui.type === "file") {
+      refreshInputImages();
+    }
+  }, [ui.type]);
+
+  async function handlePickedFile(file) {
+    if (!file) {
+      onChange("");
+      return;
+    }
+    if (ui.type !== "file" && !file.type.startsWith("image/")) return;
+    const dataUrl = await fileToDataUrl(file);
+    onChange(dataUrl);
+    try {
+      const response = await fetch("/api/input-images", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ filename: file.name, dataUrl })
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setInputImages(data.images || []);
+        if (data.image) {
+          onChange({ kind: "input-image", ...data.image });
+        }
+      }
+    } catch {
+      // Direct upload still works even if the local input library is unavailable.
+    }
+  }
+
+  function handleInputImageSelect(name) {
+    if (!name) return;
+    const image = inputImages.find(item => item.name === name);
+    if (image) onChange({ kind: "input-image", ...image });
+  }
 
   if (!inputTypes.has(ui.type)) return <StaticBlock item={item} />;
   if (ui.type === "seed") {
@@ -57,20 +111,53 @@ export function DynamicField({ item, value, onChange }) {
     return (
       <label className="field">
         <span>{label}</span>
-        <div className="dropzone">
-          <Upload size={18} />
-          <strong>{value ? "Đã chọn tệp" : "Tải ảnh hoặc tệp lên"}</strong>
-          <small>{ui.type === "image_mask" ? "Mask trong React bản này dùng ảnh chính; có thể mở rộng canvas mask sau." : "Ảnh sẽ được upload trực tiếp lên ComfyUI target khi chạy."}</small>
-          <input
-            type="file"
-            accept={ui.type === "file" ? undefined : "image/*"}
-            onChange={async event => {
-              const file = event.target.files?.[0];
-              onChange(file ? await fileToDataUrl(file) : "");
+        {selectedImageUrl ? (
+          <div className="uploadFrame">
+            <img className="uploadPreview" src={selectedImageUrl} alt="" />
+            <button type="button" className="uploadClear" onClick={() => onChange("")} title="Xóa ảnh đã tải lên">
+              <X size={14} />
+            </button>
+          </div>
+        ) : (
+          <div
+            className={`dropzone ${isDraggingFile ? "isDragging" : ""}`}
+            onDragEnter={event => {
+              event.preventDefault();
+              setIsDraggingFile(true);
             }}
-          />
-        </div>
-        {value?.startsWith?.("data:image") ? <img className="uploadPreview" src={value} alt="" /> : null}
+            onDragOver={event => {
+              event.preventDefault();
+              event.dataTransfer.dropEffect = "copy";
+              setIsDraggingFile(true);
+            }}
+            onDragLeave={event => {
+              event.preventDefault();
+              if (!event.currentTarget.contains(event.relatedTarget)) {
+                setIsDraggingFile(false);
+              }
+            }}
+            onDrop={async event => {
+              event.preventDefault();
+              setIsDraggingFile(false);
+              await handlePickedFile(event.dataTransfer.files?.[0]);
+            }}
+          >
+            <Upload size={18} />
+            <strong>{isDraggingFile ? "Thả tệp vào đây" : "Tải ảnh hoặc tệp lên"}</strong>
+            <small>{ui.type === "image_mask" ? "Mask trong React bản này dùng ảnh chính; có thể mở rộng canvas mask sau." : "Kéo-thả hoặc bấm để chọn ảnh."}</small>
+            <input
+              type="file"
+              accept={ui.type === "file" ? undefined : "image/*"}
+              onChange={event => handlePickedFile(event.target.files?.[0])}
+            />
+          </div>
+        )}
+        <select className="inputLibrarySelect" value={selectedInputName} onChange={event => handleInputImageSelect(event.target.value)}>
+          <option value="">Chọn ảnh từ thư mục input</option>
+          {inputImages.map(image => (
+            <option key={image.name} value={image.name}>{image.name}</option>
+          ))}
+        </select>
       </label>
     );
   }

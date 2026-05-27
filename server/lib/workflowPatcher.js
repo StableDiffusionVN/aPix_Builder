@@ -1,0 +1,151 @@
+import { mkdir, writeFile } from "node:fs/promises";
+import path from "node:path";
+
+export function flattenInputIds(config) {
+  const ids = [];
+  for (const item of Object.values(config.input || {})) {
+    if (item?.ui?.type === "col") {
+      for (const child of Object.values(item.ui.col || {})) {
+        if (child.id) ids.push(child.id);
+      }
+    } else if (item?.id) {
+      ids.push(item.id);
+    }
+  }
+  return ids;
+}
+
+export function mapValuesToRequest(config, values) {
+  const request = {};
+  const ids = flattenInputIds(config);
+  ids.forEach(id => {
+    if (Array.isArray(id)) {
+      id.forEach(childId => {
+        if (childId in values) request[childId] = values[childId];
+      });
+      return;
+    }
+    if (id in values) request[id] = values[id];
+  });
+  return request;
+}
+
+export function resolveWorkflowInput(workflow, id) {
+  const parts = String(id).split("-");
+  if (parts.length < 2) {
+    throw new Error(`Invalid YAML id "${id}". Expected "node-field" or "node-inputs-field".`);
+  }
+  const [nodeId] = parts;
+  const hasSection = parts.length >= 3;
+  const section = hasSection ? parts[1] : "inputs";
+  const requestedField = (hasSection ? parts.slice(2) : parts.slice(1)).join("-");
+  const node = workflow[nodeId];
+  if (!node) {
+    throw new Error(`Workflow node not found for YAML id "${id}": node ${nodeId}`);
+  }
+  const nodeInputs = node[section];
+  if (!nodeInputs) {
+    throw new Error(`Workflow path not found for YAML id "${id}": ${nodeId}.${section}`);
+  }
+  const field = Object.keys(nodeInputs).find(key => key === requestedField)
+    || Object.keys(nodeInputs).find(key => key.toLowerCase() === requestedField.toLowerCase());
+  if (!field) {
+    throw new Error(`Workflow field not found for YAML id "${id}": ${nodeId}.${section}.${requestedField}`);
+  }
+  return { nodeInputs, section, field };
+}
+
+export function validateWorkflowMappings(config, workflow) {
+  for (const id of flattenInputIds(config)) {
+    if (Array.isArray(id)) {
+      id.forEach(childId => resolveWorkflowInput(workflow, childId));
+    } else {
+      resolveWorkflowInput(workflow, id);
+    }
+  }
+  for (const item of Object.values(config.output || {})) {
+    const nodeId = String(item.id || "");
+    if (!nodeId) {
+      throw new Error("Output mapping is missing required node id");
+    }
+    if (!workflow[nodeId]) {
+      throw new Error(`Workflow output node not found: ${nodeId}`);
+    }
+  }
+}
+
+export async function persistDataUrl(uploadDir, dataUrl, index) {
+  const match = /^data:([^;]+);base64,(.+)$/.exec(dataUrl || "");
+  if (!match) return dataUrl;
+  const extension = match[1].includes("jpeg") ? "jpg" : match[1].split("/")[1] || "png";
+  await mkdir(uploadDir, { recursive: true });
+  const filename = `upload_${Date.now()}_${index}.${extension}`;
+  const filePath = path.join(uploadDir, filename);
+  await writeFile(filePath, Buffer.from(match[2], "base64"));
+  return filePath;
+}
+
+export async function setWorkflowValue(workflow, id, value, target, signal, options = {}) {
+  const { nodeInputs, section, field } = resolveWorkflowInput(workflow, id);
+  const { uploadDir, uploadImageToComfy, uploadedImageUrl, urlUploadMode } = options;
+
+  if (value?.kind === "upload") {
+    if (section === "inputs" && field.toLowerCase() === "url") {
+      if (urlUploadMode === "local_path") {
+        nodeInputs[field] = await persistDataUrl(
+          uploadDir,
+          `data:${value.mimeType};base64,${value.buffer.toString("base64")}`,
+          value.index
+        );
+        if ("Load_url" in nodeInputs) nodeInputs.Load_url = true;
+        if ("image" in nodeInputs) nodeInputs.image = "None";
+        return nodeInputs[field];
+      }
+      const uploaded = await uploadImageToComfy(target, value, signal);
+      if ("Load_url" in nodeInputs) nodeInputs.Load_url = true;
+      if ("mode" in nodeInputs) nodeInputs.mode = "Url";
+      if ("image" in nodeInputs) nodeInputs.image = "None";
+      nodeInputs[field] = uploadedImageUrl(target, uploaded);
+      return nodeInputs[field];
+    }
+    if (section === "inputs" && "image" in nodeInputs) {
+      const uploaded = await uploadImageToComfy(target, value, signal);
+      if ("Load_url" in nodeInputs) nodeInputs.Load_url = false;
+      if ("Url" in nodeInputs) nodeInputs.Url = "";
+      if ("url" in nodeInputs) nodeInputs.url = "";
+      if ("mode" in nodeInputs) nodeInputs.mode = "Image";
+      nodeInputs.image = uploaded.name || uploaded.filename || uploaded.image || uploaded;
+      return nodeInputs.image;
+    }
+    nodeInputs[field] = await persistDataUrl(
+      uploadDir,
+      `data:${value.mimeType};base64,${value.buffer.toString("base64")}`,
+      value.index
+    );
+    return nodeInputs[field];
+  }
+
+  nodeInputs[field] = value;
+  return value;
+}
+
+export function collectOutputs(config, history, target) {
+  const outputIds = Object.values(config.output || {}).map(item => String(item.id));
+  const outputs = [];
+  for (const nodeId of outputIds) {
+    const images = history?.outputs?.[nodeId]?.images || [];
+    for (const image of images) {
+      const query = new URLSearchParams({
+        filename: image.filename,
+        subfolder: image.subfolder || "",
+        type: image.type || "output"
+      });
+      outputs.push({
+        nodeId,
+        filename: image.filename,
+        url: `/api/comfy-view?address=${encodeURIComponent(target.proxyAddress)}&${query.toString()}`
+      });
+    }
+  }
+  return outputs;
+}

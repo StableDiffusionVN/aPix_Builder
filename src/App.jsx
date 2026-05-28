@@ -16,12 +16,11 @@ import { RunControls } from "./components/RunControls";
 import { TemplateSelector } from "./components/TemplateSelector";
 import { downloadImage } from "./lib/download";
 import { buildDefaults, flattenInputs, normalizeId, requestPayload } from "./lib/template";
-import YAML from "yaml";
 
 const SERVER_STORAGE_KEY = "comfyui-build:server:v2";
 const THEME_STORAGE_KEY = "comfyui-build:theme";
 const MIN_IMAGE_SCALE = 0.5;
-const MAX_IMAGE_SCALE = 4;
+const MAX_IMAGE_SCALE = 10;
 const DEFAULT_COMFY_SERVER = "http://127.0.0.1:8188";
 
 function loadTheme() {
@@ -31,6 +30,14 @@ function loadTheme() {
 function loadServerAddress() {
   const stored = localStorage.getItem(SERVER_STORAGE_KEY) || "";
   return stored || DEFAULT_COMFY_SERVER;
+}
+
+function formatDuration(ms) {
+  if (!Number.isFinite(ms)) return "";
+  const seconds = Math.max(0, Math.round(ms / 1000));
+  const minutes = Math.floor(seconds / 60);
+  const rest = seconds % 60;
+  return minutes ? `${minutes}m ${rest}s` : `${rest}s`;
 }
 
 export default function App() {
@@ -44,16 +51,19 @@ export default function App() {
   const [templates, setTemplates] = useState([]);
   const [selectedTemplate, setSelectedTemplate] = useState("");
   const [activeRunId, setActiveRunId] = useState("");
+  const [runQueue, setRunQueue] = useState([]);
   const [history, setHistory] = useState([]);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [theme, setTheme] = useState(loadTheme);
   const [imageScale, setImageScale] = useState(1);
   const [imagePan, setImagePan] = useState({ x: 0, y: 0 });
   const [imageFitSize, setImageFitSize] = useState({ width: 0, height: 0 });
+  const [outputImageSize, setOutputImageSize] = useState({ width: 0, height: 0 });
   const [draggingImage, setDraggingImage] = useState(false);
   const imageDragRef = useRef(null);
   const previewAreaRef = useRef(null);
   const imageElementRef = useRef(null);
+  const runQueueRef = useRef([]);
 
   const inputs = useMemo(() => flattenInputs(config?.input), [config]);
   const outputs = useMemo(() => Object.values(config?.output || {}), [config]);
@@ -62,6 +72,7 @@ export default function App() {
   const selectedTemplateName = templates.find(item => item.id === selectedTemplate)?.name || selectedTemplate || "Default";
   const primaryOutput = result?.outputs?.[0];
   const heroImage = primaryOutput?.url;
+  const resultTiming = result?.historyItem || result || {};
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -84,47 +95,41 @@ export default function App() {
   }
 
   async function loadTemplateRegistry() {
-    try {
-      const response = await fetch("/api/templates");
-      if (!response.ok) throw new Error("API templates unavailable");
-      const data = await response.json();
-      return data;
-    } catch {
-      const response = await fetch("/config/templates.json");
-      if (!response.ok) throw new Error("Không đọc được config/templates.json");
-      return response.json();
-    }
+    const response = await fetch("/api/templates");
+    if (!response.ok) throw new Error("Không đọc được danh sách template từ API");
+    return response.json();
   }
 
   async function loadTemplateConfig(templateId) {
     const suffix = templateId ? `?template=${encodeURIComponent(templateId)}` : "";
-    try {
-      const response = await fetch(`/api/config${suffix}`);
-      if (!response.ok) throw new Error("API config unavailable");
-      const data = await response.json();
-      if (data.error) throw new Error(data.error);
-      return data;
-    } catch {
-      const registry = await loadTemplateRegistry();
-      const template = registry.templates.find(item => item.id === templateId) || registry.templates.find(item => item.id === registry.default) || registry.templates[0];
-      if (!template) throw new Error("Không có mẫu API nào được cấu hình");
-      const response = await fetch(`/config/${template.yaml}`);
-      if (!response.ok) throw new Error(`Không đọc được YAML: ${template.yaml}`);
-      const raw = await response.text();
-      const parsedConfig = YAML.parse(raw);
-      return {
-        config: parsedConfig,
-        raw,
-        server: parsedConfig.server || parsedConfig.sever || {},
-        template
-      };
-    }
+    const response = await fetch(`/api/config${suffix}`);
+    if (!response.ok) throw new Error("Không đọc được cấu hình template từ API");
+    const data = await response.json();
+    if (data.error) throw new Error(data.error);
+    return data;
   }
 
   function resetImageView() {
     setImageScale(1);
     setImagePan({ x: 0, y: 0 });
   }
+
+  useEffect(() => {
+    function handleSpaceReset(event) {
+      if (!heroImage || event.code !== "Space") return;
+      const target = event.target;
+      const isTypingTarget = target instanceof HTMLElement && (
+        target.isContentEditable ||
+        ["INPUT", "TEXTAREA", "SELECT", "BUTTON"].includes(target.tagName)
+      );
+      if (isTypingTarget) return;
+      event.preventDefault();
+      resetImageView();
+    }
+
+    window.addEventListener("keydown", handleSpaceReset);
+    return () => window.removeEventListener("keydown", handleSpaceReset);
+  }, [heroImage]);
 
   function updateImageFitSize() {
     const area = previewAreaRef.current;
@@ -140,11 +145,24 @@ export default function App() {
     });
   }
 
+  function handleResultImageLoad() {
+    const image = imageElementRef.current;
+    if (image?.naturalWidth && image?.naturalHeight) {
+      setOutputImageSize({
+        width: image.naturalWidth,
+        height: image.naturalHeight
+      });
+    }
+    updateImageFitSize();
+  }
+
   useEffect(() => {
     if (!heroImage) {
       setImageFitSize({ width: 0, height: 0 });
+      setOutputImageSize({ width: 0, height: 0 });
       return undefined;
     }
+    setOutputImageSize({ width: 0, height: 0 });
     const frame = requestAnimationFrame(updateImageFitSize);
     window.addEventListener("resize", updateImageFitSize);
     return () => {
@@ -184,36 +202,84 @@ export default function App() {
       .catch(() => loadConfig(""));
   }, []);
 
-  async function runWorkflow() {
-    const runId = crypto.randomUUID();
-    setActiveRunId(runId);
+  function makeRunJob() {
+    return {
+      runId: crypto.randomUUID(),
+      template: selectedTemplate,
+      address: comfyAddress,
+      values: requestPayload(inputs, values),
+      queuedAt: new Date().toISOString()
+    };
+  }
+
+  function setQueue(nextQueue) {
+    runQueueRef.current = nextQueue;
+    setRunQueue(nextQueue);
+  }
+
+  function runWorkflow() {
+    const job = makeRunJob();
+    if (running) {
+      setQueue([...runQueueRef.current, job]);
+      setStatus(`Đã thêm vào hàng chờ (${runQueueRef.current.length} request)`);
+      return;
+    }
+    executeRun(job);
+  }
+
+  async function executeRun(job) {
+    setActiveRunId(job.runId);
     setRunning(true);
     setError("");
     setResult(null);
     resetImageView();
-    setStatus("Đang gửi workflow tới ComfyUI...");
+    const clientSubmittedAt = new Date().toISOString();
+    setStatus(runQueueRef.current.length ? `Đang chạy request, còn ${runQueueRef.current.length} trong hàng chờ...` : "Đang gửi workflow tới ComfyUI...");
     try {
       const response = await fetch("/api/run", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          runId,
-          template: selectedTemplate,
-          address: comfyAddress,
-          values: requestPayload(inputs, values)
+          runId: job.runId,
+          template: job.template,
+          address: job.address,
+          values: job.values,
+          queuedAt: job.queuedAt
         })
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Run failed");
-      setResult(data);
-      setHistory(current => data.historyItem ? [data.historyItem, ...current] : current);
-      setStatus(`Hoàn tất prompt ${data.promptId}`);
+      const clientCompletedAt = new Date().toISOString();
+      const clientDurationMs = new Date(clientCompletedAt).getTime() - new Date(clientSubmittedAt).getTime();
+      const timedHistoryItem = data.historyItem ? {
+        ...data.historyItem,
+        submittedAt: data.historyItem.submittedAt || data.submittedAt || clientSubmittedAt,
+        completedAt: data.historyItem.completedAt || data.completedAt || clientCompletedAt,
+        durationMs: data.historyItem.durationMs ?? data.durationMs ?? clientDurationMs
+      } : null;
+      const timedResult = {
+        ...data,
+        submittedAt: data.submittedAt || timedHistoryItem?.submittedAt || clientSubmittedAt,
+        completedAt: data.completedAt || timedHistoryItem?.completedAt || clientCompletedAt,
+        durationMs: data.durationMs ?? timedHistoryItem?.durationMs ?? clientDurationMs,
+        historyItem: timedHistoryItem
+      };
+      setResult(timedResult);
+      setHistory(current => timedHistoryItem ? [timedHistoryItem, ...current] : current);
+      setStatus(`Hoàn tất prompt ${data.promptId}${timedResult.durationMs ? ` trong ${formatDuration(timedResult.durationMs)}` : ""}`);
     } catch (err) {
       setError(err.message);
       setStatus("Request thất bại");
     } finally {
-      setRunning(false);
       setActiveRunId("");
+      const [nextJob, ...remaining] = runQueueRef.current;
+      setQueue(remaining);
+      if (nextJob) {
+        setStatus(`Đang lấy request tiếp theo, còn ${remaining.length} trong hàng chờ...`);
+        executeRun(nextJob);
+      } else {
+        setRunning(false);
+      }
     }
   }
 
@@ -244,6 +310,9 @@ export default function App() {
       promptId: item.promptId,
       template: item.templateId,
       address: item.address,
+      submittedAt: item.submittedAt,
+      completedAt: item.completedAt || item.createdAt,
+      durationMs: item.durationMs,
       outputs: item.outputs || []
     });
     setComfyAddress(item.address || "");
@@ -375,6 +444,7 @@ export default function App() {
           running={running}
           canRun={Boolean(config)}
           canCancel={Boolean(running && activeRunId)}
+          queueCount={runQueue.length}
           onRun={runWorkflow}
           onCancel={cancelWorkflow}
         />
@@ -391,7 +461,7 @@ export default function App() {
               </div>
               {primaryOutput ? (
                 <>
-                <button className="downloadButton" onClick={resetImageView} title="Đặt zoom và vị trí về mặc định">
+                <button className="downloadButton" onClick={resetImageView} title="Đặt zoom và vị trí về mặc định (Space)">
                   <RotateCcw size={16} />
                   <span>{Math.round(imageScale * 100)}%</span>
                 </button>
@@ -429,7 +499,7 @@ export default function App() {
                   src={heroImage}
                   alt={outputs[0]?.ui?.label || "Ảnh kết quả"}
                   draggable="false"
-                  onLoad={updateImageFitSize}
+                  onLoad={handleResultImageLoad}
                 />
               </div>
             ) : (
@@ -439,6 +509,16 @@ export default function App() {
                 <p>{running ? "App đang chờ workflow hoàn tất." : "Điền input bên trái rồi chạy workflow để xem output."}</p>
               </div>
             )}
+            {heroImage && outputImageSize.width && outputImageSize.height ? (
+              <div className="outputSizeBadge">
+                {outputImageSize.width} x {outputImageSize.height}
+              </div>
+            ) : null}
+            {heroImage && resultTiming.durationMs ? (
+              <div className="outputTimingBadge">
+                Hoàn thành trong {formatDuration(resultTiming.durationMs)}
+              </div>
+            ) : null}
           </div>
         </section>
 

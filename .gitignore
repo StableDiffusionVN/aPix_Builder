@@ -3,6 +3,7 @@ dist/
 uploads/
 input/
 output/
+config/templates/
 .DS_Store
 *.log
 .env

@@ -1,7 +1,27 @@
-import { useEffect, useState } from "react";
-import { RefreshCcw, Upload, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { Check, Eye, Images, RefreshCcw, Trash2, Upload, X } from "lucide-react";
 
-const inputTypes = new Set(["text", "image", "image_mask", "slider", "dropdown", "seed", "checkbox", "number", "radio", "file", "colorpicker", "date", "json"]);
+const inputTypes = new Set([
+  "string",
+  "text",
+  "image",
+  "image_mask",
+  "slider",
+  "dropdown",
+  "menu",
+  "seed",
+  "checkbox",
+  "boolean",
+  "number",
+  "int",
+  "float",
+  "radio",
+  "file",
+  "colorpicker",
+  "date",
+  "json"
+]);
 
 function fileToDataUrl(file) {
   return new Promise((resolve, reject) => {
@@ -26,10 +46,29 @@ export function StaticBlock({ item }) {
 export function DynamicField({ item, value, onChange }) {
   const ui = item.ui || {};
   const label = ui.label || item.key;
+  const description = ui.description || ui.help || "";
+  const display = ui.display || ui.variant || ui.widget || "";
   const [isDraggingFile, setIsDraggingFile] = useState(false);
   const [inputImages, setInputImages] = useState([]);
+  const [libraryOpen, setLibraryOpen] = useState(false);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [lightboxImage, setLightboxImage] = useState(null);
+  const [uploadImageSize, setUploadImageSize] = useState({ width: 0, height: 0 });
+  const [lightboxScale, setLightboxScale] = useState(1);
+  const [lightboxPan, setLightboxPan] = useState({ x: 0, y: 0 });
+  const [isPanningLightbox, setIsPanningLightbox] = useState(false);
+  const lightboxDragRef = useRef(null);
   const selectedInputName = value?.kind === "input-image" ? value.name : "";
   const selectedImageUrl = value?.startsWith?.("data:image") ? value : value?.kind === "input-image" ? value.url : "";
+  const isNumberType = ui.type === "number" || ui.type === "int" || ui.type === "float";
+  const isSlider = ui.type === "slider" || (isNumberType && display === "slider");
+  const isDropdown = ui.type === "dropdown" || ui.type === "menu";
+  const isBoolean = ui.type === "checkbox" || ui.type === "boolean";
+  const parseNumber = inputValue => {
+    if (inputValue === "") return "";
+    const next = Number(inputValue);
+    return ui.type === "int" ? Math.trunc(next) : next;
+  };
 
   async function refreshInputImages() {
     try {
@@ -47,6 +86,30 @@ export function DynamicField({ item, value, onChange }) {
       refreshInputImages();
     }
   }, [ui.type]);
+
+  useEffect(() => {
+    setUploadImageSize({ width: 0, height: 0 });
+  }, [selectedImageUrl]);
+
+  useEffect(() => {
+    if (!lightboxOpen) return undefined;
+    setLightboxScale(1);
+    setLightboxPan({ x: 0, y: 0 });
+    function handleKeyDown(event) {
+      if (event.key === "Escape") setLightboxOpen(false);
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [lightboxOpen, lightboxImage?.url]);
+
+  useEffect(() => {
+    if (!libraryOpen) return undefined;
+    function handleKeyDown(event) {
+      if (event.key === "Escape") setLibraryOpen(false);
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [libraryOpen]);
 
   async function handlePickedFile(file) {
     if (!file) {
@@ -74,10 +137,119 @@ export function DynamicField({ item, value, onChange }) {
     }
   }
 
+  async function handlePickedImageUrl(url, filename = "output.png") {
+    if (!url) return;
+    const response = await fetch(url);
+    if (!response.ok) return;
+    const blob = await response.blob();
+    const dataUrl = await fileToDataUrl(blob);
+    try {
+      const uploadResponse = await fetch("/api/input-images", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ filename, dataUrl })
+      });
+      if (uploadResponse.ok) {
+        const data = await uploadResponse.json();
+        setInputImages(data.images || []);
+        if (data.image) onChange({ kind: "input-image", ...data.image });
+      }
+    } catch {
+      onChange(dataUrl);
+    }
+  }
+
+  async function handleImageDrop(event) {
+    event.preventDefault();
+    setIsDraggingFile(false);
+    const payload = event.dataTransfer.getData("application/x-comfy-output-image");
+    if (payload) {
+      try {
+        const image = JSON.parse(payload);
+        await handlePickedImageUrl(image.url, image.filename);
+        return;
+      } catch {
+        // Fall through to file handling.
+      }
+    }
+    const uri = event.dataTransfer.getData("text/uri-list");
+    if (uri) {
+      await handlePickedImageUrl(uri.split("\n")[0]);
+      return;
+    }
+    await handlePickedFile(event.dataTransfer.files?.[0]);
+  }
+
   function handleInputImageSelect(name) {
     if (!name) return;
     const image = inputImages.find(item => item.name === name);
-    if (image) onChange({ kind: "input-image", ...image });
+    if (image) {
+      onChange({ kind: "input-image", ...image });
+      setLibraryOpen(false);
+    }
+  }
+
+  function openLightbox(image) {
+    if (!image?.url) return;
+    setLightboxImage(image);
+    setLightboxOpen(true);
+  }
+
+  async function handleDeleteInputImage(image) {
+    if (!image?.name) return;
+    const response = await fetch("/api/input-images/delete", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: image.name })
+    });
+    if (!response.ok) return;
+    const data = await response.json();
+    setInputImages(data.images || []);
+    if (selectedInputName === image.name) onChange("");
+  }
+
+  function handleLightboxWheel(event) {
+    event.preventDefault();
+    const delta = event.deltaY > 0 ? -0.18 : 0.18;
+    setLightboxScale(current => {
+      const next = Math.min(6, Math.max(1, Number((current + delta).toFixed(2))));
+      if (next === 1) setLightboxPan({ x: 0, y: 0 });
+      return next;
+    });
+  }
+
+  function handleLightboxPointerDown(event) {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    lightboxDragRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      panX: lightboxPan.x,
+      panY: lightboxPan.y
+    };
+    setIsPanningLightbox(true);
+  }
+
+  function handleLightboxPointerMove(event) {
+    const drag = lightboxDragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    setLightboxPan({
+      x: drag.panX + event.clientX - drag.startX,
+      y: drag.panY + event.clientY - drag.startY
+    });
+  }
+
+  function handleLightboxPointerUp(event) {
+    const drag = lightboxDragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    lightboxDragRef.current = null;
+    setIsPanningLightbox(false);
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
   }
 
   if (!inputTypes.has(ui.type)) return <StaticBlock item={item} />;
@@ -104,64 +276,230 @@ export function DynamicField({ item, value, onChange }) {
           value={value}
           onChange={event => onChange(event.target.value)}
         />
+        {description ? <small className="fieldDescription">{description}</small> : null}
+      </label>
+    );
+  }
+  if (ui.type === "string") {
+    const multiline = display === "multiline" || ui.multiline === true || Number(ui.lines || ui.rows || 1) > 1;
+    return (
+      <label className="field">
+        <span>{label}</span>
+        {multiline ? (
+          <textarea
+            rows={ui.lines || ui.rows || 3}
+            placeholder={ui.placeholder || ""}
+            value={value}
+            onChange={event => onChange(event.target.value)}
+          />
+        ) : (
+          <input
+            type="text"
+            placeholder={ui.placeholder || ""}
+            value={value}
+            onChange={event => onChange(event.target.value)}
+          />
+        )}
+        {description ? <small className="fieldDescription">{description}</small> : null}
       </label>
     );
   }
   if (ui.type === "image" || ui.type === "image_mask" || ui.type === "file") {
     return (
-      <label className="field">
-        <span>{label}</span>
-        {selectedImageUrl ? (
-          <div className="uploadFrame">
-            <img className="uploadPreview" src={selectedImageUrl} alt="" />
-            <button type="button" className="uploadClear" onClick={() => onChange("")} title="Xóa ảnh đã tải lên">
-              <X size={14} />
-            </button>
-          </div>
-        ) : (
-          <div
-            className={`dropzone ${isDraggingFile ? "isDragging" : ""}`}
-            onDragEnter={event => {
+      <>
+        <label className="field">
+          <span>{label}</span>
+          {selectedImageUrl ? (
+            <div
+              className={`uploadFrame ${isDraggingFile ? "isDragging" : ""}`}
+              onDragEnter={event => {
+                event.preventDefault();
+                setIsDraggingFile(true);
+              }}
+              onDragOver={event => {
+                event.preventDefault();
+                event.dataTransfer.dropEffect = "copy";
+                setIsDraggingFile(true);
+              }}
+              onDragLeave={event => {
+                event.preventDefault();
+                if (!event.currentTarget.contains(event.relatedTarget)) setIsDraggingFile(false);
+              }}
+              onDrop={handleImageDrop}
+            >
+              <img
+                className="uploadPreview"
+                src={selectedImageUrl}
+                alt=""
+                onLoad={event => setUploadImageSize({
+                  width: event.currentTarget.naturalWidth,
+                  height: event.currentTarget.naturalHeight
+                })}
+              />
+              <div className="uploadActions">
+                <button
+                  type="button"
+                  className="uploadView"
+                  onClick={event => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    openLightbox({ name: selectedInputName || label, url: selectedImageUrl });
+                  }}
+                  title="Mở ảnh đầy đủ"
+                >
+                  <Eye size={14} />
+                </button>
+                <button
+                  type="button"
+                  className="uploadClear"
+                  onClick={event => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    onChange("");
+                  }}
+                  title="Xóa ảnh đã tải lên"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+              {uploadImageSize.width && uploadImageSize.height ? (
+                <div className="imageSizeBadge">
+                  {uploadImageSize.width} x {uploadImageSize.height}
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <div
+              className={`dropzone ${isDraggingFile ? "isDragging" : ""}`}
+              onDragEnter={event => {
+                event.preventDefault();
+                setIsDraggingFile(true);
+              }}
+              onDragOver={event => {
+                event.preventDefault();
+                event.dataTransfer.dropEffect = "copy";
+                setIsDraggingFile(true);
+              }}
+              onDragLeave={event => {
+                event.preventDefault();
+                if (!event.currentTarget.contains(event.relatedTarget)) {
+                  setIsDraggingFile(false);
+                }
+              }}
+              onDrop={async event => {
+                await handleImageDrop(event);
+              }}
+            >
+              <Upload size={18} />
+              <strong>{isDraggingFile ? "Thả tệp vào đây" : "Tải ảnh hoặc tệp lên"}</strong>
+              <small>{ui.type === "image_mask" ? "Mask trong React bản này dùng ảnh chính; có thể mở rộng canvas mask sau." : "Kéo-thả hoặc bấm để chọn ảnh."}</small>
+              <input
+                type="file"
+                accept={ui.type === "file" ? undefined : "image/*"}
+                onChange={event => handlePickedFile(event.target.files?.[0])}
+              />
+            </div>
+          )}
+          <button
+            type="button"
+            className="inputLibraryButton"
+            onClick={event => {
               event.preventDefault();
-              setIsDraggingFile(true);
-            }}
-            onDragOver={event => {
-              event.preventDefault();
-              event.dataTransfer.dropEffect = "copy";
-              setIsDraggingFile(true);
-            }}
-            onDragLeave={event => {
-              event.preventDefault();
-              if (!event.currentTarget.contains(event.relatedTarget)) {
-                setIsDraggingFile(false);
-              }
-            }}
-            onDrop={async event => {
-              event.preventDefault();
-              setIsDraggingFile(false);
-              await handlePickedFile(event.dataTransfer.files?.[0]);
+              event.stopPropagation();
+              refreshInputImages();
+              setLibraryOpen(true);
             }}
           >
-            <Upload size={18} />
-            <strong>{isDraggingFile ? "Thả tệp vào đây" : "Tải ảnh hoặc tệp lên"}</strong>
-            <small>{ui.type === "image_mask" ? "Mask trong React bản này dùng ảnh chính; có thể mở rộng canvas mask sau." : "Kéo-thả hoặc bấm để chọn ảnh."}</small>
-            <input
-              type="file"
-              accept={ui.type === "file" ? undefined : "image/*"}
-              onChange={event => handlePickedFile(event.target.files?.[0])}
-            />
-          </div>
-        )}
-        <select className="inputLibrarySelect" value={selectedInputName} onChange={event => handleInputImageSelect(event.target.value)}>
-          <option value="">Chọn ảnh từ thư mục input</option>
-          {inputImages.map(image => (
-            <option key={image.name} value={image.name}>{image.name}</option>
-          ))}
-        </select>
-      </label>
+            <Images size={16} />
+            <span>{selectedInputName || "Chọn ảnh từ thư mục input"}</span>
+          </button>
+          {description ? <small className="fieldDescription">{description}</small> : null}
+        </label>
+        {libraryOpen ? createPortal(
+          <div className="inputLibraryModal" role="presentation" onMouseDown={() => setLibraryOpen(false)}>
+            <section className="inputLibraryPanel" role="dialog" aria-modal="true" aria-label="Thư viện ảnh input" onMouseDown={event => event.stopPropagation()}>
+              <div className="inputLibraryHeader">
+                <div>
+                  <h3>Ảnh trong thư mục input</h3>
+                  <p>{inputImages.length} ảnh</p>
+                </div>
+                <button type="button" className="imageLightboxClose inPanel" onClick={() => setLibraryOpen(false)} title="Đóng">
+                  <X size={18} />
+                </button>
+              </div>
+              {inputImages.length > 0 ? (
+                <div className="inputLibraryGrid">
+                  {inputImages.map(image => (
+                    <article key={image.name} className={`inputLibraryItem ${selectedInputName === image.name ? "isSelected" : ""}`}>
+                      <button type="button" className="inputLibraryThumb" onClick={() => handleInputImageSelect(image.name)} title="Chọn ảnh này">
+                        <img src={image.url} alt={image.name} />
+                      </button>
+                      <div className="inputLibraryMeta">
+                        <span title={image.name}>{image.name}</span>
+                        <div className="inputLibraryActions">
+                          <button type="button" onClick={() => handleInputImageSelect(image.name)} title="Chọn">
+                            <Check size={15} />
+                          </button>
+                          <button type="button" onClick={() => openLightbox(image)} title="Xem ảnh">
+                            <Eye size={15} />
+                          </button>
+                          <button type="button" onClick={() => handleDeleteInputImage(image)} title="Xóa ảnh">
+                            <Trash2 size={15} />
+                          </button>
+                        </div>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <div className="inputLibraryEmpty">
+                  <Images size={34} />
+                  <strong>Chưa có ảnh trong thư mục input</strong>
+                </div>
+              )}
+            </section>
+          </div>,
+          document.body
+        ) : null}
+        {lightboxOpen && lightboxImage?.url ? createPortal(
+          <div className="imageLightbox" role="presentation" onClick={event => {
+            if (event.target === event.currentTarget) setLightboxOpen(false);
+          }}>
+            <div
+              className={`imageLightboxFrame ${isPanningLightbox ? "isPanning" : ""}`}
+              role="dialog"
+              aria-modal="true"
+              aria-label={label}
+              onClick={event => {
+                if (event.target === event.currentTarget) setLightboxOpen(false);
+              }}
+              onWheel={handleLightboxWheel}
+            >
+              <button type="button" className="imageLightboxClose" onClick={() => setLightboxOpen(false)} title="Đóng">
+                <X size={18} />
+              </button>
+              <div
+                className="imageLightboxStage"
+                style={{
+                  "--lightbox-scale": lightboxScale,
+                  "--lightbox-pan-x": `${lightboxPan.x}px`,
+                  "--lightbox-pan-y": `${lightboxPan.y}px`
+                }}
+                onPointerDown={handleLightboxPointerDown}
+                onPointerMove={handleLightboxPointerMove}
+                onPointerUp={handleLightboxPointerUp}
+                onPointerCancel={handleLightboxPointerUp}
+              >
+                <img src={lightboxImage.url} alt={lightboxImage.name || label} draggable="false" />
+              </div>
+            </div>
+          </div>,
+          document.body
+        ) : null}
+      </>
     );
   }
-  if (ui.type === "slider") {
+  if (isSlider) {
     return (
       <label className="field">
         <span>{label}<b>{value}</b></span>
@@ -171,18 +509,20 @@ export function DynamicField({ item, value, onChange }) {
           max={ui.maximum}
           step={ui.step || 1}
           value={value}
-          onChange={event => onChange(Number(event.target.value))}
+          onChange={event => onChange(parseNumber(event.target.value))}
         />
+        {description ? <small className="fieldDescription">{description}</small> : null}
       </label>
     );
   }
-  if (ui.type === "dropdown") {
+  if (isDropdown) {
     return (
       <label className="field">
         <span>{label}</span>
         <select value={value} onChange={event => onChange(event.target.value)}>
           {(ui.choices || []).map(choice => <option key={choice} value={choice}>{choice}</option>)}
         </select>
+        {description ? <small className="fieldDescription">{description}</small> : null}
       </label>
     );
   }
@@ -196,22 +536,35 @@ export function DynamicField({ item, value, onChange }) {
             {choice}
           </label>
         ))}
+        {description ? <small className="fieldDescription">{description}</small> : null}
       </fieldset>
     );
   }
-  if (ui.type === "checkbox") {
+  if (isBoolean) {
     return (
-      <label className="checkField">
-        <input type="checkbox" checked={Boolean(value)} onChange={event => onChange(event.target.checked)} />
-        <span>{label}</span>
-      </label>
+      <fieldset className="field booleanField">
+        <legend>{label}</legend>
+        <div className="booleanToggle">
+          <button type="button" className={value === true ? "active" : ""} onClick={() => onChange(true)}>True</button>
+          <button type="button" className={value === false ? "active" : ""} onClick={() => onChange(false)}>False</button>
+        </div>
+        {description ? <small className="fieldDescription">{description}</small> : null}
+      </fieldset>
     );
   }
-  if (ui.type === "number") {
+  if (isNumberType) {
     return (
       <label className="field compact">
         <span>{label}</span>
-        <input type="number" value={value} onChange={event => onChange(Number(event.target.value))} />
+        <input
+          type="number"
+          min={ui.minimum}
+          max={ui.maximum}
+          step={ui.step || (ui.type === "float" ? 0.1 : 1)}
+          value={value}
+          onChange={event => onChange(parseNumber(event.target.value))}
+        />
+        {description ? <small className="fieldDescription">{description}</small> : null}
       </label>
     );
   }
@@ -220,6 +573,7 @@ export function DynamicField({ item, value, onChange }) {
       <label className="field compact colorField">
         <span>{label}</span>
         <input type="color" value={value || "#10b981"} onChange={event => onChange(event.target.value)} />
+        {description ? <small className="fieldDescription">{description}</small> : null}
       </label>
     );
   }
@@ -228,6 +582,7 @@ export function DynamicField({ item, value, onChange }) {
       <label className="field compact">
         <span>{label}</span>
         <input type="date" value={value || ""} onChange={event => onChange(event.target.value)} />
+        {description ? <small className="fieldDescription">{description}</small> : null}
       </label>
     );
   }
@@ -236,6 +591,7 @@ export function DynamicField({ item, value, onChange }) {
       <label className="field">
         <span>{label}</span>
         <textarea rows={5} value={value} onChange={event => onChange(event.target.value)} />
+        {description ? <small className="fieldDescription">{description}</small> : null}
       </label>
     );
   }

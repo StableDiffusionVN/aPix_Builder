@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "start:app": "node scripts/start-app.mjs",
     "dev": "vite --host 0.0.0.0",
     "server": "node server/server.js",
     "build": "vite build",

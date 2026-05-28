@@ -314,6 +314,13 @@ p {
   font-size: 12px;
 }
 
+.fieldDescription {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .field input:not([type="range"]):not([type="color"]),
 .field select,
 .field textarea {
@@ -387,6 +394,12 @@ p {
   box-shadow: inset 0 0 0 1px rgba(var(--accent-rgb), 0.28);
 }
 
+.uploadFrame.isDragging {
+  border-color: var(--accent-hover);
+  background: rgba(var(--accent-rgb), 0.13);
+  box-shadow: inset 0 0 0 1px rgba(var(--accent-rgb), 0.28);
+}
+
 .dropzone input {
   position: absolute;
   inset: 0;
@@ -422,28 +435,267 @@ p {
   object-fit: contain;
 }
 
-.uploadClear {
+.uploadActions {
   position: absolute;
   top: 8px;
   right: 8px;
   z-index: 2;
+  display: flex;
+  gap: 6px;
+}
+
+.uploadView,
+.uploadClear {
   display: grid;
   place-items: center;
   width: 30px;
   height: 30px;
-  border: 1px solid rgba(255, 68, 68, 0.38);
+  border: 1px solid var(--border);
   border-radius: 10px;
-  background: rgba(20, 8, 12, 0.82);
-  color: #ffc4c4;
+  background: rgba(255, 255, 255, 0.055);
+  color: var(--muted);
+  cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease, color 0.2s ease;
+}
+
+.uploadView:hover,
+.uploadClear:hover {
+  border-color: rgba(var(--accent-rgb), 0.36);
+  color: var(--accent-hover);
+  background: rgba(var(--accent-rgb), 0.1);
+}
+
+.imageLightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 48px 72px;
+  background: rgba(3, 3, 11, 0.82);
+  backdrop-filter: blur(10px);
+}
+
+.imageLightboxFrame {
+  position: relative;
+  display: grid;
+  width: 100%;
+  max-width: 1400px;
+  max-height: calc(100vh - 96px);
+  place-items: center;
+}
+
+.imageLightboxStage {
+  display: grid;
+  max-width: 100%;
+  max-height: calc(100vh - 96px);
+  place-items: center;
+  cursor: grab;
+  touch-action: none;
+  transform: translate3d(var(--lightbox-pan-x, 0px), var(--lightbox-pan-y, 0px), 0) scale(var(--lightbox-scale, 1));
+  transform-origin: 50% 50%;
+  transition: transform 0.12s ease-out;
+  will-change: transform;
+}
+
+.imageLightboxFrame.isPanning .imageLightboxStage {
+  cursor: grabbing;
+  transition: none;
+}
+
+.imageLightboxStage img {
+  display: block;
+  max-width: 100%;
+  max-height: calc(100vh - 96px);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--panel-strong);
+  object-fit: contain;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.36);
+  user-select: none;
+}
+
+.imageLightboxClose {
+  position: absolute;
+  top: -4px;
+  right: -56px;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(8, 8, 18, 0.88);
+  color: var(--muted);
   cursor: pointer;
 }
 
-.uploadClear:hover {
-  background: var(--danger-bg);
+.imageLightboxClose:hover {
+  border-color: rgba(var(--accent-rgb), 0.4);
+  color: var(--accent-hover);
+  background: rgba(var(--accent-rgb), 0.1);
 }
 
-.inputLibrarySelect {
+.inputLibraryButton {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: center;
+  width: 100%;
+  min-height: 42px;
+  gap: 8px;
   margin-top: 2px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel-soft);
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+}
+
+.inputLibraryButton span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inputLibraryModal {
+  position: fixed;
+  inset: 0;
+  z-index: 950;
+  display: grid;
+  place-items: center;
+  padding: 28px;
+  background: rgba(3, 3, 11, 0.74);
+  backdrop-filter: blur(10px);
+}
+
+.inputLibraryPanel {
+  display: grid;
+  width: min(980px, 100%);
+  max-height: min(82vh, 760px);
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background:
+    radial-gradient(circle at 20% -20%, rgba(var(--accent-rgb), 0.14), transparent 44%),
+    var(--panel);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.36);
+}
+
+.inputLibraryHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.inputLibraryHeader h3 {
+  color: var(--text);
+  font-size: 16px;
+}
+
+.inputLibraryHeader p {
+  color: var(--muted-2);
+  font-size: 12px;
+}
+
+.imageLightboxClose.inPanel {
+  position: static;
+  flex: 0 0 auto;
+}
+
+.inputLibraryGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+  gap: 12px;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.inputLibraryItem {
+  display: grid;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.inputLibraryItem.isSelected {
+  border-color: rgba(var(--accent-rgb), 0.58);
+  box-shadow: inset 0 0 0 1px rgba(var(--accent-rgb), 0.22);
+}
+
+.inputLibraryThumb {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  padding: 0;
+  border: 0;
+  background: var(--panel-strong);
+  cursor: pointer;
+}
+
+.inputLibraryThumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.inputLibraryMeta {
+  display: grid;
+  gap: 8px;
+  padding: 9px;
+}
+
+.inputLibraryMeta span {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inputLibraryActions {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 7px;
+}
+
+.inputLibraryActions button {
+  display: grid;
+  min-height: 32px;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.055);
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.inputLibraryActions button:hover,
+.inputLibraryButton:hover {
+  border-color: rgba(var(--accent-rgb), 0.36);
+  color: var(--accent-hover);
+  background: rgba(var(--accent-rgb), 0.1);
+}
+
+.inputLibraryEmpty {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  min-height: 280px;
+  gap: 10px;
+  color: var(--muted-2);
+  text-align: center;
 }
 
 .checkField {
@@ -455,6 +707,34 @@ p {
 .checkField input,
 .radioGroup input {
   accent-color: var(--accent);
+}
+
+.booleanField {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.booleanToggle {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.booleanToggle button {
+  min-height: 40px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel-soft);
+  color: var(--muted);
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.booleanToggle button.active {
+  border-color: rgba(var(--accent-rgb), 0.68);
+  background: rgba(var(--accent-rgb), 0.18);
+  color: var(--text);
 }
 
 .radioGroup {
@@ -624,6 +904,44 @@ p {
 
 .previewArea.isDragging {
   cursor: grabbing;
+}
+
+.outputSizeBadge,
+.imageSizeBadge {
+  position: absolute;
+  right: 12px;
+  bottom: 10px;
+  z-index: 3;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(8, 8, 18, 0.58);
+  color: var(--muted-2);
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.imageSizeBadge {
+  right: 8px;
+  bottom: 8px;
+}
+
+.outputTimingBadge {
+  position: absolute;
+  left: 12px;
+  bottom: 10px;
+  z-index: 3;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(8, 8, 18, 0.58);
+  color: var(--muted-2);
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1;
+  pointer-events: none;
 }
 
 .downloadButton {
@@ -912,6 +1230,21 @@ p {
   .status {
     max-width: none;
   }
+
+  .imageLightbox {
+    padding: 48px 24px;
+  }
+
+  .imageLightboxFrame,
+  .imageLightboxStage,
+  .imageLightboxStage img {
+    max-height: calc(100vh - 96px);
+  }
+
+  .imageLightboxClose {
+    top: -44px;
+    right: 0;
+  }
 }
 
 @media (max-width: 680px) {
@@ -976,5 +1309,15 @@ p {
   .modalBackdrop {
     align-items: start;
     padding: 10px;
+  }
+
+  .imageLightbox {
+    padding: 56px 12px 24px;
+  }
+
+  .imageLightboxFrame,
+  .imageLightboxStage,
+  .imageLightboxStage img {
+    max-height: calc(100vh - 80px);
   }
 }

@@ -15,9 +15,9 @@ export function flattenInputs(input = {}) {
 export function defaultValue(item) {
   const ui = item.ui || {};
   if (ui.type === "seed") return "random_seed";
-  if (ui.type === "checkbox") return Boolean(ui.value);
-  if (ui.type === "number" || ui.type === "slider") return ui.value ?? ui.minimum ?? 0;
-  if (ui.type === "dropdown" || ui.type === "radio") return ui.value ?? ui.choices?.[0] ?? "";
+  if (ui.type === "checkbox" || ui.type === "boolean") return Boolean(ui.value);
+  if (ui.type === "number" || ui.type === "int" || ui.type === "float" || ui.type === "slider") return ui.value ?? ui.minimum ?? 0;
+  if (ui.type === "dropdown" || ui.type === "menu" || ui.type === "radio") return ui.value ?? ui.choices?.[0] ?? "";
   if (ui.type === "json") return "{}";
   return ui.value ?? "";
 }

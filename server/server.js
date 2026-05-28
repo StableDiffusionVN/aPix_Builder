@@ -26,15 +26,16 @@ import {
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
 const configDir = path.join(root, "config");
+const defaultTemplateDir = path.join(configDir, "default");
+const userTemplatesDir = path.join(configDir, "templates");
 const uploadDir = path.join(root, "uploads");
 const inputDir = path.join(root, "input");
 const outputDir = path.join(root, "output");
 const outputHistoryPath = path.join(outputDir, "history.json");
-const templatesPath = path.join(configDir, "templates.json");
 const port = Number(process.env.PORT || 8787);
 const comfyTimeoutMs = Number(process.env.COMFY_TIMEOUT_MS || 10 * 60 * 1000);
 const activeRuns = new Map();
-const templates = createTemplateService({ configDir, templatesPath });
+const templates = createTemplateService({ configDir, defaultDir: defaultTemplateDir, templatesDir: userTemplatesDir });
 
 async function assertTemplateWorkflow(config, template) {
   const workflow = JSON.parse(await readFile(template.workflowPath, "utf8"));
@@ -45,6 +46,7 @@ async function assertTemplateWorkflow(config, template) {
 async function handleRun(req, res) {
   const body = JSON.parse(await readBody(req) || "{}");
   const runId = body.runId || randomUUID();
+  const submittedAt = new Date().toISOString();
   const abortController = new AbortController();
   const run = {
     id: runId,
@@ -96,13 +98,17 @@ async function handleRun(req, res) {
       target,
       config,
       history,
-      values: body.values || {}
+      values: body.values || {},
+      submittedAt
     });
     send(res, 200, {
       runId,
       promptId: queued.prompt_id,
       template: template.id,
       address: target.label,
+      submittedAt: historyItem.submittedAt,
+      completedAt: historyItem.completedAt,
+      durationMs: historyItem.durationMs,
       request: responseRequest,
       outputs: historyItem.outputs,
       rawOutputs: history?.outputs || {},
@@ -226,6 +232,23 @@ async function handleInputImage(req, res, url) {
   res.end(data);
 }
 
+async function handleDeleteInputImage(req, res) {
+  const body = JSON.parse(await readBody(req) || "{}");
+  const filename = safeInputName(body.name);
+  if (!filename) {
+    send(res, 400, { error: "Missing image name" });
+    return;
+  }
+  const filePath = path.join(inputDir, filename);
+  const relative = path.relative(inputDir, filePath);
+  if (relative.startsWith("..") || path.isAbsolute(relative)) {
+    send(res, 400, { error: "Invalid image path" });
+    return;
+  }
+  await rm(filePath, { force: true });
+  send(res, 200, { images: await listInputImages() });
+}
+
 function outputImageUrl(filename) {
   return `/api/output-image?name=${encodeURIComponent(filename)}`;
 }
@@ -252,8 +275,10 @@ function trimHistoryValues(values = {}) {
   ]));
 }
 
-async function archiveOutputRun({ runId, promptId, template, address, target, config, history, values }) {
+async function archiveOutputRun({ runId, promptId, template, address, target, config, history, values, submittedAt }) {
   await mkdir(outputDir, { recursive: true });
+  const completedAt = new Date().toISOString();
+  const durationMs = Math.max(0, new Date(completedAt).getTime() - new Date(submittedAt || completedAt).getTime());
   const outputIds = Object.values(config.output || {}).map(item => String(item.id));
   const archivedOutputs = [];
   let index = 0;
@@ -291,7 +316,10 @@ async function archiveOutputRun({ runId, promptId, template, address, target, co
     templateName: template.name || template.id,
     address,
     promptId,
-    createdAt: new Date().toISOString(),
+    createdAt: completedAt,
+    submittedAt: submittedAt || completedAt,
+    completedAt,
+    durationMs,
     outputs: archivedOutputs,
     status: "success",
     values: trimHistoryValues(values),
@@ -300,6 +328,9 @@ async function archiveOutputRun({ runId, promptId, template, address, target, co
       promptId,
       template: template.id,
       address,
+      submittedAt: submittedAt || completedAt,
+      completedAt,
+      durationMs,
       outputs: archivedOutputs
     }
   };
@@ -381,6 +412,8 @@ const server = http.createServer(async (req, res) => {
       send(res, 200, { images: await listInputImages() });
     } else if (req.method === "POST" && url.pathname === "/api/input-images") {
       await handleInputUpload(req, res);
+    } else if (req.method === "POST" && url.pathname === "/api/input-images/delete") {
+      await handleDeleteInputImage(req, res);
     } else if (req.method === "GET" && url.pathname === "/api/input-image") {
       await handleInputImage(req, res, url);
     } else if (req.method === "GET" && url.pathname === "/api/output-history") {

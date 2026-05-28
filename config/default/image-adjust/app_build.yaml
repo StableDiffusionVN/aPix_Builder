@@ -1,0 +1,29 @@
+app:
+  name: "ComfyUI Image Adjust"
+
+input:
+  image:
+    id: "10-inputs-image"
+    ui:
+      type: "image"
+      label: "Ảnh đầu vào"
+  saturation:
+    id: "11-inputs-saturation"
+    ui:
+      type: "float"
+      display: "slider"
+      label: "Saturation"
+      minimum: -100
+      maximum: 100
+      value: 0
+      step: 1
+
+output:
+  image:
+    id: "12"
+    ui:
+      type: "image"
+      label: "Ảnh kết quả"
+
+server:
+  address: "http://127.0.0.1:8188"

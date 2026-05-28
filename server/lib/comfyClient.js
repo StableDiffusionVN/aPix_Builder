@@ -5,7 +5,9 @@ export function normalizeComfyTarget(rawAddress) {
   let value = String(rawAddress).trim().replace(/\/+$/, "");
   if (!/^https?:\/\//i.test(value)) {
     const parts = value.split(":");
-    if (parts.length === 3 && !/^\d+$/.test(parts[1])) {
+    if (value.includes("@")) {
+      value = `http://${value}`;
+    } else if (parts.length === 3 && !/^\d+$/.test(parts[1])) {
       value = `http://${encodeURIComponent(parts[1])}:${encodeURIComponent(parts[2])}@${parts[0]}`;
     } else {
       value = `http://${value}`;
@@ -21,10 +23,11 @@ export function normalizeComfyTarget(rawAddress) {
   const authPart = username || password
     ? `${encodeURIComponent(username)}:${encodeURIComponent(password)}@`
     : "";
+  const proxyAddress = `${url.protocol}//${authPart}${url.host}`;
   return {
-    label: url.host,
+    label: proxyAddress,
     httpBase: url.origin,
-    proxyAddress: `${url.protocol}//${authPart}${url.host}`,
+    proxyAddress,
     wsBase: `${wsProtocol}//${authPart}${url.host}`,
     headers: authHeader ? { authorization: authHeader } : {}
   };

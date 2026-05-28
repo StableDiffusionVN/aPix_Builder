@@ -10,6 +10,14 @@ function formatTime(value) {
   }).format(new Date(value));
 }
 
+function formatDuration(ms) {
+  if (!Number.isFinite(ms)) return "";
+  const seconds = Math.max(0, Math.round(ms / 1000));
+  const minutes = Math.floor(seconds / 60);
+  const rest = seconds % 60;
+  return minutes ? `${minutes}m ${rest}s` : `${rest}s`;
+}
+
 export function OutputGallery({ history = [], onDownload, onRestore, onDelete }) {
   return (
     <section className="historyPanel">
@@ -26,6 +34,16 @@ export function OutputGallery({ history = [], onDownload, onRestore, onDelete })
               key={item.id}
               role="button"
               tabIndex={0}
+              draggable={Boolean(primaryOutput)}
+              onDragStart={event => {
+                if (!primaryOutput) return;
+                event.dataTransfer.effectAllowed = "copy";
+                event.dataTransfer.setData("application/x-comfy-output-image", JSON.stringify({
+                  url: primaryOutput.url,
+                  filename: primaryOutput.filename || `${item.templateId || "output"}.png`
+                }));
+                event.dataTransfer.setData("text/uri-list", primaryOutput.url);
+              }}
               onClick={() => onRestore(item)}
               onKeyDown={event => {
                 if (event.key === "Enter" || event.key === " ") {
@@ -40,6 +58,9 @@ export function OutputGallery({ history = [], onDownload, onRestore, onDelete })
               <div className="historyMeta">
                 <strong>{item.templateName || item.templateId || "Workflow"}</strong>
                 <span>{formatTime(item.createdAt)} · Prompt {item.promptId || "n/a"}</span>
+                {item.durationMs ? (
+                  <span>Hoàn thành trong {formatDuration(item.durationMs)}</span>
+                ) : null}
                 <small>{item.address}</small>
               </div>
               <div className="historyActions">

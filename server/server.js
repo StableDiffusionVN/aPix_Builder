@@ -1,8 +1,9 @@
 import http from "node:http";
 import { randomUUID } from "node:crypto";
-import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import YAML from "yaml";
 import {
   getHistory,
   interruptComfy,
@@ -177,13 +178,19 @@ function inputImageUrl(filename) {
 async function listInputImages() {
   await mkdir(inputDir, { recursive: true });
   const entries = await readdir(inputDir, { withFileTypes: true });
-  return entries
+  const images = await Promise.all(entries
     .filter(entry => entry.isFile() && /\.(png|jpe?g|webp|gif)$/i.test(entry.name))
-    .map(entry => ({
-      name: entry.name,
-      url: inputImageUrl(entry.name)
-    }))
-    .sort((a, b) => a.name.localeCompare(b.name));
+    .map(async entry => {
+      const fileStat = await stat(path.join(inputDir, entry.name));
+      const createdAt = fileStat.birthtimeMs > 0 ? fileStat.birthtime : fileStat.mtime;
+      return {
+        name: entry.name,
+        url: inputImageUrl(entry.name),
+        createdAt: createdAt.toISOString(),
+        modifiedAt: fileStat.mtime.toISOString()
+      };
+    }));
+  return images.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 }
 
 async function handleInputUpload(req, res) {
@@ -379,6 +386,87 @@ async function handleDeleteOutputHistory(req, res) {
   send(res, 200, { history: next });
 }
 
+function slugifyTemplateId(value = "") {
+  return String(value)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80) || `template-${Date.now()}`;
+}
+
+function assertWritableTemplatePath(baseDir, targetDir) {
+  const relative = path.relative(baseDir, targetDir);
+  if (relative.startsWith("..") || path.isAbsolute(relative)) {
+    throw new Error("Invalid template path");
+  }
+}
+
+async function handleTemplateEditor(req, res, url) {
+  const { config, raw, template } = await templates.loadConfig(url.searchParams.get("template"));
+  const workflow = JSON.parse(await readFile(template.workflowPath, "utf8"));
+  send(res, 200, {
+    config,
+    raw,
+    workflow,
+    template: {
+      id: template.id,
+      name: template.name,
+      isDefault: template.isDefault,
+      yaml: template.yaml,
+      workflow: template.workflow
+    }
+  });
+}
+
+async function handleTemplateSave(req, res) {
+  const body = JSON.parse(await readBody(req) || "{}");
+  const workflow = body.workflow;
+  const config = body.config;
+  if (!workflow || typeof workflow !== "object" || Array.isArray(workflow)) {
+    send(res, 400, { error: "Missing workflow JSON object" });
+    return;
+  }
+  if (!config || typeof config !== "object" || Array.isArray(config)) {
+    send(res, 400, { error: "Missing YAML config object" });
+    return;
+  }
+  const templateId = slugifyTemplateId(body.templateId || config?.template?.id || config?.app?.name);
+  const existing = (await templates.loadTemplateRegistry()).templates.find(item => item.id === templateId);
+  const targetRoot = existing
+    ? (await templates.loadConfig(templateId)).template.baseDir
+    : path.join(userTemplatesDir, templateId);
+  assertWritableTemplatePath(configDir, targetRoot);
+
+  const nextConfig = {
+    app: {
+      name: config.app?.name || templateId
+    },
+    input: config.input || {},
+    output: config.output || {}
+  };
+  if (config.server && Object.keys(config.server).length > 0) {
+    nextConfig.server = config.server;
+  }
+
+  validateWorkflowMappings(nextConfig, workflow);
+  await mkdir(targetRoot, { recursive: true });
+  await writeFile(path.join(targetRoot, "api.json"), `${JSON.stringify(workflow, null, 2)}\n`);
+  await writeFile(path.join(targetRoot, "app_build.yaml"), YAML.stringify(nextConfig));
+
+  const registry = await templates.loadTemplateRegistry();
+  send(res, 200, {
+    template: {
+      id: templateId,
+      name: nextConfig.app.name,
+      yaml: "app_build.yaml",
+      workflow: "api.json"
+    },
+    registry
+  });
+}
+
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://${req.headers.host}`);
@@ -402,6 +490,10 @@ const server = http.createServer(async (req, res) => {
           workflow: template.workflow
         }
       });
+    } else if (req.method === "GET" && url.pathname === "/api/template-editor") {
+      await handleTemplateEditor(req, res, url);
+    } else if (req.method === "POST" && url.pathname === "/api/templates/save") {
+      await handleTemplateSave(req, res);
     } else if (req.method === "POST" && url.pathname === "/api/run") {
       await handleRun(req, res);
     } else if (req.method === "POST" && url.pathname === "/api/cancel") {

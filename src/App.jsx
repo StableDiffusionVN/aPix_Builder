@@ -3,6 +3,7 @@ import {
   AlertCircle,
   CheckCircle2,
   Download,
+  GitCompare,
   Image as ImageIcon,
   Loader2,
   RotateCcw,
@@ -13,6 +14,7 @@ import { ConnectionPanel } from "./components/ConnectionPanel";
 import { DynamicField } from "./components/DynamicField";
 import { OutputGallery } from "./components/OutputGallery";
 import { RunControls } from "./components/RunControls";
+import { TemplateEditorModal } from "./components/TemplateEditorModal";
 import { TemplateSelector } from "./components/TemplateSelector";
 import { downloadImage } from "./lib/download";
 import { buildDefaults, flattenInputs, normalizeId, requestPayload } from "./lib/template";
@@ -54,12 +56,16 @@ export default function App() {
   const [runQueue, setRunQueue] = useState([]);
   const [history, setHistory] = useState([]);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [templateEditorOpen, setTemplateEditorOpen] = useState(false);
   const [theme, setTheme] = useState(loadTheme);
   const [imageScale, setImageScale] = useState(1);
   const [imagePan, setImagePan] = useState({ x: 0, y: 0 });
   const [imageFitSize, setImageFitSize] = useState({ width: 0, height: 0 });
   const [outputImageSize, setOutputImageSize] = useState({ width: 0, height: 0 });
   const [draggingImage, setDraggingImage] = useState(false);
+  const [compareMode, setCompareMode] = useState(false);
+  const [comparePosition, setComparePosition] = useState(50);
+  const [compareDividerX, setCompareDividerX] = useState(50);
   const imageDragRef = useRef(null);
   const previewAreaRef = useRef(null);
   const imageElementRef = useRef(null);
@@ -73,6 +79,18 @@ export default function App() {
   const primaryOutput = result?.outputs?.[0];
   const heroImage = primaryOutput?.url;
   const resultTiming = result?.historyItem || result || {};
+  const showStatus = Boolean(error || result || running || activeRunId || runQueue.length || status === "Đang tải cấu hình YAML...");
+  const compareInputImage = useMemo(() => {
+    for (const item of inputs) {
+      const type = item.ui?.type;
+      if (type !== "image" && type !== "image_mask") continue;
+      const value = values[normalizeId(item.id)];
+      if (typeof value === "string" && value.startsWith("data:image")) return value;
+      if (value?.kind === "input-image" && value.url) return value.url;
+    }
+    return "";
+  }, [inputs, values]);
+  const canCompare = Boolean(heroImage && compareInputImage);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -109,26 +127,46 @@ export default function App() {
     return data;
   }
 
+  async function reloadTemplates(nextTemplateId) {
+    const registry = await loadTemplateRegistry();
+    setTemplates(registry.templates || []);
+    await loadConfig(nextTemplateId || registry.default);
+  }
+
   function resetImageView() {
     setImageScale(1);
     setImagePan({ x: 0, y: 0 });
   }
 
   useEffect(() => {
+    function isTextEntryTarget(target) {
+      return target instanceof HTMLElement && (
+        target.isContentEditable ||
+        ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)
+      );
+    }
+
     function handleSpaceReset(event) {
       if (!heroImage || event.code !== "Space") return;
-      const target = event.target;
-      const isTypingTarget = target instanceof HTMLElement && (
-        target.isContentEditable ||
-        ["INPUT", "TEXTAREA", "SELECT", "BUTTON"].includes(target.tagName)
-      );
-      if (isTypingTarget) return;
+      if (isTextEntryTarget(event.target)) return;
       event.preventDefault();
+      event.stopPropagation();
       resetImageView();
     }
 
-    window.addEventListener("keydown", handleSpaceReset);
-    return () => window.removeEventListener("keydown", handleSpaceReset);
+    function preventSpaceClick(event) {
+      if (!heroImage || event.code !== "Space") return;
+      if (isTextEntryTarget(event.target)) return;
+      event.preventDefault();
+      event.stopPropagation();
+    }
+
+    window.addEventListener("keydown", handleSpaceReset, true);
+    window.addEventListener("keyup", preventSpaceClick, true);
+    return () => {
+      window.removeEventListener("keydown", handleSpaceReset, true);
+      window.removeEventListener("keyup", preventSpaceClick, true);
+    };
   }, [heroImage]);
 
   function updateImageFitSize() {
@@ -143,6 +181,7 @@ export default function App() {
       width: Math.max(1, Math.floor(image.naturalWidth * fitScale)),
       height: Math.max(1, Math.floor(image.naturalHeight * fitScale))
     });
+    setCompareDividerX(areaWidth / 2);
   }
 
   function handleResultImageLoad() {
@@ -160,6 +199,7 @@ export default function App() {
     if (!heroImage) {
       setImageFitSize({ width: 0, height: 0 });
       setOutputImageSize({ width: 0, height: 0 });
+      setCompareMode(false);
       return undefined;
     }
     setOutputImageSize({ width: 0, height: 0 });
@@ -170,6 +210,10 @@ export default function App() {
       window.removeEventListener("resize", updateImageFitSize);
     };
   }, [heroImage]);
+
+  useEffect(() => {
+    if (!canCompare) setCompareMode(false);
+  }, [canCompare]);
 
   async function loadConfig(templateId, options = {}) {
     setStatus("Đang tải cấu hình YAML...");
@@ -354,6 +398,17 @@ export default function App() {
     setImageScale(current => Math.min(MAX_IMAGE_SCALE, Math.max(MIN_IMAGE_SCALE, Number((current + delta).toFixed(2)))));
   }
 
+  function updateComparePosition(event) {
+    const image = imageElementRef.current;
+    if (!image) return;
+    const rect = image.getBoundingClientRect();
+    if (!rect.width) return;
+    const next = ((event.clientX - rect.left) / rect.width) * 100;
+    const clamped = Math.min(100, Math.max(0, Number(next.toFixed(2))));
+    setComparePosition(clamped);
+    setCompareDividerX(rect.left - event.currentTarget.getBoundingClientRect().left + rect.width * (clamped / 100));
+  }
+
   function handlePreviewPointerDown(event) {
     if (!heroImage || event.button !== 0) return;
     event.preventDefault();
@@ -369,9 +424,14 @@ export default function App() {
   }
 
   function handlePreviewPointerMove(event) {
+    if (compareMode && !imageDragRef.current) {
+      updateComparePosition(event);
+      return;
+    }
     const drag = imageDragRef.current;
     if (!drag || drag.pointerId !== event.pointerId) return;
     event.preventDefault();
+    if (compareMode) updateComparePosition(event);
     setImagePan({
       x: drag.panX + event.clientX - drag.startX,
       y: drag.panY + event.clientY - drag.startY
@@ -420,6 +480,7 @@ export default function App() {
             templates={templates}
             selectedTemplate={selectedTemplate}
             onChange={loadConfig}
+            onEdit={() => setTemplateEditorOpen(true)}
           />
         </section>
 
@@ -455,12 +516,24 @@ export default function App() {
           <div className="panelTitle">
             <h3>{outputs[0]?.ui?.label || "Ảnh kết quả"}</h3>
             <div className="previewActions">
-              <div className={`status ${error ? "bad" : result ? "good" : ""}`}>
-            {error ? <AlertCircle size={17} /> : result ? <CheckCircle2 size={17} /> : running ? <Loader2 className="spin" size={17} /> : <ImageIcon size={17} />}
-                <span>{status}</span>
-              </div>
+              {showStatus ? (
+                <div className={`status ${error ? "bad" : result ? "good" : ""}`}>
+                  {error ? <AlertCircle size={17} /> : result ? <CheckCircle2 size={17} /> : running ? <Loader2 className="spin" size={17} /> : <ImageIcon size={17} />}
+                  <span>{status}</span>
+                </div>
+              ) : null}
               {primaryOutput ? (
                 <>
+                {canCompare ? (
+                  <button
+                    className={`downloadButton compareButton ${compareMode ? "active" : ""}`}
+                    onClick={() => setCompareMode(current => !current)}
+                    title="So sánh ảnh input và output"
+                  >
+                    <GitCompare size={16} />
+                    <span>Compare</span>
+                  </button>
+                ) : null}
                 <button className="downloadButton" onClick={resetImageView} title="Đặt zoom và vị trí về mặc định (Space)">
                   <RotateCcw size={16} />
                   <span>{Math.round(imageScale * 100)}%</span>
@@ -474,7 +547,7 @@ export default function App() {
             </div>
           </div>
           <div
-            className={`previewArea ${heroImage ? "isInteractive" : ""} ${draggingImage ? "isDragging" : ""}`}
+            className={`previewArea ${heroImage ? "isInteractive" : ""} ${compareMode ? "isCompareMode" : ""} ${draggingImage ? "isDragging" : ""}`}
             ref={previewAreaRef}
             onWheel={handlePreviewWheel}
             onPointerDown={handlePreviewPointerDown}
@@ -484,23 +557,44 @@ export default function App() {
           >
             {heroImage ? (
               <div
-                className="imageStage"
+                className={`imageStage ${compareMode && canCompare ? "isCompare" : ""}`}
                 style={{
                   "--image-scale": imageScale,
                   "--image-pan-x": `${imagePan.x}px`,
                   "--image-pan-y": `${imagePan.y}px`,
                   "--image-fit-width": imageFitSize.width ? `${imageFitSize.width}px` : "100%",
-                  "--image-fit-height": imageFitSize.height ? `${imageFitSize.height}px` : "100%"
+                  "--image-fit-height": imageFitSize.height ? `${imageFitSize.height}px` : "100%",
+                  "--compare-position": `${comparePosition}%`,
+                  "--compare-divider-x": `${compareDividerX}px`
                 }}
               >
-                <img
-                  ref={imageElementRef}
-                  className="resultImage"
-                  src={heroImage}
-                  alt={outputs[0]?.ui?.label || "Ảnh kết quả"}
-                  draggable="false"
-                  onLoad={handleResultImageLoad}
-                />
+                {compareMode && canCompare ? (
+                  <>
+                    <img
+                      className="resultImage compareInputImage"
+                      src={compareInputImage}
+                      alt="Ảnh input"
+                      draggable="false"
+                    />
+                    <img
+                      ref={imageElementRef}
+                      className="resultImage compareOutputImage"
+                      src={heroImage}
+                      alt={outputs[0]?.ui?.label || "Ảnh kết quả"}
+                      draggable="false"
+                      onLoad={handleResultImageLoad}
+                    />
+                  </>
+                ) : (
+                  <img
+                    ref={imageElementRef}
+                    className="resultImage"
+                    src={heroImage}
+                    alt={outputs[0]?.ui?.label || "Ảnh kết quả"}
+                    draggable="false"
+                    onLoad={handleResultImageLoad}
+                  />
+                )}
               </div>
             ) : (
               <div className="emptyState">
@@ -509,6 +603,13 @@ export default function App() {
                 <p>{running ? "App đang chờ workflow hoàn tất." : "Điền input bên trái rồi chạy workflow để xem output."}</p>
               </div>
             )}
+            {heroImage && compareMode && canCompare ? (
+              <div
+                className="compareDivider"
+                style={{ "--compare-divider-x": `${compareDividerX}px` }}
+                aria-hidden="true"
+              />
+            ) : null}
             {heroImage && outputImageSize.width && outputImageSize.height ? (
               <div className="outputSizeBadge">
                 {outputImageSize.width} x {outputImageSize.height}
@@ -557,6 +658,14 @@ export default function App() {
             </div>
           </section>
         </div>
+      ) : null}
+
+      {templateEditorOpen ? (
+        <TemplateEditorModal
+          selectedTemplate={selectedTemplate}
+          onClose={() => setTemplateEditorOpen(false)}
+          onSaved={reloadTemplates}
+        />
       ) : null}
     </main>
   );

@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Check, Eye, Images, RefreshCcw, Trash2, Upload, X } from "lucide-react";
+import { Check, Eye, Filter, Images, RefreshCcw, Star, Trash2, Upload, X } from "lucide-react";
+
+const INPUT_FAVORITES_KEY = "comfyui-build:input-image-favorites:v1";
 
 const inputTypes = new Set([
   "string",
@@ -32,6 +34,45 @@ function fileToDataUrl(file) {
   });
 }
 
+function readStoredSet(key) {
+  try {
+    return new Set(JSON.parse(localStorage.getItem(key) || "[]"));
+  } catch {
+    return new Set();
+  }
+}
+
+function writeStoredSet(key, value) {
+  localStorage.setItem(key, JSON.stringify([...value]));
+}
+
+function inferImageDate(image) {
+  if (image?.createdAt) return new Date(image.createdAt);
+  const match = /(\d{13})/.exec(image?.name || "");
+  if (match) return new Date(Number(match[1]));
+  return null;
+}
+
+function matchesTimeFilter(value, filter) {
+  if (filter === "all") return true;
+  const date = value instanceof Date && Number.isFinite(value.getTime()) ? value : null;
+  if (!date) return false;
+  const now = new Date();
+  if (filter === "day") {
+    return date.getFullYear() === now.getFullYear()
+      && date.getMonth() === now.getMonth()
+      && date.getDate() === now.getDate();
+  }
+  if (filter === "month") {
+    return date.getFullYear() === now.getFullYear()
+      && date.getMonth() === now.getMonth();
+  }
+  if (filter === "year") {
+    return date.getFullYear() === now.getFullYear();
+  }
+  return true;
+}
+
 export function StaticBlock({ item }) {
   const ui = item.ui || {};
   if (ui.type === "markdown") {
@@ -50,6 +91,9 @@ export function DynamicField({ item, value, onChange }) {
   const display = ui.display || ui.variant || ui.widget || "";
   const [isDraggingFile, setIsDraggingFile] = useState(false);
   const [inputImages, setInputImages] = useState([]);
+  const [libraryTimeFilter, setLibraryTimeFilter] = useState("all");
+  const [libraryFavoritesOnly, setLibraryFavoritesOnly] = useState(false);
+  const [favoriteInputImages, setFavoriteInputImages] = useState(() => readStoredSet(INPUT_FAVORITES_KEY));
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxImage, setLightboxImage] = useState(null);
@@ -195,6 +239,20 @@ export function DynamicField({ item, value, onChange }) {
     setLightboxOpen(true);
   }
 
+  function toggleInputFavorite(name) {
+    if (!name) return;
+    setFavoriteInputImages(current => {
+      const next = new Set(current);
+      if (next.has(name)) {
+        next.delete(name);
+      } else {
+        next.add(name);
+      }
+      writeStoredSet(INPUT_FAVORITES_KEY, next);
+      return next;
+    });
+  }
+
   async function handleDeleteInputImage(image) {
     if (!image?.name) return;
     const response = await fetch("/api/input-images/delete", {
@@ -254,12 +312,31 @@ export function DynamicField({ item, value, onChange }) {
 
   if (!inputTypes.has(ui.type)) return <StaticBlock item={item} />;
   if (ui.type === "seed") {
+    const isRandomSeed = value === "random_seed" || value === "";
+    const handleSeedChange = event => {
+      const inputValue = event.target.value;
+      if (inputValue === "") {
+        onChange("random_seed");
+        return;
+      }
+      const next = Math.max(ui.minimum ?? 0, Math.trunc(Number(inputValue)));
+      onChange(Number.isFinite(next) ? next : "random_seed");
+    };
+
     return (
       <label className="field compact">
-        <span>Seed</span>
+        <span>{label}</span>
         <div className="inlineControl">
-          <input value={value} onChange={event => onChange(event.target.value)} />
-          <button type="button" className="iconButton" onClick={() => onChange("random_seed")} title="Random seed">
+          <input
+            type="number"
+            min={ui.minimum ?? 0}
+            max={ui.maximum}
+            step={ui.step ?? 1}
+            placeholder={isRandomSeed ? "Random mỗi lần run" : ""}
+            value={isRandomSeed ? "" : value}
+            onChange={handleSeedChange}
+          />
+          <button type="button" className="iconButton" onClick={() => onChange("random_seed")} title="Random seed mỗi lần run">
             <RefreshCcw size={16} />
           </button>
         </div>
@@ -305,6 +382,11 @@ export function DynamicField({ item, value, onChange }) {
     );
   }
   if (ui.type === "image" || ui.type === "image_mask" || ui.type === "file") {
+    const visibleInputImages = inputImages.filter(image => {
+      if (libraryFavoritesOnly && !favoriteInputImages.has(image.name)) return false;
+      return matchesTimeFilter(inferImageDate(image), libraryTimeFilter);
+    });
+
     return (
       <>
         <label className="field">
@@ -421,32 +503,56 @@ export function DynamicField({ item, value, onChange }) {
               <div className="inputLibraryHeader">
                 <div>
                   <h3>Ảnh trong thư mục input</h3>
-                  <p>{inputImages.length} ảnh</p>
+                  <p>{visibleInputImages.length} / {inputImages.length} ảnh</p>
                 </div>
-                <button type="button" className="imageLightboxClose inPanel" onClick={() => setLibraryOpen(false)} title="Đóng">
-                  <X size={18} />
-                </button>
+                <div className="inputLibraryHeaderTools">
+                  <label className={`historyIconFilter ${libraryTimeFilter !== "all" ? "active" : ""}`} title="Lọc thời gian">
+                    <Filter size={14} />
+                    <select value={libraryTimeFilter} onChange={event => setLibraryTimeFilter(event.target.value)} aria-label="Lọc thời gian thư viện ảnh">
+                      <option value="all">Tất cả thời gian</option>
+                      <option value="day">Hôm nay</option>
+                      <option value="month">Tháng này</option>
+                      <option value="year">Năm này</option>
+                    </select>
+                  </label>
+                  <button
+                    type="button"
+                    className={`historyIconButton ${libraryFavoritesOnly ? "active" : ""}`}
+                    onClick={() => setLibraryFavoritesOnly(current => !current)}
+                    title="Chỉ xem favourite"
+                  >
+                    <Star size={14} />
+                  </button>
+                  <button type="button" className="imageLightboxClose inPanel" onClick={() => setLibraryOpen(false)} title="Đóng">
+                    <X size={18} />
+                  </button>
+                </div>
               </div>
-              {inputImages.length > 0 ? (
+              {visibleInputImages.length > 0 ? (
                 <div className="inputLibraryGrid">
-                  {inputImages.map(image => (
+                  {visibleInputImages.map(image => (
                     <article key={image.name} className={`inputLibraryItem ${selectedInputName === image.name ? "isSelected" : ""}`}>
                       <button type="button" className="inputLibraryThumb" onClick={() => handleInputImageSelect(image.name)} title="Chọn ảnh này">
                         <img src={image.url} alt={image.name} />
                       </button>
-                      <div className="inputLibraryMeta">
-                        <span title={image.name}>{image.name}</span>
-                        <div className="inputLibraryActions">
-                          <button type="button" onClick={() => handleInputImageSelect(image.name)} title="Chọn">
-                            <Check size={15} />
-                          </button>
-                          <button type="button" onClick={() => openLightbox(image)} title="Xem ảnh">
-                            <Eye size={15} />
-                          </button>
-                          <button type="button" onClick={() => handleDeleteInputImage(image)} title="Xóa ảnh">
-                            <Trash2 size={15} />
-                          </button>
-                        </div>
+                      <div className="inputLibraryActions">
+                        <button
+                          type="button"
+                          className={favoriteInputImages.has(image.name) ? "isFavorite" : ""}
+                          onClick={() => toggleInputFavorite(image.name)}
+                          title={favoriteInputImages.has(image.name) ? "Bỏ favourite" : "Favourite ảnh"}
+                        >
+                          <Star size={15} />
+                        </button>
+                        <button type="button" onClick={() => handleInputImageSelect(image.name)} title="Chọn">
+                          <Check size={15} />
+                        </button>
+                        <button type="button" onClick={() => openLightbox(image)} title="Xem ảnh">
+                          <Eye size={15} />
+                        </button>
+                        <button type="button" onClick={() => handleDeleteInputImage(image)} title="Xóa ảnh">
+                          <Trash2 size={15} />
+                        </button>
                       </div>
                     </article>
                   ))}
@@ -454,7 +560,7 @@ export function DynamicField({ item, value, onChange }) {
               ) : (
                 <div className="inputLibraryEmpty">
                   <Images size={34} />
-                  <strong>Chưa có ảnh trong thư mục input</strong>
+                  <strong>{inputImages.length ? "Không có ảnh khớp bộ lọc" : "Chưa có ảnh trong thư mục input"}</strong>
                 </div>
               )}
             </section>

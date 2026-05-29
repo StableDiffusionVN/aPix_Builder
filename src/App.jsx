@@ -6,12 +6,14 @@ import {
   GitCompare,
   Image as ImageIcon,
   Loader2,
+  Pencil,
   RotateCcw,
   Settings2,
   X
 } from "lucide-react";
 import { ConnectionPanel } from "./components/ConnectionPanel";
 import { DynamicField } from "./components/DynamicField";
+import { ImageEditorModal } from "./components/ImageEditorModal";
 import { OutputGallery } from "./components/OutputGallery";
 import { RunControls } from "./components/RunControls";
 import { TemplateEditorModal } from "./components/TemplateEditorModal";
@@ -57,6 +59,7 @@ export default function App() {
   const [history, setHistory] = useState([]);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [templateEditorOpen, setTemplateEditorOpen] = useState(false);
+  const [outputEditorOpen, setOutputEditorOpen] = useState(false);
   const [theme, setTheme] = useState(loadTheme);
   const [imageScale, setImageScale] = useState(1);
   const [imagePan, setImagePan] = useState({ x: 0, y: 0 });
@@ -365,7 +368,7 @@ export default function App() {
       address: item.address,
       keepResult: true
     });
-    setStatus(`Đã gọi lại prompt ${item.promptId || "trước đó"}`);
+    setStatus("Đã gọi lại prompt");
   }
 
   async function deleteHistoryItem(id) {
@@ -457,6 +460,22 @@ export default function App() {
     }
   }
 
+  async function handleSaveEditedOutput(dataUrl) {
+    setResult(current => {
+      if (!current?.outputs?.length) return current;
+      const nextOutputs = current.outputs.map((output, index) => (
+        index === 0
+          ? { ...output, url: dataUrl, filename: output.filename || "edited-output.png" }
+          : output
+      ));
+      return {
+        ...current,
+        outputs: nextOutputs,
+        historyItem: current.historyItem ? { ...current.historyItem, outputs: nextOutputs } : current.historyItem
+      };
+    });
+  }
+
   return (
     <main className="appShell">
       <aside className="sidebar">
@@ -530,17 +549,17 @@ export default function App() {
                     onClick={() => setCompareMode(current => !current)}
                     title="So sánh ảnh input và output"
                   >
-                    <GitCompare size={16} />
-                    <span>Compare</span>
+                    <GitCompare size={14} />
                   </button>
                 ) : null}
                 <button className="downloadButton" onClick={resetImageView} title="Đặt zoom và vị trí về mặc định (Space)">
-                  <RotateCcw size={16} />
-                  <span>{Math.round(imageScale * 100)}%</span>
+                  <RotateCcw size={14} />
+                </button>
+                <button className="downloadButton" onClick={() => setOutputEditorOpen(true)} title="Image Editor">
+                  <Pencil size={14} />
                 </button>
                 <button className="downloadButton" onClick={() => handleDownload(primaryOutput)} title="Tải ảnh xuống">
-                  <Download size={17} />
-                  <span>Tải ảnh</span>
+                  <Download size={14} />
                 </button>
                 </>
               ) : null}
@@ -665,6 +684,15 @@ export default function App() {
           selectedTemplate={selectedTemplate}
           onClose={() => setTemplateEditorOpen(false)}
           onSaved={reloadTemplates}
+        />
+      ) : null}
+
+      {outputEditorOpen && heroImage ? (
+        <ImageEditorModal
+          source={heroImage}
+          title="Output - Image Editor"
+          onClose={() => setOutputEditorOpen(false)}
+          onSave={handleSaveEditedOutput}
         />
       ) : null}
     </main>

@@ -78,7 +78,7 @@ p {
 
 .appShell {
   display: grid;
-  grid-template-columns: 430px minmax(0, 1fr);
+  grid-template-columns: clamp(340px, 32vw, 430px) minmax(0, 1fr);
   gap: 12px;
   width: auto;
   max-width: 100vw;
@@ -200,6 +200,7 @@ p {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+  min-width: 0;
 }
 
 .settingsHeader {
@@ -209,9 +210,12 @@ p {
 
 .settingsHeader h2,
 .panelTitle h3 {
+  min-width: 0;
+  overflow: hidden;
   color: var(--text);
   font-size: 14px;
   font-weight: 750;
+  text-overflow: ellipsis;
 }
 
 .panelTitle span {
@@ -466,28 +470,44 @@ p {
   right: 8px;
   z-index: 2;
   display: flex;
-  gap: 6px;
+  gap: 5px;
+  opacity: 0;
+  transform: translateY(-3px);
+  transition: opacity 0.18s ease, transform 0.18s ease;
+  pointer-events: none;
+}
+
+.uploadFrame:hover .uploadActions {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
 }
 
 .uploadView,
 .uploadClear {
   display: grid;
   place-items: center;
-  width: 30px;
-  height: 30px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.055);
-  color: var(--muted);
+  width: 28px;
+  height: 28px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 8px;
+  background: rgba(8, 8, 18, 0.72);
+  color: rgba(255, 255, 255, 0.82);
   cursor: pointer;
-  transition: border-color 0.2s ease, background 0.2s ease, color 0.2s ease;
+  backdrop-filter: blur(8px);
+  transition: border-color 0.16s ease, background 0.16s ease, color 0.16s ease;
 }
 
-.uploadView:hover,
-.uploadClear:hover {
-  border-color: rgba(var(--accent-rgb), 0.36);
+.uploadView:hover {
+  border-color: rgba(var(--accent-rgb), 0.5);
   color: var(--accent-hover);
-  background: rgba(var(--accent-rgb), 0.1);
+  background: rgba(var(--accent-rgb), 0.18);
+}
+
+.uploadClear:hover {
+  border-color: rgba(255, 68, 68, 0.5);
+  color: #ffc4c4;
+  background: var(--danger-bg);
 }
 
 .imageLightbox {
@@ -560,6 +580,569 @@ p {
   border-color: rgba(var(--accent-rgb), 0.4);
   color: var(--accent-hover);
   background: rgba(var(--accent-rgb), 0.1);
+}
+
+.imageEditorBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: grid;
+  place-items: center;
+  padding: 6px;
+  background: rgba(4, 7, 9, 0.82);
+  backdrop-filter: blur(8px);
+}
+
+.imageEditorModal {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr) 300px;
+  gap: 12px;
+  width: min(2040px, 100%);
+  height: min(96vh, 1160px);
+  padding: 16px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: radial-gradient(circle at 20% -20%, rgba(var(--accent-rgb), 0.1), transparent 44%), var(--panel);
+  backdrop-filter: blur(24px);
+  box-shadow: 0 28px 90px rgba(0, 0, 0, 0.56), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.imageEditorRail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-height: 0;
+  padding: 7px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel-strong);
+}
+
+.imageEditorRail button {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.055);
+  color: rgba(245, 245, 235, 0.84);
+  cursor: pointer;
+  transition: background 0.16s ease, color 0.16s ease, transform 0.16s ease;
+}
+
+.imageEditorRail button:hover,
+.imageEditorRail button.active {
+  color: var(--accent-hover);
+  background: rgba(var(--accent-rgb), 0.15);
+}
+
+.imageEditorRailDivider {
+  width: 100%;
+  height: 1px;
+  margin: 3px 0;
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.imageEditorColorSwatch {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  margin-top: auto;
+  cursor: pointer;
+}
+
+.imageEditorColorSwatch input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.imageEditorColorSwatch span {
+  width: 26px;
+  height: 26px;
+  border: 2px solid rgba(255, 255, 255, 0.82);
+  border-radius: 999px;
+}
+
+.imageEditorStage {
+  min-width: 0;
+  min-height: 0;
+}
+
+.imageEditorPreview {
+  position: relative;
+  display: grid;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background:
+    linear-gradient(45deg, rgba(255,255,255,0.03) 25%, transparent 25%),
+    linear-gradient(-45deg, rgba(255,255,255,0.03) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, rgba(255,255,255,0.03) 75%),
+    linear-gradient(-45deg, transparent 75%, rgba(255,255,255,0.03) 75%);
+  background-color: rgba(2, 3, 15, 0.72);
+  background-size: 20px 20px;
+  background-position: 0 0, 0 10px, 10px -10px, -10px 0;
+}
+
+.imageEditorCanvasWrap {
+  position: relative;
+  display: inline-block;
+  line-height: 0;
+  transform-origin: center;
+  touch-action: none;
+}
+
+.imageEditorPreview canvas {
+  display: block;
+  max-width: min(100%, 1220px);
+  max-height: calc(96vh - 120px);
+  width: auto;
+  height: auto;
+  image-rendering: auto;
+  box-shadow: none;
+}
+
+.brushCursorCircle {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  z-index: 10;
+  box-sizing: border-box;
+}
+
+.brushCursorCircle.brushMode {
+  border: 1.5px solid;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6);
+}
+
+.brushCursorCircle.eraserMode {
+  border: 1.5px dashed rgba(255, 255, 255, 0.85);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6);
+}
+
+.cropOverlay {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+}
+
+.cropBox {
+  position: absolute;
+  border: 1px solid rgba(255, 255, 255, 0.92);
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.48);
+  cursor: move;
+  pointer-events: auto;
+}
+
+.cropThird {
+  position: absolute;
+  background: rgba(255, 255, 255, 0.28);
+  pointer-events: none;
+}
+
+.cropThirdV {
+  top: 0;
+  bottom: 0;
+  width: 1px;
+}
+
+.cropThirdH {
+  left: 0;
+  right: 0;
+  height: 1px;
+}
+
+.cropHandle {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.5);
+  border-radius: 2px;
+  pointer-events: auto;
+}
+
+.cropHandle-nw { left: -6px; top: -6px; cursor: nwse-resize; }
+.cropHandle-ne { right: -6px; top: -6px; cursor: nesw-resize; }
+.cropHandle-se { right: -6px; bottom: -6px; cursor: nwse-resize; }
+.cropHandle-sw { left: -6px; bottom: -6px; cursor: nesw-resize; }
+.cropHandle-n { left: 50%; top: -6px; margin-left: -6px; cursor: ns-resize; }
+.cropHandle-s { left: 50%; bottom: -6px; margin-left: -6px; cursor: ns-resize; }
+.cropHandle-e { right: -6px; top: 50%; margin-top: -6px; cursor: ew-resize; }
+.cropHandle-w { left: -6px; top: 50%; margin-top: -6px; cursor: ew-resize; }
+
+.cropHint {
+  color: var(--muted-2, rgba(203, 213, 245, 0.66));
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.cropRatioGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+.cropRatioGrid button {
+  min-height: 30px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--panel-soft);
+  color: rgba(245, 245, 235, 0.78);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+
+.cropRatioGrid button:hover {
+  border-color: rgba(var(--accent-rgb), 0.4);
+  color: var(--accent-hover);
+}
+
+.cropRatioGrid button.active {
+  border-color: rgba(var(--accent-rgb), 0.5);
+  color: var(--accent);
+  background: rgba(var(--accent-rgb), 0.14);
+}
+
+.cropResetButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 30px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: transparent;
+  color: rgba(245, 245, 235, 0.7);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.cropResetButton:hover {
+  border-color: rgba(var(--accent-rgb), 0.4);
+  color: var(--accent-hover);
+}
+
+.editorLoading {
+  position: absolute;
+  color: rgba(245, 245, 235, 0.68);
+  font-size: 13px;
+}
+
+.imageEditorControls {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  align-content: stretch;
+  gap: 12px;
+  min-height: 0;
+  overflow: hidden;
+  padding-left: 0;
+}
+
+.imageEditorPanelHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.imageEditorPanelHeader h2 {
+  color: var(--accent);
+  font-size: 14px;
+  font-weight: 750;
+  line-height: 1;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.imageEditorPanelHeader button {
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-soft);
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  transition: border-color 0.16s ease, background 0.16s ease, color 0.16s ease;
+}
+
+.imageEditorPanelHeader button:hover {
+  border-color: rgba(var(--accent-rgb), 0.4);
+  color: var(--accent-hover);
+  background: rgba(var(--accent-rgb), 0.1);
+}
+
+.imageEditorFloatingBar {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 42px;
+  padding: 0 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: rgba(6, 7, 23, 0.88);
+  backdrop-filter: blur(16px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  transform: translateX(-50%);
+}
+
+.imageEditorFloatingBar button {
+  display: grid;
+  place-items: center;
+  min-width: 24px;
+  height: 28px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: rgba(245, 245, 235, 0.78);
+  cursor: pointer;
+}
+
+.imageEditorFloatingBar button:hover {
+  color: var(--accent-hover);
+  background: rgba(var(--accent-rgb), 0.1);
+}
+
+.imageEditorFloatingBar button:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+
+.zoomReadout {
+  width: 46px;
+  color: #f4f1de !important;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.floatingDivider {
+  width: 1px;
+  height: 28px;
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.imageEditorAccordionList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.imageEditorAccordionList::-webkit-scrollbar {
+  width: 5px;
+}
+
+.imageEditorAccordionList::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.imageEditorAccordion {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel-soft);
+  overflow: hidden;
+}
+
+.imageEditorAccordionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 38px;
+  padding: 0 12px;
+  border: 0;
+  background: transparent;
+  color: rgba(245, 245, 235, 0.78);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 750;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  transition: color 0.16s ease, background 0.16s ease;
+}
+
+.imageEditorAccordionHeader:hover {
+  color: var(--accent-hover);
+  background: rgba(var(--accent-rgb), 0.07);
+}
+
+.imageEditorAccordion.isOpen .imageEditorAccordionHeader {
+  color: var(--accent);
+  background: rgba(var(--accent-rgb), 0.1);
+  border-bottom: 1px solid var(--border);
+}
+
+.imageEditorAccordionTitle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.imageEditorAccordionChevron {
+  transition: transform 0.18s ease;
+}
+
+.imageEditorAccordion.isOpen .imageEditorAccordionChevron {
+  transform: rotate(180deg);
+}
+
+.imageEditorAccordionBody {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  padding: 12px 10px;
+}
+
+.editorRange {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 4px 8px;
+  color: rgba(245, 245, 235, 0.9);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.editorRange input {
+  grid-column: 1 / -1;
+  width: 100%;
+  height: 4px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.editorRange b {
+  color: rgba(245, 245, 235, 0.82);
+  font-size: 12px;
+  text-align: right;
+}
+
+.editorRangeReset {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: rgba(245, 245, 235, 0.5);
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.editorRangeReset:hover:not(:disabled) {
+  color: var(--accent-hover);
+  background: rgba(var(--accent-rgb), 0.12);
+}
+
+.editorRangeReset:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.hslSwatches {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 3px 0 5px;
+}
+
+.hslSwatches button {
+  width: 20px;
+  height: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 999px;
+  cursor: pointer;
+  box-shadow: none;
+}
+
+.hslSwatches button.active {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.editorColorRow {
+  display: grid;
+  grid-template-columns: 1fr 32px auto;
+  align-items: center;
+  gap: 8px;
+  color: rgba(245, 245, 235, 0.9);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.editorColorRow input {
+  width: 38px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+}
+
+.editorColorRow b {
+  color: var(--accent);
+  font-size: 12px;
+  text-align: right;
+}
+
+.imageEditorNote {
+  padding: 9px 10px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.imageEditorFooter {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 6px;
+}
+
+.imageEditorFooter .smallActionButton,
+.imageEditorFooter .saveTemplateButton {
+  min-width: 72px;
+  min-height: 34px;
+  border-radius: 7px;
+  font-size: 12px;
+}
+
+.imageEditorFooter .saveTemplateButton {
+  background: linear-gradient(135deg, var(--accent), var(--accent-hover));
+  border-color: rgba(var(--accent-rgb), 0.42);
+  color: #0a0b00;
+  box-shadow: var(--shadow);
 }
 
 .inputLibraryButton {
@@ -951,7 +1534,9 @@ p {
 .status {
   display: flex;
   align-items: center;
-  max-width: min(460px, 44vw);
+  flex: 0 1 220px;
+  max-width: min(260px, 100%);
+  min-width: 0;
   min-height: 38px;
   gap: 8px;
   padding: 8px 12px;
@@ -982,6 +1567,8 @@ p {
 .historyPanel {
   display: grid;
   min-height: 0;
+  min-width: 0;
+  overflow: hidden;
   gap: 12px;
   padding: 16px;
 }
@@ -1108,9 +1695,10 @@ p {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 38px;
-  gap: 7px;
-  padding: 0 12px;
+  width: 34px;
+  min-height: 34px;
+  gap: 0;
+  padding: 0;
   border: 1px solid rgba(var(--accent-rgb), 0.36);
   border-radius: 10px;
   background: rgba(var(--accent-rgb), 0.13);
@@ -1121,23 +1709,31 @@ p {
 }
 
 .compareButton.active {
-  border-color: rgba(var(--accent-rgb), 0.68);
-  color: #0b0b1b;
-  background: linear-gradient(135deg, var(--accent), var(--accent-hover));
-  box-shadow: 0 0 0 2px rgba(var(--accent-rgb), 0.14);
+  border-color: rgba(var(--accent-rgb), 0.42);
+  color: var(--accent-hover);
+  background: rgba(var(--accent-rgb), 0.14);
+  box-shadow: none;
 }
 
 .compareButton.active span,
 .compareButton.active svg {
-  color: #0b0b1b;
+  color: var(--accent-hover);
 }
 
 .previewActions {
   display: flex;
   align-items: center;
   justify-content: flex-end;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
   min-width: 0;
   gap: 8px;
+}
+
+.previewActions .downloadButton {
+  flex: 0 0 auto;
+  min-width: 0;
+  white-space: nowrap;
 }
 
 .emptyState {
@@ -1712,9 +2308,65 @@ p {
     max-height: none;
   }
 
+  .imageEditorModal {
+    grid-template-columns: 46px minmax(0, 1fr) 270px;
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .imageEditorRail {
+    padding: 6px;
+    gap: 5px;
+  }
+
+  .imageEditorRail button,
+  .imageEditorColorSwatch {
+    width: 34px;
+    height: 34px;
+  }
+
+  .imageEditorControls {
+    min-width: 0;
+  }
+
   .imageLightboxClose {
     top: -44px;
     right: 0;
+  }
+}
+
+@media (max-width: 1320px) and (min-width: 1081px) {
+  .appShell {
+    grid-template-columns: clamp(340px, 31vw, 400px) minmax(0, 1fr);
+    padding: 14px;
+  }
+
+  .sidebar,
+  .previewPanel,
+  .historyPanel {
+    padding: 14px;
+  }
+
+  .previewActions {
+    gap: 6px;
+  }
+
+  .previewActions .downloadButton {
+    width: 34px;
+    padding: 0;
+  }
+
+  .previewActions .downloadButton span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  .status {
+    max-width: min(240px, 100%);
   }
 }
 
@@ -1815,5 +2467,52 @@ p {
   .inputLibraryGrid {
     grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
     gap: 10px;
+  }
+
+  .imageEditorBackdrop {
+    align-items: start;
+    padding: 8px;
+  }
+
+  .imageEditorModal {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(300px, 1fr) minmax(260px, 40vh);
+    height: calc(100vh - 16px);
+    padding: 10px;
+    gap: 10px;
+  }
+
+  .imageEditorRail {
+    flex-direction: row;
+    overflow-x: auto;
+  }
+
+  .imageEditorRailDivider {
+    width: 1px;
+    height: 34px;
+    flex: 0 0 auto;
+  }
+
+  .imageEditorColorSwatch {
+    margin-top: 0;
+    margin-left: auto;
+    flex: 0 0 auto;
+  }
+
+  .imageEditorControls {
+    overflow: auto;
+  }
+
+  .imageEditorPanelHeader h2 {
+    font-size: 12px;
+  }
+
+  .imageEditorFloatingBar {
+    bottom: 8px;
+    height: 38px;
+  }
+
+  .editorRange {
+    grid-template-columns: 1fr;
   }
 }

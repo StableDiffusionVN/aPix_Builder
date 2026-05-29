@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Check, Eye, Filter, Images, RefreshCcw, Star, Trash2, Upload, X } from "lucide-react";
+import { Check, Eye, Filter, Images, Pencil, RefreshCcw, Star, Trash2, Upload, X } from "lucide-react";
+import { ImageEditorModal } from "./ImageEditorModal";
 
 const INPUT_FAVORITES_KEY = "comfyui-build:input-image-favorites:v1";
 
@@ -95,6 +96,7 @@ export function DynamicField({ item, value, onChange }) {
   const [libraryFavoritesOnly, setLibraryFavoritesOnly] = useState(false);
   const [favoriteInputImages, setFavoriteInputImages] = useState(() => readStoredSet(INPUT_FAVORITES_KEY));
   const [libraryOpen, setLibraryOpen] = useState(false);
+  const [editorOpen, setEditorOpen] = useState(false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxImage, setLightboxImage] = useState(null);
   const [uploadImageSize, setUploadImageSize] = useState({ width: 0, height: 0 });
@@ -251,6 +253,30 @@ export function DynamicField({ item, value, onChange }) {
       writeStoredSet(INPUT_FAVORITES_KEY, next);
       return next;
     });
+  }
+
+  async function handleSaveEditedInput(dataUrl) {
+    try {
+      const baseName = selectedInputName
+        ? selectedInputName.replace(/(\.[^.]+)?$/, "_edited.png")
+        : "edited.png";
+      const response = await fetch("/api/input-images", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ filename: baseName, dataUrl })
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setInputImages(data.images || []);
+        if (data.image) {
+          onChange({ kind: "input-image", ...data.image });
+          return;
+        }
+      }
+    } catch {
+      // Server unavailable — fall back to raw dataUrl
+    }
+    onChange(dataUrl);
   }
 
   async function handleDeleteInputImage(image) {
@@ -433,6 +459,18 @@ export function DynamicField({ item, value, onChange }) {
                 </button>
                 <button
                   type="button"
+                  className="uploadView"
+                  onClick={event => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    setEditorOpen(true);
+                  }}
+                  title="Image Editor"
+                >
+                  <Pencil size={14} />
+                </button>
+                <button
+                  type="button"
                   className="uploadClear"
                   onClick={event => {
                     event.preventDefault();
@@ -600,6 +638,15 @@ export function DynamicField({ item, value, onChange }) {
               </div>
             </div>
           </div>,
+          document.body
+        ) : null}
+        {editorOpen && selectedImageUrl ? createPortal(
+          <ImageEditorModal
+            source={selectedImageUrl}
+            title={`${label} - Image Editor`}
+            onClose={() => setEditorOpen(false)}
+            onSave={handleSaveEditedInput}
+          />,
           document.body
         ) : null}
       </>

@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   Download,
   GitCompare,
   Image as ImageIcon,
@@ -98,6 +100,7 @@ export default function App() {
   const [templateEditorOpen, setTemplateEditorOpen] = useState(false);
   const [outputEditorOpen, setOutputEditorOpen] = useState(false);
   const [theme, setTheme] = useState(loadTheme);
+  const [selectedOutputIndex, setSelectedOutputIndex] = useState(0);
   const [imageScale, setImageScale] = useState(1);
   const [imagePan, setImagePan] = useState({ x: 0, y: 0 });
   const [imageFitSize, setImageFitSize] = useState({ width: 0, height: 0 });
@@ -117,8 +120,10 @@ export default function App() {
   const app = config?.app || {};
   const serverAddress = config?.server?.address || config?.sever?.address || "";
   const selectedTemplateName = templates.find(item => item.id === selectedTemplate)?.name || selectedTemplate || "Default";
-  const primaryOutput = result?.outputs?.[0];
-  const heroImage = primaryOutput?.url;
+  const resultOutputs = result?.outputs || [];
+  const selectedOutput = resultOutputs[selectedOutputIndex] || resultOutputs[0];
+  const outputLabel = selectedOutput?.label || outputs[0]?.ui?.label || "Ảnh kết quả";
+  const heroImage = selectedOutput?.url;
   const resultTiming = result?.historyItem || result || {};
   const showStatus = Boolean(error || result || running || activeRunId || runQueue.length || status === "Đang tải cấu hình YAML...");
   const compareInputImage = useMemo(() => {
@@ -204,14 +209,30 @@ export default function App() {
     setImagePan({ x: 0, y: 0 });
   }
 
-  useEffect(() => {
-    function isTextEntryTarget(target) {
-      return target instanceof HTMLElement && (
-        target.isContentEditable ||
-        ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)
-      );
-    }
+  function selectOutput(index) {
+    if (!resultOutputs.length) return;
+    const nextIndex = Math.min(resultOutputs.length - 1, Math.max(0, index));
+    setSelectedOutputIndex(nextIndex);
+    resetImageView();
+  }
 
+  function stepOutput(direction) {
+    if (resultOutputs.length < 2) return;
+    setSelectedOutputIndex(current => {
+      const nextIndex = (current + direction + resultOutputs.length) % resultOutputs.length;
+      return nextIndex;
+    });
+    resetImageView();
+  }
+
+  function isTextEntryTarget(target) {
+    return target instanceof HTMLElement && (
+      target.isContentEditable ||
+      ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)
+    );
+  }
+
+  useEffect(() => {
     function handleSpaceReset(event) {
       if (!heroImage || event.code !== "Space") return;
       if (isTextEntryTarget(event.target)) return;
@@ -246,6 +267,22 @@ export default function App() {
       window.removeEventListener("keyup", preventSpaceClick, true);
     };
   }, [canCompare, heroImage]);
+
+  useEffect(() => {
+    function handleOutputNavigation(event) {
+      if (!heroImage || resultOutputs.length < 2) return;
+      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+      if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
+      if (isTextEntryTarget(event.target)) return;
+      if (document.querySelector(".imageEditorModal")) return;
+      event.preventDefault();
+      event.stopPropagation();
+      stepOutput(event.key === "ArrowRight" ? 1 : -1);
+    }
+
+    window.addEventListener("keydown", handleOutputNavigation, true);
+    return () => window.removeEventListener("keydown", handleOutputNavigation, true);
+  }, [heroImage, resultOutputs.length]);
 
   function updateImageFitSize() {
     const area = previewAreaRef.current;
@@ -293,11 +330,18 @@ export default function App() {
     if (!canCompare) setCompareMode(false);
   }, [canCompare]);
 
+  useEffect(() => {
+    if (selectedOutputIndex >= resultOutputs.length) {
+      setSelectedOutputIndex(0);
+    }
+  }, [resultOutputs.length, selectedOutputIndex]);
+
   async function loadConfig(templateId, options = {}) {
     setStatus("Đang tải cấu hình YAML...");
     setError("");
     if (!options.keepResult) {
       setResult(null);
+      setSelectedOutputIndex(0);
       resetImageView();
     }
     return loadTemplateConfig(templateId)
@@ -360,6 +404,7 @@ export default function App() {
     setRunning(true);
     setError("");
     setResult(null);
+    setSelectedOutputIndex(0);
     resetImageView();
     const clientSubmittedAt = new Date().toISOString();
     setStatus(runQueueRef.current.length ? `Đang chạy request, còn ${runQueueRef.current.length} trong hàng chờ...` : "Đang gửi workflow tới ComfyUI...");
@@ -393,6 +438,7 @@ export default function App() {
         historyItem: timedHistoryItem
       };
       setResult(timedResult);
+      setSelectedOutputIndex(0);
       setHistory(current => timedHistoryItem ? [timedHistoryItem, ...current] : current);
       setStatus(`Hoàn tất prompt ${data.promptId}${timedResult.durationMs ? ` trong ${formatDuration(timedResult.durationMs)}` : ""}`);
     } catch (err) {
@@ -433,6 +479,7 @@ export default function App() {
     if (!item) return;
     setError("");
     resetImageView();
+    setSelectedOutputIndex(0);
     const restoredResult = item.result || {
       runId: item.id,
       promptId: item.promptId,
@@ -475,6 +522,7 @@ export default function App() {
     }
     if (result?.runId === id) {
       setResult(null);
+      setSelectedOutputIndex(0);
       resetImageView();
       setStatus("Đã xóa ảnh khỏi lịch sử");
     }
@@ -500,6 +548,7 @@ export default function App() {
 
   function handlePreviewPointerDown(event) {
     if (!heroImage || event.button !== 0) return;
+    if (event.target instanceof Element && event.target.closest(".outputNavButton, .outputRail")) return;
     event.preventDefault();
     event.currentTarget.setPointerCapture(event.pointerId);
     imageDragRef.current = {
@@ -552,7 +601,7 @@ export default function App() {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         dataUrl,
-        sourceFilename: primaryOutput?.filename,
+        sourceFilename: selectedOutput?.filename,
         address: comfyAddress
       })
     });
@@ -568,6 +617,7 @@ export default function App() {
 
     const historyItem = data.historyItem;
     setResult(historyItem.result || historyItem);
+    setSelectedOutputIndex(0);
     setHistory(current => data.history || (historyItem ? [historyItem, ...current] : current));
     resetImageView();
     setStatus("Đã lưu ảnh Image Editor vào output");
@@ -633,7 +683,7 @@ export default function App() {
       <section className="workspace">
         <section className="previewPanel">
           <div className="panelTitle">
-            <h3>{outputs[0]?.ui?.label || "Ảnh kết quả"}</h3>
+            <h3>{outputLabel}{resultOutputs.length > 1 ? ` (${selectedOutputIndex + 1}/${resultOutputs.length})` : ""}</h3>
             <div className="previewActions">
               {showStatus ? (
                 <div className={`status ${error ? "bad" : result ? "good" : ""}`}>
@@ -641,7 +691,7 @@ export default function App() {
                   <span>{status}</span>
                 </div>
               ) : null}
-              {primaryOutput ? (
+              {selectedOutput ? (
                 <>
                 {canCompare ? (
                   <button
@@ -658,87 +708,134 @@ export default function App() {
                 <button className="downloadButton" onClick={() => setOutputEditorOpen(true)} title="Image Editor">
                   <Pencil size={14} />
                 </button>
-                <button className="downloadButton" onClick={() => handleDownload(primaryOutput)} title="Tải ảnh xuống">
+                <button className="downloadButton" onClick={() => handleDownload(selectedOutput)} title="Tải ảnh xuống">
                   <Download size={14} />
                 </button>
                 </>
               ) : null}
             </div>
           </div>
-          <div
-            className={`previewArea ${heroImage ? "isInteractive" : ""} ${compareMode ? "isCompareMode" : ""} ${draggingImage ? "isDragging" : ""}`}
-            ref={previewAreaRef}
-            onWheel={handlePreviewWheel}
-            onPointerDown={handlePreviewPointerDown}
-            onPointerMove={handlePreviewPointerMove}
-            onPointerUp={handlePreviewPointerUp}
-            onPointerCancel={handlePreviewPointerUp}
-          >
-            {heroImage ? (
-              <div
-                className={`imageStage ${compareMode && canCompare ? "isCompare" : ""}`}
-                style={{
-                  "--image-scale": imageScale,
-                  "--image-pan-x": `${imagePan.x}px`,
-                  "--image-pan-y": `${imagePan.y}px`,
-                  "--image-fit-width": imageFitSize.width ? `${imageFitSize.width}px` : "100%",
-                  "--image-fit-height": imageFitSize.height ? `${imageFitSize.height}px` : "100%",
-                  "--compare-position": `${comparePosition}%`,
-                  "--compare-divider-x": `${compareDividerX}px`
-                }}
-              >
-                {compareMode && canCompare ? (
-                  <>
-                    <img
-                      className="resultImage compareInputImage"
-                      src={compareInputImage}
-                      alt="Ảnh input"
-                      draggable="false"
-                    />
+          <div className="outputViewer">
+            <div
+              className={`previewArea ${heroImage ? "isInteractive" : ""} ${resultOutputs.length > 1 ? "hasOutputRail" : ""} ${compareMode ? "isCompareMode" : ""} ${draggingImage ? "isDragging" : ""}`}
+              ref={previewAreaRef}
+              onWheel={handlePreviewWheel}
+              onPointerDown={handlePreviewPointerDown}
+              onPointerMove={handlePreviewPointerMove}
+              onPointerUp={handlePreviewPointerUp}
+              onPointerCancel={handlePreviewPointerUp}
+            >
+              {heroImage ? (
+                <div
+                  className={`imageStage ${compareMode && canCompare ? "isCompare" : ""}`}
+                  style={{
+                    "--image-scale": imageScale,
+                    "--image-pan-x": `${imagePan.x}px`,
+                    "--image-pan-y": `${imagePan.y}px`,
+                    "--image-fit-width": imageFitSize.width ? `${imageFitSize.width}px` : "100%",
+                    "--image-fit-height": imageFitSize.height ? `${imageFitSize.height}px` : "100%",
+                    "--compare-position": `${comparePosition}%`,
+                    "--compare-divider-x": `${compareDividerX}px`
+                  }}
+                >
+                  {compareMode && canCompare ? (
+                    <>
+                      <img
+                        className="resultImage compareInputImage"
+                        src={compareInputImage}
+                        alt="Ảnh input"
+                        draggable="false"
+                      />
+                      <img
+                        ref={imageElementRef}
+                        className="resultImage compareOutputImage"
+                        src={heroImage}
+                        alt={outputLabel}
+                        draggable="false"
+                        onLoad={handleResultImageLoad}
+                      />
+                    </>
+                  ) : (
                     <img
                       ref={imageElementRef}
-                      className="resultImage compareOutputImage"
+                      className="resultImage"
                       src={heroImage}
-                      alt={outputs[0]?.ui?.label || "Ảnh kết quả"}
+                      alt={outputLabel}
                       draggable="false"
                       onLoad={handleResultImageLoad}
                     />
-                  </>
-                ) : (
-                  <img
-                    ref={imageElementRef}
-                    className="resultImage"
-                    src={heroImage}
-                    alt={outputs[0]?.ui?.label || "Ảnh kết quả"}
-                    draggable="false"
-                    onLoad={handleResultImageLoad}
-                  />
-                )}
-              </div>
-            ) : (
-              <div className="emptyState">
-                {running ? <Loader2 className="spin" size={42} /> : <ImageIcon size={42} />}
-                <h3>{running ? "ComfyUI đang xử lý" : "Chưa có ảnh kết quả"}</h3>
-                <p>{running ? "App đang chờ workflow hoàn tất." : "Điền input bên trái rồi chạy workflow để xem output."}</p>
-              </div>
-            )}
-            {heroImage && compareMode && canCompare ? (
-              <div
-                className="compareDivider"
-                style={{ "--compare-divider-x": `${compareDividerX}px` }}
-                aria-hidden="true"
-              />
-            ) : null}
-            {heroImage && outputImageSize.width && outputImageSize.height ? (
-              <div className="outputSizeBadge">
-                {outputImageSize.width} x {outputImageSize.height}
-              </div>
-            ) : null}
-            {heroImage && resultTiming.durationMs ? (
-              <div className="outputTimingBadge">
-                Hoàn thành trong {formatDuration(resultTiming.durationMs)}
-              </div>
-            ) : null}
+                  )}
+                </div>
+              ) : (
+                <div className="emptyState">
+                  {running ? <Loader2 className="spin" size={42} /> : <ImageIcon size={42} />}
+                  <h3>{running ? "ComfyUI đang xử lý" : "Chưa có ảnh kết quả"}</h3>
+                  <p>{running ? "App đang chờ workflow hoàn tất." : "Điền input bên trái rồi chạy workflow để xem output."}</p>
+                </div>
+              )}
+              {heroImage && resultOutputs.length > 1 ? (
+                <>
+                  <button
+                    type="button"
+                    className="outputNavButton previous"
+                    onClick={event => {
+                      event.stopPropagation();
+                      stepOutput(-1);
+                    }}
+                    title="Ảnh trước (←)"
+                    aria-label="Ảnh trước"
+                  >
+                    <ChevronLeft size={20} />
+                  </button>
+                  <button
+                    type="button"
+                    className="outputNavButton next"
+                    onClick={event => {
+                      event.stopPropagation();
+                      stepOutput(1);
+                    }}
+                    title="Ảnh tiếp theo (→)"
+                    aria-label="Ảnh tiếp theo"
+                  >
+                    <ChevronRight size={20} />
+                  </button>
+                </>
+              ) : null}
+              {heroImage && resultOutputs.length > 1 ? (
+                <div className="outputRail" aria-label="Danh sách ảnh output">
+                  {resultOutputs.map((output, index) => (
+                    <button
+                      type="button"
+                      key={`${output.url || output.filename || "output"}-${index}`}
+                      className={`outputThumb ${index === selectedOutputIndex ? "active" : ""}`}
+                      onClick={() => selectOutput(index)}
+                      title={`Xem output ${index + 1}`}
+                      aria-label={`Xem output ${index + 1}`}
+                      aria-pressed={index === selectedOutputIndex}
+                    >
+                      <img src={output.url} alt={output.filename || `Output ${index + 1}`} draggable="false" />
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+              {heroImage && compareMode && canCompare ? (
+                <div
+                  className="compareDivider"
+                  style={{ "--compare-divider-x": `${compareDividerX}px` }}
+                  aria-hidden="true"
+                />
+              ) : null}
+              {heroImage && outputImageSize.width && outputImageSize.height ? (
+                <div className="outputSizeBadge">
+                  {outputImageSize.width} x {outputImageSize.height}
+                </div>
+              ) : null}
+              {heroImage && resultTiming.durationMs ? (
+                <div className="outputTimingBadge">
+                  Hoàn thành trong {formatDuration(resultTiming.durationMs)}
+                </div>
+              ) : null}
+            </div>
           </div>
         </section>
 

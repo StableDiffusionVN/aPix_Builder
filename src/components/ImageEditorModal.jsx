@@ -42,6 +42,36 @@ const CurveIcon = ({ size = 14, ...props }) => (
   </svg>
 );
 
+const HealingIcon = ({ size = 14, ...props }) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    {...props}
+  >
+    <rect
+      x="7"
+      y="2"
+      width="10"
+      height="20"
+      rx="5"
+      transform="rotate(-45 12 12)"
+    />
+    <circle cx="12" cy="12" r="0.8" fill="currentColor" stroke="none" />
+    <circle cx="12" cy="8.5" r="0.8" fill="currentColor" stroke="none" />
+    <circle cx="12" cy="15.5" r="0.8" fill="currentColor" stroke="none" />
+    <circle cx="8.5" cy="12" r="0.8" fill="currentColor" stroke="none" />
+    <circle cx="15.5" cy="12" r="0.8" fill="currentColor" stroke="none" />
+    <circle cx="9.5" cy="9.5" r="0.8" fill="currentColor" stroke="none" />
+    <circle cx="14.5" cy="14.5" r="0.8" fill="currentColor" stroke="none" />
+  </svg>
+);
+
 const COLOR_CHANNELS = [
   { id: "reds", name: "Reds", center: 0, color: "#ef4444" },
   { id: "yellows", name: "Yellows", center: 60, color: "#f59e0b" },
@@ -469,30 +499,226 @@ function drawCurvesCanvas(canvas, points, activeChannel, selectedPointIndex, his
   });
 }
 
-// Draws a single stroke onto a 2D context. Eraser strokes use destination-out
-// so — when drawn on a dedicated transparent stroke layer — they only remove
-// previously painted brush pixels, never the underlying image.
 function drawStroke(ctx, stroke, width, height, scale) {
-  if (!stroke || !stroke.points || !stroke.points.length) return;
+  const points = stroke.points;
+  if (!points || !points.length) return;
+
+  const size = Math.max(1, stroke.size * scale);
+  const radius = size / 2;
+  const hardness = clamp(stroke.hardness ?? 100, 0, 100);
+  const isEraser = stroke.tool === "eraser";
+
+  // Isolate the stroke on a temp canvas so globalAlpha is applied once at the end,
+  // preventing per-stamp alpha accumulation from bleeding into the base image.
+  const tempCanvas = document.createElement("canvas");
+  tempCanvas.width = width;
+  tempCanvas.height = height;
+  const tctx = tempCanvas.getContext("2d");
+  if (!tctx) return;
+
+  if (hardness >= 100) {
+    // Solid hard brush
+    tctx.lineCap = "round";
+    tctx.lineJoin = "round";
+    tctx.strokeStyle = isEraser ? "black" : stroke.color;
+    tctx.lineWidth = size;
+    tctx.beginPath();
+    const first = points[0];
+    tctx.moveTo(first.x * width, first.y * height);
+    points.slice(1).forEach(p => tctx.lineTo(p.x * width, p.y * height));
+    if (points.length === 1) tctx.lineTo(first.x * width + 0.01, first.y * height + 0.01);
+    tctx.stroke();
+  } else {
+    // Soft brush: radial-gradient stamps along the path.
+    // The softness (1 - hardness) both shrinks the solid core AND extends the
+    // feathered falloff *beyond* the nominal brush radius, so low hardness bleeds
+    // softly outside the brush-size circle. A multi-stop gaussian-like curve makes
+    // the transition smoother than a plain linear ramp.
+    const rgb = isEraser ? { r: 0, g: 0, b: 0 } : hexToRgb(stroke.color);
+    const softness = 1 - hardness / 100;
+    // Solid core: full at hardness 100, shrinks toward centre as hardness drops.
+    const innerRadius = radius * (hardness / 100) * 0.85;
+    // Outer falloff grows past `radius` (up to ~1.6x) the softer the brush is.
+    const outerRadius = radius * (1 + softness * 0.6);
+    const spacing = Math.max(0.5, outerRadius * 0.1);
+    // Smooth (ease-out / gaussian-ish) alpha falloff between core and edge.
+    const falloffStops = [
+      [0.0, 1],
+      [0.25, 0.88],
+      [0.5, 0.6],
+      [0.7, 0.32],
+      [0.85, 0.13],
+      [1.0, 0]
+    ];
+
+    // Interpolate evenly-spaced stamp positions along the polyline
+    const stampPoints = [];
+    if (points.length === 1) {
+      stampPoints.push({ x: points[0].x * width, y: points[0].y * height });
+    } else {
+      let accumulated = 0;
+      let nextStamp = 0;
+      for (let i = 1; i < points.length; i++) {
+        const x0 = points[i - 1].x * width;
+        const y0 = points[i - 1].y * height;
+        const x1 = points[i].x * width;
+        const y1 = points[i].y * height;
+        const dx = x1 - x0;
+        const dy = y1 - y0;
+        const segLen = Math.sqrt(dx * dx + dy * dy);
+        if (segLen === 0) continue;
+        if (i === 1) stampPoints.push({ x: x0, y: y0 });
+        while (nextStamp <= accumulated + segLen) {
+          const t = (nextStamp - accumulated) / segLen;
+          stampPoints.push({ x: x0 + dx * t, y: y0 + dy * t });
+          nextStamp += spacing;
+        }
+        accumulated += segLen;
+      }
+      const last = points[points.length - 1];
+      stampPoints.push({ x: last.x * width, y: last.y * height });
+    }
+
+    const coreFrac = outerRadius > 0 ? innerRadius / outerRadius : 0;
+    stampPoints.forEach(pt => {
+      const grad = tctx.createRadialGradient(pt.x, pt.y, innerRadius, pt.x, pt.y, outerRadius);
+      falloffStops.forEach(([offset, alpha]) => {
+        // Map the falloff curve onto the [core .. edge] span of the gradient.
+        const pos = coreFrac + offset * (1 - coreFrac);
+        grad.addColorStop(clamp(pos, 0, 1), `rgba(${rgb.r},${rgb.g},${rgb.b},${alpha})`);
+      });
+      tctx.fillStyle = grad;
+      tctx.beginPath();
+      tctx.arc(pt.x, pt.y, outerRadius, 0, Math.PI * 2);
+      tctx.fill();
+    });
+  }
+
   ctx.save();
   ctx.globalAlpha = stroke.opacity / 100;
+  ctx.globalCompositeOperation = isEraser ? "destination-out" : "source-over";
+  ctx.drawImage(tempCanvas, 0, 0);
+  ctx.restore();
+}
+
+function applyHealingStroke(ctx, stroke, scale) {
+  if (!stroke.points || !stroke.points.length) return;
+  
+  const width = ctx.canvas.width;
+  const height = ctx.canvas.height;
+  const strokeSize = Math.max(2, stroke.size * scale);
+  
+  // Calculate bounding box of the stroke in canvas pixels
+  let minX = width, maxX = 0, minY = height, maxY = 0;
+  stroke.points.forEach(p => {
+    const x = p.x * width;
+    const y = p.y * height;
+    if (x < minX) minX = x;
+    if (x > maxX) maxX = x;
+    if (y < minY) minY = y;
+    if (y > maxY) maxY = y;
+  });
+  
+  // Expand bounding box by the stroke size to capture surroundings
+  const pad = Math.ceil(strokeSize * 1.5);
+  minX = Math.max(0, Math.floor(minX - pad));
+  maxX = Math.min(width - 1, Math.ceil(maxX + pad));
+  minY = Math.max(0, Math.floor(minY - pad));
+  maxY = Math.min(height - 1, Math.ceil(maxY + pad));
+  
+  const boxW = maxX - minX + 1;
+  const boxH = maxY - minY + 1;
+  if (boxW <= 0 || boxH <= 0) return;
+  
+  // Create offscreen canvas for the mask
+  const maskCanvas = document.createElement("canvas");
+  maskCanvas.width = boxW;
+  maskCanvas.height = boxH;
+  const mctx = maskCanvas.getContext("2d");
+  mctx.fillStyle = "black";
+  mctx.fillRect(0, 0, boxW, boxH);
+  
+  mctx.strokeStyle = "white";
+  mctx.lineWidth = strokeSize;
+  mctx.lineCap = "round";
+  mctx.lineJoin = "round";
+  
+  mctx.beginPath();
+  const first = stroke.points[0];
+  mctx.moveTo(first.x * width - minX, first.y * height - minY);
+  stroke.points.slice(1).forEach(p => {
+    mctx.lineTo(p.x * width - minX, p.y * height - minY);
+  });
+  if (stroke.points.length === 1) {
+    mctx.lineTo(first.x * width - minX + 0.01, first.y * height - minY + 0.01);
+  }
+  mctx.stroke();
+  
+  let imgData;
+  try {
+    imgData = ctx.getImageData(minX, minY, boxW, boxH);
+  } catch (e) {
+    return;
+  }
+  const maskData = mctx.getImageData(0, 0, boxW, boxH);
+  
+  const pixels = imgData.data;
+  const maskPixels = maskData.data;
+  
+  const sourcePixels = new Uint8ClampedArray(pixels);
+  const maxSearch = Math.max(30, Math.round(strokeSize * 2));
+  
+  const dirs = [
+    [0, -1], [0, 1], [-1, 0], [1, 0],
+    [-1, -1], [1, -1], [-1, 1], [1, 1]
+  ];
+  
+  for (let y = 0; y < boxH; y++) {
+    for (let x = 0; x < boxW; x++) {
+      const idx = (y * boxW + x) * 4;
+      if (maskPixels[idx] > 128) {
+        let rSum = 0, gSum = 0, bSum = 0, wSum = 0;
+        for (let d = 0; d < 8; d++) {
+          const dx = dirs[d][0];
+          const dy = dirs[d][1];
+          let step = 1;
+          while (step <= maxSearch) {
+            const sx = x + dx * step;
+            const sy = y + dy * step;
+            if (sx < 0 || sx >= boxW || sy < 0 || sy >= boxH) break;
+            const sIdx = (sy * boxW + sx) * 4;
+            if (maskPixels[sIdx] <= 128) {
+              const dist = step;
+              const weight = 1 / (dist * dist);
+              rSum += sourcePixels[sIdx] * weight;
+              gSum += sourcePixels[sIdx + 1] * weight;
+              bSum += sourcePixels[sIdx + 2] * weight;
+              wSum += weight;
+              break;
+            }
+            step++;
+          }
+        }
+        if (wSum > 0) {
+          pixels[idx] = rSum / wSum;
+          pixels[idx + 1] = gSum / wSum;
+          pixels[idx + 2] = bSum / wSum;
+          pixels[idx + 3] = 255;
+        }
+      }
+    }
+  }
+  ctx.putImageData(imgData, minX, minY);
+}
+
+function drawHealingOverlay(ctx, stroke, width, height, scale) {
+  if (!stroke || !stroke.points || !stroke.points.length) return;
+  ctx.save();
+  ctx.globalAlpha = 0.55;
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
-  ctx.globalCompositeOperation = stroke.tool === "eraser" ? "destination-out" : "source-over";
-  
-  const size = Math.max(1, stroke.size * scale);
-  const hardness = stroke.hardness ?? 100;
-  
-  if (hardness < 100) {
-    const blur = size * (1 - hardness / 100);
-    ctx.shadowBlur = blur;
-    ctx.shadowColor = stroke.tool === "eraser" ? "black" : stroke.color;
-    ctx.strokeStyle = stroke.tool === "eraser" ? "black" : stroke.color;
-    ctx.lineWidth = Math.max(1, size * (hardness / 100));
-  } else {
-    ctx.strokeStyle = stroke.color;
-    ctx.lineWidth = size;
-  }
+  ctx.strokeStyle = "rgba(239, 68, 68, 0.75)";
+  ctx.lineWidth = Math.max(2, stroke.size * scale);
   
   ctx.beginPath();
   const first = stroke.points[0];
@@ -504,6 +730,7 @@ function drawStroke(ctx, stroke, width, height, scale) {
   ctx.stroke();
   ctx.restore();
 }
+
 
 function computeHistogram(canvas) {
   if (!canvas) return null;
@@ -616,6 +843,7 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
   const croppingRef = useRef(false);
   const altToolRef = useRef(null);
   const spaceToolRef = useRef(null);
+  const prevHealingCountRef = useRef(0);
 
   const origCanvasRef = useRef(null);
   const histogramCanvasRef = useRef(null);
@@ -903,6 +1131,14 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
     ctx.restore();
     ctx.filter = "none";
 
+    // Apply healing strokes on the adjusted base canvas
+    const healingStrokes = (strokesRef.current || []).filter(s => s.tool === "healing");
+    if (healingStrokes.length > 0) {
+      healingStrokes.forEach(stroke => {
+        applyHealingStroke(ctx, stroke, scale);
+      });
+    }
+
         const activeHslChannels = COLOR_CHANNELS.filter(channel => {
       const a = adjustments.hsl[channel.id];
       return a.h !== 0 || a.s !== 0 || a.l !== 0;
@@ -1065,7 +1301,11 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
     }
     const ctx = layer.getContext("2d");
     ctx.clearRect(0, 0, layer.width, layer.height);
-    strokesRef.current.forEach(stroke => drawStroke(ctx, stroke, layer.width, layer.height, meta.scale));
+    strokesRef.current.forEach(stroke => {
+      if (stroke.tool !== "healing") {
+        drawStroke(ctx, stroke, layer.width, layer.height, meta.scale);
+      }
+    });
   }, []);
 
   // Composites image + cached brush layer (+ the live in-progress stroke) onto
@@ -1142,7 +1382,11 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
       // Combine committed brush layer + the live stroke on a temp layer first,
       // so an eraser stroke removes only brush pixels (never the image).
       if (layer) tctx.drawImage(layer, 0, 0);
-      drawStroke(tctx, active, tmp.width, tmp.height, meta.scale);
+      if (active.tool === "healing") {
+        drawHealingOverlay(tctx, active, tmp.width, tmp.height, meta.scale);
+      } else {
+        drawStroke(tctx, active, tmp.width, tmp.height, meta.scale);
+      }
     } else if (layer) {
       tctx.drawImage(layer, 0, 0);
     }
@@ -1214,9 +1458,18 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
   // the brush layer and recomposite. Not triggered during dragging.
   useEffect(() => {
     if (!isReady) return;
-    syncStrokeLayer();
-    compositePreview();
-  }, [isReady, strokes, syncStrokeLayer, compositePreview]);
+
+    const healingCount = (strokes || []).filter(s => s.tool === "healing").length;
+    const prevCount = prevHealingCountRef.current;
+    prevHealingCountRef.current = healingCount;
+
+    if (healingCount > 0 || prevCount > 0) {
+      renderPreview();
+    } else {
+      syncStrokeLayer();
+      compositePreview();
+    }
+  }, [isReady, strokes, syncStrokeLayer, compositePreview, renderPreview]);
 
   // Entering/leaving the crop tool switches between the full-image crop preview
   // and the normal cropped preview.
@@ -1524,7 +1777,7 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
   }
 
   function updateZoom(delta) {
-    setZoom(value => clamp(Number((value + delta).toFixed(2)), 0.2, 4));
+    setZoom(value => clamp(Number((value + delta).toFixed(2)), 0.2, 100));
   }
 
   function toggleEditorCompare() {
@@ -1545,7 +1798,7 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
     const activateTool = tool => {
       setActiveTool(tool);
       if (tool === "crop") openSection("crop");
-      if (tool === "brush" || tool === "eraser") openSection("brush");
+      if (tool === "brush" || tool === "eraser" || tool === "healing") openSection("brush");
       spaceToolRef.current = null;
       altToolRef.current = null;
     };
@@ -1660,6 +1913,9 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
       } else if (key === "z") {
         event.preventDefault();
         activateTool("zoom");
+      } else if (key === "j") {
+        event.preventDefault();
+        activateTool("healing");
       }
     };
 
@@ -1755,7 +2011,7 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
       setActiveTool("brush");
       return;
     }
-    if (activeTool === "brush" || activeTool === "eraser") {
+    if (activeTool === "brush" || activeTool === "eraser" || activeTool === "healing") {
       event.currentTarget.setPointerCapture(event.pointerId);
       // The in-progress stroke lives outside React state and is drawn live, so
       // dragging never churns state (avoids re-render storms and array races).
@@ -1764,6 +2020,7 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
         color: brush.color,
         size: brush.size,
         opacity: brush.opacity,
+        hardness: brush.hardness ?? 100,
         points: [point]
       };
       compositePreview();
@@ -1788,7 +2045,7 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
 
   function handlePointerMove(event) {
     if (editorCompareMode && activeTool === "hand") updateEditorComparePosition(event);
-    if (activeTool === "brush" || activeTool === "eraser") {
+    if (activeTool === "brush" || activeTool === "eraser" || activeTool === "healing") {
       const stage = stageRef.current;
       const canvas = canvasRef.current;
       if (stage && canvas) {
@@ -1798,7 +2055,7 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
         setBrushCursor({ x: event.clientX - stageRect.left, y: event.clientY - stageRect.top });
       }
     }
-    if (activeStrokeRef.current && (activeTool === "brush" || activeTool === "eraser")) {
+    if (activeStrokeRef.current && (activeTool === "brush" || activeTool === "eraser" || activeTool === "healing")) {
       const point = getCanvasPoint(event);
       if (!point) return;
       activeStrokeRef.current.points.push(point);
@@ -1812,7 +2069,8 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
         drag.dragged = true;
       }
       if (drag.dragged) {
-        const newZoom = clamp(Number((drag.startZoom + deltaX * 0.005).toFixed(2)), 0.2, 4);
+        // Exponential zoom for smooth scaling between 20% and 10000%
+        const newZoom = clamp(Number((drag.startZoom * Math.exp(deltaX * 0.006)).toFixed(2)), 0.2, 100);
         setZoom(newZoom);
       }
       return;
@@ -1836,9 +2094,11 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
       activeStrokeRef.current = null;
       // Bake into the brush layer immediately so there is no one-frame flicker
       // before the strokes effect re-syncs.
-      const layer = strokeLayerRef.current;
-      const meta = previewMetaRef.current;
-      if (layer && meta) drawStroke(layer.getContext("2d"), finished, layer.width, layer.height, meta.scale);
+      if (finished.tool !== "healing") {
+        const layer = strokeLayerRef.current;
+        const meta = previewMetaRef.current;
+        if (layer && meta) drawStroke(layer.getContext("2d"), finished, layer.width, layer.height, meta.scale);
+      }
       const nextStrokes = strokesRef.current.concat(finished);
       strokesRef.current = nextStrokes;
       setStrokes(nextStrokes);
@@ -1872,7 +2132,11 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
       strokeCanvas.width = meta.width;
       strokeCanvas.height = meta.height;
       const sctx = strokeCanvas.getContext("2d");
-      strokesRef.current.forEach(stroke => drawStroke(sctx, stroke, meta.width, meta.height, meta.scale));
+      strokesRef.current.forEach(stroke => {
+        if (stroke.tool !== "healing") {
+          drawStroke(sctx, stroke, meta.width, meta.height, meta.scale);
+        }
+      });
       ctx.drawImage(strokeCanvas, 0, 0);
     }
     const mimeType = exportFormat || "image/png";
@@ -1916,7 +2180,7 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
   }
 
   const previewCursor = useMemo(() => {
-    if (activeTool === "brush" || activeTool === "eraser") return "none";
+    if (activeTool === "brush" || activeTool === "eraser" || activeTool === "healing") return "none";
     if (activeTool === "colorpicker") return "copy";
     if (activeTool === "zoom") return isShiftPressed ? "zoom-out" : "zoom-in";
     return panStartRef.current ? "grabbing" : "grab";
@@ -1961,6 +2225,9 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
           <button type="button" className={activeTool === "eraser" ? "active" : ""} onClick={() => { setActiveTool("eraser"); openSection("brush"); }} title="Tẩy">
             <Eraser size={15} />
           </button>
+          <button type="button" className={activeTool === "healing" ? "active" : ""} onClick={() => { setActiveTool("healing"); openSection("brush"); }} title="Sửa ảnh (Healing - J)">
+            <HealingIcon size={15} />
+          </button>
           <button type="button" className={activeTool === "colorpicker" ? "active" : ""} onClick={() => setActiveTool("colorpicker")} title="Chấm màu">
             <Pipette size={15} />
           </button>
@@ -1977,17 +2244,34 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
             onMouseLeave={() => setBrushCursor(null)}
           >
             {!isReady ? <span className="editorLoading">Đang tải ảnh...</span> : null}
-            {brushCursor && (activeTool === "brush" || activeTool === "eraser") ? (
+            {brushCursor && (activeTool === "brush" || activeTool === "eraser" || activeTool === "healing") ? (
               <div
-                className={`brushCursorCircle ${activeTool === "eraser" ? "eraserMode" : "brushMode"}`}
+                className={`brushCursorCircle ${activeTool === "eraser" ? "eraserMode" : activeTool === "healing" ? "healingMode" : "brushMode"}`}
                 style={{
                   left: brushCursor.x,
                   top: brushCursor.y,
                   width: Math.max(4, brushDiameter),
                   height: Math.max(4, brushDiameter),
-                  borderColor: activeTool === "brush" ? brush.color : undefined
+                  borderColor: activeTool === "brush" ? brush.color : activeTool === "healing" ? "rgba(239, 68, 68, 0.8)" : undefined
                 }}
-              />
+              >
+                {activeTool !== "healing" && brush.hardness < 100 && (
+                  <div
+                    style={{
+                      width: `${brush.hardness}%`,
+                      height: `${brush.hardness}%`,
+                      border: "1.2px dashed rgba(255, 255, 255, 0.62)",
+                      borderRadius: "50%",
+                      position: "absolute",
+                      left: "50%",
+                      top: "50%",
+                      transform: "translate(-50%, -50%)",
+                      boxSizing: "border-box",
+                      boxShadow: "0 0 0 1px rgba(0, 0, 0, 0.42)"
+                    }}
+                  />
+                )}
+              </div>
             ) : null}
             <div
               className={`imageEditorCanvasWrap ${isPanning ? "isPanning" : ""}`}
@@ -2201,16 +2485,22 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
                 </div>
               </AccordionSection>
 
-              {(activeTool === "brush" || activeTool === "eraser") ? (
-                <AccordionSection icon={Brush} title="Brush / Eraser" open={!!openSections.brush} onToggle={() => toggleSection("brush")}>
-                  <label className="editorColorRow">
-                    <span>Color</span>
-                    <input type="color" value={brush.color} onChange={event => setBrush(current => ({ ...current, color: event.target.value }))} onBlur={commitCurrent} />
-                    <b>{brush.color}</b>
-                  </label>
+              {(activeTool === "brush" || activeTool === "eraser" || activeTool === "healing") ? (
+                <AccordionSection icon={activeTool === "healing" ? HealingIcon : Brush} title={activeTool === "healing" ? "Healing Brush" : "Brush / Eraser"} open={!!openSections.brush} onToggle={() => toggleSection("brush")}>
+                  {activeTool !== "healing" && (
+                    <label className="editorColorRow">
+                      <span>Color</span>
+                      <input type="color" value={brush.color} onChange={event => setBrush(current => ({ ...current, color: event.target.value }))} onBlur={commitCurrent} />
+                      <b>{brush.color}</b>
+                    </label>
+                  )}
                   <EditorRange label="Size" value={brush.size} min={1} max={180} resetValue={DEFAULT_BRUSH.size} onChange={value => setBrush(current => ({ ...current, size: value }))} onCommit={commitCurrent} />
-                  <EditorRange label="Opacity" value={brush.opacity} min={1} max={100} resetValue={DEFAULT_BRUSH.opacity} onChange={value => setBrush(current => ({ ...current, opacity: value }))} onCommit={commitCurrent} />
-                  <EditorRange label="Hardness" value={brush.hardness ?? 100} min={10} max={100} resetValue={100} onChange={value => setBrush(current => ({ ...current, hardness: value }))} onCommit={commitCurrent} />
+                  {activeTool !== "healing" && (
+                    <>
+                      <EditorRange label="Opacity" value={brush.opacity} min={1} max={100} resetValue={DEFAULT_BRUSH.opacity} onChange={value => setBrush(current => ({ ...current, opacity: value }))} onCommit={commitCurrent} />
+                      <EditorRange label="Hardness" value={brush.hardness ?? 100} min={10} max={100} resetValue={100} onChange={value => setBrush(current => ({ ...current, hardness: value }))} onCommit={commitCurrent} />
+                    </>
+                  )}
                 </AccordionSection>
               ) : null}
 

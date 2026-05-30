@@ -1173,6 +1173,393 @@ select:disabled {
   cursor: default;
 }
 
+/* Custom Presets management styles */
+.presetAccordionContent {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.presetGroupTitle {
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  margin-top: 6px;
+  margin-bottom: 2px;
+}
+
+.presetGroupTitle.custom {
+  margin-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  padding-top: 10px;
+}
+
+.noCustomPresets {
+  color: var(--muted-2, rgba(203, 213, 245, 0.45));
+  font-size: 12px;
+  font-style: italic;
+  padding: 4px;
+}
+
+.customPresetList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.customPresetItem {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--panel-strong);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 10px;
+  transition: all 0.15s ease;
+}
+
+.customPresetItem:hover {
+  border-color: rgba(var(--accent-rgb), 0.35);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.customPresetItem.active {
+  border-color: rgba(var(--accent-rgb), 0.5);
+  background: rgba(var(--accent-rgb), 0.08);
+}
+
+.customPresetSelectBtn {
+  flex: 1;
+  background: transparent;
+  border: 0;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+  text-align: left;
+  padding: 0;
+  display: flex;
+  align-items: center;
+}
+
+.customPresetSelectBtn span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.customPresetItem.active .customPresetSelectBtn {
+  color: var(--accent-hover);
+}
+
+.customPresetActions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 8px;
+}
+
+.customPresetActions button {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 0;
+  transition: all 0.15s ease;
+}
+
+.customPresetActions button:hover {
+  color: var(--accent-hover);
+  background: rgba(var(--accent-rgb), 0.12);
+}
+
+.customPresetActions button.delete:hover {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.12);
+}
+
+.presetRenameWrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+
+.presetRenameInput {
+  flex: 1;
+  background: var(--panel-soft);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 12px;
+  padding: 3px 6px;
+  outline: none;
+}
+
+.presetRenameInput:focus {
+  border-color: var(--accent);
+}
+
+.presetRenameActions {
+  display: flex;
+  gap: 4px;
+}
+
+.presetRenameBtn {
+  border: 0;
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 8px;
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.presetRenameBtn.confirm {
+  background: var(--accent);
+  color: #0b0d10;
+}
+
+.presetRenameBtn.confirm:hover {
+  background: var(--accent-hover);
+}
+
+.presetRenameBtn.cancel {
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--border);
+}
+
+.presetRenameBtn.cancel:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text);
+}
+
+.newPresetForm {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--panel-strong);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+  margin-top: 10px;
+}
+
+.newPresetInput {
+  width: 100%;
+  background: var(--panel-soft);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 12px;
+  padding: 6px 10px;
+  outline: none;
+}
+
+.newPresetInput:focus {
+  border-color: var(--accent);
+}
+
+.newPresetFormBtns {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.newPresetBtn {
+  border: 0;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 6px 12px;
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.newPresetBtn.save {
+  background: var(--accent);
+  color: #0b0d10;
+}
+
+.newPresetBtn.save:hover {
+  background: var(--accent-hover);
+}
+
+.newPresetBtn.cancel {
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--border);
+}
+
+.newPresetBtn.cancel:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.saveNewPresetBtn {
+  width: 100%;
+  background: transparent;
+  border: 1px dashed rgba(var(--accent-rgb), 0.44);
+  border-radius: 8px;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  margin-top: 6px;
+}
+
+.saveNewPresetBtn:hover {
+  background: rgba(var(--accent-rgb), 0.06);
+  border-color: var(--accent);
+}
+
+/* Curves Editor styles */
+.curvesTabContainer {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 6px;
+}
+
+.curvesTabs {
+  display: flex;
+  gap: 4px;
+  background: var(--panel-strong);
+  padding: 3px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  width: 100%;
+}
+
+.curvesTabButton {
+  flex: 1;
+  border: 0;
+  background: transparent;
+  padding: 6px 4px;
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.15s ease;
+}
+
+.curvesTabButton:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.curvesTabButton.active {
+  color: #0b0d10;
+  background: #ffffff;
+}
+
+.curvesTabButton.active.rgb {
+  background: #ffffff;
+  color: #000000;
+}
+
+.curvesTabButton.active.red {
+  background: #ef4444;
+  color: #ffffff;
+}
+
+.curvesTabButton.active.green {
+  background: #22c55e;
+  color: #ffffff;
+}
+
+.curvesTabButton.active.blue {
+  background: #3b82f6;
+  color: #ffffff;
+}
+
+.curvesCanvasWrapper {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  background: #090d12;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+.curvesCanvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.curvesControlsRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.curvesPointInfo {
+  color: var(--text);
+  font-weight: 600;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.curvesHelpText {
+  color: var(--muted-2, rgba(203, 213, 245, 0.5));
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.curvesActions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.curvesActionBtn {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel-soft);
+  color: var(--muted);
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.curvesActionBtn:hover:not(:disabled) {
+  border-color: rgba(var(--accent-rgb), 0.35);
+  color: var(--accent-hover);
+  background: rgba(var(--accent-rgb), 0.08);
+}
+
+.curvesActionBtn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.curvesActionBtn.delete:hover:not(:disabled) {
+  border-color: rgba(239, 68, 68, 0.4);
+  color: #fca5a5;
+  background: rgba(239, 68, 68, 0.08);
+}
+
 .hslSwatches {
   display: flex;
   align-items: center;

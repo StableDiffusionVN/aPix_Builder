@@ -23,6 +23,25 @@ import {
   ZoomOut
 } from "lucide-react";
 
+const CurveIcon = ({ size = 14, ...props }) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    {...props}
+  >
+    <path d="M3 21h18" />
+    <path d="M3 21c4-4 8-16 18-16" />
+    <circle cx="3" cy="21" r="1.5" fill="currentColor" />
+    <circle cx="21" cy="5" r="1.5" fill="currentColor" />
+  </svg>
+);
+
 const COLOR_CHANNELS = [
   { id: "reds", name: "Reds", center: 0, color: "#ef4444" },
   { id: "yellows", name: "Yellows", center: 60, color: "#f59e0b" },
@@ -33,6 +52,13 @@ const COLOR_CHANNELS = [
 ];
 
 const DEFAULT_HSL = Object.fromEntries(COLOR_CHANNELS.map(channel => [channel.id, { h: 0, s: 0, l: 0 }]));
+
+const DEFAULT_CURVES = {
+  rgb: [{ x: 0, y: 0 }, { x: 255, y: 255 }],
+  red: [{ x: 0, y: 0 }, { x: 255, y: 255 }],
+  green: [{ x: 0, y: 0 }, { x: 255, y: 255 }],
+  blue: [{ x: 0, y: 0 }, { x: 255, y: 255 }]
+};
 
 const DEFAULT_ADJUSTMENTS = {
   luminance: 0,
@@ -58,7 +84,8 @@ const DEFAULT_ADJUSTMENTS = {
   flipH: false,
   flipV: false,
   invert: false,
-  hsl: DEFAULT_HSL
+  hsl: DEFAULT_HSL,
+  curves: DEFAULT_CURVES
 };
 
 const DEFAULT_BRUSH = {
@@ -214,6 +241,234 @@ function hueDistance(a, b) {
   return Math.abs(diff);
 }
 
+function isCurveActive(points) {
+  if (!points) return false;
+  if (points.length !== 2) return true;
+  return points[0].y !== 0 || points[1].y !== 255;
+}
+
+function getSplineLut(points) {
+  const lut = new Uint8Array(256);
+  const n = points.length;
+
+  if (n === 2) {
+    const p0 = points[0];
+    const p1 = points[1];
+    const dx = p1.x - p0.x || 1;
+    for (let i = 0; i < 256; i++) {
+      if (i < p0.x) {
+        lut[i] = p0.y;
+      } else if (i > p1.x) {
+        lut[i] = p1.y;
+      } else {
+        const t = (i - p0.x) / dx;
+        lut[i] = clamp(Math.round(p0.y + t * (p1.y - p0.y)), 0, 255);
+      }
+    }
+    return lut;
+  }
+
+  const h = new Array(n - 1);
+  for (let i = 0; i < n - 1; i++) {
+    h[i] = points[i + 1].x - points[i].x || 1;
+  }
+
+  const a = new Array(n);
+  for (let i = 0; i < n; i++) {
+    a[i] = points[i].y;
+  }
+
+  const alpha = new Array(n - 1);
+  for (let i = 1; i < n - 1; i++) {
+    alpha[i] = (3 / h[i]) * (a[i + 1] - a[i]) - (3 / h[i - 1]) * (a[i] - a[i - 1]);
+  }
+
+  const l = new Array(n);
+  const mu = new Array(n);
+  const z = new Array(n);
+
+  l[0] = 1;
+  mu[0] = 0;
+  z[0] = 0;
+
+  for (let i = 1; i < n - 1; i++) {
+    l[i] = 2 * (points[i + 1].x - points[i - 1].x) - h[i - 1] * mu[i - 1];
+    mu[i] = h[i] / l[i];
+    z[i] = (alpha[i] - h[i - 1] * z[i - 1]) / l[i];
+  }
+
+  l[n - 1] = 1;
+  z[n - 1] = 0;
+
+  const b = new Array(n);
+  const c = new Array(n);
+  const d = new Array(n);
+
+  c[n - 1] = 0;
+
+  for (let j = n - 2; j >= 0; j--) {
+    c[j] = z[j] - mu[j] * c[j + 1];
+    b[j] = (a[j + 1] - a[j]) / h[j] - (h[j] * (c[j + 1] + 2 * c[j])) / 3;
+    d[j] = (c[j + 1] - c[j]) / (3 * h[j]);
+  }
+
+  let j = 0;
+  for (let i = 0; i < 256; i++) {
+    if (i < points[0].x) {
+      lut[i] = points[0].y;
+    } else if (i > points[n - 1].x) {
+      lut[i] = points[n - 1].y;
+    } else {
+      while (j < n - 1 && i > points[j + 1].x) {
+        j++;
+      }
+      const dx = i - points[j].x;
+      const val = a[j] + b[j] * dx + c[j] * dx * dx + d[j] * dx * dx * dx;
+      lut[i] = clamp(Math.round(val), 0, 255);
+    }
+  }
+
+  return lut;
+}
+
+function drawCurvesCanvas(canvas, points, activeChannel, selectedPointIndex, histData) {
+  if (!canvas || !points) return;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+
+  const width = canvas.width;
+  const height = canvas.height;
+
+  ctx.clearRect(0, 0, width, height);
+
+  // 1. Draw Complementary Colors Gradient Background
+  let grad = null;
+  if (activeChannel === "red") {
+    grad = ctx.createLinearGradient(0, 0, 0, height);
+    grad.addColorStop(0, "rgba(239, 68, 68, 0.22)");  // Đỏ (thêm đỏ) - trên
+    grad.addColorStop(1, "rgba(6, 182, 212, 0.22)");  // Xanh lam/Lục (giảm đỏ -> cyan) - dưới
+  } else if (activeChannel === "green") {
+    grad = ctx.createLinearGradient(0, 0, 0, height);
+    grad.addColorStop(0, "rgba(34, 197, 94, 0.22)");  // Xanh lá (thêm xanh lá) - trên
+    grad.addColorStop(1, "rgba(217, 70, 239, 0.22)"); // Hồng cánh sen (giảm xanh lá -> magenta) - dưới
+  } else if (activeChannel === "blue") {
+    grad = ctx.createLinearGradient(0, 0, 0, height);
+    grad.addColorStop(0, "rgba(59, 130, 246, 0.22)"); // Xanh dương (thêm xanh dương) - trên
+    grad.addColorStop(1, "rgba(234, 179, 8, 0.22)");  // Vàng (giảm xanh dương -> vàng) - dưới
+  } else if (activeChannel === "rgb") {
+    grad = ctx.createLinearGradient(0, 0, 0, height);
+    grad.addColorStop(0, "rgba(255, 255, 255, 0.05)"); // Sáng (top)
+    grad.addColorStop(1, "rgba(0, 0, 0, 0.3)");        // Tối (bottom)
+  }
+
+  if (grad) {
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, width, height);
+  }
+
+  // 2. Draw Grid Lines
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.09)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let i = 1; i < 4; i++) {
+    const pos = Math.round((i / 4) * width);
+    // Vertical line
+    ctx.moveTo(pos, 0);
+    ctx.lineTo(pos, height);
+    // Horizontal line
+    ctx.moveTo(0, pos);
+    ctx.lineTo(width, pos);
+  }
+  ctx.stroke();
+
+  // 3. Draw Diagonal Guide Line (y = x)
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.16)";
+  ctx.lineWidth = 1;
+  ctx.setLineDash([4, 4]);
+  ctx.beginPath();
+  ctx.moveTo(0, height);
+  ctx.lineTo(width, 0);
+  ctx.stroke();
+  ctx.setLineDash([]); // Reset line dash
+
+  // 4. Draw Channel Histogram in background (charcoal translucent shape)
+  if (histData) {
+    let hist = null;
+    if (activeChannel === "rgb") {
+      hist = histData.lHist;
+    } else if (activeChannel === "red") {
+      hist = histData.rHist;
+    } else if (activeChannel === "green") {
+      hist = histData.gHist;
+    } else if (activeChannel === "blue") {
+      hist = histData.bHist;
+    }
+
+    if (hist) {
+      let maxVal = 0;
+      for (let i = 0; i < 256; i++) {
+        if (hist[i] > maxVal) maxVal = hist[i];
+      }
+      if (maxVal > 0) {
+        ctx.beginPath();
+        ctx.moveTo(0, height);
+        for (let i = 0; i < 256; i++) {
+          const x = (i / 255) * width;
+          const y = height - (hist[i] / maxVal) * height * 0.8;
+          ctx.lineTo(x, y);
+        }
+        ctx.lineTo(width, height);
+        ctx.closePath();
+        ctx.fillStyle = "rgba(10, 15, 22, 0.58)";
+        ctx.fill();
+      }
+    }
+  }
+
+  // 4. Draw Spline Curve
+  const lut = getSplineLut(points);
+  ctx.beginPath();
+  ctx.moveTo(0, height - (lut[0] / 255) * height);
+  for (let i = 1; i < 256; i++) {
+    const cx = (i / 255) * width;
+    const cy = height - (lut[i] / 255) * height;
+    ctx.lineTo(cx, cy);
+  }
+  ctx.strokeStyle = activeChannel === "rgb" ? "#cbd5e1" :
+                    activeChannel === "red" ? "#ef4444" :
+                    activeChannel === "green" ? "#22c55e" : "#3b82f6";
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // 5. Draw Control Points
+  points.forEach((pt, idx) => {
+    const cx = (pt.x / 255) * width;
+    const cy = height - (pt.y / 255) * height;
+
+    if (idx === selectedPointIndex) {
+      ctx.beginPath();
+      ctx.arc(cx, cy, 7, 0, 2 * Math.PI);
+      ctx.fillStyle = activeChannel === "rgb" ? "rgba(255, 255, 255, 0.25)" :
+                      activeChannel === "red" ? "rgba(239, 68, 68, 0.25)" :
+                      activeChannel === "green" ? "rgba(34, 197, 94, 0.25)" : "rgba(59, 130, 246, 0.25)";
+      ctx.fill();
+      ctx.strokeStyle = "#ffffff";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+
+    ctx.beginPath();
+    ctx.arc(cx, cy, 4, 0, 2 * Math.PI);
+    ctx.fillStyle = activeChannel === "rgb" ? "#ffffff" :
+                    activeChannel === "red" ? "#ef4444" :
+                    activeChannel === "green" ? "#22c55e" : "#3b82f6";
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = 1.2;
+    ctx.fill();
+    ctx.stroke();
+  });
+}
+
 // Draws a single stroke onto a 2D context. Eraser strokes use destination-out
 // so — when drawn on a dedicated transparent stroke layer — they only remove
 // previously painted brush pixels, never the underlying image.
@@ -362,7 +617,10 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
 
   const origCanvasRef = useRef(null);
   const histogramCanvasRef = useRef(null);
-
+  const curvesCanvasRef = useRef(null);
+  const draggingCurvePointRef = useRef(null);
+  const [activeCurveChannel, setActiveCurveChannel] = useState("rgb");
+  const [selectedCurvePointIndex, setSelectedCurvePointIndex] = useState(null);
   const [adjustments, setAdjustments] = useState(DEFAULT_ADJUSTMENTS);
   const [brush, setBrush] = useState(DEFAULT_BRUSH);
   const [strokes, setStrokes] = useState([]);
@@ -392,6 +650,85 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
 
   const canUndo = historyIndex > 0;
   const canRedo = historyIndex >= 0 && historyIndex < history.length - 1;
+
+  const [customPresets, setCustomPresets] = useState([]);
+  const [showNewPresetForm, setShowNewPresetForm] = useState(false);
+  const [newPresetName, setNewPresetName] = useState("");
+  const [editingPresetId, setEditingPresetId] = useState(null);
+  const [renameValue, setRenameValue] = useState("");
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("image-editor-custom-presets");
+      if (saved) {
+        setCustomPresets(JSON.parse(saved));
+      }
+    } catch (e) {
+      console.error("Failed to load presets", e);
+    }
+  }, []);
+
+  const handleCreatePreset = useCallback(() => {
+    if (!newPresetName.trim()) return;
+    const newPreset = {
+      id: `custom_${Date.now()}`,
+      name: newPresetName.trim(),
+      adjustments: JSON.parse(JSON.stringify(adjustments))
+    };
+    const updated = [...customPresets, newPreset];
+    setCustomPresets(updated);
+    localStorage.setItem("image-editor-custom-presets", JSON.stringify(updated));
+    setShowNewPresetForm(false);
+    setNewPresetName("");
+  }, [newPresetName, adjustments, customPresets]);
+
+  const handleDeletePreset = useCallback((id) => {
+    const updated = customPresets.filter(item => item.id !== id);
+    setCustomPresets(updated);
+    localStorage.setItem("image-editor-custom-presets", JSON.stringify(updated));
+  }, [customPresets]);
+
+  const handleUpdatePresetSettings = useCallback((id) => {
+    const updated = customPresets.map(item => {
+      if (item.id === id) {
+        return {
+          ...item,
+          adjustments: JSON.parse(JSON.stringify(adjustments))
+        };
+      }
+      return item;
+    });
+    setCustomPresets(updated);
+    localStorage.setItem("image-editor-custom-presets", JSON.stringify(updated));
+  }, [adjustments, customPresets]);
+
+  const handleSaveRename = useCallback((id) => {
+    if (!renameValue.trim()) return;
+    const updated = customPresets.map(item => {
+      if (item.id === id) {
+        return {
+          ...item,
+          name: renameValue.trim()
+        };
+      }
+      return item;
+    });
+    setCustomPresets(updated);
+    localStorage.setItem("image-editor-custom-presets", JSON.stringify(updated));
+    setEditingPresetId(null);
+  }, [renameValue, customPresets]);
+
+  const isPresetActive = useCallback((preset) => {
+    if (!preset || !preset.adjustments) return false;
+    const adj = adjustments;
+    const padj = preset.adjustments;
+    return Math.abs(adj.luminance - padj.luminance) < 1
+      && Math.abs(adj.contrast - padj.contrast) < 1
+      && Math.abs(adj.temperature - padj.temperature) < 1
+      && Math.abs(adj.vibrance - padj.vibrance) < 1
+      && Math.abs(adj.saturation - padj.saturation) < 1
+      && adj.invert === padj.invert;
+  }, [adjustments]);
 
   useEffect(() => {
     adjustmentsRef.current = adjustments;
@@ -520,6 +857,12 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
       const a = adjustments.hsl[channel.id];
       return a.h !== 0 || a.s !== 0 || a.l !== 0;
     });
+    const hasCurves = adjustments.curves && (
+      isCurveActive(adjustments.curves.rgb) ||
+      isCurveActive(adjustments.curves.red) ||
+      isCurveActive(adjustments.curves.green) ||
+      isCurveActive(adjustments.curves.blue)
+    );
     const needsPixelPass = adjustments.temperature !== 0
       || adjustments.tint !== 0
       || adjustments.grain > 0
@@ -529,8 +872,9 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
       || adjustments.shadows !== 0
       || adjustments.whites !== 0
       || adjustments.blacks !== 0
-      || activeHslChannels.length > 0;
-
+      || activeHslChannels.length > 0
+      || hasCurves;
+ 
     if (needsPixelPass) {
       const needsHsl = activeHslChannels.length > 0;
       const imageData = ctx.getImageData(0, 0, width, height);
@@ -540,12 +884,12 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
       const grainStrength = adjustments.grain * 0.9;
       const dehazeBias = adjustments.dehaze * 0.18;
       const clarityBias = adjustments.clarity * 0.12;
-
+ 
       // Cache shifts and calculate cb ratio outside the loop
       const rShift = tempShift + dehazeBias;
       const bShift = -(tempShift - dehazeBias);
       const cb = clarityBias / 64;
-
+ 
       const activeChannelAdjusts = needsHsl
         ? activeHslChannels.map(channel => ({
             center: channel.center,
@@ -554,29 +898,48 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
             l: adjustments.hsl[channel.id].l
           }))
         : null;
-
+ 
       const highlightsVal = adjustments.highlights * 0.45;
       const shadowsVal = adjustments.shadows * 0.45;
       const whitesVal = adjustments.whites * 0.55;
       const blacksVal = adjustments.blacks * 0.55;
       const hasLightAdjustments = highlightsVal !== 0 || shadowsVal !== 0 || whitesVal !== 0 || blacksVal !== 0;
 
+      // Precalculate curves LUTs if active
+      let lutR, lutG, lutB;
+      if (hasCurves) {
+        const lutRGB = getSplineLut(adjustments.curves.rgb);
+        const lutRedOnly = getSplineLut(adjustments.curves.red);
+        const lutGreenOnly = getSplineLut(adjustments.curves.green);
+        const lutBlueOnly = getSplineLut(adjustments.curves.blue);
+
+        lutR = new Uint8Array(256);
+        lutG = new Uint8Array(256);
+        lutB = new Uint8Array(256);
+
+        for (let i = 0; i < 256; i++) {
+          lutR[i] = lutRGB[lutRedOnly[i]];
+          lutG[i] = lutRGB[lutGreenOnly[i]];
+          lutB[i] = lutRGB[lutBlueOnly[i]];
+        }
+      }
+ 
       for (let index = 0; index < data.length; index += 4) {
         if (data[index + 3] === 0) continue;
         let r = data[index];
         let g = data[index + 1];
         let b = data[index + 2];
-
+ 
         r += rShift;
         b += bShift;
         g += tintShift;
-
+ 
         if (clarityBias) {
           r += cb * (r - 128);
           g += cb * (g - 128);
           b += cb * (b - 128);
         }
-
+ 
         if (hasLightAdjustments) {
           const y = (0.299 * r + 0.587 * g + 0.114 * b) / 255.0;
           let shift = 0;
@@ -596,7 +959,7 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
           g += shift;
           b += shift;
         }
-
+ 
         if (needsHsl) {
           const hsl = rgbToHsl(r, g, b);
           for (let i = 0; i < activeChannelAdjusts.length; i++) {
@@ -614,20 +977,26 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
           b = shifted.b;
         }
 
+        if (hasCurves) {
+          r = lutR[clamp(Math.round(r), 0, 255)];
+          g = lutG[clamp(Math.round(g), 0, 255)];
+          b = lutB[clamp(Math.round(b), 0, 255)];
+        }
+ 
         if (grainStrength > 0) {
           const noise = (Math.random() - 0.5) * grainStrength;
           r += noise;
           g += noise;
           b += noise;
         }
-
+ 
         data[index] = clamp(Math.round(r), 0, 255);
         data[index + 1] = clamp(Math.round(g), 0, 255);
         data[index + 2] = clamp(Math.round(b), 0, 255);
       }
       ctx.putImageData(imageData, 0, 0);
     }
-
+ 
     return { width, height, scale };
   }, [adjustments, getOutputGeometry]);
 
@@ -751,11 +1120,21 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
     compositePreview();
 
     // Draw live histogram
-    if (histogramCanvasRef.current) {
-      const histData = computeHistogram(baseCanvasRef.current);
+    const histData = baseCanvasRef.current ? computeHistogram(baseCanvasRef.current) : null;
+    if (histogramCanvasRef.current && histData) {
       drawHistogram(histogramCanvasRef.current, histData);
     }
-  }, [applyAdjustments, syncStrokeLayer, compositePreview]);
+
+    if (curvesCanvasRef.current && histData && adjustments.curves) {
+      drawCurvesCanvas(
+        curvesCanvasRef.current,
+        adjustments.curves[activeCurveChannel],
+        activeCurveChannel,
+        selectedCurvePointIndex,
+        histData
+      );
+    }
+  }, [applyAdjustments, syncStrokeLayer, compositePreview, activeCurveChannel, selectedCurvePointIndex]);
 
   // Heavy path: rebuild the adjusted base (throttled to one per animation frame)
   // whenever an adjustment changes.
@@ -767,6 +1146,19 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
   }, [isReady, renderPreview]);
+
+  useEffect(() => {
+    if (openSections.curves && curvesCanvasRef.current && adjustments.curves && baseCanvasRef.current) {
+      const histData = computeHistogram(baseCanvasRef.current);
+      drawCurvesCanvas(
+        curvesCanvasRef.current,
+        adjustments.curves[activeCurveChannel],
+        activeCurveChannel,
+        selectedCurvePointIndex,
+        histData
+      );
+    }
+  }, [openSections.curves, adjustments.curves, activeCurveChannel, selectedCurvePointIndex]);
 
   // When the committed stroke set changes (commit / undo / redo / reset), rebuild
   // the brush layer and recomposite. Not triggered during dragging.
@@ -795,7 +1187,8 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
     setAdjustments(current => {
       const next = {
         ...current,
-        ...preset.adjustments
+        ...preset.adjustments,
+        curves: preset.adjustments.curves || DEFAULT_CURVES
       };
       commitHistory(next, brush, strokes);
       return next;
@@ -877,7 +1270,10 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
   }
 
   function toggleSection(id) {
-    setOpenSections(current => ({ ...current, [id]: !current[id] }));
+    setOpenSections(current => {
+      const isOpen = !current[id];
+      return { [id]: isOpen };
+    });
   }
 
   function applyCropRatio(id) {
@@ -915,8 +1311,152 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
     });
   }
 
+  const handleCurvesPointerDown = useCallback((e) => {
+    const canvas = curvesCanvasRef.current;
+    if (!canvas || !adjustments.curves) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = clamp(Math.round(((e.clientX - rect.left) / rect.width) * 255), 0, 255);
+    const y = clamp(Math.round((1 - (e.clientY - rect.top) / rect.height) * 255), 0, 255);
+
+    const points = adjustments.curves[activeCurveChannel];
+    let closestIdx = -1;
+    let minDist = 12; // Detection radius in curves space [0..255]
+
+    points.forEach((pt, idx) => {
+      const dx = pt.x - x;
+      const dy = pt.y - y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < minDist) {
+        minDist = dist;
+        closestIdx = idx;
+      }
+    });
+
+    if (closestIdx !== -1) {
+      setSelectedCurvePointIndex(closestIdx);
+      draggingCurvePointRef.current = { index: closestIdx };
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } else {
+      // Find insert position
+      let insertIdx = -1;
+      for (let i = 0; i < points.length; i++) {
+        if (x < points[i].x) {
+          insertIdx = i;
+          break;
+        }
+      }
+
+      if (insertIdx > 0) {
+        const prev = points[insertIdx - 1];
+        const next = points[insertIdx];
+        if (x > prev.x + 2 && x < next.x - 2) {
+          const newPt = { x, y };
+          const nextPoints = [...points];
+          nextPoints.splice(insertIdx, 0, newPt);
+          
+          setAdjustments(current => ({
+            ...current,
+            curves: {
+              ...current.curves,
+              [activeCurveChannel]: nextPoints
+            }
+          }));
+          
+          setSelectedCurvePointIndex(insertIdx);
+          draggingCurvePointRef.current = { index: insertIdx };
+          e.currentTarget.setPointerCapture(e.pointerId);
+        }
+      }
+    }
+  }, [adjustments.curves, activeCurveChannel]);
+
+  const handleCurvesPointerMove = useCallback((e) => {
+    if (!draggingCurvePointRef.current || !adjustments.curves) return;
+    const canvas = curvesCanvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = clamp(Math.round(((e.clientX - rect.left) / rect.width) * 255), 0, 255);
+    const y = clamp(Math.round((1 - (e.clientY - rect.top) / rect.height) * 255), 0, 255);
+
+    const points = adjustments.curves[activeCurveChannel];
+    const idx = draggingCurvePointRef.current.index;
+
+    const nextPoints = points.map((pt, i) => {
+      if (i === idx) {
+        let newX = x;
+        if (idx === 0) {
+          newX = clamp(x, 0, points[1].x - 2);
+        } else if (idx === points.length - 1) {
+          newX = clamp(x, points[points.length - 2].x + 2, 255);
+        } else {
+          newX = clamp(x, points[idx - 1].x + 2, points[idx + 1].x - 2);
+        }
+        return {
+          x: newX,
+          y: clamp(y, 0, 255)
+        };
+      }
+      return pt;
+    });
+
+    setAdjustments(current => ({
+      ...current,
+      curves: {
+        ...current.curves,
+        [activeCurveChannel]: nextPoints
+      }
+    }));
+  }, [adjustments.curves, activeCurveChannel]);
+
+  const handleCurvesPointerUp = useCallback((e) => {
+    if (draggingCurvePointRef.current) {
+      try {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+      } catch {}
+      draggingCurvePointRef.current = null;
+      commitCurrent();
+    }
+  }, [commitCurrent]);
+
+  const handleCurvesDoubleClick = useCallback((e) => {
+    if (!adjustments.curves) return;
+    const canvas = curvesCanvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = clamp(Math.round(((e.clientX - rect.left) / rect.width) * 255), 0, 255);
+    const y = clamp(Math.round((1 - (e.clientY - rect.top) / rect.height) * 255), 0, 255);
+
+    const points = adjustments.curves[activeCurveChannel];
+    let closestIdx = -1;
+    let minDist = 12;
+
+    points.forEach((pt, idx) => {
+      const dx = pt.x - x;
+      const dy = pt.y - y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < minDist) {
+        minDist = dist;
+        closestIdx = idx;
+      }
+    });
+
+    // Delete if it is a middle point
+    if (closestIdx > 0 && closestIdx < points.length - 1) {
+      const nextPoints = points.filter((_, i) => i !== closestIdx);
+      setAdjustments(current => ({
+        ...current,
+        curves: {
+          ...current.curves,
+          [activeCurveChannel]: nextPoints
+        }
+      }));
+      setSelectedCurvePointIndex(null);
+      commitCurrent();
+    }
+  }, [adjustments.curves, activeCurveChannel, commitCurrent]);
+
   function openSection(id) {
-    setOpenSections(current => ({ ...current, [id]: true }));
+    setOpenSections({ [id]: true });
   }
 
   function handleUndo() {
@@ -993,6 +1533,32 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
       }
 
       if (editable || hasUndoModifier || event.altKey || event.shiftKey) return;
+
+      if (event.key === "1") {
+        event.preventDefault();
+        toggleSection("basic");
+        return;
+      }
+      if (event.key === "2") {
+        event.preventDefault();
+        toggleSection("curves");
+        return;
+      }
+      if (event.key === "3") {
+        event.preventDefault();
+        toggleSection("hsl");
+        return;
+      }
+      if (event.key === "4") {
+        event.preventDefault();
+        toggleSection("effects");
+        return;
+      }
+      if (event.key === "5") {
+        event.preventDefault();
+        toggleSection("export");
+        return;
+      }
 
       if (event.key === "Enter" && activeTool === "crop") {
         event.preventDefault();
@@ -1412,17 +1978,113 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
           <div className="accordionListWithSlider">
             <div className="imageEditorAccordionList">
               <AccordionSection icon={Sparkles} title="Presets" open={!!openSections.presets} onToggle={() => toggleSection("presets")}>
-                <div className="presetGrid">
-                  {PRESETS.map(preset => (
-                    <button
-                      type="button"
-                      key={preset.id}
-                      className={`presetButton ${adjustments.luminance === preset.adjustments.luminance && adjustments.contrast === preset.adjustments.contrast && adjustments.temperature === preset.adjustments.temperature && adjustments.vibrance === preset.adjustments.vibrance ? "active" : ""}`}
-                      onClick={() => applyPreset(preset)}
-                    >
-                      {preset.name}
+                <div className="presetAccordionContent">
+                  <div className="presetGroupTitle">Mặc định</div>
+                  <div className="presetGrid">
+                    {PRESETS.map(preset => (
+                      <button
+                        type="button"
+                        key={preset.id}
+                        className={`presetButton ${isPresetActive(preset) ? "active" : ""}`}
+                        onClick={() => applyPreset(preset)}
+                      >
+                        {preset.name}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="presetGroupTitle custom">Tùy chỉnh</div>
+                  {customPresets.length === 0 ? (
+                    <p className="noCustomPresets">Chưa có preset tự lưu</p>
+                  ) : (
+                    <div className="customPresetList">
+                      {customPresets.map(preset => (
+                        <div key={preset.id} className={`customPresetItem ${isPresetActive(preset) ? "active" : ""}`}>
+                          {editingPresetId === preset.id ? (
+                            <div className="presetRenameWrap">
+                              <input
+                                type="text"
+                                value={renameValue}
+                                onChange={e => setRenameValue(e.target.value)}
+                                onKeyDown={e => {
+                                  if (e.key === "Enter") handleSaveRename(preset.id);
+                                  if (e.key === "Escape") setEditingPresetId(null);
+                                }}
+                                autoFocus
+                                className="presetRenameInput"
+                              />
+                              <div className="presetRenameActions">
+                                <button type="button" className="presetRenameBtn confirm" onClick={() => handleSaveRename(preset.id)}>Lưu</button>
+                                <button type="button" className="presetRenameBtn cancel" onClick={() => setEditingPresetId(null)}>Hủy</button>
+                              </div>
+                            </div>
+                          ) : (
+                            <>
+                              <button
+                                type="button"
+                                className="customPresetSelectBtn"
+                                onClick={() => applyPreset(preset)}
+                              >
+                                <span>{preset.name}</span>
+                              </button>
+                              <div className="customPresetActions">
+                                <button
+                                  type="button"
+                                  title="Ghi đè cài đặt hiện tại vào preset này"
+                                  onClick={() => handleUpdatePresetSettings(preset.id)}
+                                >
+                                  <RotateCcw size={11} style={{ transform: "rotate(180deg)" }} />
+                                </button>
+                                <button
+                                  type="button"
+                                  title="Đổi tên preset"
+                                  onClick={() => {
+                                    setEditingPresetId(preset.id);
+                                    setRenameValue(preset.name);
+                                  }}
+                                >
+                                  <SlidersHorizontal size={11} />
+                                </button>
+                                <button
+                                  type="button"
+                                  className="delete"
+                                  title="Xóa preset này"
+                                  onClick={() => handleDeletePreset(preset.id)}
+                                >
+                                  <X size={11} />
+                                </button>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {showNewPresetForm ? (
+                    <div className="newPresetForm">
+                      <input
+                        type="text"
+                        placeholder="Tên Preset mới..."
+                        value={newPresetName}
+                        onChange={e => setNewPresetName(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === "Enter") handleCreatePreset();
+                          if (e.key === "Escape") setShowNewPresetForm(false);
+                        }}
+                        autoFocus
+                        className="newPresetInput"
+                      />
+                      <div className="newPresetFormBtns">
+                        <button type="button" className="newPresetBtn cancel" onClick={() => setShowNewPresetForm(false)}>Hủy</button>
+                        <button type="button" className="newPresetBtn save" onClick={handleCreatePreset}>Lưu lại</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button type="button" className="saveNewPresetBtn" onClick={() => { setShowNewPresetForm(true); setNewPresetName(""); }}>
+                      + Lưu cài đặt làm Preset mới
                     </button>
-                  ))}
+                  )}
                 </div>
               </AccordionSection>
 
@@ -1472,6 +2134,112 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
                 <EditorRange label="Vibrance" value={adjustments.vibrance} min={-100} max={100} onChange={value => updateAdjustment("vibrance", value)} onCommit={commitCurrent} />
                 <EditorRange label="Saturation" value={adjustments.saturation} min={-100} max={100} onChange={value => updateAdjustment("saturation", value)} onCommit={commitCurrent} />
                 <EditorRange label="Hue" value={adjustments.hue} min={-180} max={180} onChange={value => updateAdjustment("hue", value)} onCommit={commitCurrent} />
+              </AccordionSection>
+ 
+              <AccordionSection icon={CurveIcon} title="Curves" open={!!openSections.curves} onToggle={() => toggleSection("curves")}>
+                <div className="curvesTabContainer">
+                  <div className="curvesTabs">
+                    <button
+                      type="button"
+                      className={`curvesTabButton rgb ${activeCurveChannel === "rgb" ? "active" : ""}`}
+                      onClick={() => { setActiveCurveChannel("rgb"); setSelectedCurvePointIndex(null); }}
+                    >
+                      RGB
+                    </button>
+                    <button
+                      type="button"
+                      className={`curvesTabButton red ${activeCurveChannel === "red" ? "active" : ""}`}
+                      onClick={() => { setActiveCurveChannel("red"); setSelectedCurvePointIndex(null); }}
+                    >
+                      Red
+                    </button>
+                    <button
+                      type="button"
+                      className={`curvesTabButton green ${activeCurveChannel === "green" ? "active" : ""}`}
+                      onClick={() => { setActiveCurveChannel("green"); setSelectedCurvePointIndex(null); }}
+                    >
+                      Green
+                    </button>
+                    <button
+                      type="button"
+                      className={`curvesTabButton blue ${activeCurveChannel === "blue" ? "active" : ""}`}
+                      onClick={() => { setActiveCurveChannel("blue"); setSelectedCurvePointIndex(null); }}
+                    >
+                      Blue
+                    </button>
+                  </div>
+                </div>
+
+                <div className="curvesCanvasWrapper">
+                  <canvas
+                    ref={curvesCanvasRef}
+                    width={256}
+                    height={256}
+                    className="curvesCanvas"
+                    onPointerDown={handleCurvesPointerDown}
+                    onPointerMove={handleCurvesPointerMove}
+                    onPointerUp={handleCurvesPointerUp}
+                    onPointerCancel={handleCurvesPointerUp}
+                    onDoubleClick={handleCurvesDoubleClick}
+                  />
+                </div>
+
+                {adjustments.curves && (
+                  <div className="curvesControlsRow">
+                    <div className="curvesPointInfo">
+                      {selectedCurvePointIndex !== null ? (
+                        <span>
+                          Điểm: {adjustments.curves[activeCurveChannel][selectedCurvePointIndex].x}, {adjustments.curves[activeCurveChannel][selectedCurvePointIndex].y}
+                        </span>
+                      ) : (
+                        <span className="curvesHelpText">Click lên lưới để thêm điểm</span>
+                      )}
+                    </div>
+                    <div className="curvesActions">
+                      <button
+                        type="button"
+                        className="curvesActionBtn delete"
+                        title="Xóa điểm đang chọn"
+                        disabled={selectedCurvePointIndex === null || selectedCurvePointIndex === 0 || selectedCurvePointIndex === adjustments.curves[activeCurveChannel].length - 1}
+                        onClick={() => {
+                          const points = adjustments.curves[activeCurveChannel];
+                          if (selectedCurvePointIndex > 0 && selectedCurvePointIndex < points.length - 1) {
+                            const nextPoints = points.filter((_, i) => i !== selectedCurvePointIndex);
+                            setAdjustments(current => ({
+                              ...current,
+                              curves: {
+                                ...current.curves,
+                                [activeCurveChannel]: nextPoints
+                              }
+                            }));
+                            setSelectedCurvePointIndex(null);
+                            commitCurrent();
+                          }
+                        }}
+                      >
+                        Xóa điểm
+                      </button>
+                      <button
+                        type="button"
+                        className="curvesActionBtn reset"
+                        title="Đặt lại đường cong kênh này"
+                        onClick={() => {
+                          setAdjustments(current => ({
+                            ...current,
+                            curves: {
+                              ...current.curves,
+                              [activeCurveChannel]: [{ x: 0, y: 0 }, { x: 255, y: 255 }]
+                            }
+                          }));
+                          setSelectedCurvePointIndex(null);
+                          commitCurrent();
+                        }}
+                      >
+                        Đặt lại
+                      </button>
+                    </div>
+                  </div>
+                )}
               </AccordionSection>
 
               <AccordionSection icon={Droplet} title="Color HSL" open={!!openSections.hsl} onToggle={() => toggleSection("hsl")}>

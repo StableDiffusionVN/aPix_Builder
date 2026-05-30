@@ -112,57 +112,80 @@ export async function queuePrompt(target, workflow, clientId, signal) {
 
 export function waitForPrompt(target, promptId, clientId, run, timeoutMs) {
   return new Promise((resolve, reject) => {
-    const ws = new WebSocket(`${target.wsBase}/ws?clientId=${clientId}`);
-    if (run) run.ws = ws;
-    let settled = false;
-    const finish = (fn, value) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      try {
-        ws.close();
-      } catch {
-        // Ignore close errors while resolving the request.
-      }
-      fn(value);
-    };
-    if (run?.abortController?.signal.aborted) {
-      finish(reject, new Error("Request cancelled by user"));
-      return;
-    }
-    const onAbort = () => finish(reject, new Error("Request cancelled by user"));
-    run?.abortController?.signal.addEventListener("abort", onAbort, { once: true });
-    const timer = setTimeout(() => {
-      finish(reject, new Error(`Timed out after ${Math.round(timeoutMs / 1000)}s waiting for ComfyUI prompt ${promptId}`));
-    }, timeoutMs);
+    const wsUrl = `${target.wsBase}/ws?clientId=${clientId}`;
 
-    ws.addEventListener("message", event => {
-      if (typeof event.data !== "string") return;
-      const message = JSON.parse(event.data);
-      const data = message.data || {};
-      if (data.prompt_id && data.prompt_id !== promptId) return;
-      if (message.type === "execution_error") {
-        const node = data.node_id || data.node || "unknown";
-        const detail = data.exception_message || data.exception_type || JSON.stringify(data);
-        finish(reject, new Error(`ComfyUI execution error at node ${node}: ${detail}`));
-        return;
+    const startConnection = (WSClass) => {
+      try {
+        const ws = new WSClass(wsUrl);
+        if (run) run.ws = ws;
+        let settled = false;
+        const finish = (fn, value) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          try {
+            ws.close();
+          } catch {
+            // Ignore close errors while resolving the request.
+          }
+          fn(value);
+        };
+        if (run?.abortController?.signal.aborted) {
+          finish(reject, new Error("Request cancelled by user"));
+          return;
+        }
+        const onAbort = () => finish(reject, new Error("Request cancelled by user"));
+        run?.abortController?.signal.addEventListener("abort", onAbort, { once: true });
+        const timer = setTimeout(() => {
+          finish(reject, new Error(`Timed out after ${Math.round(timeoutMs / 1000)}s waiting for ComfyUI prompt ${promptId}`));
+        }, timeoutMs);
+
+        ws.addEventListener("message", event => {
+          if (typeof event.data !== "string") return;
+          const message = JSON.parse(event.data);
+          const data = message.data || {};
+          if (data.prompt_id && data.prompt_id !== promptId) return;
+          if (message.type === "execution_error") {
+            const node = data.node_id || data.node || "unknown";
+            const detail = data.exception_message || data.exception_type || JSON.stringify(data);
+            finish(reject, new Error(`ComfyUI execution error at node ${node}: ${detail}`));
+            return;
+          }
+          if (message.type === "execution_interrupted") {
+            finish(reject, new Error(run?.cancelled ? "Request cancelled by user" : `ComfyUI execution interrupted for prompt ${promptId}`));
+            return;
+          }
+          if (message.type === "executing" && message.data?.node === null && message.data?.prompt_id === promptId) {
+            finish(resolve);
+          }
+        });
+        ws.addEventListener("error", error => {
+          finish(reject, new Error(`ComfyUI websocket error: ${error.message || "connection failed"}`));
+        });
+        ws.addEventListener("close", () => {
+          if (!settled) {
+            finish(reject, new Error(`ComfyUI websocket closed before prompt ${promptId} finished`));
+          }
+        });
+      } catch (err) {
+        reject(new Error(`Failed to initialize WebSocket connection: ${err.message}`));
       }
-      if (message.type === "execution_interrupted") {
-        finish(reject, new Error(run?.cancelled ? "Request cancelled by user" : `ComfyUI execution interrupted for prompt ${promptId}`));
-        return;
-      }
-      if (message.type === "executing" && message.data?.node === null && message.data?.prompt_id === promptId) {
-        finish(resolve);
-      }
-    });
-    ws.addEventListener("error", error => {
-      finish(reject, new Error(`ComfyUI websocket error: ${error.message || "connection failed"}`));
-    });
-    ws.addEventListener("close", () => {
-      if (!settled) {
-        finish(reject, new Error(`ComfyUI websocket closed before prompt ${promptId} finished`));
-      }
-    });
+    };
+
+    if (typeof globalThis.WebSocket !== "undefined") {
+      startConnection(globalThis.WebSocket);
+    } else {
+      import("ws")
+        .then(module => {
+          startConnection(module.default);
+        })
+        .catch(err => {
+          reject(new Error(
+            `Node.js global WebSocket is not available (Node.js <22) and the 'ws' package is not installed. ` +
+            `Please upgrade Node.js to v22+ or install the 'ws' package: npm install ws`
+          ));
+        });
+    }
   });
 }
 

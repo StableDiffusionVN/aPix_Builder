@@ -23,6 +23,7 @@ import { buildDefaults, flattenInputs, normalizeId, requestPayload } from "./lib
 
 const SERVER_STORAGE_KEY = "comfyui-build:server:v2";
 const THEME_STORAGE_KEY = "comfyui-build:theme";
+const WORKSPACE_STORAGE_KEY = "comfyui-build:workspace:v1";
 const MIN_IMAGE_SCALE = 0.5;
 const MAX_IMAGE_SCALE = 10;
 const DEFAULT_COMFY_SERVER = "http://127.0.0.1:8188";
@@ -34,6 +35,41 @@ function loadTheme() {
 function loadServerAddress() {
   const stored = localStorage.getItem(SERVER_STORAGE_KEY) || "";
   return stored || DEFAULT_COMFY_SERVER;
+}
+
+function loadStoredWorkspace() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(WORKSPACE_STORAGE_KEY) || "{}");
+    return {
+      selectedTemplate: typeof parsed.selectedTemplate === "string" ? parsed.selectedTemplate : "",
+      valuesByTemplate: parsed.valuesByTemplate && typeof parsed.valuesByTemplate === "object" ? parsed.valuesByTemplate : {}
+    };
+  } catch {
+    return { selectedTemplate: "", valuesByTemplate: {} };
+  }
+}
+
+function sanitizeWorkspaceValue(value) {
+  if (typeof value === "string") {
+    return value.startsWith("data:") || value.length > 200000 ? "" : value;
+  }
+  if (Array.isArray(value)) return value.map(sanitizeWorkspaceValue);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).map(([key, nested]) => [key, sanitizeWorkspaceValue(nested)]));
+  }
+  return value;
+}
+
+function sanitizeWorkspaceValues(values = {}) {
+  return Object.fromEntries(Object.entries(values).map(([key, value]) => [key, sanitizeWorkspaceValue(value)]));
+}
+
+function saveStoredWorkspace(workspace) {
+  try {
+    localStorage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify(workspace));
+  } catch {
+    // Large temporary image data can exceed localStorage; keep the app usable.
+  }
 }
 
 function formatDuration(ms) {
@@ -57,6 +93,7 @@ export default function App() {
   const [activeRunId, setActiveRunId] = useState("");
   const [runQueue, setRunQueue] = useState([]);
   const [history, setHistory] = useState([]);
+  const [inputImages, setInputImages] = useState([]);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [templateEditorOpen, setTemplateEditorOpen] = useState(false);
   const [outputEditorOpen, setOutputEditorOpen] = useState(false);
@@ -73,6 +110,7 @@ export default function App() {
   const previewAreaRef = useRef(null);
   const imageElementRef = useRef(null);
   const runQueueRef = useRef([]);
+  const workspaceRef = useRef(loadStoredWorkspace());
 
   const inputs = useMemo(() => flattenInputs(config?.input), [config]);
   const outputs = useMemo(() => Object.values(config?.output || {}), [config]);
@@ -104,6 +142,20 @@ export default function App() {
     if (comfyAddress) localStorage.setItem(SERVER_STORAGE_KEY, comfyAddress);
   }, [comfyAddress]);
 
+  useEffect(() => {
+    if (!selectedTemplate || !config) return;
+    const nextWorkspace = {
+      ...workspaceRef.current,
+      selectedTemplate,
+      valuesByTemplate: {
+        ...workspaceRef.current.valuesByTemplate,
+        [selectedTemplate]: sanitizeWorkspaceValues(values)
+      }
+    };
+    workspaceRef.current = nextWorkspace;
+    saveStoredWorkspace(nextWorkspace);
+  }, [config, selectedTemplate, values]);
+
   async function loadOutputHistory() {
     try {
       const response = await fetch("/api/output-history");
@@ -112,6 +164,17 @@ export default function App() {
       setHistory(data.history || []);
     } catch {
       setHistory([]);
+    }
+  }
+
+  async function refreshInputImages() {
+    try {
+      const response = await fetch("/api/input-images");
+      if (!response.ok) return;
+      const data = await response.json();
+      setInputImages(data.images || []);
+    } catch {
+      setInputImages([]);
     }
   }
 
@@ -157,6 +220,16 @@ export default function App() {
       resetImageView();
     }
 
+    function handleCompareToggle(event) {
+      if (!canCompare || event.key.toLowerCase() !== "s") return;
+      if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
+      if (isTextEntryTarget(event.target)) return;
+      if (document.querySelector(".imageEditorModal")) return;
+      event.preventDefault();
+      event.stopPropagation();
+      setCompareMode(current => !current);
+    }
+
     function preventSpaceClick(event) {
       if (!heroImage || event.code !== "Space") return;
       if (isTextEntryTarget(event.target)) return;
@@ -165,12 +238,14 @@ export default function App() {
     }
 
     window.addEventListener("keydown", handleSpaceReset, true);
+    window.addEventListener("keydown", handleCompareToggle, true);
     window.addEventListener("keyup", preventSpaceClick, true);
     return () => {
       window.removeEventListener("keydown", handleSpaceReset, true);
+      window.removeEventListener("keydown", handleCompareToggle, true);
       window.removeEventListener("keyup", preventSpaceClick, true);
     };
-  }, [heroImage]);
+  }, [canCompare, heroImage]);
 
   function updateImageFitSize() {
     const area = previewAreaRef.current;
@@ -227,9 +302,12 @@ export default function App() {
     }
     return loadTemplateConfig(templateId)
       .then(data => {
+        const nextTemplateId = data.template?.id || templateId || "";
+        const defaults = buildDefaults(flattenInputs(data.config?.input));
+        const storedValues = nextTemplateId ? workspaceRef.current.valuesByTemplate?.[nextTemplateId] : null;
         setConfig(data.config);
-        setValues(options.values || buildDefaults(flattenInputs(data.config?.input)));
-        setSelectedTemplate(data.template?.id || templateId || "");
+        setValues(options.values || { ...defaults, ...(storedValues || {}) });
+        setSelectedTemplate(nextTemplateId);
         setComfyAddress(current => options.address || current || data.server?.address || DEFAULT_COMFY_SERVER);
         setStatus(`YAML đã sẵn sàng: ${data.template?.name || data.template?.id || "Default"}`);
       })
@@ -241,10 +319,13 @@ export default function App() {
 
   useEffect(() => {
     loadOutputHistory();
+    refreshInputImages();
     loadTemplateRegistry()
       .then(data => {
         setTemplates(data.templates || []);
-        return loadConfig(data.default);
+        const storedTemplate = workspaceRef.current.selectedTemplate;
+        const hasStoredTemplate = (data.templates || []).some(template => template.id === storedTemplate);
+        return loadConfig(hasStoredTemplate ? storedTemplate : data.default);
       })
       .catch(() => loadConfig(""));
   }, []);
@@ -352,7 +433,7 @@ export default function App() {
     if (!item) return;
     setError("");
     resetImageView();
-    setResult(item.result || {
+    const restoredResult = item.result || {
       runId: item.id,
       promptId: item.promptId,
       template: item.templateId,
@@ -361,8 +442,13 @@ export default function App() {
       completedAt: item.completedAt || item.createdAt,
       durationMs: item.durationMs,
       outputs: item.outputs || []
-    });
+    };
+    setResult(restoredResult);
     setComfyAddress(item.address || "");
+    if (item.templateId === "image-editor") {
+      setStatus("Đã mở ảnh từ Image Editor");
+      return;
+    }
     await loadConfig(item.templateId, {
       values: item.values,
       address: item.address,
@@ -461,19 +547,30 @@ export default function App() {
   }
 
   async function handleSaveEditedOutput(dataUrl) {
-    setResult(current => {
-      if (!current?.outputs?.length) return current;
-      const nextOutputs = current.outputs.map((output, index) => (
-        index === 0
-          ? { ...output, url: dataUrl, filename: output.filename || "edited-output.png" }
-          : output
-      ));
-      return {
-        ...current,
-        outputs: nextOutputs,
-        historyItem: current.historyItem ? { ...current.historyItem, outputs: nextOutputs } : current.historyItem
-      };
+    const response = await fetch("/api/output-history/edit", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        dataUrl,
+        sourceFilename: primaryOutput?.filename,
+        address: comfyAddress
+      })
     });
+    const text = await response.text();
+    let data = {};
+    try {
+      data = text ? JSON.parse(text) : {};
+    } catch {
+      throw new Error(text || "Backend không trả về JSON khi lưu ảnh");
+    }
+    if (!response.ok) throw new Error(data.error || "Không lưu được ảnh đã sửa");
+    if (!data.historyItem) throw new Error("Backend chưa trả về ảnh đã lưu. Hãy restart backend rồi thử lại.");
+
+    const historyItem = data.historyItem;
+    setResult(historyItem.result || historyItem);
+    setHistory(current => data.history || (historyItem ? [historyItem, ...current] : current));
+    resetImageView();
+    setStatus("Đã lưu ảnh Image Editor vào output");
   }
 
   return (
@@ -515,6 +612,9 @@ export default function App() {
               item={item}
               value={values[normalizeId(item.id)]}
               onChange={next => setValues(current => ({ ...current, [normalizeId(item.id)]: next }))}
+              inputImages={inputImages}
+              onRefreshInputImages={refreshInputImages}
+              onUpdateInputImages={setInputImages}
             />
           ))}
           </div>
@@ -547,7 +647,7 @@ export default function App() {
                   <button
                     className={`downloadButton compareButton ${compareMode ? "active" : ""}`}
                     onClick={() => setCompareMode(current => !current)}
-                    title="So sánh ảnh input và output"
+                    title={compareMode ? "Tắt so sánh ảnh input và output (S)" : "Bật so sánh ảnh input và output (S)"}
                   >
                     <GitCompare size={14} />
                   </button>

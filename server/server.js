@@ -35,6 +35,7 @@ const outputDir = path.join(root, "output");
 const outputHistoryPath = path.join(outputDir, "history.json");
 const port = Number(process.env.PORT || 8787);
 const comfyTimeoutMs = Number(process.env.COMFY_TIMEOUT_MS || 10 * 60 * 1000);
+const maxImageBodyBytes = Number(process.env.MAX_IMAGE_BODY_BYTES || 512 * 1024 * 1024);
 const activeRuns = new Map();
 const templates = createTemplateService({ configDir, defaultDir: defaultTemplateDir, templatesDir: userTemplatesDir });
 
@@ -386,6 +387,60 @@ async function handleDeleteOutputHistory(req, res) {
   send(res, 200, { history: next });
 }
 
+async function handleSaveEditedOutput(req, res) {
+  const body = JSON.parse(await readBody(req, maxImageBodyBytes) || "{}");
+  const parsed = parseDataUrl(body.dataUrl);
+  if (!parsed) {
+    send(res, 400, { error: "Invalid image data" });
+    return;
+  }
+
+  await mkdir(outputDir, { recursive: true });
+  const runId = randomUUID();
+  const completedAt = new Date().toISOString();
+  const extension = parsed.mimeType.includes("jpeg") ? "jpg" : parsed.mimeType.split("/")[1] || "png";
+  const sourceName = safeOutputName(body.sourceFilename || `output.${extension}`);
+  const base = sourceName.replace(/\.[^.]+$/, "") || "output";
+  const filename = `${Date.now()}_${runId}_0_${base}_edited.${extension}`;
+  await writeFile(path.join(outputDir, filename), parsed.buffer);
+
+  const outputs = [{
+    nodeId: "image-editor",
+    filename,
+    originalFilename: sourceName,
+    url: outputImageUrl(filename)
+  }];
+  const item = {
+    id: runId,
+    templateId: "image-editor",
+    templateName: "Image Editor",
+    address: body.address || "Image Editor",
+    promptId: "editor",
+    createdAt: completedAt,
+    submittedAt: completedAt,
+    completedAt,
+    durationMs: 0,
+    outputs,
+    status: "success",
+    values: {},
+    result: {
+      runId,
+      promptId: "editor",
+      template: "image-editor",
+      address: body.address || "Image Editor",
+      submittedAt: completedAt,
+      completedAt,
+      durationMs: 0,
+      outputs
+    }
+  };
+
+  const current = await readOutputHistory();
+  const history = [item, ...current];
+  await writeOutputHistory(history);
+  send(res, 200, { historyItem: item, history: history.slice(0, 50) });
+}
+
 function slugifyTemplateId(value = "") {
   return String(value)
     .normalize("NFD")
@@ -466,6 +521,27 @@ async function handleTemplateSave(req, res) {
     registry
   });
 }
+async function cleanupUploads(maxAgeMs = 24 * 60 * 60 * 1000) {
+  try {
+    const now = Date.now();
+    const files = await readdir(uploadDir);
+    let count = 0;
+    for (const file of files) {
+      if (file === ".gitkeep" || file === ".DS_Store") continue;
+      const filePath = path.join(uploadDir, file);
+      const fileStat = await stat(filePath);
+      if (now - fileStat.mtimeMs > maxAgeMs) {
+        await rm(filePath, { force: true });
+        count++;
+      }
+    }
+    if (count > 0) {
+      console.log(`[Cleanup] Cleaned up ${count} old upload file(s) in /uploads`);
+    }
+  } catch (error) {
+    // Ignore error if directory doesn't exist yet
+  }
+}
 
 const server = http.createServer(async (req, res) => {
   try {
@@ -512,6 +588,8 @@ const server = http.createServer(async (req, res) => {
       send(res, 200, { history: await readOutputHistory() });
     } else if (req.method === "POST" && url.pathname === "/api/output-history/delete") {
       await handleDeleteOutputHistory(req, res);
+    } else if (req.method === "POST" && url.pathname === "/api/output-history/edit") {
+      await handleSaveEditedOutput(req, res);
     } else if (req.method === "GET" && url.pathname === "/api/output-image") {
       await handleOutputImage(req, res, url);
     } else {
@@ -524,4 +602,8 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(port, "127.0.0.1", () => {
   console.log(`ComfyUI YAML app server listening on http://127.0.0.1:${port}`);
+  cleanupUploads().catch(console.error);
+  setInterval(() => {
+    cleanupUploads().catch(console.error);
+  }, 6 * 60 * 60 * 1000).unref();
 });

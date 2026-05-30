@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Plus, Save, Trash2, Upload, X } from "lucide-react";
+import YAML from "yaml";
 
 const FIELD_TYPES = ["image", "seed", "int", "float", "string", "menu", "checkbox", "boolean"];
 const DISPLAY_TYPES = ["input", "slider"];
@@ -161,18 +162,36 @@ function buildConfig({ appName, inputRows, outputRows }) {
 }
 
 function readJsonFile(file) {
+  return readTextFile(file).then(text => JSON.parse(text));
+}
+
+function readTextFile(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = () => {
-      try {
-        resolve(JSON.parse(reader.result));
-      } catch (error) {
-        reject(error);
-      }
-    };
+    reader.onload = () => resolve(String(reader.result || ""));
     reader.onerror = reject;
     reader.readAsText(file);
   });
+}
+
+function isJsonFile(file) {
+  return /\.json$/i.test(file?.name || "");
+}
+
+function isYamlFile(file) {
+  return /\.(ya?ml)$/i.test(file?.name || "");
+}
+
+function preferredFile(files, names, matcher) {
+  return files.find(file => names.includes((file.webkitRelativePath || file.name).split("/").pop()?.toLowerCase()))
+    || files.find(matcher);
+}
+
+function templateIdFromFile(file) {
+  const relative = file?.webkitRelativePath || file?.name || "";
+  const firstFolder = relative.includes("/") ? relative.split("/")[0] : "";
+  const baseName = (firstFolder || file?.name || "template").replace(/\.[^.]+$/, "");
+  return baseName;
 }
 
 export function TemplateEditorModal({ selectedTemplate, onClose, onSaved }) {
@@ -212,19 +231,48 @@ export function TemplateEditorModal({ selectedTemplate, onClose, onSaved }) {
     };
   }, [selectedTemplate]);
 
+  async function applyWorkflow(nextWorkflow, sourceName, nextConfig = null) {
+    setWorkflow(nextWorkflow);
+    const name = sourceName.replace(/\.(json|ya?ml)$/i, "");
+    setTemplateId(slugify(nextConfig?.template?.id || nextConfig?.app?.id || name));
+    setAppName(nextConfig?.app?.name || nextConfig?.name || name);
+    const nextNodes = workflowNodes(nextWorkflow);
+    if (nextConfig) {
+      setInputRows(Object.entries(nextConfig.input || {}).map(([key, item]) => rowFromConfig(item, nextWorkflow, key)));
+      setOutputRows(Object.values(nextConfig.output || {}).map(outputFromConfig));
+      return;
+    }
+    setInputRows([]);
+    const firstSave = nextNodes.find(node => node.classType.toLowerCase().includes("save"));
+    setOutputRows(firstSave ? [{ rowId: crypto.randomUUID(), nodeId: firstSave.id, label: "Ảnh kết quả" }] : []);
+  }
+
+  async function handleTemplateUpload(fileList) {
+    const files = Array.from(fileList || []);
+    if (!files.length) return;
+    setError("");
+    try {
+      const yamlFile = preferredFile(files, ["app_build.yaml", "app_build.yml"], isYamlFile);
+      const jsonFile = preferredFile(files, ["api.json", "workflow.json"], isJsonFile);
+      if (!jsonFile) throw new Error("Không tìm thấy workflow JSON hợp lệ");
+      const nextWorkflow = JSON.parse(await readTextFile(jsonFile));
+      const nextConfig = yamlFile ? YAML.parse(await readTextFile(yamlFile)) : null;
+      if (nextConfig && (!nextConfig.input || !nextConfig.output)) {
+        throw new Error("YAML thiếu input hoặc output");
+      }
+      setTemplateId(slugify(nextConfig?.template?.id || nextConfig?.app?.id || templateIdFromFile(yamlFile || jsonFile)));
+      await applyWorkflow(nextWorkflow, jsonFile.name, nextConfig);
+    } catch (err) {
+      setError(`Không đọc được tệp upload: ${err.message}`);
+    }
+  }
+
   async function handleJsonUpload(file) {
     if (!file) return;
     setError("");
     try {
       const nextWorkflow = await readJsonFile(file);
-      setWorkflow(nextWorkflow);
-      const name = file.name.replace(/\.json$/i, "");
-      setTemplateId(name);
-      setAppName(current => current || name);
-      setInputRows([]);
-      const nextNodes = workflowNodes(nextWorkflow);
-      const firstSave = nextNodes.find(node => node.classType.toLowerCase().includes("save"));
-      setOutputRows(firstSave ? [{ rowId: crypto.randomUUID(), nodeId: firstSave.id, label: "Ảnh kết quả" }] : []);
+      await applyWorkflow(nextWorkflow, file.name);
     } catch (err) {
       setError(`JSON không hợp lệ: ${err.message}`);
     }
@@ -320,8 +368,13 @@ export function TemplateEditorModal({ selectedTemplate, onClose, onSaved }) {
         <div className="templateEditorToolbar">
           <label className="uploadJsonButton">
             <Upload size={16} />
-            <span>Upload JSON API</span>
-            <input type="file" accept=".json,application/json" onChange={event => handleJsonUpload(event.target.files?.[0])} />
+            <span>Upload JSON/YAML</span>
+            <input type="file" accept=".json,.yaml,.yml,application/json" multiple onChange={event => handleTemplateUpload(event.target.files)} />
+          </label>
+          <label className="uploadJsonButton">
+            <Upload size={16} />
+            <span>Upload thư mục</span>
+            <input type="file" multiple webkitdirectory="" directory="" onChange={event => handleTemplateUpload(event.target.files)} />
           </label>
           <label className="field">
             <span>Template ID</span>

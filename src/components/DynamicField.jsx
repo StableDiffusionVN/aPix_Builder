@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Check, Eye, Filter, Images, Pencil, RefreshCcw, Star, Trash2, Upload, X } from "lucide-react";
 import { ImageEditorModal } from "./ImageEditorModal";
+import { defaultValue } from "../lib/template";
 
 const INPUT_FAVORITES_KEY = "comfyui-build:input-image-favorites:v1";
 
@@ -85,13 +86,12 @@ export function StaticBlock({ item }) {
   return null;
 }
 
-export function DynamicField({ item, value, onChange }) {
+export function DynamicField({ item, value, onChange, inputImages = [], onRefreshInputImages, onUpdateInputImages }) {
   const ui = item.ui || {};
   const label = ui.label || item.key;
   const description = ui.description || ui.help || "";
   const display = ui.display || ui.variant || ui.widget || "";
   const [isDraggingFile, setIsDraggingFile] = useState(false);
-  const [inputImages, setInputImages] = useState([]);
   const [libraryTimeFilter, setLibraryTimeFilter] = useState("all");
   const [libraryFavoritesOnly, setLibraryFavoritesOnly] = useState(false);
   const [favoriteInputImages, setFavoriteInputImages] = useState(() => readStoredSet(INPUT_FAVORITES_KEY));
@@ -108,6 +108,9 @@ export function DynamicField({ item, value, onChange }) {
   const selectedImageUrl = value?.startsWith?.("data:image") ? value : value?.kind === "input-image" ? value.url : "";
   const isNumberType = ui.type === "number" || ui.type === "int" || ui.type === "float";
   const isSlider = ui.type === "slider" || (isNumberType && display === "slider");
+  const canResetNumber = isNumberType || ui.type === "slider";
+  const resetValue = canResetNumber ? defaultValue(item) : undefined;
+  const isAtResetValue = canResetNumber && Number(value) === Number(resetValue);
   const isDropdown = ui.type === "dropdown" || ui.type === "menu";
   const isBoolean = ui.type === "checkbox" || ui.type === "boolean";
   const parseNumber = inputValue => {
@@ -116,16 +119,17 @@ export function DynamicField({ item, value, onChange }) {
     return ui.type === "int" ? Math.trunc(next) : next;
   };
 
-  async function refreshInputImages() {
-    try {
-      const response = await fetch("/api/input-images");
-      if (!response.ok) return;
-      const data = await response.json();
-      setInputImages(data.images || []);
-    } catch {
-      setInputImages([]);
+  const setInputImages = (images) => {
+    if (onUpdateInputImages) {
+      onUpdateInputImages(images);
     }
-  }
+  };
+
+  const refreshInputImages = async () => {
+    if (onRefreshInputImages) {
+      await onRefreshInputImages();
+    }
+  };
 
   useEffect(() => {
     if (ui.type === "image" || ui.type === "image_mask" || ui.type === "file") {
@@ -530,8 +534,8 @@ export function DynamicField({ item, value, onChange }) {
               setLibraryOpen(true);
             }}
           >
-            <Images size={16} />
-            <span>{selectedInputName || "Chọn ảnh từ thư mục input"}</span>
+            <Images size={14} />
+            <span>Chọn ảnh từ thư mục input</span>
           </button>
           {description ? <small className="fieldDescription">{description}</small> : null}
         </label>
@@ -655,7 +659,24 @@ export function DynamicField({ item, value, onChange }) {
   if (isSlider) {
     return (
       <label className="field">
-        <span>{label}<b>{value}</b></span>
+        <span className="fieldValueHeader">
+          <span>{label}</span>
+          <span className="fieldValueTools">
+            <b>{value}</b>
+            <button
+              type="button"
+              className="fieldResetButton"
+              onClick={event => {
+                event.preventDefault();
+                onChange(resetValue);
+              }}
+              disabled={isAtResetValue}
+              title="Reset về mặc định"
+            >
+              <RefreshCcw size={13} />
+            </button>
+          </span>
+        </span>
         <input
           type="range"
           min={ui.minimum}
@@ -709,14 +730,25 @@ export function DynamicField({ item, value, onChange }) {
     return (
       <label className="field compact">
         <span>{label}</span>
-        <input
-          type="number"
-          min={ui.minimum}
-          max={ui.maximum}
-          step={ui.step || (ui.type === "float" ? 0.1 : 1)}
-          value={value}
-          onChange={event => onChange(parseNumber(event.target.value))}
-        />
+        <div className="inlineControl">
+          <input
+            type="number"
+            min={ui.minimum}
+            max={ui.maximum}
+            step={ui.step || (ui.type === "float" ? 0.1 : 1)}
+            value={value}
+            onChange={event => onChange(parseNumber(event.target.value))}
+          />
+          <button
+            type="button"
+            className="iconButton"
+            onClick={() => onChange(resetValue)}
+            disabled={isAtResetValue}
+            title="Reset về mặc định"
+          >
+            <RefreshCcw size={16} />
+          </button>
+        </div>
         {description ? <small className="fieldDescription">{description}</small> : null}
       </label>
     );

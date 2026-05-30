@@ -3,10 +3,12 @@ import {
   Brush,
   ChevronDown,
   Crop,
+  Download,
   Droplet,
   Eraser,
   FlipHorizontal,
   FlipVertical,
+  GitCompare,
   Hand,
   Pipette,
   Redo2,
@@ -40,6 +42,10 @@ const DEFAULT_ADJUSTMENTS = {
   vibrance: 0,
   saturation: 0,
   hue: 0,
+  highlights: 0,
+  shadows: 0,
+  whites: 0,
+  blacks: 0,
   grain: 0,
   clarity: 0,
   dehaze: 0,
@@ -58,12 +64,58 @@ const DEFAULT_ADJUSTMENTS = {
 const DEFAULT_BRUSH = {
   size: 28,
   opacity: 70,
-  color: "#ffffff"
+  color: "#ffffff",
+  hardness: 100
 };
+
+const PRESETS = [
+  {
+    id: "original",
+    name: "Original",
+    adjustments: {
+      luminance: 0, contrast: 0, temperature: 0, tint: 0, vibrance: 0, saturation: 0, hue: 0, highlights: 0, shadows: 0, whites: 0, blacks: 0, clarity: 0, dehaze: 0, blur: 0, invert: false
+    }
+  },
+  {
+    id: "cinematic",
+    name: "Cinematic",
+    adjustments: {
+      luminance: -5, contrast: 15, temperature: 10, tint: -5, vibrance: 15, saturation: -10, hue: 0, highlights: 5, shadows: 10, whites: -5, blacks: 5, clarity: 15, dehaze: 5, blur: 0, invert: false
+    }
+  },
+  {
+    id: "vintage",
+    name: "Vintage",
+    adjustments: {
+      luminance: 5, contrast: -10, temperature: 15, tint: 10, vibrance: -10, saturation: -15, hue: 5, highlights: -5, shadows: 5, whites: -10, blacks: 10, clarity: -10, dehaze: -5, blur: 0, invert: false
+    }
+  },
+  {
+    id: "vibrant",
+    name: "Vibrant",
+    adjustments: {
+      luminance: 0, contrast: 10, temperature: 0, tint: 0, vibrance: 30, saturation: 15, hue: 0, highlights: 10, shadows: 5, whites: 10, blacks: -5, clarity: 10, dehaze: 10, blur: 0, invert: false
+    }
+  },
+  {
+    id: "dramatic",
+    name: "Dramatic",
+    adjustments: {
+      luminance: -10, contrast: 30, temperature: -5, tint: 5, vibrance: 10, saturation: -20, hue: 0, highlights: 15, shadows: -15, whites: 15, blacks: -20, clarity: 25, dehaze: 15, blur: 0, invert: false
+    }
+  },
+  {
+    id: "blackwhite",
+    name: "B&W",
+    adjustments: {
+      luminance: 0, contrast: 20, temperature: 0, tint: 0, vibrance: -100, saturation: -100, hue: 0, highlights: 0, shadows: 0, whites: 0, blacks: 0, clarity: 15, dehaze: 10, blur: 0, invert: false
+    }
+  }
+];
 
 // Preview is rendered at a capped resolution so the per-pixel pass and canvas
 // reads stay cheap while dragging sliders. Full resolution is only used on save.
-const PREVIEW_MAX_EDGE = 1600;
+const PREVIEW_MAX_EDGE = 1024;
 
 function loadImage(src) {
   return new Promise((resolve, reject) => {
@@ -171,9 +223,22 @@ function drawStroke(ctx, stroke, width, height, scale) {
   ctx.globalAlpha = stroke.opacity / 100;
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
-  ctx.lineWidth = Math.max(1, stroke.size * scale);
   ctx.globalCompositeOperation = stroke.tool === "eraser" ? "destination-out" : "source-over";
-  ctx.strokeStyle = stroke.color;
+  
+  const size = Math.max(1, stroke.size * scale);
+  const hardness = stroke.hardness ?? 100;
+  
+  if (hardness < 100) {
+    const blur = size * (1 - hardness / 100);
+    ctx.shadowBlur = blur;
+    ctx.shadowColor = stroke.tool === "eraser" ? "black" : stroke.color;
+    ctx.strokeStyle = stroke.tool === "eraser" ? "black" : stroke.color;
+    ctx.lineWidth = Math.max(1, size * (hardness / 100));
+  } else {
+    ctx.strokeStyle = stroke.color;
+    ctx.lineWidth = size;
+  }
+  
   ctx.beginPath();
   const first = stroke.points[0];
   ctx.moveTo(first.x * width, first.y * height);
@@ -183,6 +248,91 @@ function drawStroke(ctx, stroke, width, height, scale) {
   }
   ctx.stroke();
   ctx.restore();
+}
+
+function computeHistogram(canvas) {
+  if (!canvas) return null;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+  const { width, height } = canvas;
+  
+  const imageData = ctx.getImageData(0, 0, width, height);
+  const data = imageData.data;
+  
+  const rHist = new Uint32Array(256);
+  const gHist = new Uint32Array(256);
+  const bHist = new Uint32Array(256);
+  const lHist = new Uint32Array(256);
+  
+  for (let i = 0; i < data.length; i += 16) {
+    const r = data[i];
+    const g = data[i + 1];
+    const b = data[i + 2];
+    const a = data[i + 3];
+    if (a === 0) continue;
+    
+    rHist[r]++;
+    gHist[g]++;
+    bHist[b]++;
+    const l = Math.round(0.299 * r + 0.587 * g + 0.114 * b);
+    lHist[l]++;
+  }
+  
+  return { rHist, gHist, bHist, lHist };
+}
+
+function drawHistogram(canvas, histData) {
+  if (!canvas || !histData) return;
+  const context = canvas.getContext("2d");
+  if (!context) return;
+  
+  const { width, height } = canvas;
+  context.clearRect(0, 0, width, height);
+  
+  const { rHist, gHist, bHist, lHist } = histData;
+  let maxVal = 0;
+  for (let i = 0; i < 256; i++) {
+    if (rHist[i] > maxVal) maxVal = rHist[i];
+    if (gHist[i] > maxVal) maxVal = gHist[i];
+    if (bHist[i] > maxVal) maxVal = bHist[i];
+    if (lHist[i] > maxVal) maxVal = lHist[i];
+  }
+  
+  if (maxVal === 0) return;
+  
+  const drawPath = (hist, fillColor, strokeColor) => {
+    // Draw the fill
+    context.beginPath();
+    context.moveTo(0, height);
+    for (let i = 0; i < 256; i++) {
+      const x = (i / 255) * width;
+      const y = height - (hist[i] / maxVal) * height * 0.92;
+      context.lineTo(x, y);
+    }
+    context.lineTo(width, height);
+    context.closePath();
+    context.fillStyle = fillColor;
+    context.fill();
+    
+    // Draw the outline
+    context.beginPath();
+    for (let i = 0; i < 256; i++) {
+      const x = (i / 255) * width;
+      const y = height - (hist[i] / maxVal) * height * 0.92;
+      if (i === 0) context.moveTo(x, y);
+      else context.lineTo(x, y);
+    }
+    context.lineWidth = 1.2;
+    context.strokeStyle = strokeColor;
+    context.stroke();
+  };
+  
+  context.globalCompositeOperation = "screen";
+  drawPath(rHist, "rgba(239, 68, 68, 0.22)", "rgba(239, 68, 68, 0.8)");
+  drawPath(gHist, "rgba(34, 197, 94, 0.22)", "rgba(34, 197, 94, 0.8)");
+  drawPath(bHist, "rgba(59, 130, 246, 0.22)", "rgba(59, 130, 246, 0.8)");
+  drawPath(lHist, "rgba(255, 255, 255, 0.08)", "rgba(255, 255, 255, 0.6)");
+  context.globalCompositeOperation = "source-over";
 }
 
 function snapshot(adjustments, brush, strokes) {
@@ -210,22 +360,35 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
   const croppingRef = useRef(false);
   const altToolRef = useRef(null);
 
+  const origCanvasRef = useRef(null);
+  const histogramCanvasRef = useRef(null);
+
   const [adjustments, setAdjustments] = useState(DEFAULT_ADJUSTMENTS);
   const [brush, setBrush] = useState(DEFAULT_BRUSH);
   const [strokes, setStrokes] = useState([]);
+  const [hoveredZone, setHoveredZone] = useState(null);
+  const histogramDragRef = useRef(null);
   const [activeTool, setActiveTool] = useState("hand");
-  const [openSections, setOpenSections] = useState({ basic: true });
+  const [openSections, setOpenSections] = useState({ basic: true, presets: true });
   const [activeColorTab, setActiveColorTab] = useState("reds");
   const [cropRatio, setCropRatio] = useState("free");
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [isPanning, setIsPanning] = useState(false);
   const [history, setHistory] = useState([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [saving, setSaving] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState("");
   const [isReady, setIsReady] = useState(false);
   const [brushCursor, setBrushCursor] = useState(null);
   const canvasScaleRef = useRef(1);
+
+  const [editorCompareMode, setEditorCompareMode] = useState(false);
+  const [editorComparePosition, setEditorComparePosition] = useState(50);
+  const [editorCompareDividerX, setEditorCompareDividerX] = useState(50);
+  const [exportFormat, setExportFormat] = useState("image/png");
+  const [exportQuality, setExportQuality] = useState(90);
 
   const canUndo = historyIndex > 0;
   const canRedo = historyIndex >= 0 && historyIndex < history.length - 1;
@@ -353,7 +516,7 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
     ctx.restore();
     ctx.filter = "none";
 
-    const activeHslChannels = COLOR_CHANNELS.filter(channel => {
+        const activeHslChannels = COLOR_CHANNELS.filter(channel => {
       const a = adjustments.hsl[channel.id];
       return a.h !== 0 || a.s !== 0 || a.l !== 0;
     });
@@ -362,6 +525,10 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
       || adjustments.grain > 0
       || adjustments.clarity !== 0
       || adjustments.dehaze !== 0
+      || adjustments.highlights !== 0
+      || adjustments.shadows !== 0
+      || adjustments.whites !== 0
+      || adjustments.blacks !== 0
       || activeHslChannels.length > 0;
 
     if (needsPixelPass) {
@@ -374,26 +541,67 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
       const dehazeBias = adjustments.dehaze * 0.18;
       const clarityBias = adjustments.clarity * 0.12;
 
+      // Cache shifts and calculate cb ratio outside the loop
+      const rShift = tempShift + dehazeBias;
+      const bShift = -(tempShift - dehazeBias);
+      const cb = clarityBias / 64;
+
+      const activeChannelAdjusts = needsHsl
+        ? activeHslChannels.map(channel => ({
+            center: channel.center,
+            h: adjustments.hsl[channel.id].h,
+            s: adjustments.hsl[channel.id].s,
+            l: adjustments.hsl[channel.id].l
+          }))
+        : null;
+
+      const highlightsVal = adjustments.highlights * 0.45;
+      const shadowsVal = adjustments.shadows * 0.45;
+      const whitesVal = adjustments.whites * 0.55;
+      const blacksVal = adjustments.blacks * 0.55;
+      const hasLightAdjustments = highlightsVal !== 0 || shadowsVal !== 0 || whitesVal !== 0 || blacksVal !== 0;
+
       for (let index = 0; index < data.length; index += 4) {
         if (data[index + 3] === 0) continue;
         let r = data[index];
         let g = data[index + 1];
         let b = data[index + 2];
 
-        r += tempShift + dehazeBias;
-        b -= tempShift - dehazeBias;
+        r += rShift;
+        b += bShift;
         g += tintShift;
+
         if (clarityBias) {
-          r += clarityBias * (r - 128) / 64;
-          g += clarityBias * (g - 128) / 64;
-          b += clarityBias * (b - 128) / 64;
+          r += cb * (r - 128);
+          g += cb * (g - 128);
+          b += cb * (b - 128);
+        }
+
+        if (hasLightAdjustments) {
+          const y = (0.299 * r + 0.587 * g + 0.114 * b) / 255.0;
+          let shift = 0;
+          if (highlightsVal !== 0 && y > 0.2) {
+            shift += highlightsVal * Math.pow((y - 0.2) / 0.8, 1.5);
+          }
+          if (shadowsVal !== 0 && y < 0.8) {
+            shift += shadowsVal * Math.pow((0.8 - y) / 0.8, 1.5);
+          }
+          if (whitesVal !== 0 && y > 0.5) {
+            shift += whitesVal * Math.pow((y - 0.5) / 0.5, 2);
+          }
+          if (blacksVal !== 0 && y < 0.4) {
+            shift += blacksVal * Math.pow((0.4 - y) / 0.4, 2);
+          }
+          r += shift;
+          g += shift;
+          b += shift;
         }
 
         if (needsHsl) {
           const hsl = rgbToHsl(r, g, b);
-          for (const channel of activeHslChannels) {
-            const channelAdjust = adjustments.hsl[channel.id];
-            const weight = Math.max(0, 1 - hueDistance(hsl.h, channel.center) / 42);
+          for (let i = 0; i < activeChannelAdjusts.length; i++) {
+            const channelAdjust = activeChannelAdjusts[i];
+            const weight = Math.max(0, 1 - hueDistance(hsl.h, channelAdjust.center) / 42);
             if (weight > 0) {
               hsl.h += channelAdjust.h * weight;
               hsl.s += channelAdjust.s * weight;
@@ -443,6 +651,42 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
 
   // Composites image + cached brush layer (+ the live in-progress stroke) onto
   // the visible canvas. Cheap and constant-cost regardless of stroke count.
+  const drawOriginalGeometry = useCallback((targetCanvas, meta) => {
+    const image = imageRef.current;
+    const geometry = getOutputGeometry(image, {
+      ...adjustments,
+      luminance: 0,
+      contrast: 0,
+      temperature: 0,
+      tint: 0,
+      vibrance: 0,
+      saturation: 0,
+      hue: 0,
+      grain: 0,
+      clarity: 0,
+      dehaze: 0,
+      blur: 0,
+      invert: false
+    });
+    if (!image || !targetCanvas || !geometry) return;
+    
+    targetCanvas.width = meta.width;
+    targetCanvas.height = meta.height;
+    const ctx = targetCanvas.getContext("2d");
+    ctx.clearRect(0, 0, targetCanvas.width, targetCanvas.height);
+    ctx.save();
+    ctx.translate(meta.width / 2, meta.height / 2);
+    ctx.rotate((adjustments.rotation * Math.PI) / 180);
+    ctx.scale(adjustments.flipH ? -1 : 1, adjustments.flipV ? -1 : 1);
+    
+    const dw = geometry.sw * meta.scale;
+    const dh = geometry.sh * meta.scale;
+    ctx.drawImage(image, geometry.sx, geometry.sy, geometry.sw, geometry.sh, -dw / 2, -dh / 2, dw, dh);
+    ctx.restore();
+  }, [adjustments, getOutputGeometry]);
+
+  // Composites image + cached brush layer (+ the live in-progress stroke) onto
+  // the visible canvas. Cheap and constant-cost regardless of stroke count.
   const compositePreview = useCallback(() => {
     const canvas = canvasRef.current;
     const base = baseCanvasRef.current;
@@ -455,32 +699,48 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(base, 0, 0);
 
     // Strokes are hidden while cropping (the preview is the full source image,
     // so their normalised coordinates wouldn't line up).
-    if (croppingRef.current) return;
+    if (croppingRef.current) {
+      ctx.drawImage(base, 0, 0);
+      return;
+    }
+
+    if (!overlayLayerRef.current) overlayLayerRef.current = document.createElement("canvas");
+    const tmp = overlayLayerRef.current;
+    if (tmp.width !== base.width || tmp.height !== base.height) {
+      tmp.width = base.width;
+      tmp.height = base.height;
+    }
+    const tctx = tmp.getContext("2d");
+    tctx.clearRect(0, 0, tmp.width, tmp.height);
+    tctx.drawImage(base, 0, 0);
 
     const active = activeStrokeRef.current;
     const layer = strokeLayerRef.current;
     if (active) {
       // Combine committed brush layer + the live stroke on a temp layer first,
       // so an eraser stroke removes only brush pixels (never the image).
-      if (!overlayLayerRef.current) overlayLayerRef.current = document.createElement("canvas");
-      const tmp = overlayLayerRef.current;
-      if (tmp.width !== base.width || tmp.height !== base.height) {
-        tmp.width = base.width;
-        tmp.height = base.height;
-      }
-      const tctx = tmp.getContext("2d");
-      tctx.clearRect(0, 0, tmp.width, tmp.height);
       if (layer) tctx.drawImage(layer, 0, 0);
       drawStroke(tctx, active, tmp.width, tmp.height, meta.scale);
-      ctx.drawImage(tmp, 0, 0);
     } else if (layer) {
-      ctx.drawImage(layer, 0, 0);
+      tctx.drawImage(layer, 0, 0);
     }
-  }, []);
+
+    if (editorCompareMode) {
+      if (!origCanvasRef.current) origCanvasRef.current = document.createElement("canvas");
+      const origCanvas = origCanvasRef.current;
+      drawOriginalGeometry(origCanvas, meta);
+
+      const splitX = (editorComparePosition / 100) * canvas.width;
+      // Match output compare: adjusted image on the left, original on the right.
+      ctx.drawImage(tmp, 0, 0, splitX, canvas.height, 0, 0, splitX, canvas.height);
+      ctx.drawImage(origCanvas, splitX, 0, canvas.width - splitX, canvas.height, splitX, 0, canvas.width - splitX, canvas.height);
+    } else {
+      ctx.drawImage(tmp, 0, 0);
+    }
+  }, [editorCompareMode, editorComparePosition, drawOriginalGeometry]);
 
   const renderPreview = useCallback(() => {
     if (!baseCanvasRef.current) baseCanvasRef.current = document.createElement("canvas");
@@ -489,6 +749,12 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
     previewMetaRef.current = meta;
     syncStrokeLayer();
     compositePreview();
+
+    // Draw live histogram
+    if (histogramCanvasRef.current) {
+      const histData = computeHistogram(baseCanvasRef.current);
+      drawHistogram(histogramCanvasRef.current, histData);
+    }
   }, [applyAdjustments, syncStrokeLayer, compositePreview]);
 
   // Heavy path: rebuild the adjusted base (throttled to one per animation frame)
@@ -525,6 +791,17 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
     });
   }
 
+  function applyPreset(preset) {
+    setAdjustments(current => {
+      const next = {
+        ...current,
+        ...preset.adjustments
+      };
+      commitHistory(next, brush, strokes);
+      return next;
+    });
+  }
+
   function updateHsl(channel, key, value) {
     setAdjustments(current => {
       const next = {
@@ -543,6 +820,60 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
 
   function commitCurrent() {
     commitHistory(adjustments, brush, strokes);
+  }
+
+  function getHistogramZone(event) {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const x = clamp((event.clientX - rect.left) / rect.width, 0, 1);
+    if (x < 0.2) return { zone: "blacks", x };
+    if (x < 0.4) return { zone: "shadows", x };
+    if (x < 0.6) return { zone: "luminance", x };
+    if (x < 0.8) return { zone: "highlights", x };
+    return { zone: "whites", x };
+  }
+
+  function handleHistogramPointerDown(event) {
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    
+    const { zone } = getHistogramZone(event);
+    const startValue = adjustmentsRef.current[zone] || 0;
+    
+    histogramDragRef.current = {
+      zone,
+      startX: event.clientX,
+      startValue
+    };
+  }
+
+  function handleHistogramPointerMove(event) {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const { zone } = getHistogramZone(event);
+    
+    if (histogramDragRef.current) {
+      const drag = 	histogramDragRef.current;
+      const deltaX = event.clientX - drag.startX;
+      const deltaValue = Math.round((deltaX / rect.width) * 150);
+      const nextValue = clamp(drag.startValue + deltaValue, -100, 100);
+      
+      updateAdjustment(drag.zone, nextValue);
+    } else {
+      setHoveredZone(zone);
+    }
+  }
+
+  function handleHistogramPointerUp(event) {
+    if (histogramDragRef.current) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+      histogramDragRef.current = null;
+      commitCurrent();
+    }
+  }
+
+  function handleHistogramPointerLeave(event) {
+    if (!histogramDragRef.current) {
+      setHoveredZone(null);
+    }
   }
 
   function toggleSection(id) {
@@ -602,6 +933,18 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
     restore(history[nextIndex]);
   }
 
+  function updateZoom(delta) {
+    setZoom(value => clamp(Number((value + delta).toFixed(2)), 0.2, 4));
+  }
+
+  function toggleEditorCompare() {
+    setEditorCompareMode(current => {
+      const next = !current;
+      if (next) setActiveTool("hand");
+      return next;
+    });
+  }
+
   useEffect(() => {
     const isEditableTarget = target => {
       if (!target) return false;
@@ -637,6 +980,18 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
         return;
       }
 
+      if (hasUndoModifier && !event.altKey && (event.key === "+" || event.key === "=" || event.code === "NumpadAdd")) {
+        event.preventDefault();
+        updateZoom(0.1);
+        return;
+      }
+
+      if (hasUndoModifier && !event.altKey && (event.key === "-" || event.key === "_" || event.code === "NumpadSubtract")) {
+        event.preventDefault();
+        updateZoom(-0.1);
+        return;
+      }
+
       if (editable || hasUndoModifier || event.altKey || event.shiftKey) return;
 
       if (event.key === "Enter" && activeTool === "crop") {
@@ -646,16 +1001,19 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
       } else if (event.key === "[") {
         event.preventDefault();
         const step = event.repeat ? 4 : 1;
-        setBrush(current => ({ ...current, size: clamp(current.size + step, 1, 180) }));
+        setBrush(current => ({ ...current, size: clamp(current.size - step, 1, 180) }));
       } else if (event.key === "]") {
         event.preventDefault();
         const step = event.repeat ? 4 : 1;
-        setBrush(current => ({ ...current, size: clamp(current.size - step, 1, 180) }));
+        setBrush(current => ({ ...current, size: clamp(current.size + step, 1, 180) }));
       } else if (event.repeat) {
         return;
       } else if (key === "c") {
         event.preventDefault();
         activateTool("crop");
+      } else if (key === "s") {
+        event.preventDefault();
+        toggleEditorCompare();
       } else if (key === "r") {
         event.preventDefault();
         updateAdjustment("rotation", (adjustmentsRef.current.rotation + 90) % 360, true);
@@ -712,6 +1070,37 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
     };
   }
 
+  function updateEditorComparePosition(event) {
+    const canvas = canvasRef.current;
+    const stage = stageRef.current;
+    if (!canvas || !stage) return;
+    const rect = canvas.getBoundingClientRect();
+    const stageRect = stage.getBoundingClientRect();
+    if (!rect.width) return;
+    const next = ((event.clientX - rect.left) / rect.width) * 100;
+    const clamped = clamp(Number(next.toFixed(2)), 0, 100);
+    setEditorComparePosition(clamped);
+    setEditorCompareDividerX(clamp(event.clientX - stageRect.left, rect.left - stageRect.left, rect.right - stageRect.left));
+  }
+
+  useEffect(() => {
+    if (!editorCompareMode || !isReady) return undefined;
+    const syncDivider = () => {
+      const canvas = canvasRef.current;
+      const stage = stageRef.current;
+      if (!canvas || !stage) return;
+      const canvasRect = canvas.getBoundingClientRect();
+      const stageRect = stage.getBoundingClientRect();
+      setEditorCompareDividerX(canvasRect.left - stageRect.left + canvasRect.width * (editorComparePosition / 100));
+    };
+    const frame = requestAnimationFrame(syncDivider);
+    window.addEventListener("resize", syncDivider);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("resize", syncDivider);
+    };
+  }, [editorCompareMode, editorComparePosition, isReady, pan, zoom]);
+
   function handlePointerDown(event) {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -741,10 +1130,13 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
       return;
     }
     event.currentTarget.setPointerCapture(event.pointerId);
+    if (editorCompareMode && activeTool === "hand") updateEditorComparePosition(event);
     panStartRef.current = { pointer: { x: event.clientX, y: event.clientY }, pan };
+    setIsPanning(true);
   }
 
   function handlePointerMove(event) {
+    if (editorCompareMode && activeTool === "hand") updateEditorComparePosition(event);
     if (activeTool === "brush" || activeTool === "eraser") {
       const stage = stageRef.current;
       const canvas = canvasRef.current;
@@ -791,26 +1183,55 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
       commitHistory(adjustmentsRef.current, brushRef.current, nextStrokes);
     }
     panStartRef.current = null;
+    setIsPanning(false);
+  }
+
+  function renderEditedDataUrl() {
+    const canvas = document.createElement("canvas");
+    const meta = applyAdjustments(canvas, { fullResolution: true });
+    if (!meta) throw new Error("Không render được ảnh");
+    const ctx = canvas.getContext("2d");
+    // Render strokes on their own layer so eraser strokes don't cut the image.
+    if (strokesRef.current.length) {
+      const strokeCanvas = document.createElement("canvas");
+      strokeCanvas.width = meta.width;
+      strokeCanvas.height = meta.height;
+      const sctx = strokeCanvas.getContext("2d");
+      strokesRef.current.forEach(stroke => drawStroke(sctx, stroke, meta.width, meta.height, meta.scale));
+      ctx.drawImage(strokeCanvas, 0, 0);
+    }
+    const mimeType = exportFormat || "image/png";
+    const quality = mimeType === "image/png" ? undefined : (exportQuality || 90) / 100;
+    return {
+      dataUrl: canvas.toDataURL(mimeType, quality),
+      extension: mimeType.includes("jpeg") ? "jpg" : mimeType.split("/")[1] || "png"
+    };
+  }
+
+  async function handleDownloadEdited() {
+    setDownloading(true);
+    setError("");
+    try {
+      const { dataUrl, extension } = renderEditedDataUrl();
+      const link = document.createElement("a");
+      link.href = dataUrl;
+      link.download = `image-editor-${Date.now()}.${extension}`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch (err) {
+      setError(err.message || "Không tải được ảnh");
+    } finally {
+      setDownloading(false);
+    }
   }
 
   async function handleSave() {
     setSaving(true);
     setError("");
     try {
-      const canvas = document.createElement("canvas");
-      const meta = applyAdjustments(canvas, { fullResolution: true });
-      if (!meta) throw new Error("Không render được ảnh");
-      const ctx = canvas.getContext("2d");
-      // Render strokes on their own layer so eraser strokes don't cut the image.
-      if (strokesRef.current.length) {
-        const strokeCanvas = document.createElement("canvas");
-        strokeCanvas.width = meta.width;
-        strokeCanvas.height = meta.height;
-        const sctx = strokeCanvas.getContext("2d");
-        strokesRef.current.forEach(stroke => drawStroke(sctx, stroke, meta.width, meta.height, meta.scale));
-        ctx.drawImage(strokeCanvas, 0, 0);
-      }
-      await onSave(canvas.toDataURL("image/png"));
+      const { dataUrl } = renderEditedDataUrl();
+      await onSave(dataUrl);
       onClose();
     } catch (err) {
       setError(err.message || "Không lưu được ảnh");
@@ -890,7 +1311,7 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
               />
             ) : null}
             <div
-              className="imageEditorCanvasWrap"
+              className={`imageEditorCanvasWrap ${isPanning ? "isPanning" : ""}`}
               style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})` }}
             >
               <canvas
@@ -911,6 +1332,12 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
                 />
               ) : null}
             </div>
+            {editorCompareMode && isReady && !croppingRef.current ? (
+              <div
+                className="compareDivider imageEditorCompareDivider"
+                style={{ left: `${editorCompareDividerX}px` }}
+              />
+            ) : null}
             <div className="imageEditorFloatingBar">
               <button type="button" onClick={handleUndo} disabled={!canUndo} title="Hoàn tác">
                 <Undo2 size={13} />
@@ -919,13 +1346,22 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
                 <Redo2 size={13} />
               </button>
               <span className="floatingDivider" />
-              <button type="button" onClick={() => setZoom(value => clamp(value - 0.1, 0.2, 4))} title="Thu nhỏ">
+              <button
+                type="button"
+                className={editorCompareMode ? "active" : ""}
+                onClick={toggleEditorCompare}
+                title={editorCompareMode ? "Tắt so sánh Trước/Sau (S)" : "Bật so sánh Trước/Sau (S)"}
+              >
+                <GitCompare size={13} />
+              </button>
+              <span className="floatingDivider" />
+              <button type="button" onClick={() => updateZoom(-0.1)} title="Thu nhỏ">
                 <ZoomOut size={13} />
               </button>
               <button type="button" className="zoomReadout" onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }} title="Về 100%">
                 <span>{Math.round(zoom * 100)}%</span>
               </button>
-              <button type="button" onClick={() => setZoom(value => clamp(value + 0.1, 0.2, 4))} title="Phóng to">
+              <button type="button" onClick={() => updateZoom(0.1)} title="Phóng to">
                 <ZoomIn size={13} />
               </button>
               <span className="floatingDivider" />
@@ -942,75 +1378,150 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
             <button type="button" onClick={handleReset}>Reset All</button>
           </div>
 
-          <div className="imageEditorAccordionList">
-            {(activeTool === "brush" || activeTool === "eraser") ? (
-              <AccordionSection icon={Brush} title="Brush / Eraser" open={!!openSections.brush} onToggle={() => toggleSection("brush")}>
-                <label className="editorColorRow">
-                  <span>Color</span>
-                  <input type="color" value={brush.color} onChange={event => setBrush(current => ({ ...current, color: event.target.value }))} onBlur={commitCurrent} />
-                  <b>{brush.color}</b>
-                </label>
-                <EditorRange label="Size" value={brush.size} min={1} max={180} resetValue={DEFAULT_BRUSH.size} onChange={value => setBrush(current => ({ ...current, size: value }))} onCommit={commitCurrent} />
-                <EditorRange label="Opacity" value={brush.opacity} min={1} max={100} resetValue={DEFAULT_BRUSH.opacity} onChange={value => setBrush(current => ({ ...current, opacity: value }))} onCommit={commitCurrent} />
-              </AccordionSection>
-            ) : null}
+          <div
+            className="editorHistogramWrap"
+            onPointerDown={handleHistogramPointerDown}
+            onPointerMove={handleHistogramPointerMove}
+            onPointerUp={handleHistogramPointerUp}
+            onPointerLeave={handleHistogramPointerLeave}
+          >
+            <canvas ref={histogramCanvasRef} width="240" height="60" className="editorHistogramCanvas" />
+            <div className="histogramHoverOverlay">
+              <div className={`zoneHover blacks ${hoveredZone === "blacks" ? "active" : ""}`} />
+              <div className={`zoneHover shadows ${hoveredZone === "shadows" ? "active" : ""}`} />
+              <div className={`zoneHover exposure ${hoveredZone === "luminance" ? "active" : ""}`} />
+              <div className={`zoneHover highlights ${hoveredZone === "highlights" ? "active" : ""}`} />
+              <div className={`zoneHover whites ${hoveredZone === "whites" ? "active" : ""}`} />
+            </div>
+            {hoveredZone && (
+              <div className="histogramZoneIndicator">
+                <span className="zoneName">
+                  {hoveredZone === "blacks" && "Blacks"}
+                  {hoveredZone === "shadows" && "Shadows"}
+                  {hoveredZone === "luminance" && "Exposure"}
+                  {hoveredZone === "highlights" && "Highlights"}
+                  {hoveredZone === "whites" && "Whites"}
+                </span>
+                <span className="zoneValue">
+                  {adjustments[hoveredZone] > 0 ? `+${adjustments[hoveredZone]}` : adjustments[hoveredZone]}
+                </span>
+              </div>
+            )}
+          </div>
 
-            {activeTool === "crop" ? (
-              <AccordionSection icon={Crop} title="Crop" open={!!openSections.crop} onToggle={() => toggleSection("crop")}>
-                <p className="cropHint">Kéo khung trên ảnh để cắt. Chọn tỉ lệ để khoá khung cắt.</p>
-                <div className="cropRatioGrid">
-                  {CROP_RATIOS.map(option => (
+          <div className="accordionListWithSlider">
+            <div className="imageEditorAccordionList">
+              <AccordionSection icon={Sparkles} title="Presets" open={!!openSections.presets} onToggle={() => toggleSection("presets")}>
+                <div className="presetGrid">
+                  {PRESETS.map(preset => (
                     <button
                       type="button"
-                      key={option.id}
-                      className={cropRatio === option.id ? "active" : ""}
-                      onClick={() => applyCropRatio(option.id)}
+                      key={preset.id}
+                      className={`presetButton ${adjustments.luminance === preset.adjustments.luminance && adjustments.contrast === preset.adjustments.contrast && adjustments.temperature === preset.adjustments.temperature && adjustments.vibrance === preset.adjustments.vibrance ? "active" : ""}`}
+                      onClick={() => applyPreset(preset)}
                     >
-                      {option.label}
+                      {preset.name}
                     </button>
                   ))}
                 </div>
-                <button type="button" className="cropResetButton" onClick={resetCrop}>
-                  <RotateCcw size={13} /> Đặt lại khung cắt
-                </button>
               </AccordionSection>
-            ) : null}
 
-            <AccordionSection icon={SlidersHorizontal} title="Basic" open={!!openSections.basic} onToggle={() => toggleSection("basic")}>
-              <EditorRange label="Exposure" value={adjustments.luminance} min={-100} max={100} onChange={value => updateAdjustment("luminance", value)} onCommit={commitCurrent} />
-              <EditorRange label="Contrast" value={adjustments.contrast} min={-100} max={100} onChange={value => updateAdjustment("contrast", value)} onCommit={commitCurrent} />
-              <EditorRange label="Temperature" value={adjustments.temperature} min={-100} max={100} onChange={value => updateAdjustment("temperature", value)} onCommit={commitCurrent} />
-              <EditorRange label="Tint" value={adjustments.tint} min={-100} max={100} onChange={value => updateAdjustment("tint", value)} onCommit={commitCurrent} />
-              <EditorRange label="Vibrance" value={adjustments.vibrance} min={-100} max={100} onChange={value => updateAdjustment("vibrance", value)} onCommit={commitCurrent} />
-              <EditorRange label="Saturation" value={adjustments.saturation} min={-100} max={100} onChange={value => updateAdjustment("saturation", value)} onCommit={commitCurrent} />
-              <EditorRange label="Hue" value={adjustments.hue} min={-180} max={180} onChange={value => updateAdjustment("hue", value)} onCommit={commitCurrent} />
-            </AccordionSection>
+              {(activeTool === "brush" || activeTool === "eraser") ? (
+                <AccordionSection icon={Brush} title="Brush / Eraser" open={!!openSections.brush} onToggle={() => toggleSection("brush")}>
+                  <label className="editorColorRow">
+                    <span>Color</span>
+                    <input type="color" value={brush.color} onChange={event => setBrush(current => ({ ...current, color: event.target.value }))} onBlur={commitCurrent} />
+                    <b>{brush.color}</b>
+                  </label>
+                  <EditorRange label="Size" value={brush.size} min={1} max={180} resetValue={DEFAULT_BRUSH.size} onChange={value => setBrush(current => ({ ...current, size: value }))} onCommit={commitCurrent} />
+                  <EditorRange label="Opacity" value={brush.opacity} min={1} max={100} resetValue={DEFAULT_BRUSH.opacity} onChange={value => setBrush(current => ({ ...current, opacity: value }))} onCommit={commitCurrent} />
+                  <EditorRange label="Hardness" value={brush.hardness ?? 100} min={10} max={100} resetValue={100} onChange={value => setBrush(current => ({ ...current, hardness: value }))} onCommit={commitCurrent} />
+                </AccordionSection>
+              ) : null}
 
-            <AccordionSection icon={Droplet} title="Color HSL" open={!!openSections.hsl} onToggle={() => toggleSection("hsl")}>
-              <div className="hslSwatches">
-                {COLOR_CHANNELS.map(channel => (
-                  <button
-                    type="button"
-                    key={channel.id}
-                    className={activeColorTab === channel.id ? "active" : ""}
-                    style={{ backgroundColor: channel.color }}
-                    onClick={() => setActiveColorTab(channel.id)}
-                    title={channel.name}
+              {activeTool === "crop" ? (
+                <AccordionSection icon={Crop} title="Crop" open={!!openSections.crop} onToggle={() => toggleSection("crop")}>
+                  <p className="cropHint">Kéo khung trên ảnh để cắt. Chọn tỉ lệ để khoá khung cắt.</p>
+                  <div className="cropRatioGrid">
+                    {CROP_RATIOS.map(option => (
+                      <button
+                        type="button"
+                        key={option.id}
+                        className={cropRatio === option.id ? "active" : ""}
+                        onClick={() => applyCropRatio(option.id)}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                  <button type="button" className="cropResetButton" onClick={resetCrop}>
+                    <RotateCcw size={13} /> Đặt lại khung cắt
+                  </button>
+                </AccordionSection>
+              ) : null}
+
+              <AccordionSection icon={SlidersHorizontal} title="Basic" open={!!openSections.basic} onToggle={() => toggleSection("basic")}>
+                <EditorRange label="Temperature" value={adjustments.temperature} min={-100} max={100} onChange={value => updateAdjustment("temperature", value)} onCommit={commitCurrent} />
+                <EditorRange label="Tint" value={adjustments.tint} min={-100} max={100} onChange={value => updateAdjustment("tint", value)} onCommit={commitCurrent} />
+                <EditorRange label="Exposure" value={adjustments.luminance} min={-100} max={100} onChange={value => updateAdjustment("luminance", value)} onCommit={commitCurrent} />
+                <EditorRange label="Contrast" value={adjustments.contrast} min={-100} max={100} onChange={value => updateAdjustment("contrast", value)} onCommit={commitCurrent} />
+                <EditorRange label="Highlights" value={adjustments.highlights} min={-100} max={100} onChange={value => updateAdjustment("highlights", value)} onCommit={commitCurrent} />
+                <EditorRange label="Shadows" value={adjustments.shadows} min={-100} max={100} onChange={value => updateAdjustment("shadows", value)} onCommit={commitCurrent} />
+                <EditorRange label="Whites" value={adjustments.whites} min={-100} max={100} onChange={value => updateAdjustment("whites", value)} onCommit={commitCurrent} />
+                <EditorRange label="Blacks" value={adjustments.blacks} min={-100} max={100} onChange={value => updateAdjustment("blacks", value)} onCommit={commitCurrent} />
+                <EditorRange label="Vibrance" value={adjustments.vibrance} min={-100} max={100} onChange={value => updateAdjustment("vibrance", value)} onCommit={commitCurrent} />
+                <EditorRange label="Saturation" value={adjustments.saturation} min={-100} max={100} onChange={value => updateAdjustment("saturation", value)} onCommit={commitCurrent} />
+                <EditorRange label="Hue" value={adjustments.hue} min={-180} max={180} onChange={value => updateAdjustment("hue", value)} onCommit={commitCurrent} />
+              </AccordionSection>
+
+              <AccordionSection icon={Droplet} title="Color HSL" open={!!openSections.hsl} onToggle={() => toggleSection("hsl")}>
+                <div className="hslSwatches">
+                  {COLOR_CHANNELS.map(channel => (
+                    <button
+                      type="button"
+                      key={channel.id}
+                      className={activeColorTab === channel.id ? "active" : ""}
+                      style={{ backgroundColor: channel.color }}
+                      onClick={() => setActiveColorTab(channel.id)}
+                      title={channel.name}
+                    />
+                  ))}
+                </div>
+                <EditorRange label="Hue" value={hsl.h} min={-180} max={180} onChange={value => updateHsl(activeColorTab, "h", value)} onCommit={commitCurrent} />
+                <EditorRange label="Saturation" value={hsl.s} min={-100} max={100} onChange={value => updateHsl(activeColorTab, "s", value)} onCommit={commitCurrent} />
+                <EditorRange label="Luminance" value={hsl.l} min={-100} max={100} onChange={value => updateHsl(activeColorTab, "l", value)} onCommit={commitCurrent} />
+              </AccordionSection>
+
+              <AccordionSection icon={Sparkles} title="Effects" open={!!openSections.effects} onToggle={() => toggleSection("effects")}>
+                <EditorRange label="Grain" value={adjustments.grain} min={0} max={100} onChange={value => updateAdjustment("grain", value)} onCommit={commitCurrent} />
+                <EditorRange label="Clarity" value={adjustments.clarity} min={-100} max={100} onChange={value => updateAdjustment("clarity", value)} onCommit={commitCurrent} />
+                <EditorRange label="Dehaze" value={adjustments.dehaze} min={-100} max={100} onChange={value => updateAdjustment("dehaze", value)} onCommit={commitCurrent} />
+                <EditorRange label="Blur" value={adjustments.blur} min={0} max={20} step={0.5} onChange={value => updateAdjustment("blur", value)} onCommit={commitCurrent} />
+              </AccordionSection>
+
+              <AccordionSection icon={Save} title="Export" open={!!openSections.export} onToggle={() => toggleSection("export")}>
+                <label className="field">
+                  <span>Format</span>
+                  <select value={exportFormat} onChange={event => setExportFormat(event.target.value)}>
+                    <option value="image/png">PNG (Lossless)</option>
+                    <option value="image/jpeg">JPEG (Compressed)</option>
+                    <option value="image/webp">WebP (Optimized)</option>
+                  </select>
+                </label>
+                {exportFormat !== "image/png" && (
+                  <EditorRange
+                    label="Quality"
+                    value={exportQuality}
+                    min={10}
+                    max={100}
+                    step={5}
+                    resetValue={90}
+                    onChange={setExportQuality}
+                    onCommit={commitCurrent}
                   />
-                ))}
-              </div>
-              <EditorRange label="Hue" value={hsl.h} min={-180} max={180} onChange={value => updateHsl(activeColorTab, "h", value)} onCommit={commitCurrent} />
-              <EditorRange label="Saturation" value={hsl.s} min={-100} max={100} onChange={value => updateHsl(activeColorTab, "s", value)} onCommit={commitCurrent} />
-              <EditorRange label="Luminance" value={hsl.l} min={-100} max={100} onChange={value => updateHsl(activeColorTab, "l", value)} onCommit={commitCurrent} />
-            </AccordionSection>
-
-            <AccordionSection icon={Sparkles} title="Effects" open={!!openSections.effects} onToggle={() => toggleSection("effects")}>
-              <EditorRange label="Grain" value={adjustments.grain} min={0} max={100} onChange={value => updateAdjustment("grain", value)} onCommit={commitCurrent} />
-              <EditorRange label="Clarity" value={adjustments.clarity} min={-100} max={100} onChange={value => updateAdjustment("clarity", value)} onCommit={commitCurrent} />
-              <EditorRange label="Dehaze" value={adjustments.dehaze} min={-100} max={100} onChange={value => updateAdjustment("dehaze", value)} onCommit={commitCurrent} />
-              <EditorRange label="Blur" value={adjustments.blur} min={0} max={20} step={0.5} onChange={value => updateAdjustment("blur", value)} onCommit={commitCurrent} />
-            </AccordionSection>
-
+                )}
+              </AccordionSection>
+            </div>
           </div>
 
           {error ? <div className="editorError">{error}</div> : null}
@@ -1018,8 +1529,9 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
             <button type="button" className="smallActionButton secondary" onClick={onClose}>
               <span>Cancel</span>
             </button>
-            <button type="button" className="smallActionButton secondary" onClick={commitCurrent}>
-              <span>Apply</span>
+            <button type="button" className="smallActionButton secondary" onClick={handleDownloadEdited} disabled={downloading || !isReady}>
+              <Download size={14} />
+              <span>{downloading ? "Downloading..." : "Download"}</span>
             </button>
             <button type="button" className="saveTemplateButton" onClick={handleSave} disabled={saving || !isReady}>
               <Save size={15} />

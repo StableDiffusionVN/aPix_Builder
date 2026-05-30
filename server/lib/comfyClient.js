@@ -65,7 +65,7 @@ export function parseDataUrl(dataUrl) {
 
 export async function uploadImageToComfy(target, upload, signal) {
   const extension = upload.mimeType.includes("jpeg") ? "jpg" : upload.mimeType.split("/")[1] || "png";
-  const filename = `codex_upload_${Date.now()}_${upload.index}.${extension}`;
+  const filename = `sdvn_build_${Date.now()}_${upload.index}.${extension}`;
   const form = new FormData();
   form.append("image", new File([upload.buffer], filename, { type: upload.mimeType }));
   form.append("type", "input");

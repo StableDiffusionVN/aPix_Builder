@@ -9,3 +9,4 @@ config/templates/
 .env
 .env.*
 !.env.example
+presets/

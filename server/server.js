@@ -33,11 +33,29 @@ const uploadDir = path.join(root, "uploads");
 const inputDir = path.join(root, "input");
 const outputDir = path.join(root, "output");
 const outputHistoryPath = path.join(outputDir, "history.json");
+const presetsDir = path.join(root, "presets");
+const presetsFilePath = path.join(presetsDir, "presets.json");
 const port = Number(process.env.PORT || 8787);
 const comfyTimeoutMs = Number(process.env.COMFY_TIMEOUT_MS || 10 * 60 * 1000);
 const maxImageBodyBytes = Number(process.env.MAX_IMAGE_BODY_BYTES || 512 * 1024 * 1024);
 const activeRuns = new Map();
 const templates = createTemplateService({ configDir, defaultDir: defaultTemplateDir, templatesDir: userTemplatesDir });
+
+async function readCustomPresets() {
+  try {
+    await mkdir(presetsDir, { recursive: true });
+    const raw = await readFile(presetsFilePath, "utf8");
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+async function writeCustomPresets(presets) {
+  await mkdir(presetsDir, { recursive: true });
+  await writeFile(presetsFilePath, JSON.stringify(presets, null, 2), "utf8");
+}
 
 async function assertTemplateWorkflow(config, template) {
   const workflow = JSON.parse(await readFile(template.workflowPath, "utf8"));
@@ -592,6 +610,13 @@ const server = http.createServer(async (req, res) => {
       await handleSaveEditedOutput(req, res);
     } else if (req.method === "GET" && url.pathname === "/api/output-image") {
       await handleOutputImage(req, res, url);
+    } else if (req.method === "GET" && url.pathname === "/api/presets") {
+      send(res, 200, { presets: await readCustomPresets() });
+    } else if (req.method === "POST" && url.pathname === "/api/presets") {
+      const body = JSON.parse(await readBody(req) || "{}");
+      const nextPresets = body.presets || [];
+      await writeCustomPresets(nextPresets);
+      send(res, 200, { success: true, presets: nextPresets });
     } else {
       send(res, 404, { error: "Not found" });
     }

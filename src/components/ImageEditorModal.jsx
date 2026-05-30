@@ -658,14 +658,65 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
   const [renameValue, setRenameValue] = useState("");
 
   useEffect(() => {
+    fetch("/api/presets")
+      .then(res => {
+        if (!res.ok) throw new Error("HTTP error " + res.status);
+        return res.json();
+      })
+      .then(data => {
+        if (data && Array.isArray(data.presets)) {
+          setCustomPresets(data.presets);
+          try {
+            localStorage.setItem("image-editor-custom-presets", JSON.stringify(data.presets));
+          } catch (e) {
+            console.error("Failed to write presets to localStorage", e);
+          }
+        }
+      })
+      .catch(e => {
+        console.error("Failed to load presets from server, falling back to localStorage", e);
+        try {
+          const saved = localStorage.getItem("image-editor-custom-presets");
+          if (saved) {
+            setCustomPresets(JSON.parse(saved));
+          }
+        } catch (localError) {
+          console.error("Failed to load presets from localStorage", localError);
+        }
+      });
+  }, []);
+
+  const savePresets = useCallback((updated) => {
+    setCustomPresets(updated);
     try {
-      const saved = localStorage.getItem("image-editor-custom-presets");
-      if (saved) {
-        setCustomPresets(JSON.parse(saved));
-      }
+      localStorage.setItem("image-editor-custom-presets", JSON.stringify(updated));
     } catch (e) {
-      console.error("Failed to load presets", e);
+      console.error("Failed to write presets to localStorage", e);
     }
+    fetch("/api/presets", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ presets: updated })
+    })
+      .then(res => {
+        if (!res.ok) throw new Error("HTTP error " + res.status);
+        return res.json();
+      })
+      .then(data => {
+        if (data.success && Array.isArray(data.presets)) {
+          setCustomPresets(data.presets);
+          try {
+            localStorage.setItem("image-editor-custom-presets", JSON.stringify(data.presets));
+          } catch (e) {
+            console.error("Failed to write updated presets to localStorage", e);
+          }
+        }
+      })
+      .catch(e => {
+        console.error("Failed to sync presets with server", e);
+      });
   }, []);
 
   const handleCreatePreset = useCallback(() => {
@@ -676,17 +727,15 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
       adjustments: JSON.parse(JSON.stringify(adjustments))
     };
     const updated = [...customPresets, newPreset];
-    setCustomPresets(updated);
-    localStorage.setItem("image-editor-custom-presets", JSON.stringify(updated));
+    savePresets(updated);
     setShowNewPresetForm(false);
     setNewPresetName("");
-  }, [newPresetName, adjustments, customPresets]);
+  }, [newPresetName, adjustments, customPresets, savePresets]);
 
   const handleDeletePreset = useCallback((id) => {
     const updated = customPresets.filter(item => item.id !== id);
-    setCustomPresets(updated);
-    localStorage.setItem("image-editor-custom-presets", JSON.stringify(updated));
-  }, [customPresets]);
+    savePresets(updated);
+  }, [customPresets, savePresets]);
 
   const handleUpdatePresetSettings = useCallback((id) => {
     const updated = customPresets.map(item => {
@@ -698,9 +747,8 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
       }
       return item;
     });
-    setCustomPresets(updated);
-    localStorage.setItem("image-editor-custom-presets", JSON.stringify(updated));
-  }, [adjustments, customPresets]);
+    savePresets(updated);
+  }, [adjustments, customPresets, savePresets]);
 
   const handleSaveRename = useCallback((id) => {
     if (!renameValue.trim()) return;
@@ -713,10 +761,9 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
       }
       return item;
     });
-    setCustomPresets(updated);
-    localStorage.setItem("image-editor-custom-presets", JSON.stringify(updated));
+    savePresets(updated);
     setEditingPresetId(null);
-  }, [renameValue, customPresets]);
+  }, [renameValue, customPresets, savePresets]);
 
   const isPresetActive = useCallback((preset) => {
     if (!preset || !preset.adjustments) return false;

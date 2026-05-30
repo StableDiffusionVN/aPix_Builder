@@ -607,6 +607,7 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
   const strokesRef = useRef([]);
   const panStartRef = useRef(null);
   const activeStrokeRef = useRef(null);
+  const zoomStartRef = useRef(null);
   const rafRef = useRef(null);
   const baseCanvasRef = useRef(null);
   const strokeLayerRef = useRef(null);
@@ -614,6 +615,7 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
   const previewMetaRef = useRef(null);
   const croppingRef = useRef(false);
   const altToolRef = useRef(null);
+  const spaceToolRef = useRef(null);
 
   const origCanvasRef = useRef(null);
   const histogramCanvasRef = useRef(null);
@@ -633,6 +635,7 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
+  const [isShiftPressed, setIsShiftPressed] = useState(false);
   const [history, setHistory] = useState([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [saving, setSaving] = useState(false);
@@ -1543,12 +1546,24 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
       setActiveTool(tool);
       if (tool === "crop") openSection("crop");
       if (tool === "brush" || tool === "eraser") openSection("brush");
+      spaceToolRef.current = null;
+      altToolRef.current = null;
     };
 
     const handleKeyDown = event => {
+      if (event.key === "Shift") {
+        setIsShiftPressed(true);
+      }
       const editable = isEditableTarget(event.target);
       const key = event.key.toLowerCase();
       const hasUndoModifier = event.metaKey || event.ctrlKey;
+
+      if ((event.code === "Space" || event.key === " ") && !editable && !event.repeat && spaceToolRef.current === null) {
+        spaceToolRef.current = activeTool;
+        setActiveTool("hand");
+        event.preventDefault();
+        return;
+      }
 
       if (event.key === "Alt" && !editable && !event.repeat) {
         altToolRef.current = activeTool;
@@ -1642,21 +1657,33 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
       } else if (key === "i") {
         event.preventDefault();
         activateTool("colorpicker");
+      } else if (key === "z") {
+        event.preventDefault();
+        activateTool("zoom");
       }
     };
 
     const handleKeyUp = event => {
+      if (event.key === "Shift") {
+        setIsShiftPressed(false);
+      }
+      if ((event.code === "Space" || event.key === " ") && spaceToolRef.current != null) {
+        setActiveTool(spaceToolRef.current);
+        spaceToolRef.current = null;
+        event.preventDefault();
+        return;
+      }
       if (event.key !== "Alt" || altToolRef.current == null) return;
       setActiveTool(altToolRef.current);
       altToolRef.current = null;
       event.preventDefault();
     };
 
-    window.addEventListener("keydown", handleKeyDown);
-    window.addEventListener("keyup", handleKeyUp);
+    window.addEventListener("keydown", handleKeyDown, true);
+    window.addEventListener("keyup", handleKeyUp, true);
     return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-      window.removeEventListener("keyup", handleKeyUp);
+      window.removeEventListener("keydown", handleKeyDown, true);
+      window.removeEventListener("keyup", handleKeyUp, true);
     };
   }, [activeTool, canRedo, canUndo, history, historyIndex, restore]);
 
@@ -1742,6 +1769,17 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
       compositePreview();
       return;
     }
+    if (activeTool === "zoom") {
+      event.currentTarget.setPointerCapture(event.pointerId);
+      zoomStartRef.current = {
+        startX: event.clientX,
+        startY: event.clientY,
+        startZoom: zoom,
+        dragged: false,
+        hasShift: event.shiftKey
+      };
+      return;
+    }
     event.currentTarget.setPointerCapture(event.pointerId);
     if (editorCompareMode && activeTool === "hand") updateEditorComparePosition(event);
     panStartRef.current = { pointer: { x: event.clientX, y: event.clientY }, pan };
@@ -1765,6 +1803,18 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
       if (!point) return;
       activeStrokeRef.current.points.push(point);
       compositePreview();
+      return;
+    }
+    if (zoomStartRef.current && activeTool === "zoom") {
+      const drag = zoomStartRef.current;
+      const deltaX = event.clientX - drag.startX;
+      if (Math.abs(deltaX) > 5) {
+        drag.dragged = true;
+      }
+      if (drag.dragged) {
+        const newZoom = clamp(Number((drag.startZoom + deltaX * 0.005).toFixed(2)), 0.2, 4);
+        setZoom(newZoom);
+      }
       return;
     }
     if (panStartRef.current) {
@@ -1794,6 +1844,18 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
       setStrokes(nextStrokes);
       compositePreview();
       commitHistory(adjustmentsRef.current, brushRef.current, nextStrokes);
+    }
+    if (zoomStartRef.current && activeTool === "zoom") {
+      const drag = zoomStartRef.current;
+      if (!drag.dragged) {
+        if (drag.hasShift || event.shiftKey) {
+          updateZoom(-0.2);
+        } else {
+          updateZoom(0.2);
+        }
+      }
+      zoomStartRef.current = null;
+      return;
     }
     panStartRef.current = null;
     setIsPanning(false);
@@ -1856,8 +1918,9 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
   const previewCursor = useMemo(() => {
     if (activeTool === "brush" || activeTool === "eraser") return "none";
     if (activeTool === "colorpicker") return "copy";
+    if (activeTool === "zoom") return isShiftPressed ? "zoom-out" : "zoom-in";
     return panStartRef.current ? "grabbing" : "grab";
-  }, [activeTool]);
+  }, [activeTool, isShiftPressed]);
 
   const brushDiameter = brush.size * (previewMetaRef.current?.scale ?? 1) * canvasScaleRef.current;
 
@@ -1881,6 +1944,9 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
           <span className="imageEditorRailDivider" />
           <button type="button" className={activeTool === "hand" ? "active" : ""} onClick={() => setActiveTool("hand")} title="Di chuyển">
             <Hand size={15} />
+          </button>
+          <button type="button" className={activeTool === "zoom" ? "active" : ""} onClick={() => setActiveTool("zoom")} title="Thu phóng (Z)">
+            <ZoomIn size={15} />
           </button>
           <button type="button" className={adjustments.flipH ? "active" : ""} onClick={() => updateAdjustment("flipH", !adjustments.flipH, true)} title="Lật ngang">
             <FlipHorizontal size={15} />

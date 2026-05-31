@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { Check, Eye, Filter, Images, Pencil, RefreshCcw, Star, Trash2, Upload, X } from "lucide-react";
 import { ImageEditorModal } from "./ImageEditorModal";
 import { defaultValue } from "../lib/template";
+import { DYNAMIC_FIELD_TYPES, canonicalDynamicType, dynamicFieldChoices, isDynamicFieldType } from "../lib/dynamicTypes";
 
 const INPUT_FAVORITES_KEY = "comfyui-build:input-image-favorites:v1";
 
@@ -14,6 +15,22 @@ const inputTypes = new Set([
   "slider",
   "dropdown",
   "menu",
+  ...DYNAMIC_FIELD_TYPES,
+  "Checkpoints",
+  "checkpoint",
+  "Loras",
+  "lora",
+  "controlnet",
+  "control_net",
+  "upscale_model",
+  "sampler",
+  "scheduler",
+  "unets",
+  "diffusion_models",
+  "style_model",
+  "embedding",
+  "clips",
+  "clip_vision",
   "seed",
   "checkbox",
   "boolean",
@@ -86,7 +103,7 @@ export function StaticBlock({ item }) {
   return null;
 }
 
-export function DynamicField({ item, value, onChange, inputImages = [], onRefreshInputImages, onUpdateInputImages }) {
+export function DynamicField({ item, value, onChange, inputImages = [], onRefreshInputImages, onUpdateInputImages, discovery = null, discoveryLoading = false }) {
   const ui = item.ui || {};
   const label = ui.label || item.key;
   const description = ui.description || ui.help || "";
@@ -111,7 +128,9 @@ export function DynamicField({ item, value, onChange, inputImages = [], onRefres
   const canResetNumber = isNumberType || ui.type === "slider";
   const resetValue = canResetNumber ? defaultValue(item) : undefined;
   const isAtResetValue = canResetNumber && Number(value) === Number(resetValue);
-  const isDropdown = ui.type === "dropdown" || ui.type === "menu";
+  const dynamicKind = canonicalDynamicType(ui.type);
+  const isDynamicList = isDynamicFieldType(ui.type);
+  const isDropdown = ui.type === "dropdown" || ui.type === "menu" || isDynamicList;
   const isBoolean = ui.type === "checkbox" || ui.type === "boolean";
   const parseNumber = inputValue => {
     if (inputValue === "") return "";
@@ -136,6 +155,14 @@ export function DynamicField({ item, value, onChange, inputImages = [], onRefres
       refreshInputImages();
     }
   }, [ui.type]);
+
+  useEffect(() => {
+    if (!isDynamicList) return;
+    const choices = dynamicFieldChoices(discovery, dynamicKind);
+    if (!choices.length) return;
+    const defaultChoice = choices.includes(ui.value) ? ui.value : choices[0];
+    if (!choices.includes(value)) onChange(defaultChoice);
+  }, [isDynamicList, dynamicKind, discovery, ui.value, value]);
 
   useEffect(() => {
     setUploadImageSize({ width: 0, height: 0 });
@@ -340,7 +367,7 @@ export function DynamicField({ item, value, onChange, inputImages = [], onRefres
     }
   }
 
-  if (!inputTypes.has(ui.type)) return <StaticBlock item={item} />;
+  if (!inputTypes.has(ui.type) && !isDynamicFieldType(ui.type)) return <StaticBlock item={item} />;
   if (ui.type === "seed") {
     const isRandomSeed = value === "random_seed" || value === "";
     const handleSeedChange = event => {
@@ -690,11 +717,15 @@ export function DynamicField({ item, value, onChange, inputImages = [], onRefres
     );
   }
   if (isDropdown) {
+    const choices = isDynamicList ? dynamicFieldChoices(discovery, dynamicKind) : ui.choices || [];
     return (
       <label className="field">
         <span>{label}</span>
-        <select value={value} onChange={event => onChange(event.target.value)}>
-          {(ui.choices || []).map(choice => <option key={choice} value={choice}>{choice}</option>)}
+        <select value={isDynamicList ? (choices.includes(value) ? value : "") : value} onChange={event => onChange(event.target.value)} disabled={isDynamicList && discoveryLoading}>
+          {isDynamicList && choices.length === 0 ? (
+            <option value="">{discoveryLoading ? "Đang quét server..." : "Không tìm thấy dữ liệu"}</option>
+          ) : null}
+          {choices.map(choice => <option key={choice} value={choice}>{choice}</option>)}
         </select>
         {description ? <small className="fieldDescription">{description}</small> : null}
       </label>

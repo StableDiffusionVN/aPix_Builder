@@ -211,3 +211,213 @@ export async function interruptComfy(target) {
     throw new Error(`ComfyUI /interrupt failed: ${response.status} ${await response.text()}`);
   }
 }
+
+const DISCOVERY_CACHE_TTL_MS = Number(process.env.COMFY_DISCOVERY_CACHE_MS || 5 * 60 * 1000);
+const discoveryCache = new Map();
+
+const dynamicChoiceSources = {
+  checkpoints: {
+    modelFolder: "checkpoints",
+    objectInfo: [
+      ["CheckpointLoaderSimple", "ckpt_name"],
+      ["CheckpointLoader", "ckpt_name"]
+    ]
+  },
+  loras: {
+    modelFolder: "loras",
+    objectInfo: [
+      ["LoraLoader", "lora_name"],
+      ["LoraLoaderModelOnly", "lora_name"]
+    ]
+  },
+  vae: {
+    modelFolder: "vae",
+    objectInfo: [["VAELoader", "vae_name"]]
+  },
+  controlnets: {
+    modelFolder: "controlnet",
+    objectInfo: [
+      ["ControlNetLoader", "control_net_name"],
+      ["DiffControlNetLoader", "model_name"]
+    ]
+  },
+  upscale_models: {
+    modelFolder: "upscale_models",
+    objectInfo: [["UpscaleModelLoader", "model_name"]]
+  },
+  samplers: {
+    objectInfo: [
+      ["KSampler", "sampler_name"],
+      ["KSamplerAdvanced", "sampler_name"]
+    ]
+  },
+  schedulers: {
+    objectInfo: [
+      ["KSampler", "scheduler"],
+      ["KSamplerAdvanced", "scheduler"]
+    ]
+  },
+  unet: {
+    modelFolder: "diffusion_models",
+    objectInfo: [["UNETLoader", "unet_name"]]
+  },
+  style_models: {
+    modelFolder: "style_models",
+    objectInfo: [["StyleModelLoader", "style_model_name"]]
+  },
+  embeddings: {
+    modelFolder: "embeddings"
+  },
+  clip: {
+    modelFolder: "text_encoders",
+    objectInfo: [
+      ["CLIPLoader", "clip_name"],
+      ["DualCLIPLoader", "clip_name1"],
+      ["DualCLIPLoader", "clip_name2"]
+    ]
+  },
+  clip_vision: {
+    modelFolder: "clip_vision",
+    objectInfo: [["CLIPVisionLoader", "clip_name"]]
+  }
+};
+
+async function fetchComfyJson(target, path, signal, timeoutMs = 30 * 1000) {
+  const response = await fetch(`${target.httpBase}${path}`, {
+    headers: target.headers,
+    signal: signal || AbortSignal.timeout(timeoutMs)
+  });
+  if (!response.ok) {
+    throw new Error(`ComfyUI ${path} failed: ${response.status} ${await response.text()}`);
+  }
+  return response.json();
+}
+
+async function tryFetchComfyJson(target, path, signal, fallback) {
+  try {
+    return await fetchComfyJson(target, path, signal);
+  } catch {
+    return fallback;
+  }
+}
+
+function readChoiceList(objectInfo, nodeType, inputName) {
+  const choices = objectInfo?.[nodeType]?.input?.required?.[inputName]?.[0]
+    ?? objectInfo?.[nodeType]?.input?.optional?.[inputName]?.[0];
+  return Array.isArray(choices) ? choices.filter(item => typeof item === "string") : [];
+}
+
+function uniqueStrings(items) {
+  return [...new Set((items || []).filter(item => typeof item === "string" && item.trim()))];
+}
+
+function buildNodeTypes(objectInfo) {
+  return Object.entries(objectInfo || {}).map(([classType, node]) => ({
+    classType,
+    displayName: node?.display_name || node?.name || classType,
+    category: node?.category || "",
+    outputNode: Boolean(node?.output_node),
+    requiredInputs: Object.keys(node?.input?.required || {}),
+    optionalInputs: Object.keys(node?.input?.optional || {}),
+    outputs: Array.isArray(node?.output) ? node.output : []
+  }));
+}
+
+function choicesFromObjectInfo(objectInfo, sources = []) {
+  return uniqueStrings(sources.flatMap(([nodeType, inputName]) => readChoiceList(objectInfo, nodeType, inputName)));
+}
+
+async function buildDynamicChoices(target, objectInfo, modelFolders, signal) {
+  const modelsByFolder = {};
+  const dynamicChoices = {};
+  const folderSet = new Set(modelFolders || []);
+
+  await Promise.all(Object.values(dynamicChoiceSources).map(async source => {
+    if (!source.modelFolder || !folderSet.has(source.modelFolder)) return;
+    const models = await tryFetchComfyJson(
+      target,
+      `/models/${encodeURIComponent(source.modelFolder)}`,
+      signal,
+      []
+    );
+    modelsByFolder[source.modelFolder] = Array.isArray(models) ? uniqueStrings(models) : [];
+  }));
+
+  for (const [type, source] of Object.entries(dynamicChoiceSources)) {
+    const fromModels = source.modelFolder ? modelsByFolder[source.modelFolder] || [] : [];
+    const fromObjectInfo = choicesFromObjectInfo(objectInfo, source.objectInfo);
+    dynamicChoices[type] = uniqueStrings([...fromModels, ...fromObjectInfo]);
+  }
+
+  return { dynamicChoices, modelsByFolder };
+}
+
+export async function getComfyDiscovery(target, options = {}) {
+  const now = Date.now();
+  const cacheKey = target.label;
+  const cached = discoveryCache.get(cacheKey);
+  if (!options.refresh && cached && now - cached.fetchedAtMs < DISCOVERY_CACHE_TTL_MS) {
+    return { ...cached.data, cached: true };
+  }
+
+  const signal = options.signal;
+  const [system, features, modelFolders, embeddings, objectInfo] = await Promise.all([
+    tryFetchComfyJson(target, "/system_stats", signal, null),
+    tryFetchComfyJson(target, "/features", signal, null),
+    tryFetchComfyJson(target, "/models", signal, []),
+    tryFetchComfyJson(target, "/embeddings", signal, []),
+    fetchComfyJson(target, "/object_info", signal)
+  ]);
+
+  const { dynamicChoices, modelsByFolder } = await buildDynamicChoices(
+    target,
+    objectInfo,
+    Array.isArray(modelFolders) ? modelFolders : [],
+    signal
+  );
+  dynamicChoices.embeddings = uniqueStrings([
+    ...(dynamicChoices.embeddings || []),
+    ...(Array.isArray(embeddings) ? embeddings : [])
+  ]);
+
+  const data = {
+    address: target.label,
+    fetchedAt: new Date(now).toISOString(),
+    cached: false,
+    cacheTtlMs: DISCOVERY_CACHE_TTL_MS,
+    system,
+    features,
+    modelFolders: Array.isArray(modelFolders) ? modelFolders : [],
+    modelsByFolder,
+    embeddings: Array.isArray(embeddings) ? embeddings : [],
+    dynamicChoices,
+    modelLists: dynamicChoices,
+    nodeTypes: buildNodeTypes(objectInfo)
+  };
+  discoveryCache.set(cacheKey, { fetchedAtMs: now, data });
+  return data;
+}
+
+export async function getComfyHealth(target, signal) {
+  const [system, features, queue, prompt] = await Promise.all([
+    tryFetchComfyJson(target, "/system_stats", signal, null),
+    tryFetchComfyJson(target, "/features", signal, null),
+    tryFetchComfyJson(target, "/queue", signal, null),
+    tryFetchComfyJson(target, "/prompt", signal, null)
+  ]);
+  return {
+    online: Boolean(system || features || queue || prompt),
+    address: target.label,
+    checkedAt: new Date().toISOString(),
+    system: system?.system || system || null,
+    devices: system?.devices || [],
+    features,
+    queue,
+    prompt
+  };
+}
+
+export async function listComfyModels(target, signal) {
+  const discovery = await getComfyDiscovery(target, { signal });
+  return discovery.dynamicChoices;
+}

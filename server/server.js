@@ -6,7 +6,10 @@ import { fileURLToPath } from "node:url";
 import YAML from "yaml";
 import {
   getHistory,
+  getComfyDiscovery,
+  getComfyHealth,
   interruptComfy,
+  listComfyModels,
   normalizeComfyTarget,
   normalizeValues,
   parseDataUrl,
@@ -180,6 +183,22 @@ async function handleComfyView(req, res, url) {
   const contentType = response.headers.get("content-type") || "image/png";
   res.writeHead(200, { "content-type": contentType, "cache-control": "no-store" });
   res.end(Buffer.from(await response.arrayBuffer()));
+}
+
+async function handleComfyModels(req, res, url) {
+  const target = normalizeComfyTarget(url.searchParams.get("address"));
+  send(res, 200, await listComfyModels(target));
+}
+
+async function handleComfyDiscovery(req, res, url) {
+  const target = normalizeComfyTarget(url.searchParams.get("address"));
+  const refresh = url.searchParams.get("refresh") === "1" || url.searchParams.get("refresh") === "true";
+  send(res, 200, await getComfyDiscovery(target, { refresh }));
+}
+
+async function handleComfyHealth(req, res, url) {
+  const target = normalizeComfyTarget(url.searchParams.get("address"));
+  send(res, 200, await getComfyHealth(target));
 }
 
 function safeInputName(rawName = "") {
@@ -594,6 +613,12 @@ const server = http.createServer(async (req, res) => {
       await handleCancel(req, res);
     } else if (req.method === "GET" && url.pathname === "/api/comfy-view") {
       await handleComfyView(req, res, url);
+    } else if (req.method === "GET" && url.pathname === "/api/comfy-models") {
+      await handleComfyModels(req, res, url);
+    } else if (req.method === "GET" && url.pathname === "/api/comfy-discovery") {
+      await handleComfyDiscovery(req, res, url);
+    } else if (req.method === "GET" && url.pathname === "/api/comfy-health") {
+      await handleComfyHealth(req, res, url);
     } else if (req.method === "GET" && url.pathname === "/api/input-images") {
       send(res, 200, { images: await listInputImages() });
     } else if (req.method === "POST" && url.pathname === "/api/input-images") {

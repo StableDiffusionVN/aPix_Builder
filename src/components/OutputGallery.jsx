@@ -152,11 +152,10 @@ export function OutputGallery({ history = [], onDownload, onRestore, onDelete })
               </span>
               <div className="historyMeta">
                 <strong>{item.templateName || item.templateId || "Workflow"}</strong>
-                <span>{formatTime(item.createdAt)} · Prompt {item.promptId || "n/a"}</span>
+                <span>{formatTime(item.createdAt)}</span>
                 {item.durationMs ? (
-                  <span>Hoàn thành trong {formatDuration(item.durationMs)}</span>
+                  <small>{formatDuration(item.durationMs)}</small>
                 ) : null}
-                <small>{item.address}</small>
               </div>
               <div className="historyActions">
                 <button className={`thumbAction ${favorites.has(item.id) ? "isFavorite" : ""}`} onClick={event => {

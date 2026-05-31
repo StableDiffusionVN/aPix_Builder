@@ -7,10 +7,12 @@ import {
   Download,
   GitCompare,
   Image as ImageIcon,
+  Info,
   Loader2,
   Pencil,
   RotateCcw,
   Settings2,
+  ChevronsUpDown,
   X
 } from "lucide-react";
 import { ConnectionPanel } from "./components/ConnectionPanel";
@@ -21,17 +23,48 @@ import { RunControls } from "./components/RunControls";
 import { TemplateEditorModal } from "./components/TemplateEditorModal";
 import { TemplateSelector } from "./components/TemplateSelector";
 import { downloadImage } from "./lib/download";
+import { canonicalDynamicType, dynamicFieldChoices } from "./lib/dynamicTypes";
 import { buildDefaults, flattenInputs, normalizeId, requestPayload } from "./lib/template";
 
 const SERVER_STORAGE_KEY = "comfyui-build:server:v2";
 const THEME_STORAGE_KEY = "comfyui-build:theme";
+const MAIN_FONT_STORAGE_KEY = "comfyui-build:main-font";
 const WORKSPACE_STORAGE_KEY = "comfyui-build:workspace:v1";
 const MIN_IMAGE_SCALE = 0.5;
 const MAX_IMAGE_SCALE = 10;
 const DEFAULT_COMFY_SERVER = "http://127.0.0.1:8188";
+const THEME_OPTIONS = [
+  { id: "dark", label: "Dark", swatch: "#121212" },
+  { id: "light", label: "Light", swatch: "#f5f5f5" },
+  { id: "sdvn", label: "SDVN", swatch: "linear-gradient(to bottom, #5858e6, #151523)" },
+  { id: "vietnam", label: "Việt Nam", swatch: "radial-gradient(ellipse at bottom, #c62921, #a21a14)" },
+  { id: "skyline", label: "Skyline", swatch: "linear-gradient(to right, #6FB1FC, #4364F7, #0052D4)" },
+  { id: "hidden-jaguar", label: "Hidden Jaguar", swatch: "linear-gradient(to top, #0fd850 0%, #f9f047 100%)" },
+  { id: "wide-matrix", label: "Wide Matrix", swatch: "linear-gradient(to top, #fcc5e4 0%, #fda34b 15%, #ff7882 35%, #c8699e 52%, #7046aa 71%, #0c1db8 87%, #020f75 100%)" },
+  { id: "rainbow", label: "RainBow", swatch: "linear-gradient(to right, #0575E6, #00F260)" },
+  { id: "soundcloud", label: "SoundCloud", swatch: "linear-gradient(to right, #f83600, #fe8c00)" },
+  { id: "amin", label: "Amin", swatch: "linear-gradient(to right, #4A00E0, #8E2DE2)" },
+  { id: "emerald", label: "Emerald Lab", swatch: "radial-gradient(circle at 15% 20%, #34d399 0%, #10231d 58%, #030b08 100%)" },
+  { id: "violet", label: "Violet Studio", swatch: "radial-gradient(circle at 15% 20%, #a78bfa 0%, #1b1730 58%, #05030b 100%)" }
+];
+const MAIN_FONT_OPTIONS = [
+  { id: "be-vietnam", label: "Be Vietnam Pro", family: "\"Be Vietnam Pro\"" },
+  { id: "inter", label: "Inter", family: "\"Inter\"" },
+  { id: "manrope", label: "Manrope", family: "\"Manrope\"" },
+  { id: "jakarta", label: "Plus Jakarta Sans", family: "\"Plus Jakarta Sans\"" },
+  { id: "noto", label: "Noto Sans", family: "\"Noto Sans\"" },
+  { id: "system", label: "System UI", family: "ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\"" }
+];
 
 function loadTheme() {
-  return localStorage.getItem(THEME_STORAGE_KEY) || "gold";
+  const stored = localStorage.getItem(THEME_STORAGE_KEY) || "";
+  if (stored === "minimal") return "dark";
+  return THEME_OPTIONS.some(option => option.id === stored) ? stored : "dark";
+}
+
+function loadMainFont() {
+  const stored = localStorage.getItem(MAIN_FONT_STORAGE_KEY) || "";
+  return MAIN_FONT_OPTIONS.some(option => option.id === stored) ? stored : "be-vietnam";
 }
 
 function loadServerAddress() {
@@ -82,6 +115,18 @@ function formatDuration(ms) {
   return minutes ? `${minutes}m ${rest}s` : `${rest}s`;
 }
 
+function formatBytes(bytes) {
+  if (!Number.isFinite(bytes)) return "";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let value = bytes;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit += 1;
+  }
+  return `${value >= 10 || unit === 0 ? value.toFixed(0) : value.toFixed(1)} ${units[unit]}`;
+}
+
 export default function App() {
   const [config, setConfig] = useState(null);
   const [values, setValues] = useState({});
@@ -96,7 +141,13 @@ export default function App() {
   const [runQueue, setRunQueue] = useState([]);
   const [history, setHistory] = useState([]);
   const [inputImages, setInputImages] = useState([]);
+  const [discovery, setDiscovery] = useState(null);
+  const [discoveryLoading, setDiscoveryLoading] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [infoOpen, setInfoOpen] = useState(false);
+  const [showServerDetails, setShowServerDetails] = useState(false);
+  const [themeMenuOpen, setThemeMenuOpen] = useState(false);
+  const [mainFont, setMainFont] = useState(loadMainFont);
   const [templateEditorOpen, setTemplateEditorOpen] = useState(false);
   const [outputEditorOpen, setOutputEditorOpen] = useState(false);
   const [theme, setTheme] = useState(loadTheme);
@@ -125,7 +176,7 @@ export default function App() {
   const outputLabel = selectedOutput?.label || outputs[0]?.ui?.label || "Ảnh kết quả";
   const heroImage = selectedOutput?.url;
   const resultTiming = result?.historyItem || result || {};
-  const showStatus = Boolean(error || result || running || activeRunId || runQueue.length || status === "Đang tải cấu hình YAML...");
+  const showStatus = Boolean(error || result || running || activeRunId || runQueue.length);
   const compareInputImage = useMemo(() => {
     for (const item of inputs) {
       const type = item.ui?.type;
@@ -137,6 +188,36 @@ export default function App() {
     return "";
   }, [inputs, values]);
   const canCompare = Boolean(heroImage && compareInputImage);
+  const discoverySystem = discovery?.system?.system || discovery?.system || null;
+  const discoveryDevice = discovery?.system?.devices?.[0] || null;
+  const selectedThemeOption = THEME_OPTIONS.find(option => option.id === theme) || THEME_OPTIONS[0];
+  const selectedMainFont = MAIN_FONT_OPTIONS.find(option => option.id === mainFont) || MAIN_FONT_OPTIONS[0];
+  const serverDetailRows = discovery ? [
+    ["Address", discovery.address || comfyAddress],
+    ["Fetched at", discovery.fetchedAt || ""],
+    ["Cache", discovery.cached ? "Đang dùng cache" : "Dữ liệu mới"],
+    ["ComfyUI", discoverySystem?.comfyui_version || ""],
+    ["Frontend", discoverySystem?.required_frontend_version || ""],
+    ["Python", discoverySystem?.python_version || ""],
+    ["PyTorch", discoverySystem?.pytorch_version || ""],
+    ["OS", discoverySystem?.os || ""],
+    ["RAM total", formatBytes(discoverySystem?.ram_total)],
+    ["RAM free", formatBytes(discoverySystem?.ram_free)],
+    ["Device", discoveryDevice?.name || discoveryDevice?.type || ""],
+    ["VRAM total", formatBytes(discoveryDevice?.vram_total)],
+    ["VRAM free", formatBytes(discoveryDevice?.vram_free)],
+    ["Node types", discovery.nodeTypes?.length || 0],
+    ["Model folders", discovery.modelFolders?.length || 0],
+    ["Checkpoints", discovery.dynamicChoices?.checkpoints?.length || 0],
+    ["LoRAs", discovery.dynamicChoices?.loras?.length || 0],
+    ["ControlNets", discovery.dynamicChoices?.controlnets?.length || 0],
+    ["Samplers", discovery.dynamicChoices?.samplers?.length || 0],
+    ["Schedulers", discovery.dynamicChoices?.schedulers?.length || 0],
+    ["VAE", discovery.dynamicChoices?.vae?.length || 0],
+    ["UNET", discovery.dynamicChoices?.unet?.length || 0],
+    ["Style models", discovery.dynamicChoices?.style_models?.length || 0],
+    ["Embeddings", discovery.dynamicChoices?.embeddings?.length || 0]
+  ].filter(([, value]) => value !== "" && value !== null && value !== undefined) : [];
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -144,7 +225,71 @@ export default function App() {
   }, [theme]);
 
   useEffect(() => {
+    document.documentElement.style.setProperty("--main-font", selectedMainFont.family);
+    localStorage.setItem(MAIN_FONT_STORAGE_KEY, mainFont);
+  }, [mainFont, selectedMainFont.family]);
+
+  useEffect(() => {
+    if (!themeMenuOpen) return undefined;
+    function handlePointerDown(event) {
+      if (!(event.target instanceof Element) || !event.target.closest(".themeSelectWrap")) {
+        setThemeMenuOpen(false);
+      }
+    }
+    function handleKeyDown(event) {
+      if (event.key === "Escape") setThemeMenuOpen(false);
+    }
+    window.addEventListener("pointerdown", handlePointerDown);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("pointerdown", handlePointerDown);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [themeMenuOpen]);
+
+  useEffect(() => {
+    function handleInfoShortcut(event) {
+      if (event.key === "Escape" && infoOpen) {
+        setInfoOpen(false);
+        return;
+      }
+      if (event.key !== "/") return;
+      if (!event.metaKey && !event.ctrlKey) return;
+      if (event.altKey || event.shiftKey) return;
+      if (isTextEntryTarget(event.target)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      setSettingsOpen(false);
+      setInfoOpen(true);
+    }
+
+    window.addEventListener("keydown", handleInfoShortcut, true);
+    return () => window.removeEventListener("keydown", handleInfoShortcut, true);
+  }, [infoOpen]);
+
+  useEffect(() => {
     if (comfyAddress) localStorage.setItem(SERVER_STORAGE_KEY, comfyAddress);
+  }, [comfyAddress]);
+
+  useEffect(() => {
+    if (!comfyAddress) {
+      setDiscovery(null);
+      return undefined;
+    }
+    const controller = new AbortController();
+    setDiscoveryLoading(true);
+    fetch(`/api/comfy-discovery?address=${encodeURIComponent(comfyAddress)}`, { signal: controller.signal })
+      .then(response => response.ok ? response.json() : Promise.reject(new Error("Không quét được ComfyUI server")))
+      .then(data => setDiscovery(data))
+      .catch(err => {
+        if (err.name !== "AbortError") {
+          setDiscovery(null);
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setDiscoveryLoading(false);
+      });
+    return () => controller.abort();
   }, [comfyAddress]);
 
   useEffect(() => {
@@ -160,6 +305,26 @@ export default function App() {
     workspaceRef.current = nextWorkspace;
     saveStoredWorkspace(nextWorkspace);
   }, [config, selectedTemplate, values]);
+
+  useEffect(() => {
+    if (!inputs.length) return;
+    setValues(current => {
+      let changed = false;
+      const next = { ...current };
+      for (const item of inputs) {
+        const kind = canonicalDynamicType(item.ui?.type);
+        if (!kind || !item.id) continue;
+        const choices = dynamicFieldChoices(discovery, kind);
+        if (!choices.length) continue;
+        const key = normalizeId(item.id);
+        if (choices.includes(next[key])) continue;
+        const preferred = choices.includes(item.ui?.value) ? item.ui.value : choices[0];
+        next[key] = preferred;
+        changed = true;
+      }
+      return changed ? next : current;
+    });
+  }, [inputs, discovery]);
 
   async function loadOutputHistory() {
     try {
@@ -629,12 +794,23 @@ export default function App() {
         <div className="brand">
           <div className="mark"><img src="/sdvn-icon.png" alt="SDVN" /></div>
           <div>
-            <h1>SDVN ComfyUI Builder</h1>
+            <h1 className="title-font">aPix Builder</h1>
             <p>{selectedTemplateName}</p>
           </div>
-          <button className="settingsButton" onClick={() => setSettingsOpen(true)} title="Mở settings">
-            <Settings2 size={18} />
-          </button>
+          <div className="brandActions">
+            <button className="settingsButton" onClick={() => {
+              setSettingsOpen(false);
+              setInfoOpen(true);
+            }} title="Thông tin ứng dụng (Cmd/Ctrl + /)" aria-label="Thông tin ứng dụng">
+              <Info size={18} />
+            </button>
+            <button className="settingsButton" onClick={() => {
+              setInfoOpen(false);
+              setSettingsOpen(true);
+            }} title="Mở settings" aria-label="Mở settings">
+              <Settings2 size={18} />
+            </button>
+          </div>
         </div>
 
         <section className="settingsGroup">
@@ -665,6 +841,8 @@ export default function App() {
               inputImages={inputImages}
               onRefreshInputImages={refreshInputImages}
               onUpdateInputImages={setInputImages}
+              discovery={discovery}
+              discoveryLoading={discoveryLoading}
             />
           ))}
           </div>
@@ -855,22 +1033,185 @@ export default function App() {
               </button>
             </div>
 
-            <label className="field">
+            <div className="field themeSelectField">
               <span>Theme</span>
-              <select value={theme} onChange={event => setTheme(event.target.value)}>
-                <option value="gold">Midnight Gold</option>
-                <option value="emerald">Emerald Lab</option>
-                <option value="violet">Violet Studio</option>
+              <div
+                className={`themeSelectWrap ${themeMenuOpen ? "open" : ""}`}
+                style={{
+                  "--theme-swatch": selectedThemeOption.swatch
+                }}
+              >
+                <button
+                  type="button"
+                  className="themeSelectButton"
+                  onClick={() => setThemeMenuOpen(current => !current)}
+                  aria-haspopup="listbox"
+                  aria-expanded={themeMenuOpen}
+                >
+                  <span className="themeSwatch" aria-hidden="true" />
+                  <span>{selectedThemeOption.label}</span>
+                  <ChevronsUpDown size={17} />
+                </button>
+                {themeMenuOpen ? (
+                  <div className="themeMenu" role="listbox" aria-label="Theme">
+                    {THEME_OPTIONS.map(option => (
+                      <button
+                        key={option.id}
+                        type="button"
+                        role="option"
+                        aria-selected={theme === option.id}
+                        className={`themeMenuItem ${theme === option.id ? "active" : ""}`}
+                        style={{ "--theme-swatch": option.swatch }}
+                        onClick={() => {
+                          setTheme(option.id);
+                          setThemeMenuOpen(false);
+                        }}
+                      >
+                        <span className="themeSwatch" aria-hidden="true" />
+                        <span>{option.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            </div>
+
+            <label className="field">
+              <span>Main font</span>
+              <select value={mainFont} onChange={event => setMainFont(event.target.value)}>
+                {MAIN_FONT_OPTIONS.map(option => (
+                  <option key={option.id} value={option.id}>{option.label}</option>
+                ))}
               </select>
             </label>
 
             <div className="modalSection">
-              <h3>Comfy Server</h3>
+              <div className="modalSectionTitle">
+                <h3>Comfy Server</h3>
+                <label className="serverDetailToggle">
+                  <input
+                    type="checkbox"
+                    checked={showServerDetails}
+                    onChange={event => setShowServerDetails(event.target.checked)}
+                  />
+                  <span>Hiện chi tiết</span>
+                </label>
+              </div>
               <ConnectionPanel
                 comfyAddress={comfyAddress}
                 serverAddress={serverAddress}
                 onAddressChange={setComfyAddress}
               />
+              <div className="note serverDiscoverySummary">
+                {discoveryLoading ? (
+                  <span>Đang quét ComfyUI server...</span>
+                ) : discovery ? (
+                  <span>
+                    ComfyUI {discoverySystem?.comfyui_version || "unknown"} · {discoveryDevice?.type || "device unknown"}
+                    {discoveryDevice?.vram_free ? ` · VRAM trống ${formatBytes(discoveryDevice.vram_free)}` : ""}
+                    {discovery.cached ? " · cache" : ""}
+                    <br />
+                    {discovery.nodeTypes?.length || 0} node · {discovery.dynamicChoices?.checkpoints?.length || 0} checkpoints · {discovery.dynamicChoices?.loras?.length || 0} loras · {discovery.dynamicChoices?.controlnets?.length || 0} controlnets
+                  </span>
+                ) : (
+                  <span>Chưa quét được ComfyUI server.</span>
+                )}
+              </div>
+              {showServerDetails ? (
+                <div className="serverDetailTable" role="table" aria-label="Thông tin ComfyUI server">
+                  {serverDetailRows.length ? serverDetailRows.map(([label, value]) => (
+                    <div className="serverDetailRow" role="row" key={label}>
+                      <span role="cell">{label}</span>
+                      <b role="cell">{String(value)}</b>
+                    </div>
+                  )) : (
+                    <div className="serverDetailEmpty">Chưa có dữ liệu server để hiển thị.</div>
+                  )}
+                </div>
+              ) : null}
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {infoOpen ? (
+        <div className="modalBackdrop infoBackdrop" role="presentation" onMouseDown={() => setInfoOpen(false)}>
+          <section className="settingsModal infoModal" role="dialog" aria-modal="true" aria-label="Thông tin ứng dụng" onMouseDown={event => event.stopPropagation()}>
+            <div className="modalHeader infoModalHeader">
+              <div>
+                <h2>aPix Builder</h2>
+                <p>Ứng dụng dựng workflow ComfyUI bằng template YAML, tối ưu cho tạo ảnh và chỉnh ảnh nhanh.</p>
+              </div>
+              <button className="modalClose" onClick={() => setInfoOpen(false)} title="Đóng">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="infoIntro">
+              <div>
+                <span>Template hiện tại</span>
+                <b>{selectedTemplateName}</b>
+              </div>
+              <div>
+                <span>Comfy Server</span>
+                <b>{comfyAddress || serverAddress || "Chưa cấu hình"}</b>
+              </div>
+              <div>
+                <span>Phiên bản</span>
+                <b>v0.1.0</b>
+              </div>
+            </div>
+
+            <div className="infoNotice">
+              <b>Cập nhật</b>
+              <span>Hỗ trợ nhiều template, thư viện ảnh input/output, so sánh ảnh, Image Editor và tự quét model từ ComfyUI.</span>
+            </div>
+
+            <div className="infoGrid">
+              <section className="infoSection">
+                <h3>Phím tắt chung</h3>
+                <p>Hoạt động ở màn hình chính khi bạn không nhập text.</p>
+                <div className="shortcutList">
+                  <ShortcutRow label="Mở bảng hướng dẫn này" keys={["Cmd/Ctrl", "/"]} />
+                  <ShortcutRow label="Đóng popup" keys={["Esc"]} />
+                  <ShortcutRow label="Đặt lại zoom/vị trí ảnh" keys={["Space"]} />
+                  <ShortcutRow label="Bật/tắt so sánh input/output" keys={["S"]} />
+                  <ShortcutRow label="Ảnh output trước/sau" keys={["←", "→"]} />
+                </div>
+              </section>
+
+              <section className="infoSection">
+                <h3>Canvas preview</h3>
+                <p>Các thao tác chính trong vùng xem ảnh kết quả.</p>
+                <div className="shortcutList">
+                  <ShortcutRow label="Zoom ảnh" keys={["Cuộn chuột"]} />
+                  <ShortcutRow label="Di chuyển ảnh đã zoom" keys={["Kéo ảnh"]} />
+                  <ShortcutRow label="Reset khung xem" keys={["Space"]} />
+                  <ShortcutRow label="So sánh ảnh" keys={["S"]} />
+                  <ShortcutRow label="Chuyển output" keys={["←", "→"]} />
+                </div>
+              </section>
+
+              <section className="infoSection">
+                <h3>Image Editor</h3>
+                <p>Các công cụ chỉnh ảnh mở từ input hoặc output.</p>
+                <div className="shortcutList">
+                  <ShortcutRow label="Bật/tắt so sánh trước/sau" keys={["S"]} />
+                  <ShortcutRow label="Tạm chuyển sang công cụ Pan" keys={["Giữ Space"]} />
+                  <ShortcutRow label="Thoát thao tác đang sửa" keys={["Esc"]} />
+                  <ShortcutRow label="Lưu ảnh đã chỉnh vào output" keys={["Save"]} />
+                </div>
+              </section>
+
+              <section className="infoSection">
+                <h3>Mẹo sử dụng</h3>
+                <ul className="tipsList">
+                  <li>Kéo thả ảnh vào trường input để nạp ảnh nhanh hơn.</li>
+                  <li>Dùng thư viện ảnh input/output để tái sử dụng file giữa các lần chạy.</li>
+                  <li>Bật so sánh để kiểm tra khác biệt giữa ảnh đầu vào và ảnh kết quả.</li>
+                  <li>Nếu danh sách model chưa đúng, kiểm tra lại Comfy Server trong Settings rồi đợi app quét lại.</li>
+                </ul>
+              </section>
             </div>
           </section>
         </div>
@@ -879,6 +1220,8 @@ export default function App() {
       {templateEditorOpen ? (
         <TemplateEditorModal
           selectedTemplate={selectedTemplate}
+          comfyAddress={comfyAddress}
+          discovery={discovery}
           onClose={() => setTemplateEditorOpen(false)}
           onSaved={reloadTemplates}
         />
@@ -893,5 +1236,16 @@ export default function App() {
         />
       ) : null}
     </main>
+  );
+}
+
+function ShortcutRow({ label, keys }) {
+  return (
+    <div className="shortcutRow">
+      <span>{label}</span>
+      <span className="keyGroup">
+        {keys.map(key => <kbd key={key}>{key}</kbd>)}
+      </span>
+    </div>
   );
 }

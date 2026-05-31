@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { Plus, Save, Trash2, Upload, X } from "lucide-react";
+import { GripVertical, Plus, Save, Trash2, Upload, X } from "lucide-react";
 import YAML from "yaml";
+import { DYNAMIC_FIELD_TYPES, canonicalDynamicType, inferDynamicTypeFromField } from "../lib/dynamicTypes";
 
-const FIELD_TYPES = ["image", "seed", "int", "float", "string", "menu", "checkbox", "boolean"];
+const FIELD_TYPES = ["image", ...DYNAMIC_FIELD_TYPES, "seed", "int", "float", "string", "menu", "checkbox", "boolean"];
 const DISPLAY_TYPES = ["input", "slider"];
 const STRING_DISPLAY_TYPES = ["input", "multiline"];
 
@@ -51,8 +52,8 @@ function defaultsForType(type, fieldValue) {
     minimum: type === "float" ? 0 : 0,
     maximum: type === "float" ? 1 : "",
     step: type === "float" ? 0.1 : 1,
-    value: defaultValueForType(type, fieldValue),
-    choicesText: ""
+    value: type === "menu" && Array.isArray(fieldValue) ? fieldValue[0] || "" : defaultValueForType(type, fieldValue),
+    choicesText: type === "menu" && Array.isArray(fieldValue) ? fieldValue.join("\n") : ""
   };
 }
 
@@ -73,12 +74,20 @@ function inferType(value) {
   return "string";
 }
 
+function inferRowType({ field, nodeClass, value }) {
+  const dynamicType = inferDynamicTypeFromField(field, nodeClass);
+  if (dynamicType) return dynamicType;
+  if (Array.isArray(value)) return "menu";
+  return inferType(value);
+}
+
 function rowFromConfig(item, workflow, fallbackKey) {
   const [nodeId, ...fieldParts] = String(item.id || "").split("-");
   const field = fieldParts[fieldParts[0] === "inputs" ? 1 : 0] || "";
   const value = workflow?.[nodeId]?.inputs?.[field];
   const ui = item.ui || {};
-  const type = ui.type === "text" ? "string" : ui.type || inferType(value);
+  const dynamicType = canonicalDynamicType(ui.type);
+  const type = dynamicType || (ui.type === "text" ? "string" : ui.type || inferType(value));
   return {
     rowId: crypto.randomUUID(),
     nodeId,
@@ -100,6 +109,27 @@ function outputFromConfig(item) {
     nodeId: String(item.id || ""),
     label: item.ui?.label || "Ảnh kết quả"
   };
+}
+
+function moveRow(rows, rowId, direction) {
+  const index = rows.findIndex(row => row.rowId === rowId);
+  if (index < 0) return rows;
+  const nextIndex = index + direction;
+  if (nextIndex < 0 || nextIndex >= rows.length) return rows;
+  const next = [...rows];
+  [next[index], next[nextIndex]] = [next[nextIndex], next[index]];
+  return next;
+}
+
+function reorderRows(rows, draggedId, targetId) {
+  if (!draggedId || !targetId || draggedId === targetId) return rows;
+  const draggedIndex = rows.findIndex(row => row.rowId === draggedId);
+  const targetIndex = rows.findIndex(row => row.rowId === targetId);
+  if (draggedIndex < 0 || targetIndex < 0) return rows;
+  const next = [...rows];
+  const [dragged] = next.splice(draggedIndex, 1);
+  next.splice(targetIndex, 0, dragged);
+  return next;
 }
 
 function buildConfig({ appName, inputRows, outputRows }) {
@@ -194,7 +224,7 @@ function templateIdFromFile(file) {
   return baseName;
 }
 
-export function TemplateEditorModal({ selectedTemplate, onClose, onSaved }) {
+export function TemplateEditorModal({ selectedTemplate, discovery, onClose, onSaved }) {
   const [templateId, setTemplateId] = useState("");
   const [appName, setAppName] = useState("");
   const [workflow, setWorkflow] = useState(null);
@@ -202,6 +232,8 @@ export function TemplateEditorModal({ selectedTemplate, onClose, onSaved }) {
   const [outputRows, setOutputRows] = useState([]);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [draggingInputId, setDraggingInputId] = useState("");
+  const [draggingOutputId, setDraggingOutputId] = useState("");
 
   const nodes = useMemo(() => workflowNodes(workflow), [workflow]);
   const saveNodes = useMemo(() => nodes.filter(node => node.classType.toLowerCase().includes("save")), [nodes]);
@@ -282,7 +314,7 @@ export function TemplateEditorModal({ selectedTemplate, onClose, onSaved }) {
     const firstNode = nodes.find(node => node.fields.length > 0);
     const field = firstNode?.fields?.[0] || "";
     const value = firstNode ? workflow?.[firstNode.id]?.inputs?.[field] : "";
-    const typeDefaults = defaultsForType(inferType(value), value);
+    const typeDefaults = defaultsForType(inferRowType({ field, nodeClass: firstNode?.classType, value }), value);
     setInputRows(current => [...current, {
       rowId: crypto.randomUUID(),
       nodeId: firstNode?.id || "",
@@ -297,14 +329,18 @@ export function TemplateEditorModal({ selectedTemplate, onClose, onSaved }) {
       if (row.rowId !== rowId) return row;
       const next = { ...row, ...patch };
       if (patch.nodeId) {
-        const field = nodes.find(node => node.id === patch.nodeId)?.fields?.[0] || "";
+        const node = nodes.find(node => node.id === patch.nodeId);
+        const field = node?.fields?.[0] || "";
+        const value = workflow?.[patch.nodeId]?.inputs?.[field];
         next.field = field;
         next.label = field || next.label;
+        Object.assign(next, defaultsForType(inferRowType({ field, nodeClass: node?.classType, value }), value));
       }
       if (patch.field) {
+        const node = nodes.find(node => node.id === next.nodeId);
         const value = workflow?.[next.nodeId]?.inputs?.[patch.field];
         next.label = next.label || patch.field;
-        Object.assign(next, defaultsForType(inferType(value), value));
+        Object.assign(next, defaultsForType(inferRowType({ field: patch.field, nodeClass: node?.classType, value }), value));
       }
       if (patch.type) {
         const value = workflow?.[next.nodeId]?.inputs?.[next.field];
@@ -312,6 +348,10 @@ export function TemplateEditorModal({ selectedTemplate, onClose, onSaved }) {
       }
       return next;
     }));
+  }
+
+  function moveInputRow(rowId, direction) {
+    setInputRows(current => moveRow(current, rowId, direction));
   }
 
   function addOutputRow() {
@@ -325,6 +365,10 @@ export function TemplateEditorModal({ selectedTemplate, onClose, onSaved }) {
 
   function updateOutputRow(rowId, patch) {
     setOutputRows(current => current.map(row => row.rowId === rowId ? { ...row, ...patch } : row));
+  }
+
+  function moveOutputRow(rowId, direction) {
+    setOutputRows(current => moveRow(current, rowId, direction));
   }
 
   async function saveTemplate() {
@@ -396,10 +440,49 @@ export function TemplateEditorModal({ selectedTemplate, onClose, onSaved }) {
               </button>
             </div>
             <div className="editorRows">
-              {inputRows.map(row => {
+              {inputRows.map((row, index) => {
                 const selectedNode = nodes.find(node => node.id === row.nodeId);
                 return (
-                  <div className={`editorRow inputEditorRow ${row.type === "menu" ? "isMenuRow" : ""}`} key={row.rowId}>
+                  <div
+                    className={`editorRow inputEditorRow ${row.type === "menu" ? "isMenuRow" : ""} ${draggingInputId === row.rowId ? "isDragging" : ""}`}
+                    key={row.rowId}
+                    onDragOver={event => {
+                      if (!draggingInputId || draggingInputId === row.rowId) return;
+                      event.preventDefault();
+                      event.dataTransfer.dropEffect = "move";
+                    }}
+                    onDrop={event => {
+                      event.preventDefault();
+                      setInputRows(current => reorderRows(current, draggingInputId, row.rowId));
+                      setDraggingInputId("");
+                    }}
+                  >
+                    <button
+                      type="button"
+                      className="rowDragHandle"
+                      draggable
+                      onClick={event => event.preventDefault()}
+                      onDragStart={event => {
+                        setDraggingInputId(row.rowId);
+                        event.dataTransfer.effectAllowed = "move";
+                        event.dataTransfer.setData("text/plain", row.rowId);
+                      }}
+                      onDragEnd={() => setDraggingInputId("")}
+                      onKeyDown={event => {
+                        if (event.key === "ArrowUp") {
+                          event.preventDefault();
+                          moveInputRow(row.rowId, -1);
+                        }
+                        if (event.key === "ArrowDown") {
+                          event.preventDefault();
+                          moveInputRow(row.rowId, 1);
+                        }
+                      }}
+                      title="Kéo để đổi thứ tự input. Có thể dùng ↑/↓ khi đang focus."
+                      aria-label={`Di chuyển input ${index + 1}`}
+                    >
+                      <GripVertical size={16} />
+                    </button>
                     <label className="field">
                       <span>ID node</span>
                       <select value={row.nodeId} onChange={event => updateInputRow(row.rowId, { nodeId: event.target.value })}>
@@ -486,8 +569,47 @@ export function TemplateEditorModal({ selectedTemplate, onClose, onSaved }) {
               </button>
             </div>
             <div className="editorRows">
-              {outputRows.map(row => (
-                <div className="editorRow outputEditorRow" key={row.rowId}>
+              {outputRows.map((row, index) => (
+                <div
+                  className={`editorRow outputEditorRow ${draggingOutputId === row.rowId ? "isDragging" : ""}`}
+                  key={row.rowId}
+                  onDragOver={event => {
+                    if (!draggingOutputId || draggingOutputId === row.rowId) return;
+                    event.preventDefault();
+                    event.dataTransfer.dropEffect = "move";
+                  }}
+                  onDrop={event => {
+                    event.preventDefault();
+                    setOutputRows(current => reorderRows(current, draggingOutputId, row.rowId));
+                    setDraggingOutputId("");
+                  }}
+                >
+                  <button
+                    type="button"
+                    className="rowDragHandle"
+                    draggable
+                    onClick={event => event.preventDefault()}
+                    onDragStart={event => {
+                      setDraggingOutputId(row.rowId);
+                      event.dataTransfer.effectAllowed = "move";
+                      event.dataTransfer.setData("text/plain", row.rowId);
+                    }}
+                    onDragEnd={() => setDraggingOutputId("")}
+                    onKeyDown={event => {
+                      if (event.key === "ArrowUp") {
+                        event.preventDefault();
+                        moveOutputRow(row.rowId, -1);
+                      }
+                      if (event.key === "ArrowDown") {
+                        event.preventDefault();
+                        moveOutputRow(row.rowId, 1);
+                      }
+                    }}
+                    title="Kéo để đổi thứ tự output. Có thể dùng ↑/↓ khi đang focus."
+                    aria-label={`Di chuyển output ${index + 1}`}
+                  >
+                    <GripVertical size={16} />
+                  </button>
                   <label className="field">
                     <span>ID node Save</span>
                     <select value={row.nodeId} onChange={event => updateOutputRow(row.rowId, { nodeId: event.target.value })}>

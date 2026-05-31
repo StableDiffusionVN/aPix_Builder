@@ -17,6 +17,8 @@
   --success: #7dd3a8;
   --shadow: 0 20px 45px rgba(var(--accent-rgb), 0.16);
   --radius: 16px;
+  --canvas-bg: rgba(2, 3, 11, 0.56);
+  --canvas-checker: rgba(255, 255, 255, 0.045);
   --main-font: "Be Vietnam Pro";
   font-family: var(--main-font), Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   line-height: 1.5;
@@ -86,6 +88,8 @@ html[data-theme="light"] {
   --danger-bg: rgba(220, 38, 38, 0.12);
   --success: #15803d;
   --shadow: 0 20px 45px rgba(0, 0, 0, 0.08);
+  --canvas-bg: #e4e4e7;
+  --canvas-checker: rgba(23, 23, 23, 0.07);
 }
 
 html[data-theme="sdvn"] {
@@ -2407,11 +2411,11 @@ html[data-theme="light"] .stopButton:disabled {
   border: 1px solid var(--border);
   border-radius: 12px;
   background:
-    linear-gradient(45deg, rgba(255, 255, 255, 0.045) 25%, transparent 25%),
-    linear-gradient(-45deg, rgba(255, 255, 255, 0.045) 25%, transparent 25%),
-    linear-gradient(45deg, transparent 75%, rgba(255, 255, 255, 0.045) 75%),
-    linear-gradient(-45deg, transparent 75%, rgba(255, 255, 255, 0.045) 75%);
-  background-color: rgba(2, 3, 11, 0.56);
+    linear-gradient(45deg, var(--canvas-checker) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--canvas-checker) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--canvas-checker) 75%),
+    linear-gradient(-45deg, transparent 75%, var(--canvas-checker) 75%);
+  background-color: var(--canvas-bg);
   background-position: 0 0, 0 12px, 12px -12px, -12px 0;
   background-size: 24px 24px;
   overscroll-behavior: contain;
@@ -2431,20 +2435,28 @@ html[data-theme="light"] .stopButton:disabled {
 }
 
 .outputSizeBadge,
-.imageSizeBadge {
+.imageSizeBadge,
+.outputTimingBadge {
   position: absolute;
-  right: 12px;
   bottom: 10px;
   z-index: 3;
-  padding: 4px 8px;
-  border: 1px solid var(--border);
+  padding: 4px 9px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 8px;
-  background: rgba(8, 8, 18, 0.58);
-  color: var(--muted-2);
+  background: rgba(8, 8, 18, 0.72);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  color: rgba(255, 255, 255, 0.94);
   font-size: 11px;
   font-weight: 650;
   line-height: 1;
+  letter-spacing: 0.01em;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
   pointer-events: none;
+}
+
+.outputSizeBadge {
+  right: 12px;
 }
 
 .imageSizeBadge {
@@ -2453,19 +2465,7 @@ html[data-theme="light"] .stopButton:disabled {
 }
 
 .outputTimingBadge {
-  position: absolute;
   left: 12px;
-  bottom: 10px;
-  z-index: 3;
-  padding: 4px 8px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: rgba(8, 8, 18, 0.58);
-  color: var(--muted-2);
-  font-size: 11px;
-  font-weight: 650;
-  line-height: 1;
-  pointer-events: none;
 }
 
 .downloadButton {
@@ -3959,3 +3959,426 @@ html[data-theme="light"] .themeMenuItem {
   position: relative;
   flex: 1;
 }
+
+/* ── Progress Bar ─────────────────────────────────────────── */
+.progressBarWrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px 4px;
+  border-bottom: 1px solid var(--border);
+}
+.progressBar {
+  flex: 1;
+  height: 4px;
+  background: var(--border-strong);
+  border-radius: 2px;
+  overflow: hidden;
+  position: relative;
+}
+.progressFill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 2px;
+  transition: width 0.2s ease;
+}
+.progressBar.indeterminate .progressFill {
+  width: 40%;
+  animation: progressSlide 1.4s ease-in-out infinite;
+}
+@keyframes progressSlide {
+  0% { transform: translateX(-110%); }
+  100% { transform: translateX(350%); }
+}
+.progressLabel {
+  font-size: 11px;
+  color: var(--muted-2);
+  white-space: nowrap;
+  min-width: 60px;
+  text-align: right;
+}
+.emptyStateProgress {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--accent);
+  margin: 4px 0 0;
+}
+
+/* ── Health Indicator ─────────────────────────────────────── */
+.healthDot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  margin-left: auto;
+  cursor: help;
+  flex-shrink: 0;
+}
+.healthDot.health-online  { color: #4ade80; }
+.healthDot.health-loading { color: var(--muted-2); }
+.healthDot.health-offline { color: var(--danger); }
+
+.healthBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 2px 7px;
+  border-radius: 20px;
+  margin-left: 6px;
+}
+.healthBadge.health-online  { background: rgba(74,222,128,0.14); color: #4ade80; }
+.healthBadge.health-loading { background: var(--panel-soft); color: var(--muted-2); }
+.healthBadge.health-offline { background: var(--danger-bg); color: var(--danger); }
+
+/* ── Running State (replaces emptyState when running) ─────── */
+.runningState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  padding: 24px 16px;
+  text-align: center;
+  width: 100%;
+  max-width: 340px;
+}
+
+.runningRing {
+  position: relative;
+  width: 88px;
+  height: 88px;
+  flex-shrink: 0;
+}
+.runningRing svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.runningRingSpin {
+  animation: ringSpin 1.1s linear infinite;
+  transform-origin: 40px 40px;
+}
+@keyframes ringSpin {
+  to { transform: rotate(360deg); }
+}
+.runningRingCenter {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.runningRingPct {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--accent);
+  line-height: 1;
+}
+.runningRingSpinner {
+  color: var(--muted-2);
+}
+
+.runningTitle {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0;
+  letter-spacing: 0.01em;
+}
+
+.runPhases {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.runPhase {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 3px 10px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  color: var(--muted-2);
+  transition: color 0.25s, border-color 0.25s, background 0.25s;
+}
+.runPhase.active {
+  border-color: rgba(var(--accent-rgb), 0.6);
+  color: var(--accent);
+  background: rgba(var(--accent-rgb), 0.07);
+}
+.runPhase.done {
+  border-color: rgba(125, 211, 168, 0.4);
+  color: var(--success);
+}
+.runPhaseSep {
+  display: block;
+  width: 14px;
+  height: 1px;
+  background: var(--border);
+  flex-shrink: 0;
+}
+
+.runDetail {
+  font-size: 12px;
+  color: var(--muted-2);
+  margin: 0;
+  max-width: 280px;
+  line-height: 1.6;
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+
+/* ── Pending (waiting) history card ───────────────────────── */
+.historyItem.pendingItem {
+  cursor: pointer;
+  border: 1px dashed rgba(var(--accent-rgb), 0.5);
+  background: rgba(var(--accent-rgb), 0.05);
+}
+.historyItem.pendingItem.active {
+  border-style: solid;
+  border-color: var(--accent);
+  background: rgba(var(--accent-rgb), 0.1);
+}
+.historyThumb.pendingThumb {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  color: var(--accent);
+}
+.historyThumb.pendingThumb b {
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* ── Mask Editor ──────────────────────────────────────────── */
+.maskBadge {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(220, 38, 38, 0.78);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.maskEditorModal {
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  max-width: min(1480px, 96vw);
+  width: min(1480px, 96vw);
+  height: min(96vh, 1040px);
+  overflow: hidden;
+}
+.maskEditorModal .modalHeader {
+  align-items: center;
+}
+.maskHeaderActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+.maskToolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 2px 0 10px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 0;
+}
+.maskTool {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel-soft);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.maskToolIconOnly {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+}
+.maskTool.active {
+  border-color: rgba(var(--accent-rgb), 0.6);
+  color: var(--accent);
+  background: rgba(var(--accent-rgb), 0.12);
+}
+.maskBrushSize {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--muted);
+}
+.maskHeaderActions .maskBrushSize {
+  margin-left: 0;
+}
+.maskBrushSize input[type="range"] { width: 130px; }
+.maskBrushSize b { min-width: 28px; text-align: right; }
+.maskOpacityPick { margin-left: 0; }
+.maskOpacityPick input[type="range"] { width: 90px; }
+.maskOpacityPick b { min-width: 36px; }
+.maskColorPick {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.maskColorPick input[type="color"] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: none;
+  padding: 0;
+  background: none;
+  cursor: pointer;
+  opacity: 0;
+}
+.maskColorPick span {
+  width: 26px;
+  height: 26px;
+  border: 2px solid rgba(255, 255, 255, 0.82);
+  border-radius: 999px;
+  background: var(--mask-color);
+  box-shadow: 0 0 0 1px var(--border), inset 0 0 0 1px rgba(0, 0, 0, 0.18);
+  pointer-events: none;
+}
+html[data-theme="light"] .maskColorPick span {
+  border-color: rgba(23, 23, 23, 0.18);
+}
+
+.maskStage {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background:
+    linear-gradient(45deg, rgba(255,255,255,0.03) 25%, transparent 25%),
+    linear-gradient(-45deg, rgba(255,255,255,0.03) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, rgba(255,255,255,0.03) 75%),
+    linear-gradient(-45deg, transparent 75%, rgba(255,255,255,0.03) 75%);
+  background-color: rgba(2, 3, 15, 0.72);
+  background-size: 20px 20px;
+  background-position: 0 0, 0 10px, 10px -10px, -10px 0;
+  touch-action: none;
+  cursor: none;
+}
+html[data-theme="light"] .maskStage {
+  background:
+    linear-gradient(45deg, rgba(23, 23, 23, 0.055) 25%, transparent 25%),
+    linear-gradient(-45deg, rgba(23, 23, 23, 0.055) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, rgba(23, 23, 23, 0.055) 75%),
+    linear-gradient(-45deg, transparent 75%, rgba(23, 23, 23, 0.055) 75%);
+  background-color: #f1f5f9;
+  background-size: 20px 20px;
+  background-position: 0 0, 0 10px, 10px -10px, -10px 0;
+}
+.maskViewport {
+  position: relative;
+  display: inline-flex;
+  transform-origin: center center;
+  will-change: transform;
+}
+.maskBaseImage {
+  display: block;
+  max-width: min(calc(96vw - 64px), 1220px);
+  max-height: calc(96vh - 134px);
+  width: auto;
+  height: auto;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+.maskCanvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.maskBrushCursor {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  border: 1.5px solid rgba(255, 80, 80, 0.95);
+  background: rgba(255, 80, 80, 0.18);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+  z-index: 5;
+}
+.maskBrushCursor.erase {
+  border-color: rgba(255, 255, 255, 0.95);
+  background: rgba(255, 255, 255, 0.14);
+}
+.maskLoading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted-2);
+  background: rgba(0, 0, 0, 0.3);
+}
+.maskFloatingBar {
+  z-index: 8;
+}
+.maskFooter {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 0;
+}
+.maskCancel { width: auto; padding: 0 16px; }
+.maskSave {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 18px;
+  border: none;
+  border-radius: 10px;
+  background: var(--accent);
+  color: var(--panel-strong);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.maskSave:disabled { opacity: 0.6; cursor: default; }

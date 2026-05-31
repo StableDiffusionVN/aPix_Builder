@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Download, Filter, Star, Workflow, X } from "lucide-react";
+import { Download, Filter, Loader2, Star, Workflow, X } from "lucide-react";
 
 const HISTORY_FAVORITES_KEY = "comfyui-build:history-favorites:v1";
 
@@ -53,7 +53,18 @@ function matchesTimeFilter(value, filter) {
   return true;
 }
 
-export function OutputGallery({ history = [], onDownload, onRestore, onDelete }) {
+export function OutputGallery({
+  history = [],
+  onDownload,
+  onRestore,
+  onDelete,
+  pending = false,
+  pendingActive = false,
+  pendingLabel = "",
+  pendingProgressPct = null,
+  queueCount = 0,
+  onShowWaiting
+}) {
   const [timeFilter, setTimeFilter] = useState("all");
   const [templateFilter, setTemplateFilter] = useState("all");
   const [favoritesOnly, setFavoritesOnly] = useState(false);
@@ -121,6 +132,30 @@ export function OutputGallery({ history = [], onDownload, onRestore, onDelete })
         </div>
       </div>
       <div className="historyList">
+        {pending ? (
+          <article
+            className={`historyItem pendingItem ${pendingActive ? "active" : ""}`}
+            role="button"
+            tabIndex={0}
+            onClick={() => onShowWaiting?.()}
+            onKeyDown={event => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                onShowWaiting?.();
+              }
+            }}
+            title="Quay lại màn hình đang xử lý"
+          >
+            <span className="historyThumb pendingThumb">
+              <Loader2 size={20} className="spin" />
+              {pendingProgressPct !== null ? <b>{pendingProgressPct}%</b> : null}
+            </span>
+            <div className="historyMeta">
+              <strong>Đang xử lý{queueCount > 0 ? ` (+${queueCount} chờ)` : ""}</strong>
+              <span>{pendingLabel || "ComfyUI đang chạy..."}</span>
+            </div>
+          </article>
+        ) : null}
         {visibleHistory.map(item => {
           const primaryOutput = item.outputs?.[0];
           return (
@@ -182,7 +217,7 @@ export function OutputGallery({ history = [], onDownload, onRestore, onDelete })
             </article>
           );
         })}
-        {!visibleHistory.length ? (
+        {!visibleHistory.length && !pending ? (
           <div className="emptyHistory">
             <span>{history.length ? "Không có lịch sử khớp bộ lọc" : "Chưa có lịch sử tạo"}</span>
             <small>{history.length ? "Đổi bộ lọc hoặc tắt Favourite." : "Ảnh đã tạo sẽ được lưu cục bộ trên trình duyệt."}</small>

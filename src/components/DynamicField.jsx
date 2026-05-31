@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Check, Eye, Filter, Images, Pencil, RefreshCcw, Star, Trash2, Upload, X } from "lucide-react";
+import { Check, Eye, Filter, Images, Pencil, RefreshCcw, Scissors, Star, Trash2, Upload, X } from "lucide-react";
 import { ImageEditorModal } from "./ImageEditorModal";
+import { MaskEditorModal } from "./MaskEditorModal";
 import { defaultValue } from "../lib/template";
 import { DYNAMIC_FIELD_TYPES, canonicalDynamicType, dynamicFieldChoices, isDynamicFieldType } from "../lib/dynamicTypes";
 
@@ -114,6 +115,7 @@ export function DynamicField({ item, value, onChange, inputImages = [], onRefres
   const [favoriteInputImages, setFavoriteInputImages] = useState(() => readStoredSet(INPUT_FAVORITES_KEY));
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
+  const [maskEditorOpen, setMaskEditorOpen] = useState(false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxImage, setLightboxImage] = useState(null);
   const [uploadImageSize, setUploadImageSize] = useState({ width: 0, height: 0 });
@@ -123,6 +125,8 @@ export function DynamicField({ item, value, onChange, inputImages = [], onRefres
   const lightboxDragRef = useRef(null);
   const selectedInputName = value?.kind === "input-image" ? value.name : "";
   const selectedImageUrl = value?.startsWith?.("data:image") ? value : value?.kind === "input-image" ? value.url : "";
+  const maskDataUrl = value?.kind === "input-image" ? (value.maskDataUrl || "") : "";
+  const canMask = value?.kind === "input-image" && Boolean(selectedImageUrl);
   const isNumberType = ui.type === "number" || ui.type === "int" || ui.type === "float";
   const isSlider = ui.type === "slider" || (isNumberType && display === "slider");
   const canResetNumber = isNumberType || ui.type === "slider";
@@ -310,6 +314,16 @@ export function DynamicField({ item, value, onChange, inputImages = [], onRefres
     onChange(dataUrl);
   }
 
+  function handleSaveMask(nextMaskDataUrl) {
+    if (value?.kind !== "input-image") return;
+    if (nextMaskDataUrl) {
+      onChange({ ...value, maskDataUrl: nextMaskDataUrl });
+    } else {
+      const { maskDataUrl: _omit, ...rest } = value;
+      onChange(rest);
+    }
+  }
+
   async function handleDeleteInputImage(image) {
     if (!image?.name) return;
     const response = await fetch("/api/input-images/delete", {
@@ -488,6 +502,20 @@ export function DynamicField({ item, value, onChange, inputImages = [], onRefres
                 >
                   <Eye size={14} />
                 </button>
+                {canMask ? (
+                  <button
+                    type="button"
+                    className="uploadView"
+                    onClick={event => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      setMaskEditorOpen(true);
+                    }}
+                    title={maskDataUrl ? "Sửa mask (đã có mask)" : "Tô mask cho ảnh"}
+                  >
+                    <Scissors size={14} />
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   className="uploadView"
@@ -516,6 +544,11 @@ export function DynamicField({ item, value, onChange, inputImages = [], onRefres
               {uploadImageSize.width && uploadImageSize.height ? (
                 <div className="imageSizeBadge">
                   {uploadImageSize.width} x {uploadImageSize.height}
+                </div>
+              ) : null}
+              {maskDataUrl ? (
+                <div className="maskBadge" title="Ảnh đã có mask">
+                  <Scissors size={11} /> Mask
                 </div>
               ) : null}
             </div>
@@ -677,6 +710,16 @@ export function DynamicField({ item, value, onChange, inputImages = [], onRefres
             title={`${label} - Image Editor`}
             onClose={() => setEditorOpen(false)}
             onSave={handleSaveEditedInput}
+          />,
+          document.body
+        ) : null}
+        {maskEditorOpen && selectedImageUrl ? createPortal(
+          <MaskEditorModal
+            source={selectedImageUrl}
+            initialMask={maskDataUrl}
+            title={`${label} - Tô Mask`}
+            onClose={() => setMaskEditorOpen(false)}
+            onSave={handleSaveMask}
           />,
           document.body
         ) : null}

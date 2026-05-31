@@ -82,6 +82,41 @@ export async function uploadImageToComfy(target, upload, signal) {
   return response.json();
 }
 
+export async function uploadMaskToComfy(target, maskUpload, originalRef, signal) {
+  const extension = maskUpload.mimeType?.includes("jpeg") ? "jpg" : (maskUpload.mimeType?.split("/")[1] || "png");
+  const filename = `sdvn_mask_${Date.now()}_${maskUpload.index ?? 0}.${extension}`;
+  const form = new FormData();
+  form.append("image", new File([maskUpload.buffer], filename, { type: maskUpload.mimeType || "image/png" }));
+  form.append("type", "input");
+  form.append("subfolder", "clipspace");
+  form.append("overwrite", "true");
+  form.append("original_ref", JSON.stringify(originalRef));
+  const response = await fetch(`${target.httpBase}/upload/mask`, {
+    method: "POST",
+    headers: target.headers,
+    body: form,
+    signal: signal || AbortSignal.timeout(120 * 1000)
+  });
+  if (!response.ok) {
+    throw new Error(`ComfyUI /upload/mask failed: ${response.status} ${await response.text()}`);
+  }
+  return response.json();
+}
+
+export async function cancelQueueItems(target, { clear = false, promptIds = [] } = {}, signal) {
+  const body = clear ? { clear: true } : { delete: promptIds };
+  const response = await fetch(`${target.httpBase}/queue`, {
+    method: "POST",
+    headers: { "content-type": "application/json", ...target.headers },
+    body: JSON.stringify(body),
+    signal: signal || AbortSignal.timeout(15 * 1000)
+  });
+  if (!response.ok) {
+    throw new Error(`ComfyUI /queue failed: ${response.status} ${await response.text()}`);
+  }
+  return { ok: true };
+}
+
 export function uploadedImageUrl(target, uploaded) {
   const filename = uploaded.name || uploaded.filename || uploaded.image || uploaded;
   const subfolder = uploaded.subfolder || "";
@@ -110,7 +145,7 @@ export async function queuePrompt(target, workflow, clientId, signal) {
   return queued;
 }
 
-export function waitForPrompt(target, promptId, clientId, run, timeoutMs) {
+export function waitForPrompt(target, promptId, clientId, run, timeoutMs, onEvent) {
   return new Promise((resolve, reject) => {
     const wsUrl = `${target.wsBase}/ws?clientId=${clientId}`;
 
@@ -145,10 +180,15 @@ export function waitForPrompt(target, promptId, clientId, run, timeoutMs) {
           const message = JSON.parse(event.data);
           const data = message.data || {};
           if (data.prompt_id && data.prompt_id !== promptId) return;
+
+          // Forward all events to SSE subscribers
+          try { onEvent?.(message); } catch {}
+
           if (message.type === "execution_error") {
             const node = data.node_id || data.node || "unknown";
+            const nodeType = data.node_type ? ` (${data.node_type})` : "";
             const detail = data.exception_message || data.exception_type || JSON.stringify(data);
-            finish(reject, new Error(`ComfyUI execution error at node ${node}: ${detail}`));
+            finish(reject, new Error(`ComfyUI execution error at node ${node}${nodeType}: ${detail}`));
             return;
           }
           if (message.type === "execution_interrupted") {

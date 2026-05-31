@@ -5,6 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import YAML from "yaml";
 import {
+  cancelQueueItems,
   getHistory,
   getComfyDiscovery,
   getComfyHealth,
@@ -15,6 +16,7 @@ import {
   parseDataUrl,
   queuePrompt,
   uploadImageToComfy,
+  uploadMaskToComfy,
   uploadedImageUrl,
   waitForPrompt
 } from "./lib/comfyClient.js";
@@ -42,6 +44,45 @@ const port = Number(process.env.PORT || 8787);
 const comfyTimeoutMs = Number(process.env.COMFY_TIMEOUT_MS || 10 * 60 * 1000);
 const maxImageBodyBytes = Number(process.env.MAX_IMAGE_BODY_BYTES || 512 * 1024 * 1024);
 const activeRuns = new Map();
+const pendingSseClients = new Map();
+
+function broadcastRunEvent(run, message) {
+  if (!run.sseClients?.size) return;
+  const data = `data: ${JSON.stringify(message)}\n\n`;
+  for (const client of run.sseClients) {
+    try { client.res.write(data); } catch { run.sseClients.delete(client); }
+  }
+}
+
+async function handleRunEvents(req, res, url) {
+  const runId = url.searchParams.get("runId");
+  if (!runId) { send(res, 400, { error: "Missing runId" }); return; }
+  res.writeHead(200, {
+    "content-type": "text/event-stream",
+    "cache-control": "no-cache",
+    "connection": "keep-alive"
+  });
+  res.flushHeaders?.();
+  const client = { res };
+  const run = activeRuns.get(runId);
+  if (run) {
+    run.sseClients.add(client);
+  } else {
+    if (!pendingSseClients.has(runId)) pendingSseClients.set(runId, new Set());
+    pendingSseClients.get(runId).add(client);
+    // Auto-cleanup pending client after 60s if run never starts
+    setTimeout(() => {
+      if (pendingSseClients.get(runId)?.has(client)) {
+        pendingSseClients.get(runId).delete(client);
+        try { res.end(); } catch {}
+      }
+    }, 60000);
+  }
+  req.on("close", () => {
+    activeRuns.get(runId)?.sseClients?.delete(client);
+    pendingSseClients.get(runId)?.delete(client);
+  });
+}
 const templates = createTemplateService({ configDir, defaultDir: defaultTemplateDir, templatesDir: userTemplatesDir });
 
 async function readCustomPresets() {
@@ -77,8 +118,10 @@ async function handleRun(req, res) {
     cancelled: false,
     target: null,
     promptId: null,
-    ws: null
+    ws: null,
+    sseClients: new Set(pendingSseClients.get(runId) || [])
   };
+  pendingSseClients.delete(runId);
   activeRuns.set(runId, run);
 
   try {
@@ -94,6 +137,8 @@ async function handleRun(req, res) {
       inputDir,
       uploadDir,
       uploadImageToComfy,
+      uploadMaskToComfy,
+      parseDataUrl,
       uploadedImageUrl,
       urlUploadMode: template.id === "image-adjust" ? "local_path" : "comfy_view_url"
     };
@@ -105,7 +150,8 @@ async function handleRun(req, res) {
     const clientId = randomUUID();
     const queued = await queuePrompt(target, workflow, clientId, abortController.signal);
     run.promptId = queued.prompt_id;
-    await waitForPrompt(target, queued.prompt_id, clientId, run, comfyTimeoutMs);
+    const onEvent = (message) => broadcastRunEvent(run, message);
+    await waitForPrompt(target, queued.prompt_id, clientId, run, comfyTimeoutMs, onEvent);
     const historyRoot = await getHistory(target, queued.prompt_id, abortController.signal);
     const history = historyRoot[queued.prompt_id];
     const outputs = collectOutputs(config, history, target);
@@ -138,6 +184,10 @@ async function handleRun(req, res) {
       historyItem
     });
   } finally {
+    broadcastRunEvent(run, { type: "run_end", data: { runId } });
+    for (const client of run.sseClients) {
+      try { client.res.end(); } catch {}
+    }
     activeRuns.delete(runId);
   }
 }
@@ -158,6 +208,9 @@ async function handleCancel(req, res) {
   }
   if (run.target) {
     try {
+      if (run.promptId) {
+        await cancelQueueItems(run.target, { promptIds: [run.promptId] }).catch(() => {});
+      }
       await interruptComfy(run.target);
     } catch (error) {
       send(res, 200, {
@@ -619,8 +672,19 @@ const server = http.createServer(async (req, res) => {
       await handleComfyDiscovery(req, res, url);
     } else if (req.method === "GET" && url.pathname === "/api/comfy-health") {
       await handleComfyHealth(req, res, url);
+    } else if (req.method === "POST" && url.pathname === "/api/comfy-queue-cancel") {
+      const body = JSON.parse(await readBody(req) || "{}");
+      const target = normalizeComfyTarget(body.address);
+      await cancelQueueItems(target, { clear: Boolean(body.clear), promptIds: body.promptIds || [] });
+      send(res, 200, { ok: true });
+    } else if (req.method === "GET" && url.pathname === "/api/run-events") {
+      await handleRunEvents(req, res, url);
     } else if (req.method === "GET" && url.pathname === "/api/input-images") {
-      send(res, 200, { images: await listInputImages() });
+      const all = await listInputImages();
+      const page = Math.max(1, parseInt(url.searchParams.get("page") || "1", 10));
+      const limit = Math.min(200, Math.max(1, parseInt(url.searchParams.get("limit") || "200", 10)));
+      const start = (page - 1) * limit;
+      send(res, 200, { images: all.slice(start, start + limit), total: all.length, page, limit });
     } else if (req.method === "POST" && url.pathname === "/api/input-images") {
       await handleInputUpload(req, res);
     } else if (req.method === "POST" && url.pathname === "/api/input-images/delete") {

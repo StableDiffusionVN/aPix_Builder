@@ -1,0 +1,516 @@
+import { useEffect, useRef, useState } from "react";
+import { Brush, Eraser, Hand, RotateCcw, X, Check, Loader2, ZoomIn, ZoomOut, Maximize, Undo2, Redo2 } from "lucide-react";
+
+const MIN_ZOOM = 0.2;
+const MAX_ZOOM = 16;
+const ZOOM_TRANSITION = "transform 0.16s cubic-bezier(0.22, 1, 0.36, 1)";
+
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function hexToRgb(hex) {
+  const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex || "");
+  return m
+    ? { r: parseInt(m[1], 16), g: parseInt(m[2], 16), b: parseInt(m[3], 16) }
+    : { r: 255, g: 0, b: 0 };
+}
+
+// Mask painter: user paints the region to inpaint.
+// On export, painted region → alpha 0, unpainted → alpha 255 (ComfyUI: mask = 1 - alpha).
+export function MaskEditorModal({ source, initialMask, title = "Tô Mask", onClose, onSave }) {
+  const canvasRef = useRef(null);
+  const stageRef = useRef(null);
+  const imageRef = useRef(null);
+  const drawingRef = useRef(false);
+  const panningRef = useRef(null);
+  const spaceHeldRef = useRef(false);
+  const lastPointRef = useRef(null);
+  const historyRef = useRef([]);
+  const [ready, setReady] = useState(false);
+  const [brushSize, setBrushSize] = useState(40);
+  const [tool, setTool] = useState("brush"); // brush | erase | pan
+  const [maskColor, setMaskColor] = useState("#ff0000");
+  const [maskOpacity, setMaskOpacity] = useState(50);
+  const [saving, setSaving] = useState(false);
+  const [dims, setDims] = useState({ width: 0, height: 0 });
+  const [view, setView] = useState({ zoom: 1, pan: { x: 0, y: 0 } });
+  const [spaceHeld, setSpaceHeld] = useState(false);
+  const [isPanning, setIsPanning] = useState(false);
+  const [cursor, setCursor] = useState(null); // {x, y, size} in stage coords
+  const [historyIndex, setHistoryIndex] = useState(-1);
+
+  const erasing = tool === "erase";
+  const panActive = tool === "pan" || spaceHeld;
+  const canUndo = historyIndex > 0;
+  const canRedo = historyIndex >= 0 && historyIndex < historyRef.current.length - 1;
+
+  // Load image then (optionally) initial mask onto the paint canvas.
+  useEffect(() => {
+    let cancelled = false;
+    setReady(false);
+    historyRef.current = [];
+    setHistoryIndex(-1);
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      if (cancelled) return;
+      imageRef.current = img;
+      const canvas = canvasRef.current;
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      setDims({ width: img.naturalWidth, height: img.naturalHeight });
+      const ctx = canvas.getContext("2d");
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      if (initialMask) {
+        const maskImg = new Image();
+        maskImg.crossOrigin = "anonymous";
+        maskImg.onload = () => {
+          if (cancelled) return;
+          const tmp = document.createElement("canvas");
+          tmp.width = canvas.width;
+          tmp.height = canvas.height;
+          const tctx = tmp.getContext("2d");
+          tctx.drawImage(maskImg, 0, 0, canvas.width, canvas.height);
+          const data = tctx.getImageData(0, 0, canvas.width, canvas.height);
+          const out = ctx.createImageData(canvas.width, canvas.height);
+          const rgb = hexToRgb(maskColor);
+          for (let i = 0; i < data.data.length; i += 4) {
+            if (data.data[i + 3] < 128) {
+              out.data[i] = rgb.r; out.data[i + 1] = rgb.g; out.data[i + 2] = rgb.b; out.data[i + 3] = 255;
+            }
+          }
+          ctx.putImageData(out, 0, 0);
+          resetHistory(canvas);
+          setReady(true);
+        };
+        maskImg.onerror = () => {
+          resetHistory(canvas);
+          setReady(true);
+        };
+        maskImg.src = initialMask;
+      } else {
+        resetHistory(canvas);
+        setReady(true);
+      }
+    };
+    img.onerror = () => setReady(true);
+    img.src = source;
+    return () => { cancelled = true; };
+  }, [source, initialMask]);
+
+  useEffect(() => {
+    function claimShortcut(event) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+    function onKeyDown(event) {
+      if (event.key === "Escape") { event.stopPropagation(); onClose(); return; }
+      const hasUndoModifier = event.metaKey || event.ctrlKey;
+      if (hasUndoModifier && event.key.toLowerCase() === "z" && !isTextTarget(event.target)) {
+        claimShortcut(event);
+        if (event.shiftKey) redo();
+        else undo();
+        return;
+      }
+      if (event.code === "Space" && !isTextTarget(event.target)) {
+        claimShortcut(event);
+        if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+        if (!spaceHeldRef.current) { spaceHeldRef.current = true; setSpaceHeld(true); }
+        return;
+      }
+      if (event.key === "+" || event.key === "=") { claimShortcut(event); updateZoom(0.2); }
+      else if (event.key === "-" || event.key === "_") { claimShortcut(event); updateZoom(-0.2); }
+      else if (event.key === "0") { claimShortcut(event); resetView(); }
+      else if (!hasUndoModifier && !event.altKey && !event.shiftKey && !isTextTarget(event.target)) {
+        const key = event.key.toLowerCase();
+        if (key === "b") {
+          claimShortcut(event);
+          setTool("brush");
+        } else if (key === "e") {
+          claimShortcut(event);
+          setTool("erase");
+        } else if (key === "h") {
+          claimShortcut(event);
+          setTool("pan");
+        } else if (event.key === "[") {
+          claimShortcut(event);
+          const step = event.repeat ? 8 : 1;
+          setBrushSize(current => clamp(current - step, 5, 300));
+        } else if (event.key === "]") {
+          claimShortcut(event);
+          const step = event.repeat ? 8 : 1;
+          setBrushSize(current => clamp(current + step, 5, 300));
+        }
+      }
+    }
+    function onKeyUp(event) {
+      if (event.code === "Space" && !isTextTarget(event.target)) {
+        claimShortcut(event);
+        spaceHeldRef.current = false;
+        setSpaceHeld(false);
+      }
+    }
+    window.addEventListener("keydown", onKeyDown, true);
+    window.addEventListener("keyup", onKeyUp, true);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown, true);
+      window.removeEventListener("keyup", onKeyUp, true);
+    };
+  }, [historyIndex, onClose]);
+
+  function isTextTarget(target) {
+    if (!(target instanceof HTMLElement)) return false;
+    if (target.isContentEditable || target.tagName === "TEXTAREA" || target.tagName === "SELECT") return true;
+    if (target.tagName !== "INPUT") return false;
+    const textInputTypes = new Set(["", "text", "search", "url", "tel", "email", "password", "number"]);
+    return textInputTypes.has(target.getAttribute("type") || "");
+  }
+
+  function snapshotCanvas(canvas = canvasRef.current) {
+    if (!canvas?.width || !canvas?.height) return null;
+    return canvas.getContext("2d").getImageData(0, 0, canvas.width, canvas.height);
+  }
+
+  function restoreSnapshot(snapshot) {
+    const canvas = canvasRef.current;
+    if (!canvas || !snapshot) return;
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.putImageData(snapshot, 0, 0);
+  }
+
+  function resetHistory(canvas = canvasRef.current) {
+    const snapshot = snapshotCanvas(canvas);
+    historyRef.current = snapshot ? [snapshot] : [];
+    setHistoryIndex(snapshot ? 0 : -1);
+  }
+
+  function commitHistory() {
+    const snapshot = snapshotCanvas();
+    if (!snapshot) return;
+    historyRef.current = historyRef.current.slice(0, historyIndex + 1).concat(snapshot);
+    setHistoryIndex(historyRef.current.length - 1);
+  }
+
+  function undo() {
+    if (!canUndo) return;
+    const nextIndex = historyIndex - 1;
+    restoreSnapshot(historyRef.current[nextIndex]);
+    setHistoryIndex(nextIndex);
+  }
+
+  function redo() {
+    if (!canRedo) return;
+    const nextIndex = historyIndex + 1;
+    restoreSnapshot(historyRef.current[nextIndex]);
+    setHistoryIndex(nextIndex);
+  }
+
+  // Zoom keeping the point under `rel` (relative to stage center) stationary.
+  // Single pure updater on {zoom, pan} so React StrictMode double-invoke stays idempotent.
+  function updateZoom(delta, rel) {
+    setView(prev => {
+      const next = clamp(Number((prev.zoom + delta * prev.zoom).toFixed(3)), MIN_ZOOM, MAX_ZOOM);
+      if (next === prev.zoom) return prev;
+      const ratio = next / prev.zoom;
+      const p = rel || { x: 0, y: 0 };
+      return {
+        zoom: next,
+        pan: {
+          x: p.x * (1 - ratio) + prev.pan.x * ratio,
+          y: p.y * (1 - ratio) + prev.pan.y * ratio
+        }
+      };
+    });
+  }
+
+  function resetView() {
+    setView({ zoom: 1, pan: { x: 0, y: 0 } });
+  }
+
+  function handleWheel(event) {
+    event.preventDefault();
+    const rect = stageRef.current.getBoundingClientRect();
+    const rel = {
+      x: event.clientX - rect.left - rect.width / 2,
+      y: event.clientY - rect.top - rect.height / 2
+    };
+    updateZoom(event.deltaY > 0 ? -0.15 : 0.15, rel);
+  }
+
+  // Map a pointer event to natural-resolution canvas coordinates (transform-aware via rect).
+  function toCanvasPoint(event) {
+    const canvas = canvasRef.current;
+    const rect = canvas.getBoundingClientRect();
+    return {
+      x: ((event.clientX - rect.left) / rect.width) * canvas.width,
+      y: ((event.clientY - rect.top) / rect.height) * canvas.height
+    };
+  }
+
+  function updateCursorPreview(event) {
+    const stage = stageRef.current;
+    const canvas = canvasRef.current;
+    if (!stage || !canvas) return;
+    const stageRect = stage.getBoundingClientRect();
+    setCursor({
+      x: event.clientX - stageRect.left,
+      y: event.clientY - stageRect.top,
+      size: Math.max(4, brushSize)
+    });
+  }
+
+  function getBrushRadiusInCanvasPx() {
+    const canvas = canvasRef.current;
+    if (!canvas?.width) return brushSize / 2;
+    const rect = canvas.getBoundingClientRect();
+    const screenPxPerCanvasPx = rect.width / canvas.width;
+    if (!Number.isFinite(screenPxPerCanvasPx) || screenPxPerCanvasPx <= 0) return brushSize / 2;
+    return (brushSize / screenPxPerCanvasPx) / 2;
+  }
+
+  function strokeTo(point) {
+    const ctx = canvasRef.current.getContext("2d");
+    const radius = getBrushRadiusInCanvasPx();
+    ctx.globalCompositeOperation = erasing ? "destination-out" : "source-over";
+    ctx.fillStyle = maskColor;
+    const last = lastPointRef.current;
+    if (last) {
+      const dist = Math.hypot(point.x - last.x, point.y - last.y);
+      const steps = Math.max(1, Math.floor(dist / (radius / 2)));
+      for (let s = 1; s <= steps; s += 1) {
+        const t = s / steps;
+        ctx.beginPath();
+        ctx.arc(last.x + (point.x - last.x) * t, last.y + (point.y - last.y) * t, radius, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    } else {
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    lastPointRef.current = point;
+  }
+
+  function handlePointerDown(event) {
+    if (!ready) return;
+    event.preventDefault();
+    stageRef.current.setPointerCapture(event.pointerId);
+    // Pan when: hand tool, Space held, or middle mouse button.
+    if (panActive || event.button === 1) {
+      panningRef.current = {
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+        panX: view.pan.x,
+        panY: view.pan.y
+      };
+      setIsPanning(true);
+      return;
+    }
+    drawingRef.current = true;
+    lastPointRef.current = null;
+    strokeTo(toCanvasPoint(event));
+  }
+
+  function handlePointerMove(event) {
+    updateCursorPreview(event);
+    const panState = panningRef.current;
+    if (panState && panState.pointerId === event.pointerId) {
+      const nextPan = {
+        x: panState.panX + (event.clientX - panState.startX),
+        y: panState.panY + (event.clientY - panState.startY)
+      };
+      setView(prev => ({ ...prev, pan: nextPan }));
+      return;
+    }
+    if (!drawingRef.current) return;
+    event.preventDefault();
+    strokeTo(toCanvasPoint(event));
+  }
+
+  function handlePointerUp(event) {
+    const wasDrawing = drawingRef.current;
+    drawingRef.current = false;
+    if (panningRef.current) {
+      panningRef.current = null;
+      setIsPanning(false);
+    }
+    lastPointRef.current = null;
+    if (stageRef.current?.hasPointerCapture(event.pointerId)) {
+      stageRef.current.releasePointerCapture(event.pointerId);
+    }
+    if (wasDrawing) commitHistory();
+  }
+
+  // Re-tint already-painted pixels when the display color changes.
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || !ready) return;
+    const ctx = canvas.getContext("2d");
+    const data = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const rgb = hexToRgb(maskColor);
+    let changed = false;
+    for (let i = 0; i < data.data.length; i += 4) {
+      if (data.data[i + 3] > 0) {
+        data.data[i] = rgb.r; data.data[i + 1] = rgb.g; data.data[i + 2] = rgb.b;
+        changed = true;
+      }
+    }
+    if (changed) ctx.putImageData(data, 0, 0);
+  }, [maskColor, ready]);
+
+  function handleClear() {
+    const canvas = canvasRef.current;
+    canvas.getContext("2d").clearRect(0, 0, canvas.width, canvas.height);
+    commitHistory();
+  }
+
+  async function handleSave() {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    setSaving(true);
+    try {
+      const ctx = canvas.getContext("2d");
+      const painted = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const out = document.createElement("canvas");
+      out.width = canvas.width;
+      out.height = canvas.height;
+      const octx = out.getContext("2d");
+      const result = octx.createImageData(canvas.width, canvas.height);
+      let hasMask = false;
+      for (let i = 0; i < painted.data.length; i += 4) {
+        const isPainted = painted.data[i + 3] > 10;
+        if (isPainted) hasMask = true;
+        result.data[i] = 0;
+        result.data[i + 1] = 0;
+        result.data[i + 2] = 0;
+        result.data[i + 3] = isPainted ? 0 : 255;
+      }
+      octx.putImageData(result, 0, 0);
+      const maskDataUrl = hasMask ? out.toDataURL("image/png") : "";
+      await onSave(maskDataUrl);
+      onClose();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const zoomPct = Math.round(view.zoom * 100);
+  const showBrushCursor = cursor && ready && !panActive;
+  const stageCursor = panActive ? (isPanning ? "grabbing" : "grab") : "none";
+
+  return (
+    <div className="modalBackdrop maskEditorBackdrop" role="presentation" onMouseDown={onClose}>
+      <section
+        className="settingsModal maskEditorModal"
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        onMouseDown={event => event.stopPropagation()}
+      >
+        <div className="modalHeader">
+          <div>
+            <h2>Mask Editor</h2>
+          </div>
+          <div className="maskHeaderActions">
+            <label className="maskBrushSize">
+              <span>Brush Size</span>
+              <input type="range" min="5" max="300" value={brushSize} onChange={event => setBrushSize(Number(event.target.value))} />
+              <b>{brushSize}</b>
+            </label>
+            <label className="maskColorPick" title="Màu hiển thị mask" style={{ "--mask-color": maskColor }}>
+              <input type="color" value={maskColor} onChange={event => setMaskColor(event.target.value)} />
+              <span aria-hidden="true" />
+            </label>
+            <label className="maskBrushSize maskOpacityPick" title="Độ mờ hiển thị mask">
+              <span>Opacity</span>
+              <input type="range" min="10" max="100" value={maskOpacity} onChange={event => setMaskOpacity(Number(event.target.value))} />
+              <b>{maskOpacity}%</b>
+            </label>
+            <button type="button" className="maskTool maskToolIconOnly" onClick={handleClear} title="Xóa toàn bộ mask" aria-label="Xóa toàn bộ mask">
+              <RotateCcw size={15} />
+            </button>
+            <button className="modalClose" onClick={onClose} title="Đóng"><X size={18} /></button>
+          </div>
+        </div>
+
+        <div
+          className="maskStage"
+          ref={stageRef}
+          style={{ cursor: stageCursor }}
+          onWheel={handleWheel}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerCancel={handlePointerUp}
+          onPointerLeave={() => setCursor(null)}
+        >
+          <div
+            className="maskViewport"
+            style={{
+              transform: `translate(${view.pan.x}px, ${view.pan.y}px) scale(${view.zoom})`,
+              transition: isPanning ? "none" : ZOOM_TRANSITION
+            }}
+          >
+            {source ? <img className="maskBaseImage" src={source} alt="" draggable="false" /> : null}
+            <canvas ref={canvasRef} className="maskCanvas" style={{ opacity: maskOpacity / 100 }} />
+          </div>
+          {showBrushCursor ? (
+            <div
+              className={`maskBrushCursor ${erasing ? "erase" : ""}`}
+              style={{
+                left: cursor.x,
+                top: cursor.y,
+                width: cursor.size,
+                height: cursor.size,
+                ...(erasing ? {} : { borderColor: maskColor, background: `${maskColor}2e` })
+              }}
+            />
+          ) : null}
+          {!ready ? <div className="maskLoading"><Loader2 size={28} className="spin" /></div> : null}
+          <div className="imageEditorFloatingBar maskFloatingBar" onPointerDown={event => event.stopPropagation()}>
+            <button type="button" onClick={undo} disabled={!canUndo} title="Hoàn tác">
+              <Undo2 size={13} />
+            </button>
+            <button type="button" onClick={redo} disabled={!canRedo} title="Làm lại">
+              <Redo2 size={13} />
+            </button>
+            <span className="floatingDivider" />
+            <button type="button" onClick={() => updateZoom(-0.2)} title="Thu nhỏ (-)">
+              <ZoomOut size={13} />
+            </button>
+            <button type="button" className="zoomReadout" onClick={resetView} title="Về 100%">
+              <span>{zoomPct}%</span>
+            </button>
+            <button type="button" onClick={() => updateZoom(0.2)} title="Phóng to (+)">
+              <ZoomIn size={13} />
+            </button>
+            <button type="button" onClick={resetView} title="Vừa khung (0)">
+              <Maximize size={13} />
+            </button>
+            <span className="floatingDivider" />
+            <button type="button" className={tool === "brush" ? "active" : ""} onClick={() => setTool("brush")} title="Cọ vẽ mask">
+              <Brush size={13} />
+            </button>
+            <button type="button" className={tool === "erase" ? "active" : ""} onClick={() => setTool("erase")} title="Tẩy mask">
+              <Eraser size={13} />
+            </button>
+            <button type="button" className={panActive ? "active" : ""} onClick={() => setTool("pan")} title="Di chuyển (giữ Space)">
+              <Hand size={13} />
+            </button>
+          </div>
+        </div>
+
+        <div className="maskFooter">
+          <button type="button" className="downloadButton maskCancel" onClick={onClose}>Hủy</button>
+          <button type="button" className="maskSave" onClick={handleSave} disabled={saving || !ready}>
+            {saving ? <Loader2 size={15} className="spin" /> : <Check size={15} />}
+            <span>Lưu mask</span>
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}

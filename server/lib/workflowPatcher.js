@@ -106,6 +106,26 @@ async function inputImageToUpload(inputDir, value) {
   };
 }
 
+async function applyMask(target, uploaded, maskDataUrl, signal, options) {
+  const { uploadMaskToComfy, parseDataUrl } = options;
+  if (!maskDataUrl || !uploadMaskToComfy || !parseDataUrl) return null;
+  const parsed = parseDataUrl(maskDataUrl);
+  if (!parsed) return null;
+  const originalRef = {
+    filename: uploaded.name || uploaded.filename,
+    subfolder: uploaded.subfolder || "",
+    type: uploaded.type || "input"
+  };
+  const maskUploaded = await uploadMaskToComfy(
+    target,
+    { mimeType: parsed.mimeType, buffer: parsed.buffer, index: Date.now() },
+    originalRef,
+    signal
+  );
+  const name = maskUploaded.name || maskUploaded.filename;
+  return maskUploaded.subfolder ? `${maskUploaded.subfolder}/${name}` : name;
+}
+
 export async function setWorkflowValue(workflow, id, value, target, signal, options = {}) {
   const { nodeInputs, section, field } = resolveWorkflowInput(workflow, id);
   const { inputDir, uploadDir, uploadImageToComfy, uploadedImageUrl, urlUploadMode } = options;
@@ -126,7 +146,8 @@ export async function setWorkflowValue(workflow, id, value, target, signal, opti
       if ("Url" in nodeInputs) nodeInputs.Url = "";
       if ("url" in nodeInputs) nodeInputs.url = "";
       if ("mode" in nodeInputs) nodeInputs.mode = "Image";
-      nodeInputs.image = uploaded.name || uploaded.filename || uploaded.image || uploaded;
+      const masked = await applyMask(target, uploaded, value.maskDataUrl, signal, options);
+      nodeInputs.image = masked || uploaded.name || uploaded.filename || uploaded.image || uploaded;
       return nodeInputs.image;
     }
     nodeInputs[field] = await persistDataUrl(

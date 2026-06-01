@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Brush, Eraser, Hand, RotateCcw, X, Check, Loader2, ZoomIn, ZoomOut, Maximize, Undo2, Redo2 } from "lucide-react";
+import { Brush, Eraser, Hand, RotateCcw, X, Check, Loader2, ZoomIn, ZoomOut, Maximize, Undo2, Redo2, PenTool, PaintBucket } from "lucide-react";
 
 const MIN_ZOOM = 0.2;
 const MAX_ZOOM = 16;
@@ -27,9 +27,10 @@ export function MaskEditorModal({ source, initialMask, title = "Tô Mask", onClo
   const spaceHeldRef = useRef(false);
   const lastPointRef = useRef(null);
   const historyRef = useRef([]);
+  const penDragRef = useRef(null);
   const [ready, setReady] = useState(false);
   const [brushSize, setBrushSize] = useState(40);
-  const [tool, setTool] = useState("brush"); // brush | erase | pan
+  const [tool, setTool] = useState("brush"); // brush | erase | pan | pen
   const [maskColor, setMaskColor] = useState("#ff0000");
   const [maskOpacity, setMaskOpacity] = useState(50);
   const [saving, setSaving] = useState(false);
@@ -39,11 +40,16 @@ export function MaskEditorModal({ source, initialMask, title = "Tô Mask", onClo
   const [isPanning, setIsPanning] = useState(false);
   const [cursor, setCursor] = useState(null); // {x, y, size} in stage coords
   const [historyIndex, setHistoryIndex] = useState(-1);
+  const [penAnchors, setPenAnchors] = useState([]);
+  const [penClosed, setPenClosed] = useState(false);
+  const [selectedPenAnchor, setSelectedPenAnchor] = useState(-1);
 
   const erasing = tool === "erase";
   const panActive = tool === "pan" || spaceHeld;
+  const penActive = tool === "pen";
   const canUndo = historyIndex > 0;
   const canRedo = historyIndex >= 0 && historyIndex < historyRef.current.length - 1;
+  const canFillPenPath = penClosed && penAnchors.length >= 3;
 
   // Load image then (optionally) initial mask onto the paint canvas.
   useEffect(() => {
@@ -51,6 +57,9 @@ export function MaskEditorModal({ source, initialMask, title = "Tô Mask", onClo
     setReady(false);
     historyRef.current = [];
     setHistoryIndex(-1);
+    setPenAnchors([]);
+    setPenClosed(false);
+    setSelectedPenAnchor(-1);
     const img = new Image();
     img.crossOrigin = "anonymous";
     img.onload = () => {
@@ -113,6 +122,11 @@ export function MaskEditorModal({ source, initialMask, title = "Tô Mask", onClo
         else undo();
         return;
       }
+      if (hasUndoModifier && event.key === "Enter" && !isTextTarget(event.target)) {
+        claimShortcut(event);
+        fillPenPath();
+        return;
+      }
       if (event.code === "Space" && !isTextTarget(event.target)) {
         claimShortcut(event);
         if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
@@ -133,6 +147,9 @@ export function MaskEditorModal({ source, initialMask, title = "Tô Mask", onClo
         } else if (key === "h") {
           claimShortcut(event);
           setTool("pan");
+        } else if (key === "p") {
+          claimShortcut(event);
+          setTool("pen");
         } else if (event.key === "[") {
           claimShortcut(event);
           const step = event.repeat ? 8 : 1;
@@ -157,7 +174,7 @@ export function MaskEditorModal({ source, initialMask, title = "Tô Mask", onClo
       window.removeEventListener("keydown", onKeyDown, true);
       window.removeEventListener("keyup", onKeyUp, true);
     };
-  }, [historyIndex, onClose]);
+  }, [historyIndex, maskColor, onClose, penAnchors, penClosed]);
 
   function isTextTarget(target) {
     if (!(target instanceof HTMLElement)) return false;
@@ -249,6 +266,169 @@ export function MaskEditorModal({ source, initialMask, title = "Tô Mask", onClo
     };
   }
 
+  function getScreenPxPerCanvasPx() {
+    const canvas = canvasRef.current;
+    if (!canvas?.width) return 1;
+    const rect = canvas.getBoundingClientRect();
+    const scale = rect.width / canvas.width;
+    return Number.isFinite(scale) && scale > 0 ? scale : 1;
+  }
+
+  function cloneAnchors(anchors = penAnchors) {
+    return anchors.map(anchor => ({
+      x: anchor.x,
+      y: anchor.y,
+      in: anchor.in ? { ...anchor.in } : null,
+      out: anchor.out ? { ...anchor.out } : null
+    }));
+  }
+
+  function mirrorPoint(anchor, point) {
+    return { x: anchor.x * 2 - point.x, y: anchor.y * 2 - point.y };
+  }
+
+  function penHitRadius() {
+    return 10 / getScreenPxPerCanvasPx();
+  }
+
+  function distance(a, b) {
+    return Math.hypot(a.x - b.x, a.y - b.y);
+  }
+
+  function hitPenControl(point) {
+    const radius = penHitRadius();
+    for (let i = penAnchors.length - 1; i >= 0; i -= 1) {
+      const anchor = penAnchors[i];
+      if (anchor.out && distance(point, anchor.out) <= radius) return { type: "out", index: i };
+      if (anchor.in && distance(point, anchor.in) <= radius) return { type: "in", index: i };
+    }
+    for (let i = penAnchors.length - 1; i >= 0; i -= 1) {
+      const anchor = penAnchors[i];
+      if (distance(point, anchor) <= radius) return { type: "anchor", index: i };
+    }
+    return null;
+  }
+
+  function buildPenPath(anchors = penAnchors, closed = penClosed) {
+    if (!anchors.length) return "";
+    const command = [`M ${anchors[0].x} ${anchors[0].y}`];
+    for (let i = 1; i < anchors.length; i += 1) {
+      const prev = anchors[i - 1];
+      const current = anchors[i];
+      const c1 = prev.out || prev;
+      const c2 = current.in || current;
+      command.push(`C ${c1.x} ${c1.y} ${c2.x} ${c2.y} ${current.x} ${current.y}`);
+    }
+    if (closed && anchors.length > 2) {
+      const last = anchors[anchors.length - 1];
+      const first = anchors[0];
+      const c1 = last.out || last;
+      const c2 = first.in || first;
+      command.push(`C ${c1.x} ${c1.y} ${c2.x} ${c2.y} ${first.x} ${first.y} Z`);
+    }
+    return command.join(" ");
+  }
+
+  function fillPenPath() {
+    if (!canFillPenPath) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    ctx.save();
+    ctx.globalCompositeOperation = "source-over";
+    ctx.fillStyle = maskColor;
+    ctx.beginPath();
+    ctx.moveTo(penAnchors[0].x, penAnchors[0].y);
+    for (let i = 1; i < penAnchors.length; i += 1) {
+      const prev = penAnchors[i - 1];
+      const current = penAnchors[i];
+      const c1 = prev.out || prev;
+      const c2 = current.in || current;
+      ctx.bezierCurveTo(c1.x, c1.y, c2.x, c2.y, current.x, current.y);
+    }
+    const last = penAnchors[penAnchors.length - 1];
+    const first = penAnchors[0];
+    const c1 = last.out || last;
+    const c2 = first.in || first;
+    ctx.bezierCurveTo(c1.x, c1.y, c2.x, c2.y, first.x, first.y);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+    commitHistory();
+  }
+
+  function updatePenAnchor(index, updater) {
+    setPenAnchors(current => {
+      const next = cloneAnchors(current);
+      next[index] = updater(next[index], next);
+      return next;
+    });
+  }
+
+  function handlePenPointerDown(event) {
+    const point = toCanvasPoint(event);
+    if (!penClosed && penAnchors.length >= 3 && distance(point, penAnchors[0]) <= penHitRadius()) {
+      setPenClosed(true);
+      setSelectedPenAnchor(0);
+      return;
+    }
+    const hit = hitPenControl(point);
+    if (hit) {
+      setSelectedPenAnchor(hit.index);
+      penDragRef.current = {
+        pointerId: event.pointerId,
+        type: hit.type,
+        index: hit.index,
+        startPoint: point,
+        startAnchors: cloneAnchors()
+      };
+      return;
+    }
+
+    const anchor = { x: point.x, y: point.y, in: null, out: null };
+    setPenAnchors(current => {
+      const next = penClosed ? [anchor] : [...current, anchor];
+      setSelectedPenAnchor(next.length - 1);
+      return next;
+    });
+    if (penClosed) setPenClosed(false);
+    penDragRef.current = {
+      pointerId: event.pointerId,
+      type: "new",
+      index: penClosed ? 0 : penAnchors.length,
+      startPoint: point,
+      startAnchors: penClosed ? [anchor] : [...cloneAnchors(), anchor]
+    };
+  }
+
+  function handlePenPointerMove(event) {
+    const drag = penDragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    const point = toCanvasPoint(event);
+    const dx = point.x - drag.startPoint.x;
+    const dy = point.y - drag.startPoint.y;
+    const next = cloneAnchors(drag.startAnchors);
+    const anchor = next[drag.index];
+    if (!anchor) return;
+
+    if (drag.type === "anchor") {
+      anchor.x += dx;
+      anchor.y += dy;
+      if (anchor.in) { anchor.in.x += dx; anchor.in.y += dy; }
+      if (anchor.out) { anchor.out.x += dx; anchor.out.y += dy; }
+    } else if (drag.type === "out") {
+      anchor.out = point;
+      if (!event.altKey) anchor.in = mirrorPoint(anchor, point);
+    } else if (drag.type === "in") {
+      anchor.in = point;
+      if (!event.altKey) anchor.out = mirrorPoint(anchor, point);
+    } else if (drag.type === "new") {
+      anchor.out = point;
+      anchor.in = event.altKey ? null : mirrorPoint(anchor, point);
+    }
+    setPenAnchors(next);
+  }
+
   function updateCursorPreview(event) {
     const stage = stageRef.current;
     const canvas = canvasRef.current;
@@ -262,12 +442,7 @@ export function MaskEditorModal({ source, initialMask, title = "Tô Mask", onClo
   }
 
   function getBrushRadiusInCanvasPx() {
-    const canvas = canvasRef.current;
-    if (!canvas?.width) return brushSize / 2;
-    const rect = canvas.getBoundingClientRect();
-    const screenPxPerCanvasPx = rect.width / canvas.width;
-    if (!Number.isFinite(screenPxPerCanvasPx) || screenPxPerCanvasPx <= 0) return brushSize / 2;
-    return (brushSize / screenPxPerCanvasPx) / 2;
+    return (brushSize / getScreenPxPerCanvasPx()) / 2;
   }
 
   function strokeTo(point) {
@@ -309,6 +484,10 @@ export function MaskEditorModal({ source, initialMask, title = "Tô Mask", onClo
       setIsPanning(true);
       return;
     }
+    if (penActive) {
+      handlePenPointerDown(event);
+      return;
+    }
     drawingRef.current = true;
     lastPointRef.current = null;
     strokeTo(toCanvasPoint(event));
@@ -316,6 +495,11 @@ export function MaskEditorModal({ source, initialMask, title = "Tô Mask", onClo
 
   function handlePointerMove(event) {
     updateCursorPreview(event);
+    if (penActive && penDragRef.current?.pointerId === event.pointerId) {
+      event.preventDefault();
+      handlePenPointerMove(event);
+      return;
+    }
     const panState = panningRef.current;
     if (panState && panState.pointerId === event.pointerId) {
       const nextPan = {
@@ -333,6 +517,9 @@ export function MaskEditorModal({ source, initialMask, title = "Tô Mask", onClo
   function handlePointerUp(event) {
     const wasDrawing = drawingRef.current;
     drawingRef.current = false;
+    if (penDragRef.current?.pointerId === event.pointerId) {
+      penDragRef.current = null;
+    }
     if (panningRef.current) {
       panningRef.current = null;
       setIsPanning(false);
@@ -398,8 +585,9 @@ export function MaskEditorModal({ source, initialMask, title = "Tô Mask", onClo
   }
 
   const zoomPct = Math.round(view.zoom * 100);
-  const showBrushCursor = cursor && ready && !panActive;
-  const stageCursor = panActive ? (isPanning ? "grabbing" : "grab") : "none";
+  const showBrushCursor = cursor && ready && !panActive && !penActive;
+  const stageCursor = panActive ? (isPanning ? "grabbing" : "grab") : (penActive ? "crosshair" : "none");
+  const penPathD = buildPenPath();
 
   return (
     <div className="modalBackdrop maskEditorBackdrop" role="presentation" onMouseDown={onClose}>
@@ -456,6 +644,28 @@ export function MaskEditorModal({ source, initialMask, title = "Tô Mask", onClo
           >
             {source ? <img className="maskBaseImage" src={source} alt="" draggable="false" /> : null}
             <canvas ref={canvasRef} className="maskCanvas" style={{ opacity: maskOpacity / 100 }} />
+            {penAnchors.length ? (
+              <svg className="maskPenOverlay" viewBox={`0 0 ${dims.width || 1} ${dims.height || 1}`} aria-hidden="true">
+                {penPathD ? <path className={`maskPenPath ${penClosed ? "closed" : ""}`} d={penPathD} /> : null}
+                {penAnchors.map((anchor, index) => (
+                  <g key={index}>
+                    {anchor.in ? (
+                      <>
+                        <line className="maskPenHandleLine" x1={anchor.x} y1={anchor.y} x2={anchor.in.x} y2={anchor.in.y} />
+                        <circle className="maskPenHandle" cx={anchor.in.x} cy={anchor.in.y} r="4" />
+                      </>
+                    ) : null}
+                    {anchor.out ? (
+                      <>
+                        <line className="maskPenHandleLine" x1={anchor.x} y1={anchor.y} x2={anchor.out.x} y2={anchor.out.y} />
+                        <circle className="maskPenHandle" cx={anchor.out.x} cy={anchor.out.y} r="4" />
+                      </>
+                    ) : null}
+                    <circle className={`maskPenAnchor ${index === selectedPenAnchor ? "selected" : ""}`} cx={anchor.x} cy={anchor.y} r="5" />
+                  </g>
+                ))}
+              </svg>
+            ) : null}
           </div>
           {showBrushCursor ? (
             <div
@@ -497,8 +707,14 @@ export function MaskEditorModal({ source, initialMask, title = "Tô Mask", onClo
             <button type="button" className={tool === "erase" ? "active" : ""} onClick={() => setTool("erase")} title="Tẩy mask">
               <Eraser size={13} />
             </button>
+            <button type="button" className={penActive ? "active" : ""} onClick={() => setTool("pen")} title="Pen Tool">
+              <PenTool size={13} />
+            </button>
             <button type="button" className={panActive ? "active" : ""} onClick={() => setTool("pan")} title="Di chuyển (giữ Space)">
               <Hand size={13} />
+            </button>
+            <button type="button" onClick={fillPenPath} disabled={!canFillPenPath} title="Fill path (Cmd/Ctrl + Enter)">
+              <PaintBucket size={13} />
             </button>
           </div>
         </div>

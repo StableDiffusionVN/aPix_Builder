@@ -374,7 +374,9 @@ export default function App() {
         setConfig(data.config);
         setValues(options.values || { ...defaults, ...(storedValues || {}) });
         setSelectedTemplate(nextTemplateId);
-        setComfyAddress(current => options.address || current || data.server?.address || DEFAULT_COMFY_SERVER);
+        if (!options.preserveServerAddress) {
+          setComfyAddress(current => options.address || current || data.server?.address || DEFAULT_COMFY_SERVER);
+        }
         setStatus(`YAML đã sẵn sàng: ${data.template?.name || data.template?.id || "Default"}`);
       })
       .catch(err => {
@@ -448,10 +450,9 @@ export default function App() {
       outputs: item.outputs || []
     };
     setResult(restoredResult);
-    setComfyAddress(item.address || "");
     if (item.templateId === "image-editor") { setStatus("Đã mở ảnh từ Image Editor"); return; }
-    await loadConfig(item.templateId, { values: item.values, address: item.address, keepResult: true });
-    setStatus("Đã gọi lại prompt");
+    await loadConfig(item.templateId, { values: item.values, keepResult: true, preserveServerAddress: true });
+    setStatus("Đã mở lại lịch sử");
   }
 
   async function handleDeleteHistoryItem(id) {
@@ -798,13 +799,54 @@ export default function App() {
             <div className="infoIntro">
               <div><span>Template hiện tại</span><b>{selectedTemplateName}</b></div>
               <div><span>Comfy Server</span><b>{comfyAddress || serverAddress || "Chưa cấu hình"}</b></div>
-              <div><span>Phiên bản</span><b>v0.2.0</b></div>
+              <div><span>Phiên bản</span><b>beta v1.0</b></div>
             </div>
 
             <div className="infoNotice">
               <b>Cập nhật</b>
               <span>Hỗ trợ real-time progress bar, nhiều template, thư viện ảnh input/output, so sánh ảnh, Image Editor và tự quét model từ ComfyUI.</span>
             </div>
+
+            <section className="infoCredits" aria-label="Thông tin người tạo dự án">
+              <h3>Dự án & liên hệ</h3>
+              <div className="infoCreditsGrid">
+                <div>
+                  <span>Người tạo</span>
+                  <a href="https://www.facebook.com/phamhungd/" target="_blank" rel="noreferrer">© Phạm Hưng</a>
+                </div>
+                <div>
+                  <span>Liên hệ</span>
+                  <a href="https://zalo.me/0355873687" target="_blank" rel="noreferrer">0355873687</a>
+                </div>
+                <div>
+                  <span>Cộng đồng</span>
+                  <a href="https://www.facebook.com/groups/stablediffusion.vn" target="_blank" rel="noreferrer">SDVN - Cộng đồng AI Art</a>
+                </div>
+                <div>
+                  <span>GitHub</span>
+                  <a href="https://github.com/StableDiffusionVN/" target="_blank" rel="noreferrer">StableDiffusionVN</a>
+                </div>
+                <div>
+                  <span>HuggingFace</span>
+                  <a href="https://huggingface.co/StableDiffusionVN/" target="_blank" rel="noreferrer">StableDiffusionVN</a>
+                </div>
+              </div>
+              <div className="infoLinkGroup">
+                <span>Website</span>
+                <a href="https://sdvn.vn" target="_blank" rel="noreferrer">sdvn.vn</a>
+                <a href="https://hungdiffusion.com" target="_blank" rel="noreferrer">hungdiffusion.com</a>
+                <a href="https://trainlora.vn" target="_blank" rel="noreferrer">trainlora.vn</a>
+                <a href="https://stablediffusion.vn" target="_blank" rel="noreferrer">stablediffusion.vn</a>
+                <a href="https://comfy.vn" target="_blank" rel="noreferrer">comfy.vn</a>
+              </div>
+              <div className="infoLinkGroup">
+                <span>Tìm hiểu thêm</span>
+                <a href="https://aistudio.google.com/app/u/0/apps/d798af97-ec18-4946-bce4-3b5b0e7d403e?showPreview=true&showAssistant=true&fullscreenApplet=true" target="_blank" rel="noreferrer">aPix Google Studio</a>
+                <a href="https://github.com/StableDiffusionVN/sdvn_apix_python" target="_blank" rel="noreferrer">aPix Python</a>
+                <a href="https://github.com/StableDiffusionVN/sdvn_apix_react" target="_blank" rel="noreferrer">aPix React</a>
+                <a href="https://sdvn.me" target="_blank" rel="noreferrer">Colab SDVN</a>
+              </div>
+            </section>
 
             <div className="infoGrid">
               <section className="infoSection">

@@ -183,7 +183,7 @@ export function OutputGallery({
               }}
             >
               <span className="historyThumb">
-                {primaryOutput ? <img src={primaryOutput.url} alt={primaryOutput.filename || item.templateName} /> : null}
+                {primaryOutput ? <img src={primaryOutput.url} alt={primaryOutput.filename || item.templateName} draggable="false" /> : null}
               </span>
               <div className="historyMeta">
                 <strong>{item.templateName || item.templateId || "Workflow"}</strong>

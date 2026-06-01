@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Brush,
   ChevronDown,
+  Circle,
   Crop,
   Download,
   Droplet,
@@ -10,6 +11,7 @@ import {
   FlipVertical,
   GitCompare,
   Hand,
+  PenTool,
   Pipette,
   Redo2,
   RotateCcw,
@@ -17,6 +19,7 @@ import {
   Save,
   SlidersHorizontal,
   Sparkles,
+  Square,
   Undo2,
   X,
   ZoomIn,
@@ -500,6 +503,62 @@ function drawCurvesCanvas(canvas, points, activeChannel, selectedPointIndex, his
 }
 
 function drawStroke(ctx, stroke, width, height, scale) {
+  // Handle fill-type strokes from pen/selection tools
+  if (stroke.tool === "penFill" || stroke.tool === "rectSelectFill" || stroke.tool === "ellipseSelectFill") {
+    const fillCanvas = document.createElement("canvas");
+    fillCanvas.width = width;
+    fillCanvas.height = height;
+    const fctx = fillCanvas.getContext("2d");
+    fctx.fillStyle = stroke.color;
+    fctx.beginPath();
+    if (stroke.tool === "penFill") {
+      const anchors = stroke.anchors;
+      if (!anchors || anchors.length < 3) return;
+      fctx.moveTo(anchors[0].x * width, anchors[0].y * height);
+      for (let i = 1; i < anchors.length; i++) {
+        const prev = anchors[i - 1];
+        const curr = anchors[i];
+        const c1 = prev.out || prev;
+        const c2 = curr.in || curr;
+        fctx.bezierCurveTo(c1.x * width, c1.y * height, c2.x * width, c2.y * height, curr.x * width, curr.y * height);
+      }
+      const last = anchors[anchors.length - 1];
+      const first = anchors[0];
+      const lc1 = last.out || last;
+      const lc2 = first.in || first;
+      fctx.bezierCurveTo(lc1.x * width, lc1.y * height, lc2.x * width, lc2.y * height, first.x * width, first.y * height);
+      fctx.closePath();
+    } else if (stroke.tool === "rectSelectFill") {
+      const { x, y, w: sw, h: sh } = stroke.selection;
+      fctx.rect(x * width, y * height, sw * width, sh * height);
+    } else if (stroke.tool === "ellipseSelectFill") {
+      const { x, y, w: sw, h: sh } = stroke.selection;
+      const cx = (x + sw / 2) * width;
+      const cy = (y + sh / 2) * height;
+      const rx = (sw / 2) * width;
+      const ry = (sh / 2) * height;
+      fctx.ellipse(cx, cy, Math.max(1, rx), Math.max(1, ry), 0, 0, Math.PI * 2);
+    }
+    fctx.fill();
+    let sourceCanvas = fillCanvas;
+    const feather = stroke.feather || 0;
+    if (feather > 0) {
+      const blurCanvas = document.createElement("canvas");
+      blurCanvas.width = width;
+      blurCanvas.height = height;
+      const bctx = blurCanvas.getContext("2d");
+      bctx.filter = `blur(${feather}px)`;
+      bctx.drawImage(fillCanvas, 0, 0);
+      sourceCanvas = blurCanvas;
+    }
+    ctx.save();
+    ctx.globalAlpha = (stroke.opacity ?? 100) / 100;
+    ctx.globalCompositeOperation = "source-over";
+    ctx.drawImage(sourceCanvas, 0, 0);
+    ctx.restore();
+    return;
+  }
+
   const points = stroke.points;
   if (!points || !points.length) return;
 
@@ -817,11 +876,14 @@ function drawHistogram(canvas, histData) {
   context.globalCompositeOperation = "source-over";
 }
 
-function snapshot(adjustments, brush, strokes) {
+function snapshot(adjustments, brush, strokes, extra = {}) {
   return {
     adjustments: JSON.parse(JSON.stringify(adjustments)),
     brush: { ...brush },
-    strokes: JSON.parse(JSON.stringify(strokes))
+    strokes: JSON.parse(JSON.stringify(strokes)),
+    penAnchors: JSON.parse(JSON.stringify(extra.penAnchors || [])),
+    penClosed: extra.penClosed || false,
+    activeSelection: extra.activeSelection ? { ...extra.activeSelection } : null
   };
 }
 
@@ -887,6 +949,36 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
   const [newPresetName, setNewPresetName] = useState("");
   const [editingPresetId, setEditingPresetId] = useState(null);
   const [renameValue, setRenameValue] = useState("");
+
+  // Pen tool state + mirror refs (for synchronous reads in pointer-up handlers)
+  const penDragRef = useRef(null);
+  const penAnchorsRef = useRef([]);
+  const penClosedRef = useRef(false);
+  const [penAnchors, setPenAnchors] = useState([]);
+  const [penClosed, setPenClosed] = useState(false);
+  const [selectedPenAnchor, setSelectedPenAnchor] = useState(-1);
+  // Selection tool state + mirror ref
+  const selectionDragRef = useRef(null);
+  const activeSelectionRef = useRef(null);
+  const [activeSelection, setActiveSelection] = useState(null);
+  // Shared options for pen/selection
+  const [toolFeather, setToolFeather] = useState(0);
+  const [toolOpacity, setToolOpacity] = useState(50);
+  const [selectionHoverInside, setSelectionHoverInside] = useState(false);
+
+  // Helpers that update both state and ref atomically
+  function setPenAnchorsSync(anchors) {
+    penAnchorsRef.current = anchors;
+    setPenAnchors(anchors);
+  }
+  function setPenClosedSync(closed) {
+    penClosedRef.current = closed;
+    setPenClosed(closed);
+  }
+  function setActiveSelectionSync(sel) {
+    activeSelectionRef.current = sel;
+    setActiveSelection(sel);
+  }
 
   useEffect(() => {
     fetch("/api/presets")
@@ -1021,7 +1113,11 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
   }, [strokes]);
 
   const commitHistory = useCallback((nextAdjustments, nextBrush, nextStrokes) => {
-    const entry = snapshot(nextAdjustments, nextBrush, nextStrokes);
+    const entry = snapshot(nextAdjustments, nextBrush, nextStrokes, {
+      penAnchors: penAnchorsRef.current,
+      penClosed: penClosedRef.current,
+      activeSelection: activeSelectionRef.current
+    });
     setHistory(current => {
       const trimmed = current.slice(0, historyIndex + 1);
       trimmed.push(entry);
@@ -1034,6 +1130,18 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
     setAdjustments(entry.adjustments);
     setBrush(entry.brush);
     setStrokes(entry.strokes);
+    // Restore pen state
+    const restoredAnchors = entry.penAnchors || [];
+    penAnchorsRef.current = restoredAnchors;
+    setPenAnchors(restoredAnchors);
+    const restoredClosed = entry.penClosed || false;
+    penClosedRef.current = restoredClosed;
+    setPenClosed(restoredClosed);
+    setSelectedPenAnchor(-1);
+    // Restore selection state
+    const restoredSel = entry.activeSelection || null;
+    activeSelectionRef.current = restoredSel;
+    setActiveSelection(restoredSel);
   }, []);
 
   useEffect(() => {
@@ -1045,11 +1153,18 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
     setStrokes([]);
     setZoom(1);
     setPan({ x: 0, y: 0 });
+    penAnchorsRef.current = [];
+    penClosedRef.current = false;
+    activeSelectionRef.current = null;
+    setPenAnchors([]);
+    setPenClosed(false);
+    setSelectedPenAnchor(-1);
+    setActiveSelection(null);
     loadImage(source)
       .then(image => {
         if (cancelled) return;
         imageRef.current = image;
-        const initial = snapshot(DEFAULT_ADJUSTMENTS, DEFAULT_BRUSH, []);
+        const initial = snapshot(DEFAULT_ADJUSTMENTS, DEFAULT_BRUSH, [], { penAnchors: [], penClosed: false, activeSelection: null });
         setHistory([initial]);
         setHistoryIndex(0);
         setIsReady(true);
@@ -1799,6 +1914,7 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
       setActiveTool(tool);
       if (tool === "crop") openSection("crop");
       if (tool === "brush" || tool === "eraser" || tool === "healing") openSection("brush");
+      if (tool === "pen" || tool === "rectSelect" || tool === "ellipseSelect") openSection("toolOptions");
       spaceToolRef.current = null;
       altToolRef.current = null;
     };
@@ -1844,6 +1960,13 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
       if (hasUndoModifier && !event.altKey && (event.key === "-" || event.key === "_" || event.code === "NumpadSubtract")) {
         event.preventDefault();
         updateZoom(-0.1);
+        return;
+      }
+
+      // Shift+M → ellipse select (must be handled before the shiftKey guard)
+      if (event.shiftKey && !editable && !hasUndoModifier && !event.altKey && key === "m") {
+        event.preventDefault();
+        activateTool("ellipseSelect");
         return;
       }
 
@@ -1916,6 +2039,12 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
       } else if (key === "j") {
         event.preventDefault();
         activateTool("healing");
+      } else if (key === "p") {
+        event.preventDefault();
+        activateTool("pen");
+      } else if (key === "m") {
+        event.preventDefault();
+        activateTool("rectSelect");
       }
     };
 
@@ -1943,11 +2072,242 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
     };
   }, [activeTool, canRedo, canUndo, history, historyIndex, restore]);
 
+  // ── Pen tool helpers (normalized [0,1] coordinates) ──────────────────────
+
+  function clonePenAnchors(anchors) {
+    return anchors.map(a => ({ x: a.x, y: a.y, in: a.in ? { ...a.in } : null, out: a.out ? { ...a.out } : null }));
+  }
+
+  function mirrorPenPoint(anchor, pt) {
+    return { x: anchor.x * 2 - pt.x, y: anchor.y * 2 - pt.y };
+  }
+
+  function buildImagePenPath(anchors, closed) {
+    if (!anchors.length) return "";
+    const cmds = [`M ${anchors[0].x} ${anchors[0].y}`];
+    for (let i = 1; i < anchors.length; i++) {
+      const prev = anchors[i - 1];
+      const curr = anchors[i];
+      const c1 = prev.out || prev;
+      const c2 = curr.in || curr;
+      cmds.push(`C ${c1.x} ${c1.y} ${c2.x} ${c2.y} ${curr.x} ${curr.y}`);
+    }
+    if (closed && anchors.length > 2) {
+      const last = anchors[anchors.length - 1];
+      const first = anchors[0];
+      const c1 = last.out || last;
+      const c2 = first.in || first;
+      cmds.push(`C ${c1.x} ${c1.y} ${c2.x} ${c2.y} ${first.x} ${first.y} Z`);
+    }
+    return cmds.join(" ");
+  }
+
+  function penHitRadiusNorm() {
+    return 10 / (canvasRef.current?.width || 512);
+  }
+
+  function distNorm(a, b) {
+    return Math.hypot(a.x - b.x, a.y - b.y);
+  }
+
+  function hitPenControlNorm(pt, anchors) {
+    const radius = penHitRadiusNorm();
+    for (let i = anchors.length - 1; i >= 0; i--) {
+      const a = anchors[i];
+      if (a.out && distNorm(pt, a.out) <= radius) return { type: "out", index: i };
+      if (a.in && distNorm(pt, a.in) <= radius) return { type: "in", index: i };
+    }
+    for (let i = anchors.length - 1; i >= 0; i--) {
+      if (distNorm(pt, anchors[i]) <= radius) return { type: "anchor", index: i };
+    }
+    return null;
+  }
+
+  function handlePenPointerDown(event) {
+    const pt = getCanvasPoint(event);
+    if (!pt) return;
+    // Click on first anchor → close path (no drag needed, commit on up)
+    if (!penClosed && penAnchors.length >= 3 && distNorm(pt, penAnchors[0]) <= penHitRadiusNorm()) {
+      setPenClosedSync(true);
+      setSelectedPenAnchor(0);
+      // Commit immediately (no drag will follow for this action)
+      commitHistory(adjustmentsRef.current, brushRef.current, strokesRef.current);
+      return;
+    }
+    const hit = hitPenControlNorm(pt, penAnchors);
+    if (hit) {
+      setSelectedPenAnchor(hit.index);
+      penDragRef.current = { pointerId: event.pointerId, type: hit.type, index: hit.index, startPoint: pt, startAnchors: clonePenAnchors(penAnchors) };
+      return;
+    }
+    const anchor = { x: pt.x, y: pt.y, in: null, out: null };
+    const newAnchors = penClosed ? [anchor] : [...penAnchors, anchor];
+    setPenAnchorsSync(newAnchors);
+    setSelectedPenAnchor(newAnchors.length - 1);
+    if (penClosed) setPenClosedSync(false);
+    penDragRef.current = {
+      pointerId: event.pointerId,
+      type: "new",
+      index: penClosed ? 0 : penAnchors.length,
+      startPoint: pt,
+      startAnchors: penClosed ? [anchor] : [...clonePenAnchors(penAnchors), anchor]
+    };
+  }
+
+  function handlePenPointerMove(event) {
+    const drag = penDragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    const pt = getCanvasPoint(event);
+    if (!pt) return;
+    const dx = pt.x - drag.startPoint.x;
+    const dy = pt.y - drag.startPoint.y;
+    const next = clonePenAnchors(drag.startAnchors);
+    const anchor = next[drag.index];
+    if (!anchor) return;
+    if (drag.type === "anchor") {
+      anchor.x += dx; anchor.y += dy;
+      if (anchor.in) { anchor.in.x += dx; anchor.in.y += dy; }
+      if (anchor.out) { anchor.out.x += dx; anchor.out.y += dy; }
+    } else if (drag.type === "out") {
+      anchor.out = { x: pt.x, y: pt.y };
+      if (!event.altKey) anchor.in = mirrorPenPoint(anchor, pt);
+    } else if (drag.type === "in") {
+      anchor.in = { x: pt.x, y: pt.y };
+      if (!event.altKey) anchor.out = mirrorPenPoint(anchor, pt);
+    } else if (drag.type === "new") {
+      anchor.out = { x: pt.x, y: pt.y };
+      anchor.in = event.altKey ? null : mirrorPenPoint(anchor, pt);
+    }
+    // Sync ref so endPointerInteraction can commit immediately
+    penAnchorsRef.current = next;
+    setPenAnchors(next);
+  }
+
+  // ── Selection tool helpers ────────────────────────────────────────────────
+
+  function isInsideRect(pt, sel) {
+    if (!sel || sel.w < 0.001 || sel.h < 0.001) return false;
+    return pt.x >= sel.x && pt.x <= sel.x + sel.w && pt.y >= sel.y && pt.y <= sel.y + sel.h;
+  }
+
+  function isInsideEllipse(pt, sel) {
+    if (!sel || sel.w < 0.001 || sel.h < 0.001) return false;
+    const dx = (pt.x - (sel.x + sel.w / 2)) / (sel.w / 2);
+    const dy = (pt.y - (sel.y + sel.h / 2)) / (sel.h / 2);
+    return dx * dx + dy * dy <= 1;
+  }
+
+  function isInsideSelection(pt, sel) {
+    return activeTool === "ellipseSelect" ? isInsideEllipse(pt, sel) : isInsideRect(pt, sel);
+  }
+
+  function handleSelectionPointerDown(event) {
+    const pt = getCanvasPoint(event);
+    if (!pt) return;
+    const sel = activeSelectionRef.current;
+    if (sel && isInsideSelection(pt, sel)) {
+      // Move existing selection
+      selectionDragRef.current = {
+        pointerId: event.pointerId,
+        mode: "move",
+        startX: pt.x,
+        startY: pt.y,
+        origSel: { ...sel }
+      };
+    } else {
+      // Draw new selection
+      selectionDragRef.current = {
+        pointerId: event.pointerId,
+        mode: "draw",
+        startX: pt.x,
+        startY: pt.y
+      };
+      setActiveSelectionSync({ x: pt.x, y: pt.y, w: 0, h: 0 });
+    }
+  }
+
+  function handleSelectionPointerMove(event) {
+    const drag = selectionDragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    const pt = getCanvasPoint(event);
+    if (!pt) return;
+
+    if (drag.mode === "move") {
+      const dx = pt.x - drag.startX;
+      const dy = pt.y - drag.startY;
+      const orig = drag.origSel;
+      const newX = clamp(orig.x + dx, 0, 1 - orig.w);
+      const newY = clamp(orig.y + dy, 0, 1 - orig.h);
+      const moved = { ...orig, x: newX, y: newY };
+      activeSelectionRef.current = moved;
+      setActiveSelection(moved);
+      return;
+    }
+
+    // Draw mode
+    let x = Math.min(drag.startX, pt.x);
+    let y = Math.min(drag.startY, pt.y);
+    let w = Math.abs(pt.x - drag.startX);
+    let h = Math.abs(pt.y - drag.startY);
+    if (event.shiftKey) {
+      // Convert to canvas pixels so constrained shape is visually square/circle
+      const cw = canvasRef.current?.width || 1;
+      const ch = canvasRef.current?.height || 1;
+      const minPx = Math.min(w * cw, h * ch);
+      w = minPx / cw;
+      h = minPx / ch;
+      x = drag.startX < pt.x ? drag.startX : drag.startX - w;
+      y = drag.startY < pt.y ? drag.startY : drag.startY - h;
+    }
+    activeSelectionRef.current = { x, y, w, h };
+    setActiveSelection({ x, y, w, h });
+  }
+
+  // ── Fill current tool selection/path ─────────────────────────────────────
+
+  function fillCurrentTool() {
+    if (activeTool === "pen" && penClosed && penAnchors.length >= 3) {
+      const newStroke = { tool: "penFill", color: brush.color, opacity: toolOpacity, feather: toolFeather, anchors: clonePenAnchors(penAnchors) };
+      const nextStrokes = [...strokesRef.current, newStroke];
+      strokesRef.current = nextStrokes;
+      setStrokes(nextStrokes);
+      // Clear pen state in refs before committing so undo restores to clean state
+      penAnchorsRef.current = [];
+      penClosedRef.current = false;
+      setPenAnchors([]);
+      setPenClosed(false);
+      setSelectedPenAnchor(-1);
+      commitHistory(adjustmentsRef.current, brushRef.current, nextStrokes);
+    } else if ((activeTool === "rectSelect" || activeTool === "ellipseSelect") && activeSelection && activeSelection.w > 0.001 && activeSelection.h > 0.001) {
+      const newStroke = {
+        tool: activeTool === "rectSelect" ? "rectSelectFill" : "ellipseSelectFill",
+        color: brush.color,
+        opacity: toolOpacity,
+        feather: toolFeather,
+        selection: { ...activeSelection }
+      };
+      const nextStrokes = [...strokesRef.current, newStroke];
+      strokesRef.current = nextStrokes;
+      setStrokes(nextStrokes);
+      // Clear selection in ref before committing
+      activeSelectionRef.current = null;
+      setActiveSelection(null);
+      commitHistory(adjustmentsRef.current, brushRef.current, nextStrokes);
+    }
+  }
+
   function handleReset() {
     setAdjustments(DEFAULT_ADJUSTMENTS);
     setBrush(DEFAULT_BRUSH);
     setStrokes([]);
-    const initial = snapshot(DEFAULT_ADJUSTMENTS, DEFAULT_BRUSH, []);
+    penAnchorsRef.current = [];
+    penClosedRef.current = false;
+    activeSelectionRef.current = null;
+    setPenAnchors([]);
+    setPenClosed(false);
+    setSelectedPenAnchor(-1);
+    setActiveSelection(null);
+    const initial = snapshot(DEFAULT_ADJUSTMENTS, DEFAULT_BRUSH, [], { penAnchors: [], penClosed: false, activeSelection: null });
     setHistory([initial]);
     setHistoryIndex(0);
     setZoom(1);
@@ -2002,6 +2362,16 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
     if (!canvas) return;
     const point = getCanvasPoint(event);
     if (!point) return;
+    if (activeTool === "pen") {
+      event.currentTarget.setPointerCapture(event.pointerId);
+      handlePenPointerDown(event);
+      return;
+    }
+    if (activeTool === "rectSelect" || activeTool === "ellipseSelect") {
+      event.currentTarget.setPointerCapture(event.pointerId);
+      handleSelectionPointerDown(event);
+      return;
+    }
     if (activeTool === "colorpicker") {
       const ctx = canvas.getContext("2d");
       const px = clamp(Math.round(point.x * canvas.width), 0, canvas.width - 1);
@@ -2044,6 +2414,20 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
   }
 
   function handlePointerMove(event) {
+    if (activeTool === "pen") {
+      if (penDragRef.current) handlePenPointerMove(event);
+      return;
+    }
+    if (activeTool === "rectSelect" || activeTool === "ellipseSelect") {
+      if (selectionDragRef.current) {
+        handleSelectionPointerMove(event);
+      } else {
+        // Update hover cursor when not dragging
+        const pt = getCanvasPoint(event);
+        setSelectionHoverInside(pt ? isInsideSelection(pt, activeSelectionRef.current) : false);
+      }
+      return;
+    }
     if (editorCompareMode && activeTool === "hand") updateEditorComparePosition(event);
     if (activeTool === "brush" || activeTool === "eraser" || activeTool === "healing") {
       const stage = stageRef.current;
@@ -2088,6 +2472,24 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
       event.currentTarget.releasePointerCapture(event.pointerId);
     } catch {
       // Pointer capture may already be released by the browser.
+    }
+    if (activeTool === "pen") {
+      const wasDragging = !!penDragRef.current;
+      penDragRef.current = null;
+      // Commit history after placing/moving an anchor
+      if (wasDragging) {
+        commitHistory(adjustmentsRef.current, brushRef.current, strokesRef.current);
+      }
+      return;
+    }
+    if (activeTool === "rectSelect" || activeTool === "ellipseSelect") {
+      const wasDragging = !!selectionDragRef.current;
+      selectionDragRef.current = null;
+      // Commit history after drawing a selection
+      if (wasDragging && activeSelectionRef.current && activeSelectionRef.current.w > 0.001) {
+        commitHistory(adjustmentsRef.current, brushRef.current, strokesRef.current);
+      }
+      return;
     }
     if (activeStrokeRef.current) {
       const finished = activeStrokeRef.current;
@@ -2183,8 +2585,12 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
     if (activeTool === "brush" || activeTool === "eraser" || activeTool === "healing") return "none";
     if (activeTool === "colorpicker") return "copy";
     if (activeTool === "zoom") return isShiftPressed ? "zoom-out" : "zoom-in";
+    if (activeTool === "pen") return "crosshair";
+    if (activeTool === "rectSelect" || activeTool === "ellipseSelect") {
+      return selectionHoverInside ? "move" : "crosshair";
+    }
     return panStartRef.current ? "grabbing" : "grab";
-  }, [activeTool, isShiftPressed]);
+  }, [activeTool, isShiftPressed, selectionHoverInside]);
 
   const brushDiameter = brush.size * (previewMetaRef.current?.scale ?? 1) * canvasScaleRef.current;
 
@@ -2231,6 +2637,16 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
           <button type="button" className={activeTool === "colorpicker" ? "active" : ""} onClick={() => setActiveTool("colorpicker")} title="Chấm màu">
             <Pipette size={15} />
           </button>
+          <span className="imageEditorRailDivider" />
+          <button type="button" className={activeTool === "pen" ? "active" : ""} onClick={() => { setActiveTool("pen"); openSection("toolOptions"); }} title="Pen Tool (P)">
+            <PenTool size={15} />
+          </button>
+          <button type="button" className={activeTool === "rectSelect" ? "active" : ""} onClick={() => { setActiveTool("rectSelect"); openSection("toolOptions"); }} title="Vùng chọn chữ nhật (M)">
+            <Square size={15} />
+          </button>
+          <button type="button" className={activeTool === "ellipseSelect" ? "active" : ""} onClick={() => { setActiveTool("ellipseSelect"); openSection("toolOptions"); }} title="Vùng chọn elip (Shift+M)">
+            <Circle size={15} />
+          </button>
           <label className="imageEditorColorSwatch" title="Màu cọ">
             <input type="color" value={brush.color} onChange={event => setBrush(current => ({ ...current, color: event.target.value }))} onBlur={commitCurrent} />
             <span style={{ backgroundColor: brush.color }} />
@@ -2241,7 +2657,7 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
           <div
             className="imageEditorPreview"
             ref={stageRef}
-            onMouseLeave={() => setBrushCursor(null)}
+            onMouseLeave={() => { setBrushCursor(null); setSelectionHoverInside(false); }}
           >
             {!isReady ? <span className="editorLoading">Đang tải ảnh...</span> : null}
             {brushCursor && (activeTool === "brush" || activeTool === "eraser" || activeTool === "healing") ? (
@@ -2285,6 +2701,41 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
                 onPointerUp={endPointerInteraction}
                 onPointerCancel={endPointerInteraction}
               />
+              {activeTool === "pen" && penAnchors.length > 0 ? (
+                <>
+                  {/* SVG: path + handle lines only (no circles — avoids aspect-ratio distortion) */}
+                  <svg className="imageEditorPenOverlay" viewBox="0 0 1 1" preserveAspectRatio="none" aria-hidden="true">
+                    {buildImagePenPath(penAnchors, penClosed) ? (
+                      <path className={`imageEditorPenPath${penClosed ? " closed" : ""}`} d={buildImagePenPath(penAnchors, penClosed)} />
+                    ) : null}
+                    {penAnchors.map((anchor, idx) => (
+                      <g key={idx}>
+                        {anchor.in ? <line className="imageEditorPenHandleLine" x1={anchor.x} y1={anchor.y} x2={anchor.in.x} y2={anchor.in.y} vectorEffect="non-scaling-stroke" /> : null}
+                        {anchor.out ? <line className="imageEditorPenHandleLine" x1={anchor.x} y1={anchor.y} x2={anchor.out.x} y2={anchor.out.y} vectorEffect="non-scaling-stroke" /> : null}
+                      </g>
+                    ))}
+                  </svg>
+                  {/* Anchor + handle dots as divs so they stay circular on any aspect ratio */}
+                  {penAnchors.map((anchor, idx) => (
+                    <span key={idx}>
+                      {anchor.in ? <span className="imageEditorPenHandleDot" style={{ left: `${anchor.in.x * 100}%`, top: `${anchor.in.y * 100}%` }} /> : null}
+                      {anchor.out ? <span className="imageEditorPenHandleDot" style={{ left: `${anchor.out.x * 100}%`, top: `${anchor.out.y * 100}%` }} /> : null}
+                      <span className={`imageEditorPenAnchorDot${idx === selectedPenAnchor ? " selected" : ""}`} style={{ left: `${anchor.x * 100}%`, top: `${anchor.y * 100}%` }} />
+                    </span>
+                  ))}
+                </>
+              ) : null}
+              {(activeTool === "rectSelect" || activeTool === "ellipseSelect") && activeSelection && activeSelection.w > 0 && activeSelection.h > 0 ? (
+                <div
+                  className={`imageEditorSelection${activeTool === "ellipseSelect" ? " ellipse" : ""}`}
+                  style={{
+                    left: `${activeSelection.x * 100}%`,
+                    top: `${activeSelection.y * 100}%`,
+                    width: `${activeSelection.w * 100}%`,
+                    height: `${activeSelection.h * 100}%`
+                  }}
+                />
+              ) : null}
               {activeTool === "crop" && isReady ? (
                 <CropOverlay
                   crop={adjustments}
@@ -2484,6 +2935,62 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
                   )}
                 </div>
               </AccordionSection>
+
+              {(activeTool === "pen" || activeTool === "rectSelect" || activeTool === "ellipseSelect") ? (
+                <AccordionSection
+                  icon={activeTool === "pen" ? PenTool : activeTool === "rectSelect" ? Square : Circle}
+                  title={activeTool === "pen" ? "Pen Tool" : activeTool === "rectSelect" ? "Rectangle Select" : "Ellipse Select"}
+                  open={!!openSections.toolOptions}
+                  onToggle={() => toggleSection("toolOptions")}
+                >
+                  <EditorRange label="Opacity" value={toolOpacity} min={1} max={100} resetValue={50} onChange={setToolOpacity} />
+                  <EditorRange label="Feather" value={toolFeather} min={0} max={50} resetValue={0} onChange={setToolFeather} />
+                  <div className="penFillRow">
+                    <button
+                      type="button"
+                      className="penFillBtn penClearBtn"
+                      disabled={
+                        activeTool === "pen"
+                          ? !penClosed || penAnchors.length < 3
+                          : !activeSelection || activeSelection.w < 0.001 || activeSelection.h < 0.001
+                      }
+                      onClick={fillCurrentTool}
+                    >
+                      Fill
+                    </button>
+                  </div>
+                  {activeTool === "pen" && penAnchors.length > 0 ? (
+                    <div className="penFillRow">
+                      <button
+                        type="button"
+                        className="penFillBtn penClearBtn"
+                        onClick={() => {
+                          setPenAnchorsSync([]);
+                          setPenClosedSync(false);
+                          setSelectedPenAnchor(-1);
+                          commitHistory(adjustmentsRef.current, brushRef.current, strokesRef.current);
+                        }}
+                      >
+                        Clear Path
+                      </button>
+                    </div>
+                  ) : null}
+                  {(activeTool === "rectSelect" || activeTool === "ellipseSelect") && activeSelection ? (
+                    <div className="penFillRow">
+                      <button
+                        type="button"
+                        className="penFillBtn penClearBtn"
+                        onClick={() => {
+                          setActiveSelectionSync(null);
+                          commitHistory(adjustmentsRef.current, brushRef.current, strokesRef.current);
+                        }}
+                      >
+                        Clear Selection
+                      </button>
+                    </div>
+                  ) : null}
+                </AccordionSection>
+              ) : null}
 
               {(activeTool === "brush" || activeTool === "eraser" || activeTool === "healing") ? (
                 <AccordionSection icon={activeTool === "healing" ? HealingIcon : Brush} title={activeTool === "healing" ? "Healing Brush" : "Brush / Eraser"} open={!!openSections.brush} onToggle={() => toggleSection("brush")}>
@@ -2704,7 +3211,7 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
               <Download size={14} />
               <span>{downloading ? "Downloading..." : "Download"}</span>
             </button>
-            <button type="button" className="saveTemplateButton" onClick={handleSave} disabled={saving || !isReady}>
+            <button type="button" className="smallActionButton secondary" onClick={handleSave} disabled={saving || !isReady}>
               <Save size={15} />
               <span>{saving ? "Saving..." : "Save"}</span>
             </button>

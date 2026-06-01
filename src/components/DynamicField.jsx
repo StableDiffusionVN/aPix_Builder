@@ -240,8 +240,18 @@ export function DynamicField({ item, value, onChange, inputImages = [], onRefres
     }
   }
 
+  function firstDroppedUri(dataTransfer) {
+    const uriList = dataTransfer.getData("text/uri-list");
+    if (!uriList) return "";
+    return uriList
+      .split(/\r?\n/)
+      .map(line => line.trim())
+      .find(line => line && !line.startsWith("#")) || "";
+  }
+
   async function handleImageDrop(event) {
     event.preventDefault();
+    event.stopPropagation();
     setIsDraggingFile(false);
     const payload = event.dataTransfer.getData("application/x-comfy-output-image");
     if (payload) {
@@ -253,7 +263,7 @@ export function DynamicField({ item, value, onChange, inputImages = [], onRefres
         // Fall through to file handling.
       }
     }
-    const uri = event.dataTransfer.getData("text/uri-list");
+    const uri = firstDroppedUri(event.dataTransfer);
     if (uri) {
       await handlePickedImageUrl(uri.split("\n")[0]);
       return;
@@ -580,6 +590,22 @@ export function DynamicField({ item, value, onChange, inputImages = [], onRefres
               <input
                 type="file"
                 accept={ui.type === "file" ? undefined : "image/*"}
+                onDragEnter={event => {
+                  event.preventDefault();
+                  setIsDraggingFile(true);
+                }}
+                onDragOver={event => {
+                  event.preventDefault();
+                  event.dataTransfer.dropEffect = "copy";
+                  setIsDraggingFile(true);
+                }}
+                onDragLeave={event => {
+                  event.preventDefault();
+                  if (!event.currentTarget.parentElement?.contains(event.relatedTarget)) {
+                    setIsDraggingFile(false);
+                  }
+                }}
+                onDrop={handleImageDrop}
                 onChange={event => handlePickedFile(event.target.files?.[0])}
               />
             </div>

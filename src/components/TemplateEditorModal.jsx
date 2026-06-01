@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { GripVertical, Plus, Save, Trash2, Upload, X } from "lucide-react";
+import { FileText, GripVertical, Plus, Save, Trash2, Upload, X } from "lucide-react";
 import YAML from "yaml";
 import { DYNAMIC_FIELD_TYPES, canonicalDynamicType, inferDynamicTypeFromField } from "../lib/dynamicTypes";
 
@@ -82,10 +82,17 @@ function inferRowType({ field, nodeClass, value }) {
 }
 
 function rowFromConfig(item, workflow, fallbackKey) {
+  const ui = item.ui || {};
+  if (ui.type === "note" || ui.type === "markdown") {
+    return {
+      rowId: crypto.randomUUID(),
+      kind: "note",
+      markdown: ui.markdown ?? ui.value ?? ""
+    };
+  }
   const [nodeId, ...fieldParts] = String(item.id || "").split("-");
   const field = fieldParts[fieldParts[0] === "inputs" ? 1 : 0] || "";
   const value = workflow?.[nodeId]?.inputs?.[field];
-  const ui = item.ui || {};
   const dynamicType = canonicalDynamicType(ui.type);
   const type = dynamicType || (ui.type === "text" ? "string" : ui.type || inferType(value));
   return {
@@ -136,6 +143,16 @@ function buildConfig({ appName, inputRows, outputRows }) {
   const usedInputKeys = new Set();
   const input = {};
   for (const row of inputRows) {
+    if (row.kind === "note") {
+      const key = uniqueKey("note", usedInputKeys);
+      input[key] = {
+        ui: {
+          type: "note",
+          markdown: row.markdown || ""
+        }
+      };
+      continue;
+    }
     if (!row.nodeId || !row.field || !row.type) continue;
     const key = uniqueKey(row.label || `${row.nodeId}_${row.field}`, usedInputKeys);
     const ui = {
@@ -324,6 +341,14 @@ export function TemplateEditorModal({ selectedTemplate, discovery, onClose, onSa
     }]);
   }
 
+  function addNoteRow() {
+    setInputRows(current => [...current, {
+      rowId: crypto.randomUUID(),
+      kind: "note",
+      markdown: "### Ghi chú\n\nNhập nội dung **Markdown** tại đây."
+    }]);
+  }
+
   function updateInputRow(rowId, patch) {
     setInputRows(current => current.map(row => {
       if (row.rowId !== rowId) return row;
@@ -434,14 +459,72 @@ export function TemplateEditorModal({ selectedTemplate, discovery, onClose, onSa
           <section className="editorSection">
             <div className="editorSectionHeader">
               <h3>Input</h3>
-              <button type="button" className="smallActionButton" onClick={addInputRow} disabled={!workflow}>
-                <Plus size={15} />
-                <span>Thêm input</span>
-              </button>
+              <div className="editorHeaderActions">
+                <button type="button" className="smallActionButton" onClick={addInputRow} disabled={!workflow}>
+                  <Plus size={15} />
+                  <span>Thêm input</span>
+                </button>
+                <button type="button" className="smallActionButton" onClick={addNoteRow} disabled={!workflow}>
+                  <FileText size={15} />
+                  <span>Thêm chú thích</span>
+                </button>
+              </div>
             </div>
             <div className="editorRows">
               {inputRows.map((row, index) => {
                 const selectedNode = nodes.find(node => node.id === row.nodeId);
+                if (row.kind === "note") {
+                  return (
+                    <div
+                      className={`editorRow noteEditorRow ${draggingInputId === row.rowId ? "isDragging" : ""}`}
+                      key={row.rowId}
+                      onDragOver={event => {
+                        if (!draggingInputId || draggingInputId === row.rowId) return;
+                        event.preventDefault();
+                        event.dataTransfer.dropEffect = "move";
+                      }}
+                      onDrop={event => {
+                        event.preventDefault();
+                        setInputRows(current => reorderRows(current, draggingInputId, row.rowId));
+                        setDraggingInputId("");
+                      }}
+                    >
+                      <button
+                        type="button"
+                        className="rowDragHandle"
+                        draggable
+                        onClick={event => event.preventDefault()}
+                        onDragStart={event => {
+                          setDraggingInputId(row.rowId);
+                          event.dataTransfer.effectAllowed = "move";
+                          event.dataTransfer.setData("text/plain", row.rowId);
+                        }}
+                        onDragEnd={() => setDraggingInputId("")}
+                        onKeyDown={event => {
+                          if (event.key === "ArrowUp") {
+                            event.preventDefault();
+                            moveInputRow(row.rowId, -1);
+                          }
+                          if (event.key === "ArrowDown") {
+                            event.preventDefault();
+                            moveInputRow(row.rowId, 1);
+                          }
+                        }}
+                        title="Kéo để đổi thứ tự chú thích. Có thể dùng ↑/↓ khi đang focus."
+                        aria-label={`Di chuyển chú thích ${index + 1}`}
+                      >
+                        <GripVertical size={16} />
+                      </button>
+                      <label className="field editorWide noteMarkdownField">
+                        <span>Markdown</span>
+                        <textarea rows={5} value={row.markdown} onChange={event => updateInputRow(row.rowId, { markdown: event.target.value })} />
+                      </label>
+                      <button type="button" className="rowDeleteButton" onClick={() => setInputRows(current => current.filter(item => item.rowId !== row.rowId))} title="Xóa chú thích">
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  );
+                }
                 return (
                   <div
                     className={`editorRow inputEditorRow ${row.type === "menu" ? "isMenuRow" : ""} ${draggingInputId === row.rowId ? "isDragging" : ""}`}
@@ -563,10 +646,16 @@ export function TemplateEditorModal({ selectedTemplate, discovery, onClose, onSa
           <section className="editorSection">
             <div className="editorSectionHeader">
               <h3>Output</h3>
-              <button type="button" className="smallActionButton" onClick={addOutputRow} disabled={!workflow}>
-                <Plus size={15} />
-                <span>Thêm output</span>
-              </button>
+              <div className="editorHeaderActions">
+                <button type="button" className="smallActionButton" onClick={addOutputRow} disabled={!workflow}>
+                  <Plus size={15} />
+                  <span>Thêm output</span>
+                </button>
+                <button type="button" className="smallActionButton" onClick={addNoteRow} disabled={!workflow}>
+                  <FileText size={15} />
+                  <span>Thêm chú thích</span>
+                </button>
+              </div>
             </div>
             <div className="editorRows">
               {outputRows.map((row, index) => (

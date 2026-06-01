@@ -45,6 +45,7 @@ Màn hình chính gồm:
 - Tải output về máy, đánh dấu favorite, xóa lịch sử.
 - Image Editor tích hợp cho input và output.
 - Mask Editor cho input image mask.
+- Grow/Shrink mask trực quan bằng slider, có invert mask và undo/redo.
 - Nhiều theme và font hiển thị.
 - Template Editor để tạo/sửa cấu hình YAML và workflow JSON ngay trong app.
 
@@ -246,6 +247,19 @@ config/default/image-adjust/
 
 Trong YAML, mỗi input map tới một node/field của workflow bằng `id`. Backend sẽ đọc YAML, nhận giá trị từ UI, vá vào `api.json`, upload ảnh nếu cần, queue prompt sang ComfyUI và archive output sau khi hoàn tất.
 
+Template có thể thêm chú thích Markdown để hiển thị trong giao diện sử dụng. Chú thích dùng `ui.type: note`, không cần `id` và không được gửi sang ComfyUI:
+
+```yaml
+input:
+  huong_dan:
+    ui:
+      type: note
+      markdown: |
+        ### Lưu ý
+        - Chọn ảnh đầu vào trước khi chạy.
+        - Có thể dùng **Markdown** và link như [SDVN](https://sdvn.vn).
+```
+
 ## Hướng dẫn sử dụng
 
 1. Mở ComfyUI và đảm bảo truy cập được API, ví dụ `http://127.0.0.1:8188`.
@@ -352,6 +366,7 @@ Image Editor hỗ trợ:
 | `E` | Chọn Erase. |
 | `H` | Chọn Pan. |
 | `P` | Chọn Pen. |
+| `I` | Đảo ngược mask. |
 | `[` | Giảm kích thước brush. |
 | `]` | Tăng kích thước brush. |
 

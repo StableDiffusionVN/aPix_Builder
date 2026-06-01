@@ -1,6 +1,7 @@
 node_modules/
 dist/
 uploads/
+.claude/
 input/
 output/
 config/templates/

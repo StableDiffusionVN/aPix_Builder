@@ -182,6 +182,10 @@ textarea {
   font: inherit;
 }
 
+select {
+  color-scheme: dark;
+}
+
 button {
   color: inherit;
 }
@@ -433,6 +437,21 @@ select option:checked {
   background-color: var(--accent);
 }
 
+html[data-theme="light"] select {
+  color-scheme: light;
+}
+
+html[data-theme="light"] select option,
+html[data-theme="light"] select optgroup {
+  color: #171717;
+  background-color: #ffffff;
+}
+
+html[data-theme="light"] select option:checked {
+  color: #ffffff;
+  background-color: #0284c7;
+}
+
 .addressInput:focus-within,
 .templateSelect:focus-within,
 .field input:focus,
@@ -587,6 +606,90 @@ select:disabled {
 .field input[type="range"] {
   width: 100%;
   accent-color: var(--accent);
+}
+
+.workflowNote {
+  display: grid;
+  gap: 4px;
+  padding: 2px 0 4px 10px;
+  color: var(--muted);
+}
+
+.workflowNote h4,
+.workflowNoteContent h3,
+.workflowNoteContent h4,
+.workflowNoteContent h5 {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.25;
+}
+
+.workflowNoteContent {
+  display: grid;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.42;
+}
+
+.workflowNoteContent p,
+.workflowNoteContent ul,
+.workflowNoteContent blockquote,
+.workflowNoteContent pre {
+  margin: 0;
+}
+
+.workflowNoteContent ul {
+  padding-left: 16px;
+}
+
+.workflowNoteContent a {
+  color: #7dd3fc;
+  text-decoration: none;
+  text-underline-offset: 2px;
+}
+
+.workflowNoteContent a:hover {
+  color: #38bdf8;
+  text-decoration: underline;
+}
+
+html[data-theme="light"] .workflowNoteContent a {
+  color: #0284c7;
+}
+
+html[data-theme="light"] .workflowNoteContent a:hover {
+  color: #0369a1;
+}
+
+.workflowNoteContent code {
+  padding: 1px 5px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+  font-size: 11px;
+}
+
+.workflowNoteContent pre {
+  overflow: auto;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.22);
+}
+
+.workflowNoteContent pre code {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.workflowNoteContent blockquote {
+  padding-left: 10px;
+  border-left: 3px solid rgba(var(--accent-rgb), 0.5);
+  color: var(--muted-2);
 }
 
 .compact {
@@ -791,6 +894,19 @@ select:disabled {
   border-color: rgba(var(--accent-rgb), 0.4);
   color: var(--accent-hover);
   background: rgba(var(--accent-rgb), 0.1);
+}
+
+html[data-theme="light"] .imageLightboxClose {
+  border-color: rgba(23, 23, 23, 0.18);
+  background: rgba(255, 255, 255, 0.94);
+  color: #171717;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.2);
+}
+
+html[data-theme="light"] .imageLightboxClose:hover {
+  border-color: rgba(23, 23, 23, 0.32);
+  background: #ffffff;
+  color: #000000;
 }
 
 .imageEditorBackdrop {
@@ -2022,11 +2138,23 @@ html[data-theme="light"] .curvesCanvasWrapper {
 }
 
 .imageLightboxClose.inPanel {
+  display: grid;
+  place-items: center;
   position: static;
   flex: 0 0 auto;
   width: 28px;
   height: 28px;
+  padding: 0;
+  border: 1px solid var(--border);
   border-radius: 8px;
+  background: var(--panel-soft);
+  color: var(--muted);
+}
+
+.imageLightboxClose.inPanel:hover {
+  border-color: rgba(var(--accent-rgb), 0.44);
+  color: var(--accent-hover);
+  background: rgba(var(--accent-rgb), 0.12);
 }
 
 .inputLibraryGrid {
@@ -2115,6 +2243,13 @@ html[data-theme="light"] .curvesCanvasWrapper {
   backdrop-filter: blur(8px);
 }
 
+html[data-theme="light"] .inputLibraryActions button {
+  border-color: rgba(15, 23, 42, 0.16);
+  background: rgba(255, 255, 255, 0.86);
+  color: rgba(15, 23, 42, 0.72);
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.12);
+}
+
 .inputLibraryItem:hover .inputLibraryActions,
 .inputLibraryItem:focus-within .inputLibraryActions {
   opacity: 1;
@@ -2127,6 +2262,12 @@ html[data-theme="light"] .curvesCanvasWrapper {
   border-color: rgba(var(--accent-rgb), 0.36);
   color: var(--accent-hover);
   background: rgba(var(--accent-rgb), 0.1);
+}
+
+html[data-theme="light"] .inputLibraryActions button:hover {
+  border-color: rgba(2, 132, 199, 0.34);
+  color: #0369a1;
+  background: rgba(224, 242, 254, 0.92);
 }
 
 .inputLibraryEmpty {
@@ -3349,6 +3490,13 @@ html[data-theme="light"] .themeMenuItem {
   gap: 8px;
 }
 
+.editorHeaderActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .editorSectionHeader h3 {
   color: var(--text);
   font-size: 13px;
@@ -3391,6 +3539,15 @@ html[data-theme="light"] .themeMenuItem {
 
 .outputEditorRow {
   grid-template-columns: 32px minmax(220px, 1fr) minmax(180px, 0.8fr) 36px;
+}
+
+.noteEditorRow {
+  grid-template-columns: 32px minmax(280px, 1fr) 36px;
+  align-items: start;
+}
+
+.noteMarkdownField textarea {
+  min-height: 112px;
 }
 
 .templateEditorModal .field {
@@ -3469,6 +3626,18 @@ html[data-theme="light"] .themeMenuItem {
   cursor: pointer;
 }
 
+html[data-theme="light"] .rowDeleteButton {
+  border-color: rgba(185, 28, 28, 0.28);
+  background: rgba(220, 38, 38, 0.1);
+  color: #b91c1c;
+}
+
+html[data-theme="light"] .rowDeleteButton:hover {
+  border-color: rgba(185, 28, 28, 0.42);
+  background: rgba(220, 38, 38, 0.16);
+  color: #7f1d1d;
+}
+
 .smallActionButton,
 .saveTemplateButton {
   display: inline-flex;
@@ -3508,6 +3677,18 @@ html[data-theme="light"] .themeMenuItem {
   color: #151000;
   background: linear-gradient(135deg, var(--accent), var(--accent-hover));
   box-shadow: var(--shadow);
+}
+
+html[data-theme="light"] .saveTemplateButton {
+  border-color: rgba(0, 0, 0, 0.56);
+  color: #ffffff;
+  background: linear-gradient(135deg, #262626, #000000);
+}
+
+html[data-theme="light"] .saveTemplateButton:hover:not(:disabled) {
+  border-color: rgba(0, 0, 0, 0.72);
+  color: #ffffff;
+  background: linear-gradient(135deg, #171717, #000000);
 }
 
 .editorEmpty,
@@ -3589,7 +3770,8 @@ html[data-theme="light"] .themeMenuItem {
   }
 
   .templateEditorToolbar,
-  .inputEditorRow {
+  .inputEditorRow,
+  .noteEditorRow {
     grid-template-columns: 1fr 1fr;
   }
 
@@ -3795,7 +3977,8 @@ html[data-theme="light"] .themeMenuItem {
 
   .templateSelectRow,
   .templateEditorToolbar,
-  .inputEditorRow {
+  .inputEditorRow,
+  .noteEditorRow {
     grid-template-columns: 1fr;
   }
 
@@ -4273,6 +4456,7 @@ html[data-theme="light"] .themeMenuItem {
   justify-content: flex-end;
   gap: 8px;
   min-width: 0;
+  flex-wrap: wrap;
 }
 .maskToolbar {
   display: flex;
@@ -4323,6 +4507,9 @@ html[data-theme="light"] .themeMenuItem {
 .maskOpacityPick { margin-left: 0; }
 .maskOpacityPick input[type="range"] { width: 90px; }
 .maskOpacityPick b { min-width: 36px; }
+.maskGrowPick { margin-left: 0; }
+.maskGrowPick input[type="range"] { width: 110px; }
+.maskGrowPick b { min-width: 38px; }
 .maskColorPick {
   position: relative;
   display: inline-flex;

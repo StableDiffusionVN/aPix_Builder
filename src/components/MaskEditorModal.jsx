@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { Brush, Eraser, Hand, RotateCcw, X, Check, Loader2, ZoomIn, ZoomOut, Maximize, Undo2, Redo2, PenTool, PaintBucket } from "lucide-react";
+import { Brush, Contrast, Eraser, Hand, RotateCcw, X, Check, Loader2, ZoomIn, ZoomOut, Maximize, Undo2, Redo2, PenTool, PaintBucket } from "lucide-react";
 
 const MIN_ZOOM = 0.2;
 const MAX_ZOOM = 16;
+const MIN_MASK_GROW = -100;
+const MAX_MASK_GROW = 100;
 const ZOOM_TRANSITION = "transform 0.16s cubic-bezier(0.22, 1, 0.36, 1)";
 
 function clamp(value, min, max) {
@@ -14,6 +16,121 @@ function hexToRgb(hex) {
   return m
     ? { r: parseInt(m[1], 16), g: parseInt(m[2], 16), b: parseInt(m[3], 16) }
     : { r: 255, g: 0, b: 0 };
+}
+
+function get2dContext(canvas) {
+  return canvas.getContext("2d", { willReadFrequently: true });
+}
+
+function imageDataToBinary(imageData) {
+  const total = imageData.width * imageData.height;
+  const binary = new Uint8Array(total);
+  for (let i = 0; i < total; i += 1) {
+    binary[i] = imageData.data[i * 4 + 3] > 10 ? 1 : 0;
+  }
+  return binary;
+}
+
+function horizontalAny(binary, width, height, radius) {
+  const out = new Uint8Array(binary.length);
+  for (let y = 0; y < height; y += 1) {
+    const row = y * width;
+    let count = 0;
+    for (let x = 0; x <= Math.min(width - 1, radius); x += 1) count += binary[row + x];
+    for (let x = 0; x < width; x += 1) {
+      out[row + x] = count > 0 ? 1 : 0;
+      const remove = x - radius;
+      const add = x + radius + 1;
+      if (remove >= 0) count -= binary[row + remove];
+      if (add < width) count += binary[row + add];
+    }
+  }
+  return out;
+}
+
+function verticalAny(binary, width, height, radius) {
+  const out = new Uint8Array(binary.length);
+  for (let x = 0; x < width; x += 1) {
+    let count = 0;
+    for (let y = 0; y <= Math.min(height - 1, radius); y += 1) count += binary[y * width + x];
+    for (let y = 0; y < height; y += 1) {
+      out[y * width + x] = count > 0 ? 1 : 0;
+      const remove = y - radius;
+      const add = y + radius + 1;
+      if (remove >= 0) count -= binary[remove * width + x];
+      if (add < height) count += binary[add * width + x];
+    }
+  }
+  return out;
+}
+
+function horizontalAll(binary, width, height, radius) {
+  const out = new Uint8Array(binary.length);
+  const span = radius * 2 + 1;
+  for (let y = 0; y < height; y += 1) {
+    const row = y * width;
+    let count = 0;
+    for (let x = 0; x <= Math.min(width - 1, radius); x += 1) count += binary[row + x];
+    for (let x = 0; x < width; x += 1) {
+      out[row + x] = x >= radius && x + radius < width && count === span ? 1 : 0;
+      const remove = x - radius;
+      const add = x + radius + 1;
+      if (remove >= 0) count -= binary[row + remove];
+      if (add < width) count += binary[row + add];
+    }
+  }
+  return out;
+}
+
+function verticalAll(binary, width, height, radius) {
+  const out = new Uint8Array(binary.length);
+  const span = radius * 2 + 1;
+  for (let x = 0; x < width; x += 1) {
+    let count = 0;
+    for (let y = 0; y <= Math.min(height - 1, radius); y += 1) count += binary[y * width + x];
+    for (let y = 0; y < height; y += 1) {
+      out[y * width + x] = y >= radius && y + radius < height && count === span ? 1 : 0;
+      const remove = y - radius;
+      const add = y + radius + 1;
+      if (remove >= 0) count -= binary[remove * width + x];
+      if (add < height) count += binary[add * width + x];
+    }
+  }
+  return out;
+}
+
+function applyBinaryToCanvas(canvas, binary, color) {
+  const ctx = get2dContext(canvas);
+  const out = ctx.createImageData(canvas.width, canvas.height);
+  const rgb = hexToRgb(color);
+  for (let i = 0; i < binary.length; i += 1) {
+    const offset = i * 4;
+    out.data[offset] = rgb.r;
+    out.data[offset + 1] = rgb.g;
+    out.data[offset + 2] = rgb.b;
+    out.data[offset + 3] = binary[i] ? 255 : 0;
+  }
+  ctx.putImageData(out, 0, 0);
+}
+
+function applyMaskGrowSnapshot(canvas, snapshot, amount, color) {
+  if (!canvas || !snapshot) return;
+  const radius = Math.min(Math.abs(Math.round(amount)), Math.max(snapshot.width, snapshot.height));
+  if (!radius) {
+    restoreCanvasSnapshot(canvas, snapshot);
+    return;
+  }
+  const binary = imageDataToBinary(snapshot);
+  const next = amount > 0
+    ? verticalAny(horizontalAny(binary, snapshot.width, snapshot.height, radius), snapshot.width, snapshot.height, radius)
+    : verticalAll(horizontalAll(binary, snapshot.width, snapshot.height, radius), snapshot.width, snapshot.height, radius);
+  applyBinaryToCanvas(canvas, next, color);
+}
+
+function restoreCanvasSnapshot(canvas, snapshot) {
+  const ctx = get2dContext(canvas);
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.putImageData(snapshot, 0, 0);
 }
 
 // Mask painter: user paints the region to inpaint.
@@ -28,8 +145,11 @@ export function MaskEditorModal({ source, initialMask, title = "Tô Mask", onClo
   const lastPointRef = useRef(null);
   const historyRef = useRef([]);
   const penDragRef = useRef(null);
+  const growBaseRef = useRef(null);
+  const growAmountRef = useRef(0);
   const [ready, setReady] = useState(false);
   const [brushSize, setBrushSize] = useState(40);
+  const [maskGrowAmount, setMaskGrowAmount] = useState(0);
   const [tool, setTool] = useState("brush"); // brush | erase | pan | pen
   const [maskColor, setMaskColor] = useState("#ff0000");
   const [maskOpacity, setMaskOpacity] = useState(50);
@@ -60,6 +180,9 @@ export function MaskEditorModal({ source, initialMask, title = "Tô Mask", onClo
     setPenAnchors([]);
     setPenClosed(false);
     setSelectedPenAnchor(-1);
+    growBaseRef.current = null;
+    growAmountRef.current = 0;
+    setMaskGrowAmount(0);
     const img = new Image();
     img.crossOrigin = "anonymous";
     img.onload = () => {
@@ -69,7 +192,7 @@ export function MaskEditorModal({ source, initialMask, title = "Tô Mask", onClo
       canvas.width = img.naturalWidth;
       canvas.height = img.naturalHeight;
       setDims({ width: img.naturalWidth, height: img.naturalHeight });
-      const ctx = canvas.getContext("2d");
+      const ctx = get2dContext(canvas);
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       if (initialMask) {
         const maskImg = new Image();
@@ -79,7 +202,7 @@ export function MaskEditorModal({ source, initialMask, title = "Tô Mask", onClo
           const tmp = document.createElement("canvas");
           tmp.width = canvas.width;
           tmp.height = canvas.height;
-          const tctx = tmp.getContext("2d");
+          const tctx = get2dContext(tmp);
           tctx.drawImage(maskImg, 0, 0, canvas.width, canvas.height);
           const data = tctx.getImageData(0, 0, canvas.width, canvas.height);
           const out = ctx.createImageData(canvas.width, canvas.height);
@@ -150,6 +273,9 @@ export function MaskEditorModal({ source, initialMask, title = "Tô Mask", onClo
         } else if (key === "p") {
           claimShortcut(event);
           setTool("pen");
+        } else if (key === "i") {
+          claimShortcut(event);
+          handleInvert();
         } else if (event.key === "[") {
           claimShortcut(event);
           const step = event.repeat ? 8 : 1;
@@ -186,15 +312,13 @@ export function MaskEditorModal({ source, initialMask, title = "Tô Mask", onClo
 
   function snapshotCanvas(canvas = canvasRef.current) {
     if (!canvas?.width || !canvas?.height) return null;
-    return canvas.getContext("2d").getImageData(0, 0, canvas.width, canvas.height);
+    return get2dContext(canvas).getImageData(0, 0, canvas.width, canvas.height);
   }
 
   function restoreSnapshot(snapshot) {
     const canvas = canvasRef.current;
     if (!canvas || !snapshot) return;
-    const ctx = canvas.getContext("2d");
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.putImageData(snapshot, 0, 0);
+    restoreCanvasSnapshot(canvas, snapshot);
   }
 
   function resetHistory(canvas = canvasRef.current) {
@@ -208,6 +332,32 @@ export function MaskEditorModal({ source, initialMask, title = "Tô Mask", onClo
     if (!snapshot) return;
     historyRef.current = historyRef.current.slice(0, historyIndex + 1).concat(snapshot);
     setHistoryIndex(historyRef.current.length - 1);
+  }
+
+  function beginMaskGrow() {
+    if (!ready || growBaseRef.current) return;
+    growBaseRef.current = snapshotCanvas();
+    growAmountRef.current = 0;
+    setMaskGrowAmount(0);
+  }
+
+  function previewMaskGrow(value) {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    if (!growBaseRef.current) growBaseRef.current = snapshotCanvas();
+    const amount = clamp(Number(value) || 0, MIN_MASK_GROW, MAX_MASK_GROW);
+    growAmountRef.current = amount;
+    setMaskGrowAmount(amount);
+    applyMaskGrowSnapshot(canvas, growBaseRef.current, amount, maskColor);
+  }
+
+  function commitMaskGrow() {
+    if (!growBaseRef.current) return;
+    const amount = growAmountRef.current;
+    growBaseRef.current = null;
+    growAmountRef.current = 0;
+    if (amount !== 0) commitHistory();
+    setMaskGrowAmount(0);
   }
 
   function undo() {
@@ -333,7 +483,7 @@ export function MaskEditorModal({ source, initialMask, title = "Tô Mask", onClo
     if (!canFillPenPath) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext("2d");
+    const ctx = get2dContext(canvas);
     ctx.save();
     ctx.globalCompositeOperation = "source-over";
     ctx.fillStyle = maskColor;
@@ -446,7 +596,7 @@ export function MaskEditorModal({ source, initialMask, title = "Tô Mask", onClo
   }
 
   function strokeTo(point) {
-    const ctx = canvasRef.current.getContext("2d");
+    const ctx = get2dContext(canvasRef.current);
     const radius = getBrushRadiusInCanvasPx();
     ctx.globalCompositeOperation = erasing ? "destination-out" : "source-over";
     ctx.fillStyle = maskColor;
@@ -535,7 +685,7 @@ export function MaskEditorModal({ source, initialMask, title = "Tô Mask", onClo
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || !ready) return;
-    const ctx = canvas.getContext("2d");
+    const ctx = get2dContext(canvas);
     const data = ctx.getImageData(0, 0, canvas.width, canvas.height);
     const rgb = hexToRgb(maskColor);
     let changed = false;
@@ -550,7 +700,24 @@ export function MaskEditorModal({ source, initialMask, title = "Tô Mask", onClo
 
   function handleClear() {
     const canvas = canvasRef.current;
-    canvas.getContext("2d").clearRect(0, 0, canvas.width, canvas.height);
+    get2dContext(canvas).clearRect(0, 0, canvas.width, canvas.height);
+    commitHistory();
+  }
+
+  function handleInvert() {
+    const canvas = canvasRef.current;
+    if (!canvas?.width || !canvas?.height) return;
+    const ctx = get2dContext(canvas);
+    const data = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const rgb = hexToRgb(maskColor);
+    for (let i = 0; i < data.data.length; i += 4) {
+      const wasPainted = data.data[i + 3] > 10;
+      data.data[i] = rgb.r;
+      data.data[i + 1] = rgb.g;
+      data.data[i + 2] = rgb.b;
+      data.data[i + 3] = wasPainted ? 0 : 255;
+    }
+    ctx.putImageData(data, 0, 0);
     commitHistory();
   }
 
@@ -559,12 +726,12 @@ export function MaskEditorModal({ source, initialMask, title = "Tô Mask", onClo
     if (!canvas) return;
     setSaving(true);
     try {
-      const ctx = canvas.getContext("2d");
+      const ctx = get2dContext(canvas);
       const painted = ctx.getImageData(0, 0, canvas.width, canvas.height);
       const out = document.createElement("canvas");
       out.width = canvas.width;
       out.height = canvas.height;
-      const octx = out.getContext("2d");
+      const octx = get2dContext(out);
       const result = octx.createImageData(canvas.width, canvas.height);
       let hasMask = false;
       for (let i = 0; i < painted.data.length; i += 4) {
@@ -608,6 +775,24 @@ export function MaskEditorModal({ source, initialMask, title = "Tô Mask", onClo
               <input type="range" min="5" max="300" value={brushSize} onChange={event => setBrushSize(Number(event.target.value))} />
               <b>{brushSize}</b>
             </label>
+            <label className="maskBrushSize maskGrowPick" title="Grow/Shrink mask trực quan theo pixel">
+              <span>Grow</span>
+              <input
+                type="range"
+                min={MIN_MASK_GROW}
+                max={MAX_MASK_GROW}
+                step="1"
+                value={maskGrowAmount}
+                onPointerDown={beginMaskGrow}
+                onPointerUp={commitMaskGrow}
+                onPointerCancel={commitMaskGrow}
+                onFocus={beginMaskGrow}
+                onBlur={commitMaskGrow}
+                onKeyUp={commitMaskGrow}
+                onChange={event => previewMaskGrow(event.target.value)}
+              />
+              <b>{maskGrowAmount > 0 ? `+${maskGrowAmount}` : maskGrowAmount}</b>
+            </label>
             <label className="maskColorPick" title="Màu hiển thị mask" style={{ "--mask-color": maskColor }}>
               <input type="color" value={maskColor} onChange={event => setMaskColor(event.target.value)} />
               <span aria-hidden="true" />
@@ -619,6 +804,9 @@ export function MaskEditorModal({ source, initialMask, title = "Tô Mask", onClo
             </label>
             <button type="button" className="maskTool maskToolIconOnly" onClick={handleClear} title="Xóa toàn bộ mask" aria-label="Xóa toàn bộ mask">
               <RotateCcw size={15} />
+            </button>
+            <button type="button" className="maskTool maskToolIconOnly" onClick={handleInvert} title="Đảo ngược mask (I)" aria-label="Đảo ngược mask">
+              <Contrast size={15} />
             </button>
             <button className="modalClose" onClick={onClose} title="Đóng"><X size={18} /></button>
           </div>

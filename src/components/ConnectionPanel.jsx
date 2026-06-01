@@ -12,7 +12,7 @@ export function ConnectionPanel({ comfyAddress, serverAddress, onAddressChange }
           onChange={event => onAddressChange(event.target.value)}
         />
       </div>
-      <small>Nhập URL ComfyUI đầy đủ, ví dụ http://127.0.0.1:8188.</small>
+      <small>Nhập URL ComfyUI đầy đủ, ví dụ http://127.0.0.1:8188 hoặc https://user:pass@domain.com.</small>
     </label>
   );
 }

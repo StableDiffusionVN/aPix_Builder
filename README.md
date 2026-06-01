@@ -41,7 +41,7 @@ Màn hình chính gồm:
 - Theo dõi tiến trình real-time bằng Server-Sent Events.
 - Hàng chờ chạy workflow: bấm Run khi đang chạy sẽ thêm request mới vào queue.
 - Stop workflow đang chạy và gửi interrupt/cancel sang ComfyUI.
-- Lưu lịch sử output trong `output/history.json`, giới hạn 50 mục gần nhất.
+- Lưu lịch sử output trong `output/history.json`, giới hạn 500 mục gần nhất.
 - Tải output về máy, đánh dấu favorite, xóa lịch sử.
 - Image Editor tích hợp cho input và output.
 - Mask Editor cho input image mask.
@@ -59,6 +59,56 @@ http://127.0.0.1:8188
 ```
 
 ComfyUI cần bật API HTTP/WebSocket như cấu hình mặc định. Nếu ComfyUI chạy ở máy hoặc port khác, nhập URL đầy đủ trong ô `ComfyUI address`.
+
+## Cấu hình ComfyUI address
+
+Ô `ComfyUI address` nhận URL đầy đủ của ComfyUI local hoặc ComfyUI chạy online từ xa.
+
+Ví dụ local:
+
+```txt
+http://127.0.0.1:8188
+http://192.168.1.10:8188
+```
+
+Ví dụ server online từ xa:
+
+```txt
+https://comfy.example.com
+https://comfy.example.com:8188
+```
+
+Nếu ComfyUI hoặc proxy online yêu cầu user/pass Basic Auth, nhập trực tiếp trong URL:
+
+```txt
+https://username:password@comfy.example.com
+https://username:password@comfy.example.com:8188
+```
+
+Backend sẽ tự gửi header Basic Auth khi gọi HTTP API và tự dùng `wss://` cho WebSocket nếu URL là `https://`.
+
+Nếu username hoặc password có ký tự đặc biệt, hãy URL-encode trước khi nhập. Ví dụ:
+
+| Ký tự | Viết trong URL |
+| --- | --- |
+| `@` | `%40` |
+| `:` | `%3A` |
+| `/` | `%2F` |
+| `#` | `%23` |
+| khoảng trắng | `%20` |
+
+Ví dụ password là `abc@123`:
+
+```txt
+https://username:abc%40123@comfy.example.com
+```
+
+Lưu ý khi dùng ComfyUI online:
+
+- Đảm bảo server mở API HTTP và WebSocket ra internet hoặc qua tunnel/proxy.
+- Nếu dùng HTTPS qua reverse proxy, proxy cần hỗ trợ WebSocket upgrade.
+- Không chia sẻ URL có user/pass trong ảnh chụp màn hình, log public hoặc issue GitHub.
+- Nếu đổi địa chỉ server trong app, địa chỉ mới được lưu trong trình duyệt local để lần sau mở lại.
 
 ## Cài đặt Node.js
 

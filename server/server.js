@@ -43,6 +43,7 @@ const presetsFilePath = path.join(presetsDir, "presets.json");
 const port = Number(process.env.PORT || 8787);
 const comfyTimeoutMs = Number(process.env.COMFY_TIMEOUT_MS || 10 * 60 * 1000);
 const maxImageBodyBytes = Number(process.env.MAX_IMAGE_BODY_BYTES || 512 * 1024 * 1024);
+const maxOutputHistoryItems = 500;
 const activeRuns = new Map();
 const pendingSseClients = new Map();
 
@@ -363,7 +364,7 @@ async function readOutputHistory() {
 
 async function writeOutputHistory(items) {
   await mkdir(outputDir, { recursive: true });
-  await writeFile(outputHistoryPath, JSON.stringify(items.slice(0, 50), null, 2));
+  await writeFile(outputHistoryPath, JSON.stringify(items.slice(0, maxOutputHistoryItems), null, 2));
 }
 
 function trimHistoryValues(values = {}) {
@@ -528,7 +529,7 @@ async function handleSaveEditedOutput(req, res) {
   const current = await readOutputHistory();
   const history = [item, ...current];
   await writeOutputHistory(history);
-  send(res, 200, { historyItem: item, history: history.slice(0, 50) });
+  send(res, 200, { historyItem: item, history: history.slice(0, maxOutputHistoryItems) });
 }
 
 function slugifyTemplateId(value = "") {

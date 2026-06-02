@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 const MIN_IMAGE_SCALE = 0.5;
-const MAX_IMAGE_SCALE = 10;
+const MAX_IMAGE_SCALE = 100;
 
 export function useImageViewer(heroImage, canCompare) {
   const [imageScale, setImageScale] = useState(1);
@@ -9,16 +9,30 @@ export function useImageViewer(heroImage, canCompare) {
   const [imageFitSize, setImageFitSize] = useState({ width: 0, height: 0 });
   const [outputImageSize, setOutputImageSize] = useState({ width: 0, height: 0 });
   const [draggingImage, setDraggingImage] = useState(false);
+  const [isWheeling, setIsWheeling] = useState(false);
   const [compareMode, setCompareMode] = useState(false);
   const [comparePosition, setComparePosition] = useState(50);
   const [compareDividerX, setCompareDividerX] = useState(50);
+
   const imageDragRef = useRef(null);
+  const imageScaleRef = useRef(1);
+  const imagePanRef = useRef({ x: 0, y: 0 });
+  const wheelTimerRef = useRef(null);
   const previewAreaRef = useRef(null);
   const imageElementRef = useRef(null);
 
+  // Keep refs in sync so wheel handler always reads latest values
+  useEffect(() => {
+    imageScaleRef.current = imageScale;
+    imagePanRef.current = imagePan;
+  });
+
   function resetImageView() {
-    setImageScale(1);
-    setImagePan({ x: 0, y: 0 });
+    const next = { scale: 1, pan: { x: 0, y: 0 } };
+    imageScaleRef.current = next.scale;
+    imagePanRef.current = next.pan;
+    setImageScale(next.scale);
+    setImagePan(next.pan);
   }
 
   function updateImageFitSize() {
@@ -67,8 +81,36 @@ export function useImageViewer(heroImage, canCompare) {
   function handlePreviewWheel(event) {
     if (!heroImage) return;
     event.preventDefault();
-    const delta = event.deltaY > 0 ? -0.12 : 0.12;
-    setImageScale(current => Math.min(MAX_IMAGE_SCALE, Math.max(MIN_IMAGE_SCALE, Number((current + delta).toFixed(2)))));
+
+    const area = previewAreaRef.current;
+    if (!area) return;
+    const rect = area.getBoundingClientRect();
+    // Mouse position relative to preview area center
+    const mouseX = event.clientX - rect.left - rect.width / 2;
+    const mouseY = event.clientY - rect.top - rect.height / 2;
+
+    const factor = event.deltaY > 0 ? 1 / 1.15 : 1.15;
+    const prevScale = imageScaleRef.current;
+    const prevPan = imagePanRef.current;
+    const newScale = Math.min(MAX_IMAGE_SCALE, Math.max(MIN_IMAGE_SCALE, Number((prevScale * factor).toFixed(4))));
+    if (newScale === prevScale) return;
+
+    const ratio = newScale / prevScale;
+    const newPan = {
+      x: mouseX + (prevPan.x - mouseX) * ratio,
+      y: mouseY + (prevPan.y - mouseY) * ratio
+    };
+
+    imageScaleRef.current = newScale;
+    imagePanRef.current = newPan;
+
+    // Disable CSS transition while wheeling to prevent lag accumulation
+    setIsWheeling(true);
+    if (wheelTimerRef.current) clearTimeout(wheelTimerRef.current);
+    wheelTimerRef.current = setTimeout(() => setIsWheeling(false), 150);
+
+    setImageScale(newScale);
+    setImagePan(newPan);
   }
 
   function updateComparePosition(event) {
@@ -124,7 +166,7 @@ export function useImageViewer(heroImage, canCompare) {
 
   return {
     imageScale, imagePan, imageFitSize, outputImageSize,
-    draggingImage, compareMode, setCompareMode,
+    draggingImage, isWheeling, compareMode, setCompareMode,
     comparePosition, compareDividerX,
     previewAreaRef, imageElementRef,
     resetImageView, handleResultImageLoad,

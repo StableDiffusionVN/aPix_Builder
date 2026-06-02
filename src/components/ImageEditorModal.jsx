@@ -897,6 +897,8 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
   const panStartRef = useRef(null);
   const activeStrokeRef = useRef(null);
   const zoomStartRef = useRef(null);
+  const zoomRef = useRef(1);
+  const panRef = useRef({ x: 0, y: 0 });
   const rafRef = useRef(null);
   const baseCanvasRef = useRef(null);
   const strokeLayerRef = useRef(null);
@@ -1891,9 +1893,43 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
     restore(history[nextIndex]);
   }
 
+  // Keep refs in sync so wheel handler always reads current values
+  useEffect(() => { zoomRef.current = zoom; panRef.current = pan; });
+
   function updateZoom(delta) {
     setZoom(value => clamp(Number((value + delta).toFixed(2)), 0.2, 100));
   }
+
+  function zoomToPoint(factor, mouseX, mouseY) {
+    const prevZoom = zoomRef.current;
+    const prevPan = panRef.current;
+    const newZoom = clamp(Number((prevZoom * factor).toFixed(3)), 0.2, 100);
+    if (newZoom === prevZoom) return;
+    const ratio = newZoom / prevZoom;
+    const newPan = {
+      x: mouseX + (prevPan.x - mouseX) * ratio,
+      y: mouseY + (prevPan.y - mouseY) * ratio
+    };
+    zoomRef.current = newZoom;
+    panRef.current = newPan;
+    setZoom(newZoom);
+    setPan(newPan);
+  }
+
+  useEffect(() => {
+    const stage = stageRef.current;
+    if (!stage) return;
+    function onWheel(event) {
+      event.preventDefault();
+      const rect = stage.getBoundingClientRect();
+      const mouseX = event.clientX - rect.left - rect.width / 2;
+      const mouseY = event.clientY - rect.top - rect.height / 2;
+      const factor = event.deltaY < 0 ? 1.12 : 1 / 1.12;
+      zoomToPoint(factor, mouseX, mouseY);
+    }
+    stage.addEventListener("wheel", onWheel, { passive: false });
+    return () => stage.removeEventListener("wheel", onWheel);
+  }, []);
 
   function toggleEditorCompare() {
     setEditorCompareMode(current => {
@@ -1963,6 +1999,17 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
         return;
       }
 
+      if (hasUndoModifier && !editable && event.key === "Enter") {
+        if (
+          (activeTool === "pen" && penClosedRef.current && penAnchorsRef.current.length >= 3) ||
+          ((activeTool === "rectSelect" || activeTool === "ellipseSelect") && activeSelectionRef.current?.w > 0.001 && activeSelectionRef.current?.h > 0.001)
+        ) {
+          event.preventDefault();
+          fillCurrentTool();
+        }
+        return;
+      }
+
       // Shift+M → ellipse select (must be handled before the shiftKey guard)
       if (event.shiftKey && !editable && !hasUndoModifier && !event.altKey && key === "m") {
         event.preventDefault();
@@ -1998,7 +2045,14 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
         return;
       }
 
-      if (event.key === "Enter" && activeTool === "crop") {
+      if (event.key === "Enter" && activeTool === "pen") {
+        if (!penClosedRef.current && penAnchorsRef.current.length >= 3) {
+          event.preventDefault();
+          setPenClosedSync(true);
+          setSelectedPenAnchor(0);
+          commitHistory(adjustmentsRef.current, brushRef.current, strokesRef.current);
+        }
+      } else if (event.key === "Enter" && activeTool === "crop") {
         event.preventDefault();
         commitCurrent();
         activateTool("hand");
@@ -2103,7 +2157,10 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
   }
 
   function penHitRadiusNorm() {
-    return 10 / (canvasRef.current?.width || 512);
+    const canvas = canvasRef.current;
+    if (!canvas) return 0.02;
+    const rect = canvas.getBoundingClientRect();
+    return rect.width > 0 ? 10 / rect.width : 10 / (canvas.width || 512);
   }
 
   function distNorm(a, b) {
@@ -2701,30 +2758,34 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
                 onPointerUp={endPointerInteraction}
                 onPointerCancel={endPointerInteraction}
               />
-              {activeTool === "pen" && penAnchors.length > 0 ? (
-                <>
-                  {/* SVG: path + handle lines only (no circles — avoids aspect-ratio distortion) */}
-                  <svg className="imageEditorPenOverlay" viewBox="0 0 1 1" preserveAspectRatio="none" aria-hidden="true">
-                    {buildImagePenPath(penAnchors, penClosed) ? (
-                      <path className={`imageEditorPenPath${penClosed ? " closed" : ""}`} d={buildImagePenPath(penAnchors, penClosed)} />
-                    ) : null}
+              {activeTool === "pen" && penAnchors.length > 0 ? (() => {
+                const iz = 1 / zoom;
+                const pathD = buildImagePenPath(penAnchors, penClosed);
+                return (
+                  <>
+                    {/* SVG: path + handle lines only (no circles — avoids aspect-ratio distortion) */}
+                    <svg className="imageEditorPenOverlay" viewBox="0 0 1 1" preserveAspectRatio="none" aria-hidden="true">
+                      {pathD ? (
+                        <path className={`imageEditorPenPath${penClosed ? " closed" : ""}`} d={pathD} style={{ strokeWidth: 1.5 * iz }} />
+                      ) : null}
+                      {penAnchors.map((anchor, idx) => (
+                        <g key={idx}>
+                          {anchor.in ? <line className="imageEditorPenHandleLine" x1={anchor.x} y1={anchor.y} x2={anchor.in.x} y2={anchor.in.y} style={{ strokeWidth: iz, strokeDasharray: `${3 * iz} ${3 * iz}` }} /> : null}
+                          {anchor.out ? <line className="imageEditorPenHandleLine" x1={anchor.x} y1={anchor.y} x2={anchor.out.x} y2={anchor.out.y} style={{ strokeWidth: iz, strokeDasharray: `${3 * iz} ${3 * iz}` }} /> : null}
+                        </g>
+                      ))}
+                    </svg>
+                    {/* Anchor + handle dots as divs so they stay circular on any aspect ratio */}
                     {penAnchors.map((anchor, idx) => (
-                      <g key={idx}>
-                        {anchor.in ? <line className="imageEditorPenHandleLine" x1={anchor.x} y1={anchor.y} x2={anchor.in.x} y2={anchor.in.y} vectorEffect="non-scaling-stroke" /> : null}
-                        {anchor.out ? <line className="imageEditorPenHandleLine" x1={anchor.x} y1={anchor.y} x2={anchor.out.x} y2={anchor.out.y} vectorEffect="non-scaling-stroke" /> : null}
-                      </g>
+                      <span key={idx}>
+                        {anchor.in ? <span className="imageEditorPenHandleDot" style={{ left: `${anchor.in.x * 100}%`, top: `${anchor.in.y * 100}%`, width: `${7 * iz}px`, height: `${7 * iz}px`, borderWidth: `${1.5 * iz}px` }} /> : null}
+                        {anchor.out ? <span className="imageEditorPenHandleDot" style={{ left: `${anchor.out.x * 100}%`, top: `${anchor.out.y * 100}%`, width: `${7 * iz}px`, height: `${7 * iz}px`, borderWidth: `${1.5 * iz}px` }} /> : null}
+                        <span className={`imageEditorPenAnchorDot${idx === selectedPenAnchor ? " selected" : ""}`} style={{ left: `${anchor.x * 100}%`, top: `${anchor.y * 100}%`, width: `${10 * iz}px`, height: `${10 * iz}px`, borderWidth: `${2 * iz}px` }} />
+                      </span>
                     ))}
-                  </svg>
-                  {/* Anchor + handle dots as divs so they stay circular on any aspect ratio */}
-                  {penAnchors.map((anchor, idx) => (
-                    <span key={idx}>
-                      {anchor.in ? <span className="imageEditorPenHandleDot" style={{ left: `${anchor.in.x * 100}%`, top: `${anchor.in.y * 100}%` }} /> : null}
-                      {anchor.out ? <span className="imageEditorPenHandleDot" style={{ left: `${anchor.out.x * 100}%`, top: `${anchor.out.y * 100}%` }} /> : null}
-                      <span className={`imageEditorPenAnchorDot${idx === selectedPenAnchor ? " selected" : ""}`} style={{ left: `${anchor.x * 100}%`, top: `${anchor.y * 100}%` }} />
-                    </span>
-                  ))}
-                </>
-              ) : null}
+                  </>
+                );
+              })() : null}
               {(activeTool === "rectSelect" || activeTool === "ellipseSelect") && activeSelection && activeSelection.w > 0 && activeSelection.h > 0 ? (
                 <div
                   className={`imageEditorSelection${activeTool === "ellipseSelect" ? " ellipse" : ""}`}

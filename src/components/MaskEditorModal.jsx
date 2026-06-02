@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Brush, Contrast, Eraser, Hand, RotateCcw, X, Check, Loader2, ZoomIn, ZoomOut, Maximize, Undo2, Redo2, PenTool, PaintBucket } from "lucide-react";
 
 const MIN_ZOOM = 0.2;
-const MAX_ZOOM = 16;
+const MAX_ZOOM = 100;
 const MIN_MASK_GROW = -100;
 const MAX_MASK_GROW = 100;
 const ZOOM_TRANSITION = "transform 0.16s cubic-bezier(0.22, 1, 0.36, 1)";
@@ -832,28 +832,31 @@ export function MaskEditorModal({ source, initialMask, title = "Tô Mask", onClo
           >
             {source ? <img className="maskBaseImage" src={source} alt="" draggable="false" /> : null}
             <canvas ref={canvasRef} className="maskCanvas" style={{ opacity: maskOpacity / 100 }} />
-            {penAnchors.length ? (
-              <svg className="maskPenOverlay" viewBox={`0 0 ${dims.width || 1} ${dims.height || 1}`} aria-hidden="true">
-                {penPathD ? <path className={`maskPenPath ${penClosed ? "closed" : ""}`} d={penPathD} /> : null}
-                {penAnchors.map((anchor, index) => (
-                  <g key={index}>
-                    {anchor.in ? (
-                      <>
-                        <line className="maskPenHandleLine" x1={anchor.x} y1={anchor.y} x2={anchor.in.x} y2={anchor.in.y} />
-                        <circle className="maskPenHandle" cx={anchor.in.x} cy={anchor.in.y} r="4" />
-                      </>
-                    ) : null}
-                    {anchor.out ? (
-                      <>
-                        <line className="maskPenHandleLine" x1={anchor.x} y1={anchor.y} x2={anchor.out.x} y2={anchor.out.y} />
-                        <circle className="maskPenHandle" cx={anchor.out.x} cy={anchor.out.y} r="4" />
-                      </>
-                    ) : null}
-                    <circle className={`maskPenAnchor ${index === selectedPenAnchor ? "selected" : ""}`} cx={anchor.x} cy={anchor.y} r="5" />
-                  </g>
-                ))}
-              </svg>
-            ) : null}
+            {penAnchors.length ? (() => {
+              const sz = 1 / view.zoom;
+              return (
+                <svg className="maskPenOverlay" viewBox={`0 0 ${dims.width || 1} ${dims.height || 1}`} aria-hidden="true">
+                  {penPathD ? <path className={`maskPenPath ${penClosed ? "closed" : ""}`} d={penPathD} style={{ strokeWidth: 2 * sz }} /> : null}
+                  {penAnchors.map((anchor, index) => (
+                    <g key={index}>
+                      {anchor.in ? (
+                        <>
+                          <line className="maskPenHandleLine" x1={anchor.x} y1={anchor.y} x2={anchor.in.x} y2={anchor.in.y} style={{ strokeWidth: sz, strokeDasharray: `${4 * sz} ${4 * sz}` }} />
+                          <circle className="maskPenHandle" cx={anchor.in.x} cy={anchor.in.y} r={4 * sz} style={{ strokeWidth: 2 * sz }} />
+                        </>
+                      ) : null}
+                      {anchor.out ? (
+                        <>
+                          <line className="maskPenHandleLine" x1={anchor.x} y1={anchor.y} x2={anchor.out.x} y2={anchor.out.y} style={{ strokeWidth: sz, strokeDasharray: `${4 * sz} ${4 * sz}` }} />
+                          <circle className="maskPenHandle" cx={anchor.out.x} cy={anchor.out.y} r={4 * sz} style={{ strokeWidth: 2 * sz }} />
+                        </>
+                      ) : null}
+                      <circle className={`maskPenAnchor ${index === selectedPenAnchor ? "selected" : ""}`} cx={anchor.x} cy={anchor.y} r={5 * sz} style={{ strokeWidth: 2 * sz }} />
+                    </g>
+                  ))}
+                </svg>
+              );
+            })() : null}
           </div>
           {showBrushCursor ? (
             <div

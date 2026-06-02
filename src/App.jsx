@@ -17,10 +17,11 @@ import {
   WifiOff,
   X
 } from "lucide-react";
-import { ConnectionPanel } from "./components/ConnectionPanel";
+import { ConnectionPanel, SavedServerList, AddServerForm } from "./components/ConnectionPanel";
 import { DynamicField } from "./components/DynamicField";
 import { ImageEditorModal } from "./components/ImageEditorModal";
 import { OutputGallery } from "./components/OutputGallery";
+import { PresetBar } from "./components/PresetBar";
 import { RunControls } from "./components/RunControls";
 import { TemplateEditorModal } from "./components/TemplateEditorModal";
 import { TemplateSelector } from "./components/TemplateSelector";
@@ -30,6 +31,8 @@ import { buildDefaults, flattenInputs, normalizeId, requestPayload } from "./lib
 import { useDiscovery } from "./hooks/useDiscovery";
 import { useHistory } from "./hooks/useHistory";
 import { useInputImages } from "./hooks/useInputImages";
+import { usePresets } from "./hooks/usePresets";
+import { useServerList } from "./hooks/useServerList";
 import { useWorkspace, sanitizeWorkspaceValues } from "./hooks/useWorkspace";
 import { useImageViewer } from "./hooks/useImageViewer";
 import { useExecution } from "./hooks/useExecution";
@@ -37,6 +40,7 @@ import { useExecution } from "./hooks/useExecution";
 const SERVER_STORAGE_KEY = "comfyui-build:server:v2";
 const THEME_STORAGE_KEY = "comfyui-build:theme";
 const MAIN_FONT_STORAGE_KEY = "comfyui-build:main-font";
+const NOTIFY_STORAGE_KEY = "comfyui-build:notify:v1";
 const DEFAULT_COMFY_SERVER = "http://127.0.0.1:8188";
 const THEME_OPTIONS = [
   { id: "dark", label: "Dark", swatch: "#121212" },
@@ -75,6 +79,10 @@ function loadMainFont() {
 function loadServerAddress() {
   const stored = localStorage.getItem(SERVER_STORAGE_KEY) || "";
   return stored || DEFAULT_COMFY_SERVER;
+}
+
+function loadNotifyEnabled() {
+  try { return JSON.parse(localStorage.getItem(NOTIFY_STORAGE_KEY)) === true; } catch { return false; }
 }
 
 function formatDuration(ms) {
@@ -117,11 +125,15 @@ export default function App() {
   const [theme, setTheme] = useState(loadTheme);
   const [selectedOutputIndex, setSelectedOutputIndex] = useState(0);
   const [showWaitScreen, setShowWaitScreen] = useState(false);
+  const [notifyEnabled, setNotifyEnabled] = useState(loadNotifyEnabled);
+  const [addServerOpen, setAddServerOpen] = useState(false);
 
   const { discovery, discoveryLoading } = useDiscovery(comfyAddress);
   const { history, setHistory, loadOutputHistory, deleteHistoryItem } = useHistory();
   const { inputImages, setInputImages, refreshInputImages } = useInputImages();
   const { workspaceRef, getStoredValues, saveValues, getLastTemplate } = useWorkspace();
+  const { getPresets, savePreset, updatePreset, deletePreset, presetsVersion } = usePresets();
+  const { getServers, addServer, removeServer } = useServerList();
 
   const {
     running, activeRunId, runQueue,
@@ -132,11 +144,15 @@ export default function App() {
     onComplete: (historyItem) => {
       if (historyItem) setHistory(current => [historyItem, ...current]);
       setSelectedOutputIndex(0);
+      if (notifyEnabled && typeof Notification !== "undefined" && Notification.permission === "granted") {
+        new Notification("aPix Builder", { body: "Workflow đã hoàn thành!", icon: "/sdvn-icon.png" });
+      }
     }
   });
 
   const inputs = useMemo(() => flattenInputs(config?.input), [config]);
   const outputs = useMemo(() => Object.values(config?.output || {}), [config]);
+  const currentPresets = useMemo(() => getPresets(selectedTemplate), [getPresets, selectedTemplate, presetsVersion]);
   const app = config?.app || {};
   const serverAddress = config?.server?.address || config?.sever?.address || "";
   const selectedTemplateName = templates.find(item => item.id === selectedTemplate)?.name || selectedTemplate || "Default";
@@ -196,7 +212,7 @@ export default function App() {
 
   const {
     imageScale, imagePan, imageFitSize, outputImageSize,
-    draggingImage, compareMode, setCompareMode,
+    draggingImage, isWheeling, compareMode, setCompareMode,
     comparePosition, compareDividerX,
     previewAreaRef, imageElementRef,
     resetImageView, handleResultImageLoad,
@@ -220,6 +236,11 @@ export default function App() {
   useEffect(() => {
     if (comfyAddress) localStorage.setItem(SERVER_STORAGE_KEY, comfyAddress);
   }, [comfyAddress]);
+
+  // Persist notification preference
+  useEffect(() => {
+    localStorage.setItem(NOTIFY_STORAGE_KEY, JSON.stringify(notifyEnabled));
+  }, [notifyEnabled]);
 
   // Persist workspace on every change
   useEffect(() => {
@@ -531,6 +552,14 @@ export default function App() {
             onChange={loadConfig}
             onEdit={() => setTemplateEditorOpen(true)}
           />
+          <PresetBar
+            templateId={selectedTemplate}
+            presets={currentPresets}
+            onLoad={nextValues => setValues(current => ({ ...current, ...nextValues }))}
+            onSave={name => savePreset(selectedTemplate, name, values)}
+            onUpdate={id => updatePreset(selectedTemplate, id, values)}
+            onDelete={id => deletePreset(selectedTemplate, id)}
+          />
         </section>
 
         <section className="settingsGroup workflowSettings">
@@ -597,7 +626,7 @@ export default function App() {
 
           <div className="outputViewer">
             <div
-              className={`previewArea ${heroImage && !showRunningScreen ? "isInteractive" : ""} ${resultOutputs.length > 1 ? "hasOutputRail" : ""} ${compareMode ? "isCompareMode" : ""} ${draggingImage ? "isDragging" : ""}`}
+              className={`previewArea ${heroImage && !showRunningScreen ? "isInteractive" : ""} ${resultOutputs.length > 1 ? "hasOutputRail" : ""} ${compareMode ? "isCompareMode" : ""} ${draggingImage || isWheeling ? "isDragging" : ""}`}
               ref={previewAreaRef}
               onWheel={handlePreviewWheel}
               onPointerDown={handlePreviewPointerDown}
@@ -751,6 +780,21 @@ export default function App() {
                   <input type="checkbox" checked={showServerDetails} onChange={event => setShowServerDetails(event.target.checked)} />
                   <span>Hiện chi tiết</span>
                 </label>
+                <label className="serverDetailToggle" title={typeof Notification !== "undefined" && Notification.permission === "denied" ? "Trình duyệt đã chặn thông báo — mở lại trong Site Settings" : "Nhận thông báo khi workflow hoàn thành"}>
+                  <input
+                    type="checkbox"
+                    checked={notifyEnabled}
+                    onChange={async event => {
+                      const next = event.target.checked;
+                      if (next && typeof Notification !== "undefined" && Notification.permission !== "granted") {
+                        const perm = await Notification.requestPermission();
+                        if (perm !== "granted") return;
+                      }
+                      setNotifyEnabled(next);
+                    }}
+                  />
+                  <span>Thông báo</span>
+                </label>
               </div>
               <ConnectionPanel comfyAddress={comfyAddress} serverAddress={serverAddress} onAddressChange={setComfyAddress} />
               <div className="note serverDiscoverySummary">
@@ -780,6 +824,23 @@ export default function App() {
                   )}
                 </div>
               ) : null}
+
+              <SavedServerList
+                servers={getServers()}
+                currentAddress={comfyAddress}
+                onSwitch={addr => { setComfyAddress(addr); }}
+                onRemove={removeServer}
+              />
+              {addServerOpen ? (
+                <AddServerForm
+                  onAdd={(label, address) => { addServer(label, address); setAddServerOpen(false); }}
+                  onCancel={() => setAddServerOpen(false)}
+                />
+              ) : (
+                <button className="addServerToggleBtn" onClick={() => setAddServerOpen(true)}>
+                  + Lưu địa chỉ server
+                </button>
+              )}
             </div>
           </section>
         </div>

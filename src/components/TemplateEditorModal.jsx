@@ -1,11 +1,185 @@
 import { useEffect, useMemo, useState } from "react";
-import { FileText, GripVertical, Plus, Save, Trash2, Upload, X } from "lucide-react";
+import {
+  Box,
+  Dices,
+  FileText,
+  GripVertical,
+  Hash,
+  Image as ImageIcon,
+  List,
+  Plus,
+  Save,
+  ToggleLeft,
+  Trash2,
+  Type,
+  Upload,
+  X
+} from "lucide-react";
 import YAML from "yaml";
 import { DYNAMIC_FIELD_TYPES, canonicalDynamicType, inferDynamicTypeFromField } from "../lib/dynamicTypes";
 
 const FIELD_TYPES = ["image", ...DYNAMIC_FIELD_TYPES, "seed", "int", "float", "string", "menu", "checkbox", "boolean"];
 const DISPLAY_TYPES = ["input", "slider"];
 const STRING_DISPLAY_TYPES = ["input", "multiline"];
+
+function inputRowIcon(row) {
+  if (row.kind === "note") return FileText;
+  const icons = {
+    image: ImageIcon,
+    int: Hash,
+    float: Hash,
+    seed: Dices,
+    string: Type,
+    menu: List,
+    checkbox: ToggleLeft,
+    boolean: ToggleLeft
+  };
+  return icons[row.type] || Box;
+}
+
+function inputRowLabel(row) {
+  if (row.kind === "note") {
+    const firstLine = String(row.markdown || "").split("\n").find(line => line.trim()) || "";
+    return firstLine.replace(/^#+\s*/, "").trim() || "Chú thích";
+  }
+  return row.label || row.field || "Input";
+}
+
+function inputRowMeta(row, nodes) {
+  if (row.kind === "note") return "Markdown · chú thích";
+  const node = nodes.find(item => item.id === row.nodeId);
+  const nodeLabel = node ? `${row.nodeId} · ${node.title}` : row.nodeId || "—";
+  return `${nodeLabel} · ${row.field || "—"}`;
+}
+
+function InputDetailPanel({ row, nodes, onUpdate, onDelete }) {
+  if (!row) {
+    return (
+      <div className="inputDetailEmpty">
+        <p>Chọn một input bên trái để chỉnh chi tiết.</p>
+        <small>Hoặc bấm <b>Thêm input</b> sau khi đã upload workflow JSON.</small>
+      </div>
+    );
+  }
+
+  const selectedNode = nodes.find(node => node.id === row.nodeId);
+  const Icon = inputRowIcon(row);
+
+  if (row.kind === "note") {
+    return (
+      <div className="inputDetailPanel">
+        <div className="inputDetailHeader">
+          <div className="inputDetailTitle">
+            <span className={`typeBadge typeBadge--note`}><FileText size={14} /></span>
+            <div>
+              <h4>Chú thích Markdown</h4>
+              <p>Hiển thị hướng dẫn trong form, không gửi sang ComfyUI.</p>
+            </div>
+          </div>
+          <button type="button" className="rowDeleteButton" onClick={onDelete} title="Xóa chú thích">
+            <Trash2 size={16} />
+          </button>
+        </div>
+        <label className="field inputDetailFieldWide">
+          <span>Nội dung Markdown</span>
+          <textarea rows={12} value={row.markdown} onChange={event => onUpdate({ markdown: event.target.value })} />
+        </label>
+      </div>
+    );
+  }
+
+  return (
+    <div className="inputDetailPanel">
+      <div className="inputDetailHeader">
+        <div className="inputDetailTitle">
+          <span className={`typeBadge typeBadge--${row.type || "string"}`}><Icon size={14} /></span>
+          <div>
+            <h4>{row.label || row.field || "Input"}</h4>
+            <p>{inputRowMeta(row, nodes)}</p>
+          </div>
+        </div>
+        <button type="button" className="rowDeleteButton" onClick={onDelete} title="Xóa input">
+          <Trash2 size={16} />
+        </button>
+      </div>
+      <div className="inputDetailForm">
+        <label className="field">
+          <span>ID node</span>
+          <select value={row.nodeId} onChange={event => onUpdate({ nodeId: event.target.value })}>
+            {nodes.map(node => (
+              <option key={node.id} value={node.id}>{node.id} - {node.title}</option>
+            ))}
+          </select>
+        </label>
+        <label className="field">
+          <span>Trường</span>
+          <select value={row.field} onChange={event => onUpdate({ field: event.target.value })}>
+            {(selectedNode?.fields || []).map(field => (
+              <option key={field} value={field}>{field}</option>
+            ))}
+          </select>
+        </label>
+        <label className="field">
+          <span>Kiểu dữ liệu</span>
+          <select value={row.type} onChange={event => onUpdate({ type: event.target.value })}>
+            {FIELD_TYPES.map(type => <option key={type} value={type}>{type}</option>)}
+          </select>
+        </label>
+        <label className="field">
+          <span>Hiển thị</span>
+          <select
+            value={row.display}
+            onChange={event => onUpdate({ display: event.target.value })}
+            disabled={row.type !== "int" && row.type !== "float" && row.type !== "string"}
+          >
+            {(row.type === "string" ? STRING_DISPLAY_TYPES : DISPLAY_TYPES).map(type => (
+              <option key={type} value={type}>{type}</option>
+            ))}
+          </select>
+        </label>
+        <label className="field inputDetailFieldWide">
+          <span>Tên hiển thị</span>
+          <input value={row.label} onChange={event => onUpdate({ label: event.target.value })} />
+        </label>
+        {(row.type === "int" || row.type === "float" || row.type === "seed") ? (
+          <div className="inputDetailNumericGrid">
+            <label className="field">
+              <span>Min</span>
+              <input type="number" value={row.minimum} onChange={event => onUpdate({ minimum: event.target.value })} />
+            </label>
+            <label className="field">
+              <span>Max</span>
+              <input type="number" value={row.maximum} onChange={event => onUpdate({ maximum: event.target.value })} />
+            </label>
+            <label className="field">
+              <span>Step</span>
+              <input type="number" value={row.step} onChange={event => onUpdate({ step: event.target.value })} />
+            </label>
+          </div>
+        ) : null}
+        {row.type === "menu" ? (
+          <label className="field inputDetailFieldWide">
+            <span>Menu choices, mỗi dòng một lựa chọn</span>
+            <textarea rows={4} value={row.choicesText} onChange={event => onUpdate({ choicesText: event.target.value })} />
+          </label>
+        ) : null}
+        {row.type !== "image" ? (
+          <label className="field">
+            <span>Mặc định</span>
+            {(row.type === "checkbox" || row.type === "boolean") ? (
+              <select value={String(booleanValue(row.value))} onChange={event => onUpdate({ value: event.target.value === "true" })}>
+                <option value="true">True</option>
+                <option value="false">False</option>
+              </select>
+            ) : (
+              <input value={row.value} onChange={event => onUpdate({ value: event.target.value })} placeholder={row.type === "seed" ? "random_seed" : ""} />
+            )}
+          </label>
+        ) : null}
+      </div>
+    </div>
+  );
+}
 
 function slugify(value = "") {
   return String(value)
@@ -251,9 +425,24 @@ export function TemplateEditorModal({ selectedTemplate, discovery, onClose, onSa
   const [saving, setSaving] = useState(false);
   const [draggingInputId, setDraggingInputId] = useState("");
   const [draggingOutputId, setDraggingOutputId] = useState("");
+  const [selectedInputId, setSelectedInputId] = useState("");
 
   const nodes = useMemo(() => workflowNodes(workflow), [workflow]);
   const saveNodes = useMemo(() => nodes.filter(node => node.classType.toLowerCase().includes("save")), [nodes]);
+  const selectedInputRow = useMemo(
+    () => inputRows.find(row => row.rowId === selectedInputId) || null,
+    [inputRows, selectedInputId]
+  );
+
+  useEffect(() => {
+    if (!inputRows.length) {
+      setSelectedInputId("");
+      return;
+    }
+    if (!inputRows.some(row => row.rowId === selectedInputId)) {
+      setSelectedInputId(inputRows[0].rowId);
+    }
+  }, [inputRows, selectedInputId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -332,21 +521,29 @@ export function TemplateEditorModal({ selectedTemplate, discovery, onClose, onSa
     const field = firstNode?.fields?.[0] || "";
     const value = firstNode ? workflow?.[firstNode.id]?.inputs?.[field] : "";
     const typeDefaults = defaultsForType(inferRowType({ field, nodeClass: firstNode?.classType, value }), value);
+    const rowId = crypto.randomUUID();
     setInputRows(current => [...current, {
-      rowId: crypto.randomUUID(),
+      rowId,
       nodeId: firstNode?.id || "",
       field,
       label: field || "Input",
       ...typeDefaults
     }]);
+    setSelectedInputId(rowId);
   }
 
   function addNoteRow() {
+    const rowId = crypto.randomUUID();
     setInputRows(current => [...current, {
-      rowId: crypto.randomUUID(),
+      rowId,
       kind: "note",
       markdown: "### Ghi chú\n\nNhập nội dung **Markdown** tại đây."
     }]);
+    setSelectedInputId(rowId);
+  }
+
+  function deleteInputRow(rowId) {
+    setInputRows(current => current.filter(item => item.rowId !== rowId));
   }
 
   function updateInputRow(rowId, patch) {
@@ -435,30 +632,34 @@ export function TemplateEditorModal({ selectedTemplate, discovery, onClose, onSa
         </div>
 
         <div className="templateEditorToolbar">
-          <label className="uploadJsonButton">
-            <Upload size={16} />
-            <span>Upload JSON/YAML</span>
-            <input type="file" accept=".json,.yaml,.yml,application/json" multiple onChange={event => handleTemplateUpload(event.target.files)} />
-          </label>
-          <label className="uploadJsonButton">
-            <Upload size={16} />
-            <span>Upload thư mục</span>
-            <input type="file" multiple webkitdirectory="" directory="" onChange={event => handleTemplateUpload(event.target.files)} />
-          </label>
-          <label className="field">
-            <span>Template ID</span>
-            <input value={templateId} onChange={event => setTemplateId(event.target.value)} placeholder="fashion-flatlay" />
-          </label>
-          <label className="field">
-            <span>Tên ứng dụng</span>
-            <input value={appName} onChange={event => setAppName(event.target.value)} placeholder="Fashion Flatlay" />
-          </label>
+          <div className="templateEditorUploadZone">
+            <label className="uploadJsonButton uploadJsonButton--primary">
+              <Upload size={18} />
+              <span>Upload JSON/YAML</span>
+              <input type="file" accept=".json,.yaml,.yml,application/json" multiple onChange={event => handleTemplateUpload(event.target.files)} />
+            </label>
+            <label className="uploadJsonButton">
+              <Upload size={16} />
+              <span>Upload thư mục</span>
+              <input type="file" multiple webkitdirectory="" directory="" onChange={event => handleTemplateUpload(event.target.files)} />
+            </label>
+          </div>
+          <div className="templateEditorMetaCard">
+            <label className="field">
+              <span>Template ID</span>
+              <input value={templateId} onChange={event => setTemplateId(event.target.value)} placeholder="fashion-flatlay" />
+            </label>
+            <label className="field">
+              <span>Tên ứng dụng</span>
+              <input value={appName} onChange={event => setAppName(event.target.value)} placeholder="Fashion Flatlay" />
+            </label>
+          </div>
         </div>
 
         <div className="templateEditorContent">
-          <section className="editorSection">
+          <section className="editorSection inputMasterDetailSection">
             <div className="editorSectionHeader">
-              <h3>Input</h3>
+              <h3>Input <span className="editorSectionCount">{inputRows.length}</span></h3>
               <div className="editorHeaderActions">
                 <button type="button" className="smallActionButton" onClick={addInputRow} disabled={!workflow}>
                   <Plus size={15} />
@@ -470,194 +671,105 @@ export function TemplateEditorModal({ selectedTemplate, discovery, onClose, onSa
                 </button>
               </div>
             </div>
-            <div className="editorRows">
-              {inputRows.map((row, index) => {
-                const selectedNode = nodes.find(node => node.id === row.nodeId);
-                if (row.kind === "note") {
-                  return (
-                    <div
-                      className={`editorRow noteEditorRow ${draggingInputId === row.rowId ? "isDragging" : ""}`}
-                      key={row.rowId}
-                      onDragOver={event => {
-                        if (!draggingInputId || draggingInputId === row.rowId) return;
-                        event.preventDefault();
-                        event.dataTransfer.dropEffect = "move";
-                      }}
-                      onDrop={event => {
-                        event.preventDefault();
-                        setInputRows(current => reorderRows(current, draggingInputId, row.rowId));
-                        setDraggingInputId("");
-                      }}
-                    >
-                      <button
-                        type="button"
-                        className="rowDragHandle"
-                        draggable
-                        onClick={event => event.preventDefault()}
-                        onDragStart={event => {
-                          setDraggingInputId(row.rowId);
-                          event.dataTransfer.effectAllowed = "move";
-                          event.dataTransfer.setData("text/plain", row.rowId);
-                        }}
-                        onDragEnd={() => setDraggingInputId("")}
+            <div className="inputMasterDetailBody">
+              <div className="inputListPane">
+                <div className="inputListRows">
+                  {inputRows.map((row, index) => {
+                    const Icon = inputRowIcon(row);
+                    const isSelected = selectedInputId === row.rowId;
+                    return (
+                      <div
+                        className={`inputListItem ${isSelected ? "isSelected" : ""} ${draggingInputId === row.rowId ? "isDragging" : ""}`}
+                        key={row.rowId}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => setSelectedInputId(row.rowId)}
                         onKeyDown={event => {
-                          if (event.key === "ArrowUp") {
+                          if (event.key === "Enter" || event.key === " ") {
                             event.preventDefault();
-                            moveInputRow(row.rowId, -1);
-                          }
-                          if (event.key === "ArrowDown") {
-                            event.preventDefault();
-                            moveInputRow(row.rowId, 1);
+                            setSelectedInputId(row.rowId);
                           }
                         }}
-                        title="Kéo để đổi thứ tự chú thích. Có thể dùng ↑/↓ khi đang focus."
-                        aria-label={`Di chuyển chú thích ${index + 1}`}
+                        onDragOver={event => {
+                          if (!draggingInputId || draggingInputId === row.rowId) return;
+                          event.preventDefault();
+                          event.dataTransfer.dropEffect = "move";
+                        }}
+                        onDrop={event => {
+                          event.preventDefault();
+                          setInputRows(current => reorderRows(current, draggingInputId, row.rowId));
+                          setDraggingInputId("");
+                        }}
                       >
-                        <GripVertical size={16} />
-                      </button>
-                      <label className="field editorWide noteMarkdownField">
-                        <span>Markdown</span>
-                        <textarea rows={5} value={row.markdown} onChange={event => updateInputRow(row.rowId, { markdown: event.target.value })} />
-                      </label>
-                      <button type="button" className="rowDeleteButton" onClick={() => setInputRows(current => current.filter(item => item.rowId !== row.rowId))} title="Xóa chú thích">
-                        <Trash2 size={16} />
-                      </button>
+                        <button
+                          type="button"
+                          className="rowDragHandle"
+                          draggable
+                          onClick={event => event.stopPropagation()}
+                          onDragStart={event => {
+                            setDraggingInputId(row.rowId);
+                            event.dataTransfer.effectAllowed = "move";
+                            event.dataTransfer.setData("text/plain", row.rowId);
+                          }}
+                          onDragEnd={() => setDraggingInputId("")}
+                          onKeyDown={event => {
+                            if (event.key === "ArrowUp") {
+                              event.preventDefault();
+                              moveInputRow(row.rowId, -1);
+                            }
+                            if (event.key === "ArrowDown") {
+                              event.preventDefault();
+                              moveInputRow(row.rowId, 1);
+                            }
+                          }}
+                          title="Kéo để đổi thứ tự. Có thể dùng ↑/↓ khi đang focus."
+                          aria-label={`Di chuyển ${row.kind === "note" ? "chú thích" : "input"} ${index + 1}`}
+                        >
+                          <GripVertical size={16} />
+                        </button>
+                        <span className={`typeBadge typeBadge--${row.kind === "note" ? "note" : row.type || "string"}`}>
+                          <Icon size={14} />
+                        </span>
+                        <div className="inputListItemMain">
+                          <span className="inputListItemLabel">{inputRowLabel(row)}</span>
+                          <span className="inputListItemMeta">{inputRowMeta(row, nodes)}</span>
+                        </div>
+                        {row.kind !== "note" ? (
+                          <span className="inputListItemType">{row.type}</span>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                  {inputRows.length === 0 ? (
+                    <div className="editorEmpty inputListEmpty">
+                      <p>Chưa có input.</p>
+                      <small>Upload workflow JSON rồi bấm <b>Thêm input</b>.</small>
                     </div>
-                  );
-                }
-                return (
-                  <div
-                    className={`editorRow inputEditorRow ${row.type === "menu" ? "isMenuRow" : ""} ${draggingInputId === row.rowId ? "isDragging" : ""}`}
-                    key={row.rowId}
-                    onDragOver={event => {
-                      if (!draggingInputId || draggingInputId === row.rowId) return;
-                      event.preventDefault();
-                      event.dataTransfer.dropEffect = "move";
-                    }}
-                    onDrop={event => {
-                      event.preventDefault();
-                      setInputRows(current => reorderRows(current, draggingInputId, row.rowId));
-                      setDraggingInputId("");
-                    }}
-                  >
-                    <button
-                      type="button"
-                      className="rowDragHandle"
-                      draggable
-                      onClick={event => event.preventDefault()}
-                      onDragStart={event => {
-                        setDraggingInputId(row.rowId);
-                        event.dataTransfer.effectAllowed = "move";
-                        event.dataTransfer.setData("text/plain", row.rowId);
-                      }}
-                      onDragEnd={() => setDraggingInputId("")}
-                      onKeyDown={event => {
-                        if (event.key === "ArrowUp") {
-                          event.preventDefault();
-                          moveInputRow(row.rowId, -1);
-                        }
-                        if (event.key === "ArrowDown") {
-                          event.preventDefault();
-                          moveInputRow(row.rowId, 1);
-                        }
-                      }}
-                      title="Kéo để đổi thứ tự input. Có thể dùng ↑/↓ khi đang focus."
-                      aria-label={`Di chuyển input ${index + 1}`}
-                    >
-                      <GripVertical size={16} />
-                    </button>
-                    <label className="field">
-                      <span>ID node</span>
-                      <select value={row.nodeId} onChange={event => updateInputRow(row.rowId, { nodeId: event.target.value })}>
-                        {nodes.map(node => (
-                          <option key={node.id} value={node.id}>{node.id} - {node.title}</option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="field">
-                      <span>Trường</span>
-                      <select value={row.field} onChange={event => updateInputRow(row.rowId, { field: event.target.value })}>
-                        {(selectedNode?.fields || []).map(field => (
-                          <option key={field} value={field}>{field}</option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="field">
-                      <span>Kiểu dữ liệu</span>
-                      <select value={row.type} onChange={event => updateInputRow(row.rowId, { type: event.target.value })}>
-                        {FIELD_TYPES.map(type => <option key={type} value={type}>{type}</option>)}
-                      </select>
-                    </label>
-                    <label className="field">
-                      <span>Hiển thị</span>
-                      <select value={row.display} onChange={event => updateInputRow(row.rowId, { display: event.target.value })} disabled={row.type !== "int" && row.type !== "float" && row.type !== "string"}>
-                        {(row.type === "string" ? STRING_DISPLAY_TYPES : DISPLAY_TYPES).map(type => <option key={type} value={type}>{type}</option>)}
-                      </select>
-                    </label>
-                    <label className="field">
-                      <span>Tên hiển thị</span>
-                      <input value={row.label} onChange={event => updateInputRow(row.rowId, { label: event.target.value })} />
-                    </label>
-                    {(row.type === "int" || row.type === "float" || row.type === "seed") ? (
-                      <>
-                        <label className="field">
-                          <span>Min</span>
-                          <input type="number" value={row.minimum} onChange={event => updateInputRow(row.rowId, { minimum: event.target.value })} />
-                        </label>
-                        <label className="field">
-                          <span>Max</span>
-                          <input type="number" value={row.maximum} onChange={event => updateInputRow(row.rowId, { maximum: event.target.value })} />
-                        </label>
-                        <label className="field">
-                          <span>Step</span>
-                          <input type="number" value={row.step} onChange={event => updateInputRow(row.rowId, { step: event.target.value })} />
-                        </label>
-                      </>
-                    ) : null}
-                    {row.type === "menu" ? (
-                      <label className="field editorWide menuChoicesField">
-                        <span>Menu choices, mỗi dòng một lựa chọn</span>
-                        <textarea rows={3} value={row.choicesText} onChange={event => updateInputRow(row.rowId, { choicesText: event.target.value })} />
-                      </label>
-                    ) : null}
-                    {row.type !== "image" ? (
-                      <label className="field defaultValueField">
-                        <span>Mặc định</span>
-                        {(row.type === "checkbox" || row.type === "boolean") ? (
-                          <select value={String(booleanValue(row.value))} onChange={event => updateInputRow(row.rowId, { value: event.target.value === "true" })}>
-                            <option value="true">True</option>
-                            <option value="false">False</option>
-                          </select>
-                        ) : (
-                          <input value={row.value} onChange={event => updateInputRow(row.rowId, { value: event.target.value })} placeholder={row.type === "seed" ? "random_seed" : ""} />
-                        )}
-                      </label>
-                    ) : null}
-                    <button type="button" className="rowDeleteButton" onClick={() => setInputRows(current => current.filter(item => item.rowId !== row.rowId))} title="Xóa input">
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-                );
-              })}
-              {inputRows.length === 0 ? <div className="editorEmpty">Chưa có input. Upload JSON rồi bấm thêm input.</div> : null}
+                  ) : null}
+                </div>
+              </div>
+              <div className="inputDetailPane">
+                <InputDetailPanel
+                  row={selectedInputRow}
+                  nodes={nodes}
+                  onUpdate={patch => selectedInputRow && updateInputRow(selectedInputRow.rowId, patch)}
+                  onDelete={() => selectedInputRow && deleteInputRow(selectedInputRow.rowId)}
+                />
+              </div>
             </div>
           </section>
 
-          <section className="editorSection">
+          <section className="editorSection outputSectionCompact">
             <div className="editorSectionHeader">
-              <h3>Output</h3>
+              <h3>Output <span className="editorSectionCount">{outputRows.length}</span></h3>
               <div className="editorHeaderActions">
                 <button type="button" className="smallActionButton" onClick={addOutputRow} disabled={!workflow}>
                   <Plus size={15} />
                   <span>Thêm output</span>
                 </button>
-                <button type="button" className="smallActionButton" onClick={addNoteRow} disabled={!workflow}>
-                  <FileText size={15} />
-                  <span>Thêm chú thích</span>
-                </button>
               </div>
             </div>
-            <div className="editorRows">
+            <div className="editorRows outputRowsCompact">
               {outputRows.map((row, index) => (
                 <div
                   className={`editorRow outputEditorRow ${draggingOutputId === row.rowId ? "isDragging" : ""}`}
@@ -723,11 +835,18 @@ export function TemplateEditorModal({ selectedTemplate, discovery, onClose, onSa
 
         {error ? <div className="editorError">{error}</div> : null}
         <div className="templateEditorFooter">
-          <button type="button" className="smallActionButton secondary" onClick={onClose}>Hủy</button>
-          <button type="button" className="saveTemplateButton" onClick={saveTemplate} disabled={saving || !workflow}>
-            <Save size={16} />
-            <span>{saving ? "Đang lưu..." : "Save"}</span>
-          </button>
+          <span className="templateEditorStatus">
+            {workflow
+              ? `${nodes.length} nodes · ${inputRows.length} input · ${outputRows.length} output`
+              : "Chưa có workflow — upload JSON để bắt đầu"}
+          </span>
+          <div className="templateEditorFooterActions">
+            <button type="button" className="smallActionButton secondary" onClick={onClose}>Hủy</button>
+            <button type="button" className="saveTemplateButton" onClick={saveTemplate} disabled={saving || !workflow}>
+              <Save size={16} />
+              <span>{saving ? "Đang lưu..." : "Lưu template"}</span>
+            </button>
+          </div>
         </div>
       </section>
     </div>

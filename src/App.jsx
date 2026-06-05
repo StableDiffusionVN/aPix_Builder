@@ -27,7 +27,7 @@ import { TemplateEditorModal } from "./components/TemplateEditorModal";
 import { TemplateSelector } from "./components/TemplateSelector";
 import { downloadImage } from "./lib/download";
 import { canonicalDynamicType, dynamicFieldChoices } from "./lib/dynamicTypes";
-import { buildDefaults, flattenInputs, normalizeId, requestPayload } from "./lib/template";
+import { buildDefaults, flattenInputs, itemValueKey, normalizeId, requestPayload } from "./lib/template";
 import { useDiscovery } from "./hooks/useDiscovery";
 import { useHistory } from "./hooks/useHistory";
 import { useInputImages } from "./hooks/useInputImages";
@@ -568,19 +568,27 @@ export default function App() {
             <h2>Workflow settings</h2>
           </div>
           <div className="formStack">
-            {inputs.map(item => (
-              <DynamicField
-                key={item.key}
-                item={item}
-                value={values[normalizeId(item.id)]}
-                onChange={next => setValues(current => ({ ...current, [normalizeId(item.id)]: next }))}
-                inputImages={inputImages}
-                onRefreshInputImages={refreshInputImages}
-                onUpdateInputImages={setInputImages}
-                discovery={discovery}
-                discoveryLoading={discoveryLoading}
-              />
-            ))}
+            {inputs.map(item => {
+              const valueKey = itemValueKey(item);
+              return (
+                <DynamicField
+                  key={item.key}
+                  item={item}
+                  value={valueKey ? values[valueKey] : values[normalizeId(item.id)]}
+                  onChange={next => {
+                    const key = valueKey || normalizeId(item.id);
+                    setValues(current => ({ ...current, [key]: next }));
+                  }}
+                  allValues={values}
+                  onValueChange={(key, next) => setValues(current => ({ ...current, [key]: next }))}
+                  inputImages={inputImages}
+                  onRefreshInputImages={refreshInputImages}
+                  onUpdateInputImages={setInputImages}
+                  discovery={discovery}
+                  discoveryLoading={discoveryLoading}
+                />
+              );
+            })}
           </div>
         </section>
 

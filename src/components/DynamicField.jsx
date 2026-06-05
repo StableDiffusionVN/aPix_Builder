@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { Check, Eye, Filter, Images, Pencil, RefreshCcw, Scissors, Star, Trash2, Upload, X } from "lucide-react";
 import { ImageEditorModal } from "./ImageEditorModal";
 import { MaskEditorModal } from "./MaskEditorModal";
-import { defaultValue } from "../lib/template";
+import { defaultValue, getActiveSubInputs, isMenuSub, normalizeId } from "../lib/template";
 import { DYNAMIC_FIELD_TYPES, canonicalDynamicType, dynamicFieldChoices, isDynamicFieldType } from "../lib/dynamicTypes";
 
 const INPUT_FAVORITES_KEY = "comfyui-build:input-image-favorites:v1";
@@ -198,7 +198,18 @@ export function StaticBlock({ item }) {
   return null;
 }
 
-export function DynamicField({ item, value, onChange, inputImages = [], onRefreshInputImages, onUpdateInputImages, discovery = null, discoveryLoading = false }) {
+export function DynamicField({
+  item,
+  value,
+  onChange,
+  allValues = null,
+  onValueChange = null,
+  inputImages = [],
+  onRefreshInputImages,
+  onUpdateInputImages,
+  discovery = null,
+  discoveryLoading = false
+}) {
   const ui = item.ui || {};
   const label = ui.label || item.key;
   const description = ui.description || ui.help || "";
@@ -485,6 +496,47 @@ export function DynamicField({ item, value, onChange, inputImages = [], onRefres
     }
   }
 
+  if (isMenuSub(item)) {
+    const choices = ui.choices || [];
+    const menuValue = value ?? defaultValue(item);
+    const activeSubs = getActiveSubInputs(item, menuValue);
+    const valuesMap = allValues || {};
+    const patchValue = onValueChange || ((key, next) => onChange(next));
+
+    return (
+      <section className="menuSubField">
+        <label className="field">
+          <span>{label}</span>
+          <select value={choices.includes(menuValue) ? menuValue : (choices[0] || "")} onChange={event => onChange(event.target.value)}>
+            {choices.length === 0 ? <option value="">Chưa có lựa chọn</option> : null}
+            {choices.map(choice => <option key={choice} value={choice}>{choice}</option>)}
+          </select>
+          {description ? <small className="fieldDescription">{description}</small> : null}
+        </label>
+        {activeSubs.length ? (
+          <div className="menuSubInputs">
+            {activeSubs.map(subItem => (
+              <DynamicField
+                key={subItem.key}
+                item={subItem}
+                value={valuesMap[normalizeId(subItem.id)]}
+                onChange={next => patchValue(normalizeId(subItem.id), next)}
+                allValues={valuesMap}
+                onValueChange={onValueChange}
+                inputImages={inputImages}
+                onRefreshInputImages={onRefreshInputImages}
+                onUpdateInputImages={onUpdateInputImages}
+                discovery={discovery}
+                discoveryLoading={discoveryLoading}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="menuSubEmpty">Không có input cho lựa chọn <b>{menuValue}</b>.</div>
+        )}
+      </section>
+    );
+  }
   if (!inputTypes.has(ui.type) && !isDynamicFieldType(ui.type)) return <StaticBlock item={item} />;
   if (ui.type === "seed") {
     const isRandomSeed = value === "random_seed" || value === "";

@@ -3646,6 +3646,7 @@ html[data-theme="light"] .themeMenuItem {
 .typeBadge--checkbox,
 .typeBadge--boolean { background: rgba(251, 191, 36, 0.22); color: #fde68a; }
 .typeBadge--note { background: rgba(244, 114, 182, 0.22); color: #fbcfe8; }
+.typeBadge--menu-sub { background: rgba(56, 189, 248, 0.22); color: #bae6fd; }
 
 .inputListItemMain {
   display: grid;
@@ -3766,6 +3767,124 @@ html[data-theme="light"] .themeMenuItem {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px 12px;
   grid-column: 1 / -1;
+}
+
+.menuSubField {
+  display: grid;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.menuSubInputs {
+  display: grid;
+  gap: 10px;
+  padding-top: 4px;
+  border-top: 1px dashed rgba(255, 255, 255, 0.12);
+}
+
+.menuSubEmpty {
+  padding: 10px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--muted-2);
+  font-size: 12px;
+}
+
+.menuSubDetailPanel .menuSubChoiceTabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.menuSubChoiceTab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.menuSubChoiceTab span {
+  display: inline-grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 10px;
+}
+
+.menuSubChoiceTab.active {
+  border-color: rgba(var(--accent-rgb), 0.48);
+  color: var(--accent-hover);
+  background: rgba(var(--accent-rgb), 0.12);
+}
+
+.menuSubSubInputs {
+  display: grid;
+  gap: 10px;
+}
+
+.menuSubSubInputsHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.menuSubSubInputsHeader h5 {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.subInputEditorCard {
+  display: grid;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.subInputEditorHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.subInputEditorHeader strong {
+  color: var(--text);
+  font-size: 13px;
+}
+
+.subInputEditorForm {
+  gap: 8px;
+}
+
+.menuSubTargetToggle span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.menuSubChoiceEmpty,
+.menuSubSubEmpty {
+  color: var(--muted-2);
+  font-size: 12px;
 }
 
 .outputSectionCompact {

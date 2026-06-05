@@ -1,6 +1,40 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
+function menuSubSelectionStorageKey(yamlKey) {
+  return `__menu__${yamlKey}`;
+}
+
+function flattenMenuSubInputIds(item) {
+  const ids = [];
+  if (item?.id) ids.push(item.id);
+  for (const fields of Object.values(item?.ui?.sub || {})) {
+    for (const child of Object.values(fields || {})) {
+      if (child?.id) ids.push(child.id);
+    }
+  }
+  return ids;
+}
+
+function collectMenuSubRequest(item, yamlKey, values, request) {
+  const menuValue = item.id
+    ? values[item.id]
+    : values[menuSubSelectionStorageKey(yamlKey)];
+  const selected = menuValue ?? item.ui?.value ?? item.ui?.choices?.[0] ?? "";
+  if (item.id && item.id in values) request[item.id] = values[item.id];
+  const subs = item.ui?.sub?.[selected] || {};
+  for (const subItem of Object.values(subs)) {
+    if (!subItem?.id) continue;
+    if (Array.isArray(subItem.id)) {
+      subItem.id.forEach(childId => {
+        if (childId in values) request[childId] = values[childId];
+      });
+    } else if (subItem.id in values) {
+      request[subItem.id] = values[subItem.id];
+    }
+  }
+}
+
 export function flattenInputIds(config) {
   const ids = [];
   for (const item of Object.values(config.input || {})) {
@@ -8,6 +42,8 @@ export function flattenInputIds(config) {
       for (const child of Object.values(item.ui.col || {})) {
         if (child.id) ids.push(child.id);
       }
+    } else if (item?.ui?.type === "menu-sub") {
+      ids.push(...flattenMenuSubInputIds(item));
     } else if (item?.id) {
       ids.push(item.id);
     }
@@ -17,16 +53,33 @@ export function flattenInputIds(config) {
 
 export function mapValuesToRequest(config, values) {
   const request = {};
-  const ids = flattenInputIds(config);
-  ids.forEach(id => {
-    if (Array.isArray(id)) {
-      id.forEach(childId => {
+  for (const [yamlKey, item] of Object.entries(config.input || {})) {
+    if (item?.ui?.type === "col") {
+      for (const child of Object.values(item.ui.col || {})) {
+        if (!child?.id) continue;
+        if (Array.isArray(child.id)) {
+          child.id.forEach(childId => {
+            if (childId in values) request[childId] = values[childId];
+          });
+        } else if (child.id in values) {
+          request[child.id] = values[child.id];
+        }
+      }
+      continue;
+    }
+    if (item?.ui?.type === "menu-sub") {
+      collectMenuSubRequest(item, yamlKey, values, request);
+      continue;
+    }
+    if (!item?.id) continue;
+    if (Array.isArray(item.id)) {
+      item.id.forEach(childId => {
         if (childId in values) request[childId] = values[childId];
       });
-      return;
+    } else if (item.id in values) {
+      request[item.id] = values[item.id];
     }
-    if (id in values) request[id] = values[id];
-  });
+  }
   return request;
 }
 

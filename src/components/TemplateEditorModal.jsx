@@ -6,6 +6,7 @@ import {
   GripVertical,
   Hash,
   Image as ImageIcon,
+  Layers,
   List,
   Plus,
   Save,
@@ -22,8 +23,13 @@ const FIELD_TYPES = ["image", ...DYNAMIC_FIELD_TYPES, "seed", "int", "float", "s
 const DISPLAY_TYPES = ["input", "slider"];
 const STRING_DISPLAY_TYPES = ["input", "multiline"];
 
+function parseChoicesText(text = "") {
+  return String(text).split("\n").map(item => item.trim()).filter(Boolean);
+}
+
 function inputRowIcon(row) {
   if (row.kind === "note") return FileText;
+  if (row.kind === "menu-sub") return Layers;
   const icons = {
     image: ImageIcon,
     int: Hash,
@@ -47,6 +53,12 @@ function inputRowLabel(row) {
 
 function inputRowMeta(row, nodes) {
   if (row.kind === "note") return "Markdown · chú thích";
+  if (row.kind === "menu-sub") {
+    const choices = parseChoicesText(row.choicesText);
+    const subCount = Object.values(row.sub || {}).reduce((sum, items) => sum + (items?.length || 0), 0);
+    const target = row.hasTargetId ? `${row.nodeId}-${row.field}` : "không target";
+    return `${choices.length} lựa chọn · ${subCount} sub-input · ${target}`;
+  }
   const node = nodes.find(item => item.id === row.nodeId);
   const nodeLabel = node ? `${row.nodeId} · ${node.title}` : row.nodeId || "—";
   return `${nodeLabel} · ${row.field || "—"}`;
@@ -181,6 +193,224 @@ function InputDetailPanel({ row, nodes, onUpdate, onDelete }) {
   );
 }
 
+function SubInputEditor({ subRow, nodes, workflow, onUpdate, onDelete }) {
+  const selectedNode = nodes.find(node => node.id === subRow.nodeId);
+  return (
+    <div className="subInputEditorCard">
+      <div className="subInputEditorHeader">
+        <strong>{subRow.label || subRow.field || "Sub-input"}</strong>
+        <button type="button" className="rowDeleteButton" onClick={onDelete} title="Xóa sub-input">
+          <Trash2 size={14} />
+        </button>
+      </div>
+      <div className="inputDetailForm subInputEditorForm">
+        <label className="field">
+          <span>ID node</span>
+          <select value={subRow.nodeId} onChange={event => onUpdate({ nodeId: event.target.value })}>
+            {nodes.map(node => (
+              <option key={node.id} value={node.id}>{node.id} - {node.title}</option>
+            ))}
+          </select>
+        </label>
+        <label className="field">
+          <span>Trường</span>
+          <select value={subRow.field} onChange={event => onUpdate({ field: event.target.value })}>
+            {(selectedNode?.fields || []).map(field => (
+              <option key={field} value={field}>{field}</option>
+            ))}
+          </select>
+        </label>
+        <label className="field">
+          <span>Kiểu dữ liệu</span>
+          <select value={subRow.type} onChange={event => onUpdate({ type: event.target.value })}>
+            {FIELD_TYPES.map(type => <option key={type} value={type}>{type}</option>)}
+          </select>
+        </label>
+        <label className="field">
+          <span>Hiển thị</span>
+          <select
+            value={subRow.display}
+            onChange={event => onUpdate({ display: event.target.value })}
+            disabled={subRow.type !== "int" && subRow.type !== "float" && subRow.type !== "string"}
+          >
+            {(subRow.type === "string" ? STRING_DISPLAY_TYPES : DISPLAY_TYPES).map(type => (
+              <option key={type} value={type}>{type}</option>
+            ))}
+          </select>
+        </label>
+        <label className="field inputDetailFieldWide">
+          <span>Tên hiển thị</span>
+          <input value={subRow.label} onChange={event => onUpdate({ label: event.target.value })} />
+        </label>
+        {(subRow.type === "int" || subRow.type === "float" || subRow.type === "seed") ? (
+          <div className="inputDetailNumericGrid">
+            <label className="field">
+              <span>Min</span>
+              <input type="number" value={subRow.minimum} onChange={event => onUpdate({ minimum: event.target.value })} />
+            </label>
+            <label className="field">
+              <span>Max</span>
+              <input type="number" value={subRow.maximum} onChange={event => onUpdate({ maximum: event.target.value })} />
+            </label>
+            <label className="field">
+              <span>Step</span>
+              <input type="number" value={subRow.step} onChange={event => onUpdate({ step: event.target.value })} />
+            </label>
+          </div>
+        ) : null}
+        {subRow.type === "menu" ? (
+          <label className="field inputDetailFieldWide">
+            <span>Menu choices</span>
+            <textarea rows={3} value={subRow.choicesText} onChange={event => onUpdate({ choicesText: event.target.value })} />
+          </label>
+        ) : null}
+        {subRow.type !== "image" ? (
+          <label className="field">
+            <span>Mặc định</span>
+            {(subRow.type === "checkbox" || subRow.type === "boolean") ? (
+              <select value={String(booleanValue(subRow.value))} onChange={event => onUpdate({ value: event.target.value === "true" })}>
+                <option value="true">True</option>
+                <option value="false">False</option>
+              </select>
+            ) : (
+              <input value={subRow.value} onChange={event => onUpdate({ value: event.target.value })} placeholder={subRow.type === "seed" ? "random_seed" : ""} />
+            )}
+          </label>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function MenuSubDetailPanel({ row, nodes, workflow, onUpdate, onDelete, onUpdateSubInput, onAddSubInput, onDeleteSubInput }) {
+  const choices = parseChoicesText(row.choicesText);
+  const [activeChoice, setActiveChoice] = useState(choices[0] || "");
+
+  useEffect(() => {
+    if (!choices.length) {
+      setActiveChoice("");
+      return;
+    }
+    if (!choices.includes(activeChoice)) setActiveChoice(choices[0]);
+  }, [row.choicesText, choices, activeChoice]);
+
+  const selectedNode = nodes.find(node => node.id === row.nodeId);
+  const subRows = row.sub?.[activeChoice] || [];
+
+  return (
+    <div className="inputDetailPanel menuSubDetailPanel">
+      <div className="inputDetailHeader">
+        <div className="inputDetailTitle">
+          <span className="typeBadge typeBadge--menu-sub"><Layers size={14} /></span>
+          <div>
+            <h4>{row.label || "Menu sub"}</h4>
+            <p>Menu điều khiển sub-input hiển thị theo từng lựa chọn.</p>
+          </div>
+        </div>
+        <button type="button" className="rowDeleteButton" onClick={onDelete} title="Xóa menu-sub">
+          <Trash2 size={16} />
+        </button>
+      </div>
+      <div className="inputDetailForm">
+        <label className="field inputDetailFieldWide menuSubTargetToggle">
+          <span>
+            <input
+              type="checkbox"
+              checked={Boolean(row.hasTargetId)}
+              onChange={event => onUpdate({
+                hasTargetId: event.target.checked,
+                nodeId: event.target.checked ? (row.nodeId || nodes[0]?.id || "") : "",
+                field: event.target.checked ? (row.field || nodes[0]?.fields?.[0] || "") : ""
+              })}
+            />
+            {" "}Gửi giá trị menu sang ComfyUI (có target id)
+          </span>
+        </label>
+        {row.hasTargetId ? (
+          <>
+            <label className="field">
+              <span>ID node</span>
+              <select value={row.nodeId} onChange={event => onUpdate({ nodeId: event.target.value })}>
+                {nodes.map(node => (
+                  <option key={node.id} value={node.id}>{node.id} - {node.title}</option>
+                ))}
+              </select>
+            </label>
+            <label className="field">
+              <span>Trường</span>
+              <select value={row.field} onChange={event => onUpdate({ field: event.target.value })}>
+                {(selectedNode?.fields || []).map(field => (
+                  <option key={field} value={field}>{field}</option>
+                ))}
+              </select>
+            </label>
+          </>
+        ) : null}
+        <label className="field inputDetailFieldWide">
+          <span>Tên hiển thị menu</span>
+          <input value={row.label} onChange={event => onUpdate({ label: event.target.value })} />
+        </label>
+        <label className="field inputDetailFieldWide">
+          <span>Lựa chọn menu, mỗi dòng một giá trị</span>
+          <textarea
+            rows={4}
+            value={row.choicesText}
+            onChange={event => {
+              const choicesText = event.target.value;
+              const nextChoices = parseChoicesText(choicesText);
+              const sub = { ...(row.sub || {}) };
+              const nextSub = Object.fromEntries(nextChoices.map(choice => [choice, sub[choice] || []]));
+              onUpdate({ choicesText, sub: nextSub, value: nextChoices.includes(row.value) ? row.value : (nextChoices[0] || "") });
+            }}
+          />
+        </label>
+        <label className="field">
+          <span>Mặc định</span>
+          <select value={choices.includes(row.value) ? row.value : (choices[0] || "")} onChange={event => onUpdate({ value: event.target.value })}>
+            {choices.map(choice => <option key={choice} value={choice}>{choice}</option>)}
+          </select>
+        </label>
+      </div>
+      <div className="menuSubChoiceTabs">
+        {choices.map(choice => (
+          <button
+            key={choice}
+            type="button"
+            className={`menuSubChoiceTab ${activeChoice === choice ? "active" : ""}`}
+            onClick={() => setActiveChoice(choice)}
+          >
+            {choice}
+            <span>{row.sub?.[choice]?.length || 0}</span>
+          </button>
+        ))}
+        {choices.length === 0 ? <span className="menuSubChoiceEmpty">Thêm lựa chọn menu ở trên.</span> : null}
+      </div>
+      <div className="menuSubSubInputs">
+        <div className="menuSubSubInputsHeader">
+          <h5>Sub-input cho <b>{activeChoice || "—"}</b></h5>
+          <button type="button" className="smallActionButton" onClick={() => activeChoice && onAddSubInput(activeChoice)} disabled={!activeChoice}>
+            <Plus size={14} />
+            <span>Thêm sub-input</span>
+          </button>
+        </div>
+        {subRows.map(subRow => (
+          <SubInputEditor
+            key={subRow.rowId}
+            subRow={subRow}
+            nodes={nodes}
+            workflow={workflow}
+            onUpdate={patch => onUpdateSubInput(activeChoice, subRow.rowId, patch)}
+            onDelete={() => onDeleteSubInput(activeChoice, subRow.rowId)}
+          />
+        ))}
+        {!subRows.length && activeChoice ? (
+          <div className="editorEmpty menuSubSubEmpty">Chưa có sub-input cho lựa chọn này.</div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 function slugify(value = "") {
   return String(value)
     .normalize("NFD")
@@ -255,6 +485,27 @@ function inferRowType({ field, nodeClass, value }) {
   return inferType(value);
 }
 
+function subRowFromConfig(item, workflow, fallbackKey) {
+  const [nodeId, ...fieldParts] = String(item.id || "").split("-");
+  const field = fieldParts[fieldParts[0] === "inputs" ? 1 : 0] || "";
+  const value = workflow?.[nodeId]?.inputs?.[field];
+  const dynamicType = canonicalDynamicType(item.ui?.type);
+  const type = dynamicType || (item.ui?.type === "text" ? "string" : item.ui?.type || inferType(value));
+  return {
+    rowId: crypto.randomUUID(),
+    nodeId,
+    field,
+    label: item.ui?.label || fallbackKey,
+    type,
+    display: item.ui?.type === "text" ? "multiline" : item.ui?.display === "slider" ? "slider" : "input",
+    minimum: item.ui?.minimum ?? (type === "float" ? 0 : 0),
+    maximum: item.ui?.maximum ?? (type === "float" ? 1 : ""),
+    step: item.ui?.step ?? (type === "float" ? 0.1 : 1),
+    value: type === "image" ? "" : item.ui?.value ?? defaultValueForType(item.ui?.type, value),
+    choicesText: (item.ui?.choices || []).join("\n")
+  };
+}
+
 function rowFromConfig(item, workflow, fallbackKey) {
   const ui = item.ui || {};
   if (ui.type === "note" || ui.type === "markdown") {
@@ -262,6 +513,25 @@ function rowFromConfig(item, workflow, fallbackKey) {
       rowId: crypto.randomUUID(),
       kind: "note",
       markdown: ui.markdown ?? ui.value ?? ""
+    };
+  }
+  if (ui.type === "menu-sub") {
+    const [nodeId, ...fieldParts] = String(item.id || "").split("-");
+    const field = fieldParts[fieldParts[0] === "inputs" ? 1 : 0] || "";
+    const sub = {};
+    for (const [choice, fields] of Object.entries(ui.sub || {})) {
+      sub[choice] = Object.entries(fields || {}).map(([key, child]) => subRowFromConfig(child, workflow, key));
+    }
+    return {
+      rowId: crypto.randomUUID(),
+      kind: "menu-sub",
+      hasTargetId: Boolean(item.id),
+      nodeId: item.id ? nodeId : "",
+      field: item.id ? field : "",
+      label: ui.label || fallbackKey,
+      choicesText: (ui.choices || []).join("\n"),
+      value: ui.value ?? ui.choices?.[0] ?? "",
+      sub
     };
   }
   const [nodeId, ...fieldParts] = String(item.id || "").split("-");
@@ -313,6 +583,36 @@ function reorderRows(rows, draggedId, targetId) {
   return next;
 }
 
+function buildInputUiFromRow(row) {
+  const ui = {
+    type: row.type === "string" && row.display === "multiline" ? "text" : row.type,
+    label: row.label || row.field
+  };
+  if ((row.type === "int" || row.type === "float" || row.type === "seed") && row.minimum !== "") {
+    ui.minimum = numericValue(row.minimum);
+  }
+  if ((row.type === "int" || row.type === "float") && row.maximum !== "") {
+    ui.maximum = numericValue(row.maximum);
+  }
+  if ((row.type === "int" || row.type === "float" || row.type === "seed") && row.step !== "") {
+    ui.step = numericValue(row.step);
+  }
+  if ((row.type === "int" || row.type === "float") && row.display === "slider") {
+    ui.display = "slider";
+  }
+  if (row.type === "menu") {
+    ui.choices = row.choicesText.split("\n").map(item => item.trim()).filter(Boolean);
+    ui.value = ui.choices.includes(row.value) ? row.value : ui.choices[0] || "";
+  } else if (row.type === "seed") {
+    ui.value = row.value === "" ? "random_seed" : row.value;
+  } else if (row.type === "checkbox" || row.type === "boolean") {
+    ui.value = booleanValue(row.value);
+  } else if (row.type !== "image" && row.value !== "") {
+    ui.value = row.type === "int" || row.type === "float" ? numericValue(row.value) : row.value;
+  }
+  return ui;
+}
+
 function buildConfig({ appName, inputRows, outputRows }) {
   const usedInputKeys = new Set();
   const input = {};
@@ -327,37 +627,40 @@ function buildConfig({ appName, inputRows, outputRows }) {
       };
       continue;
     }
+    if (row.kind === "menu-sub") {
+      const key = uniqueKey(row.label || "menu_sub", usedInputKeys);
+      const choices = parseChoicesText(row.choicesText);
+      const ui = {
+        type: "menu-sub",
+        label: row.label || "Menu",
+        choices,
+        value: choices.includes(row.value) ? row.value : choices[0] || "",
+        sub: {}
+      };
+      for (const choice of choices) {
+        const usedSubKeys = new Set();
+        ui.sub[choice] = {};
+        for (const subRow of row.sub?.[choice] || []) {
+          if (!subRow.nodeId || !subRow.field || !subRow.type) continue;
+          const subKey = uniqueKey(subRow.label || `${subRow.nodeId}_${subRow.field}`, usedSubKeys);
+          ui.sub[choice][subKey] = {
+            id: `${subRow.nodeId}-${subRow.field}`,
+            ui: buildInputUiFromRow(subRow)
+          };
+        }
+      }
+      const entry = { ui };
+      if (row.hasTargetId && row.nodeId && row.field) {
+        entry.id = `${row.nodeId}-${row.field}`;
+      }
+      input[key] = entry;
+      continue;
+    }
     if (!row.nodeId || !row.field || !row.type) continue;
     const key = uniqueKey(row.label || `${row.nodeId}_${row.field}`, usedInputKeys);
-    const ui = {
-      type: row.type === "string" && row.display === "multiline" ? "text" : row.type,
-      label: row.label || row.field
-    };
-    if ((row.type === "int" || row.type === "float" || row.type === "seed") && row.minimum !== "") {
-      ui.minimum = numericValue(row.minimum);
-    }
-    if ((row.type === "int" || row.type === "float") && row.maximum !== "") {
-      ui.maximum = numericValue(row.maximum);
-    }
-    if ((row.type === "int" || row.type === "float" || row.type === "seed") && row.step !== "") {
-      ui.step = numericValue(row.step);
-    }
-    if ((row.type === "int" || row.type === "float") && row.display === "slider") {
-      ui.display = "slider";
-    }
-    if (row.type === "menu") {
-      ui.choices = row.choicesText.split("\n").map(item => item.trim()).filter(Boolean);
-      ui.value = ui.choices.includes(row.value) ? row.value : ui.choices[0] || "";
-    } else if (row.type === "seed") {
-      ui.value = row.value === "" ? "random_seed" : row.value;
-    } else if (row.type === "checkbox" || row.type === "boolean") {
-      ui.value = booleanValue(row.value);
-    } else if (row.type !== "image" && row.value !== "") {
-      ui.value = row.type === "int" || row.type === "float" ? numericValue(row.value) : row.value;
-    }
     input[key] = {
       id: `${row.nodeId}-${row.field}`,
-      ui
+      ui: buildInputUiFromRow(row)
     };
   }
 
@@ -542,14 +845,94 @@ export function TemplateEditorModal({ selectedTemplate, discovery, onClose, onSa
     setSelectedInputId(rowId);
   }
 
+  function addMenuSubRow() {
+    const rowId = crypto.randomUUID();
+    setInputRows(current => [...current, {
+      rowId,
+      kind: "menu-sub",
+      hasTargetId: false,
+      nodeId: "",
+      field: "",
+      label: "Menu",
+      choicesText: "option_a\noption_b",
+      value: "option_a",
+      sub: {
+        option_a: [],
+        option_b: []
+      }
+    }]);
+    setSelectedInputId(rowId);
+  }
+
   function deleteInputRow(rowId) {
     setInputRows(current => current.filter(item => item.rowId !== rowId));
+  }
+
+  function updateMenuSubInput(menuRowId, choice, subRowId, patch) {
+    setInputRows(current => current.map(row => {
+      if (row.rowId !== menuRowId || row.kind !== "menu-sub") return row;
+      const sub = { ...(row.sub || {}) };
+      sub[choice] = (sub[choice] || []).map(subRow => {
+        if (subRow.rowId !== subRowId) return subRow;
+        const next = { ...subRow, ...patch };
+        if (patch.nodeId) {
+          const node = nodes.find(node => node.id === patch.nodeId);
+          const field = node?.fields?.[0] || "";
+          const value = workflow?.[patch.nodeId]?.inputs?.[field];
+          next.field = field;
+          next.label = field || next.label;
+          Object.assign(next, defaultsForType(inferRowType({ field, nodeClass: node?.classType, value }), value));
+        }
+        if (patch.field) {
+          const node = nodes.find(node => node.id === next.nodeId);
+          const value = workflow?.[next.nodeId]?.inputs?.[patch.field];
+          next.label = next.label || patch.field;
+          Object.assign(next, defaultsForType(inferRowType({ field: patch.field, nodeClass: node?.classType, value }), value));
+        }
+        if (patch.type) {
+          const value = workflow?.[next.nodeId]?.inputs?.[next.field];
+          Object.assign(next, defaultsForType(patch.type, value));
+        }
+        return next;
+      });
+      return { ...row, sub };
+    }));
+  }
+
+  function addMenuSubInput(menuRowId, choice) {
+    const firstNode = nodes.find(node => node.fields.length > 0);
+    const field = firstNode?.fields?.[0] || "";
+    const value = firstNode ? workflow?.[firstNode.id]?.inputs?.[field] : "";
+    const typeDefaults = defaultsForType(inferRowType({ field, nodeClass: firstNode?.classType, value }), value);
+    setInputRows(current => current.map(row => {
+      if (row.rowId !== menuRowId || row.kind !== "menu-sub") return row;
+      const sub = { ...(row.sub || {}) };
+      const nextSubRow = {
+        rowId: crypto.randomUUID(),
+        nodeId: firstNode?.id || "",
+        field,
+        label: field || "Sub-input",
+        ...typeDefaults
+      };
+      sub[choice] = [...(sub[choice] || []), nextSubRow];
+      return { ...row, sub };
+    }));
+  }
+
+  function deleteMenuSubInput(menuRowId, choice, subRowId) {
+    setInputRows(current => current.map(row => {
+      if (row.rowId !== menuRowId || row.kind !== "menu-sub") return row;
+      const sub = { ...(row.sub || {}) };
+      sub[choice] = (sub[choice] || []).filter(item => item.rowId !== subRowId);
+      return { ...row, sub };
+    }));
   }
 
   function updateInputRow(rowId, patch) {
     setInputRows(current => current.map(row => {
       if (row.rowId !== rowId) return row;
       const next = { ...row, ...patch };
+      if (row.kind === "menu-sub") return next;
       if (patch.nodeId) {
         const node = nodes.find(node => node.id === patch.nodeId);
         const field = node?.fields?.[0] || "";
@@ -665,6 +1048,10 @@ export function TemplateEditorModal({ selectedTemplate, discovery, onClose, onSa
                   <Plus size={15} />
                   <span>Thêm input</span>
                 </button>
+                <button type="button" className="smallActionButton" onClick={addMenuSubRow} disabled={!workflow}>
+                  <Layers size={15} />
+                  <span>Thêm menu-sub</span>
+                </button>
                 <button type="button" className="smallActionButton" onClick={addNoteRow} disabled={!workflow}>
                   <FileText size={15} />
                   <span>Thêm chú thích</span>
@@ -734,7 +1121,9 @@ export function TemplateEditorModal({ selectedTemplate, discovery, onClose, onSa
                           <span className="inputListItemLabel">{inputRowLabel(row)}</span>
                           <span className="inputListItemMeta">{inputRowMeta(row, nodes)}</span>
                         </div>
-                        {row.kind !== "note" ? (
+                        {row.kind === "menu-sub" ? (
+                          <span className="inputListItemType">menu-sub</span>
+                        ) : row.kind !== "note" ? (
                           <span className="inputListItemType">{row.type}</span>
                         ) : null}
                       </div>
@@ -749,12 +1138,25 @@ export function TemplateEditorModal({ selectedTemplate, discovery, onClose, onSa
                 </div>
               </div>
               <div className="inputDetailPane">
-                <InputDetailPanel
-                  row={selectedInputRow}
-                  nodes={nodes}
-                  onUpdate={patch => selectedInputRow && updateInputRow(selectedInputRow.rowId, patch)}
-                  onDelete={() => selectedInputRow && deleteInputRow(selectedInputRow.rowId)}
-                />
+                {selectedInputRow?.kind === "menu-sub" ? (
+                  <MenuSubDetailPanel
+                    row={selectedInputRow}
+                    nodes={nodes}
+                    workflow={workflow}
+                    onUpdate={patch => updateInputRow(selectedInputRow.rowId, patch)}
+                    onDelete={() => deleteInputRow(selectedInputRow.rowId)}
+                    onUpdateSubInput={(choice, subRowId, patch) => updateMenuSubInput(selectedInputRow.rowId, choice, subRowId, patch)}
+                    onAddSubInput={choice => addMenuSubInput(selectedInputRow.rowId, choice)}
+                    onDeleteSubInput={(choice, subRowId) => deleteMenuSubInput(selectedInputRow.rowId, choice, subRowId)}
+                  />
+                ) : (
+                  <InputDetailPanel
+                    row={selectedInputRow}
+                    nodes={nodes}
+                    onUpdate={patch => selectedInputRow && updateInputRow(selectedInputRow.rowId, patch)}
+                    onDelete={() => selectedInputRow && deleteInputRow(selectedInputRow.rowId)}
+                  />
+                )}
               </div>
             </div>
           </section>

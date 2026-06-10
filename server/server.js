@@ -1,6 +1,8 @@
 import http from "node:http";
+import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import YAML from "yaml";
@@ -28,6 +30,13 @@ import {
   setWorkflowValue,
   validateWorkflowMappings
 } from "./lib/workflowPatcher.js";
+import {
+  getWebappNodes,
+  parsePromptTips,
+  prepareNodeInfoList,
+  submitAiAppTask,
+  waitForTaskOutputs
+} from "./lib/runningHubClient.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
@@ -45,7 +54,9 @@ const comfyTimeoutMs = Number(process.env.COMFY_TIMEOUT_MS || 10 * 60 * 1000);
 const maxImageBodyBytes = Number(process.env.MAX_IMAGE_BODY_BYTES || 512 * 1024 * 1024);
 const maxOutputHistoryItems = 500;
 const activeRuns = new Map();
+const activeRhRuns = new Map();
 const pendingSseClients = new Map();
+const runningHubTimeoutMs = Number(process.env.RUNNINGHUB_TIMEOUT_MS || 10 * 60 * 1000);
 
 function broadcastRunEvent(run, message) {
   if (!run.sseClients?.size) return;
@@ -267,6 +278,98 @@ function inputImageUrl(filename) {
   return `/api/input-image?name=${encodeURIComponent(filename)}`;
 }
 
+function imageExtensionFromMime(mimeType = "") {
+  const normalized = String(mimeType).split(";")[0].trim().toLowerCase();
+  if (normalized === "image/jpeg") return "jpg";
+  if (normalized === "image/png") return "png";
+  if (normalized === "image/webp") return "webp";
+  if (normalized === "image/gif") return "gif";
+  if (normalized === "image/avif") return "avif";
+  return "";
+}
+
+function imageMimeFromExt(filename = "") {
+  const ext = path.extname(filename).toLowerCase();
+  if (ext === ".jpg" || ext === ".jpeg") return "image/jpeg";
+  if (ext === ".png") return "image/png";
+  if (ext === ".webp") return "image/webp";
+  if (ext === ".gif") return "image/gif";
+  if (ext === ".avif") return "image/avif";
+  return "";
+}
+
+function sourceFilenameFromUrl(sourceUrl, fallbackExt = "png") {
+  try {
+    const parsed = new URL(sourceUrl);
+    const basename = safeInputName(path.basename(parsed.pathname || ""));
+    if (basename && /\.[a-z0-9]+$/i.test(basename)) return basename;
+  } catch {
+    // Fall back below.
+  }
+  return `url-image.${fallbackExt || "png"}`;
+}
+
+async function saveInputImageBuffer(buffer, sourceName, mimeType = "") {
+  const extFromMime = imageExtensionFromMime(mimeType);
+  const originalName = safeInputName(sourceName || `input.${extFromMime || "png"}`);
+  const ext = path.extname(originalName) || `.${extFromMime || "png"}`;
+  const base = originalName.replace(/\.[^.]+$/, "") || "input";
+  const filename = `${base}_${Date.now()}${ext}`;
+  await mkdir(inputDir, { recursive: true });
+  await writeFile(path.join(inputDir, filename), buffer);
+  return {
+    name: filename,
+    url: inputImageUrl(filename)
+  };
+}
+
+async function walkFiles(rootDir) {
+  const entries = await readdir(rootDir, { withFileTypes: true });
+  const files = [];
+  for (const entry of entries) {
+    const entryPath = path.join(rootDir, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...await walkFiles(entryPath));
+    } else if (entry.isFile()) {
+      files.push(entryPath);
+    }
+  }
+  return files;
+}
+
+function runProcess(command, args, { timeoutMs = 120000 } = {}) {
+  return new Promise((resolve) => {
+    const child = spawn(command, args, { stdio: ["ignore", "pipe", "pipe"] });
+    let stdout = "";
+    let stderr = "";
+    const timer = setTimeout(() => {
+      child.kill("SIGTERM");
+    }, timeoutMs);
+    child.stdout.on("data", chunk => { stdout += chunk.toString(); });
+    child.stderr.on("data", chunk => { stderr += chunk.toString(); });
+    child.on("error", error => {
+      clearTimeout(timer);
+      resolve({ ok: false, code: null, stdout, stderr: error.message || stderr });
+    });
+    child.on("close", code => {
+      clearTimeout(timer);
+      resolve({ ok: code === 0, code, stdout, stderr });
+    });
+  });
+}
+
+async function runGalleryDl(sourceUrl, destinationDir) {
+  const galleryArgs = ["-m", "gallery_dl", "--no-input", "--range", "1", "-D", destinationDir, sourceUrl];
+  const pythonCandidates = [process.env.PYTHON || "", "python3", "python"].filter(Boolean);
+  let lastResult = null;
+  for (const python of pythonCandidates) {
+    const result = await runProcess(python, galleryArgs);
+    lastResult = result;
+    if (result.ok) return result;
+  }
+  return lastResult || { ok: false, stderr: "Không tìm thấy Python/gallery-dl" };
+}
+
 async function listInputImages() {
   await mkdir(inputDir, { recursive: true });
   const entries = await readdir(inputDir, { withFileTypes: true });
@@ -292,19 +395,82 @@ async function handleInputUpload(req, res) {
     send(res, 400, { error: "Invalid image data" });
     return;
   }
-  const extension = parsed.mimeType.includes("jpeg") ? "jpg" : parsed.mimeType.split("/")[1] || "png";
-  const originalName = safeInputName(body.filename || `input.${extension}`);
-  const base = originalName.replace(/\.[^.]+$/, "") || "input";
-  const filename = `${base}_${Date.now()}.${extension}`;
-  await mkdir(inputDir, { recursive: true });
-  await writeFile(path.join(inputDir, filename), parsed.buffer);
+  const extension = imageExtensionFromMime(parsed.mimeType) || "png";
+  const image = await saveInputImageBuffer(parsed.buffer, body.filename || `input.${extension}`, parsed.mimeType);
   send(res, 200, {
-    image: {
-      name: filename,
-      url: inputImageUrl(filename)
-    },
+    image,
     images: await listInputImages()
   });
+}
+
+async function handleInputFromUrl(req, res) {
+  const body = JSON.parse(await readBody(req) || "{}");
+  const sourceUrl = String(body.url || "").trim();
+  let parsedUrl;
+  try {
+    parsedUrl = new URL(sourceUrl);
+  } catch {
+    send(res, 400, { error: "URL không hợp lệ" });
+    return;
+  }
+  if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
+    send(res, 400, { error: "Chỉ hỗ trợ URL http/https" });
+    return;
+  }
+
+  try {
+    const response = await fetch(sourceUrl, {
+      headers: { "user-agent": "aPix-Builder/1.0" },
+      signal: AbortSignal.timeout(45000)
+    });
+    const contentType = response.headers.get("content-type") || "";
+    const contentLength = Number(response.headers.get("content-length") || 0);
+    if (response.ok && contentType.toLowerCase().startsWith("image/")) {
+      if (contentLength > maxImageBodyBytes) throw new Error("Ảnh vượt quá giới hạn dung lượng");
+      const buffer = Buffer.from(await response.arrayBuffer());
+      const ext = imageExtensionFromMime(contentType) || path.extname(parsedUrl.pathname).replace(/^\./, "") || "png";
+      const image = await saveInputImageBuffer(buffer, sourceFilenameFromUrl(sourceUrl, ext), contentType);
+      send(res, 200, {
+        image,
+        images: await listInputImages(),
+        source: "direct"
+      });
+      return;
+    }
+  } catch {
+    // Non-direct pages and blocked direct downloads are handled by gallery-dl below.
+  }
+
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "apix-gallery-dl-"));
+  try {
+    const result = await runGalleryDl(sourceUrl, tempDir);
+    if (!result.ok) {
+      const message = result.stderr || result.stdout || "gallery-dl không tải được ảnh từ URL này";
+      send(res, 502, { error: message.trim().slice(0, 800) });
+      return;
+    }
+    const downloadedFiles = (await walkFiles(tempDir))
+      .filter(filePath => /\.(png|jpe?g|webp|gif|avif)$/i.test(filePath))
+      .sort();
+    if (!downloadedFiles.length) {
+      send(res, 502, { error: "gallery-dl chạy xong nhưng không tìm thấy file ảnh" });
+      return;
+    }
+    const firstFile = downloadedFiles[0];
+    const buffer = await readFile(firstFile);
+    if (buffer.byteLength > maxImageBodyBytes) {
+      send(res, 413, { error: "Ảnh vượt quá giới hạn dung lượng" });
+      return;
+    }
+    const image = await saveInputImageBuffer(buffer, path.basename(firstFile), imageMimeFromExt(firstFile));
+    send(res, 200, {
+      image,
+      images: await listInputImages(),
+      source: "gallery-dl"
+    });
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
 }
 
 async function handleInputImage(req, res, url) {
@@ -367,11 +533,26 @@ async function writeOutputHistory(items) {
   await writeFile(outputHistoryPath, JSON.stringify(items.slice(0, maxOutputHistoryItems), null, 2));
 }
 
+function trimHistoryValue(value) {
+  if (typeof value === "string") return value.length > 200000 ? "" : value;
+  if (Array.isArray(value)) return value.map(trimHistoryValue);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).map(([key, child]) => [key, trimHistoryValue(child)]));
+  }
+  return value;
+}
+
 function trimHistoryValues(values = {}) {
-  return Object.fromEntries(Object.entries(values).map(([key, value]) => [
-    key,
-    typeof value === "string" && value.length > 200000 ? "" : value
-  ]));
+  return Object.fromEntries(Object.entries(values).map(([key, value]) => [key, trimHistoryValue(value)]));
+}
+
+function runningHubHistoryValues(nodes = []) {
+  const values = {};
+  for (const node of nodes) {
+    if (!node?.nodeId || !node?.fieldName) continue;
+    values[`${node.nodeId}|${node.fieldName}`] = trimHistoryValue(node.fieldValue ?? "");
+  }
+  return values;
 }
 
 async function archiveOutputRun({ runId, promptId, template, address, target, config, history, values, submittedAt }) {
@@ -612,6 +793,155 @@ async function handleTemplateSave(req, res) {
     registry
   });
 }
+async function handleRunningHubNodes(req, res) {
+  const body = JSON.parse(await readBody(req) || "{}");
+  const apiKey = String(body.apiKey || "").trim();
+  const webappId = String(body.webappId || "").trim();
+  if (!apiKey) {
+    send(res, 400, { error: "Missing RunningHub API key" });
+    return;
+  }
+  if (!webappId) {
+    send(res, 400, { error: "Missing RunningHub webappId" });
+    return;
+  }
+  const nodes = await getWebappNodes(apiKey, webappId);
+  send(res, 200, { nodes, webappId });
+}
+
+async function archiveRunningHubOutputs({ runId, webappId, taskId, outputs, nodes, submittedAt }) {
+  await mkdir(outputDir, { recursive: true });
+  const completedAt = new Date().toISOString();
+  const durationMs = Math.max(0, new Date(completedAt).getTime() - new Date(submittedAt || completedAt).getTime());
+  const archivedOutputs = [];
+  let index = 0;
+
+  for (const output of outputs) {
+    const fileUrl = output.fileUrl || output.url;
+    if (!fileUrl) continue;
+    const response = await fetch(fileUrl);
+    if (!response.ok) continue;
+    const ext = String(output.fileType || path.extname(fileUrl).slice(1) || "png").replace(/^\./, "");
+    const filename = `${Date.now()}_${runId}_${index}_rh.${ext}`;
+    await writeFile(path.join(outputDir, filename), Buffer.from(await response.arrayBuffer()));
+    archivedOutputs.push({
+      nodeId: output.nodeId || "runninghub",
+      filename,
+      originalFilename: path.basename(fileUrl.split("?")[0]),
+      url: outputImageUrl(filename),
+      remoteUrl: fileUrl
+    });
+    index += 1;
+  }
+
+  if (!archivedOutputs.length) {
+    throw new Error("RunningHub hoàn tất nhưng không tải được file kết quả");
+  }
+
+  const item = {
+    id: runId,
+    templateId: `runninghub:${webappId}`,
+    templateName: `RunningHub ${webappId}`,
+    address: "RunningHub Cloud",
+    promptId: String(taskId),
+    createdAt: completedAt,
+    submittedAt: submittedAt || completedAt,
+    completedAt,
+    durationMs,
+    outputs: archivedOutputs,
+    status: "success",
+    provider: "runninghub",
+    webappId,
+    nodes: trimHistoryValue(Array.isArray(nodes) ? nodes : []),
+    values: runningHubHistoryValues(nodes),
+    result: {
+      runId,
+      taskId: String(taskId),
+      template: `runninghub:${webappId}`,
+      address: "RunningHub Cloud",
+      provider: "runninghub",
+      webappId,
+      submittedAt: submittedAt || completedAt,
+      completedAt,
+      durationMs,
+      outputs: archivedOutputs
+    }
+  };
+  const current = await readOutputHistory();
+  await writeOutputHistory([item, ...current]);
+  return item;
+}
+
+async function handleRunningHubRun(req, res) {
+  const body = JSON.parse(await readBody(req) || "{}");
+  const runId = body.runId || randomUUID();
+  const submittedAt = new Date().toISOString();
+  const apiKey = String(body.apiKey || "").trim();
+  const webappId = String(body.webappId || "").trim();
+  const abortController = new AbortController();
+  activeRhRuns.set(runId, { abortController, cancelled: false });
+
+  try {
+    if (!apiKey) throw new Error("Missing RunningHub API key");
+    if (!webappId) throw new Error("Missing RunningHub webappId");
+    if (!Array.isArray(body.nodes) || body.nodes.length === 0) {
+      throw new Error("Missing RunningHub node list");
+    }
+
+    const nodeInfoList = await prepareNodeInfoList(apiKey, body.nodes, {
+      inputDir,
+      signal: abortController.signal
+    });
+    const submitData = await submitAiAppTask(apiKey, webappId, nodeInfoList, abortController.signal);
+    const taskId = submitData.taskId;
+    if (!taskId) throw new Error("RunningHub không trả về taskId");
+
+    const promptTips = parsePromptTips(submitData.promptTips);
+    if (promptTips?.node_errors && Object.keys(promptTips.node_errors).length > 0) {
+      const firstError = Object.entries(promptTips.node_errors)[0];
+      throw new Error(`Node ${firstError[0]} lỗi: ${JSON.stringify(firstError[1])}`);
+    }
+
+    const outputs = await waitForTaskOutputs(apiKey, taskId, {
+      timeoutMs: runningHubTimeoutMs,
+      signal: abortController.signal
+    });
+    const historyItem = await archiveRunningHubOutputs({
+      runId,
+      webappId,
+      taskId,
+      outputs,
+      nodes: body.nodes,
+      submittedAt
+    });
+    send(res, 200, {
+      runId,
+      taskId: String(taskId),
+      provider: "runninghub",
+      webappId,
+      submittedAt: historyItem.submittedAt,
+      completedAt: historyItem.completedAt,
+      durationMs: historyItem.durationMs,
+      outputs: historyItem.outputs,
+      historyItem
+    });
+  } finally {
+    activeRhRuns.delete(runId);
+  }
+}
+
+async function handleRunningHubCancel(req, res) {
+  const body = JSON.parse(await readBody(req) || "{}");
+  const run = activeRhRuns.get(body.runId);
+  if (!run) {
+    send(res, 200, { cancelled: false, message: "Run is not active" });
+    return;
+  }
+  run.cancelled = true;
+  run.abortController.abort();
+  send(res, 200, { cancelled: true, message: "Đã hủy task RunningHub đang chờ" });
+}
+
 async function cleanupUploads(maxAgeMs = 24 * 60 * 60 * 1000) {
   try {
     const now = Date.now();
@@ -688,6 +1018,8 @@ const server = http.createServer(async (req, res) => {
       send(res, 200, { images: all.slice(start, start + limit), total: all.length, page, limit });
     } else if (req.method === "POST" && url.pathname === "/api/input-images") {
       await handleInputUpload(req, res);
+    } else if (req.method === "POST" && url.pathname === "/api/input-images/from-url") {
+      await handleInputFromUrl(req, res);
     } else if (req.method === "POST" && url.pathname === "/api/input-images/delete") {
       await handleDeleteInputImage(req, res);
     } else if (req.method === "GET" && url.pathname === "/api/input-image") {
@@ -707,6 +1039,12 @@ const server = http.createServer(async (req, res) => {
       const nextPresets = body.presets || [];
       await writeCustomPresets(nextPresets);
       send(res, 200, { success: true, presets: nextPresets });
+    } else if (req.method === "POST" && url.pathname === "/api/runninghub/nodes") {
+      await handleRunningHubNodes(req, res);
+    } else if (req.method === "POST" && url.pathname === "/api/runninghub/run") {
+      await handleRunningHubRun(req, res);
+    } else if (req.method === "POST" && url.pathname === "/api/runninghub/cancel") {
+      await handleRunningHubCancel(req, res);
     } else {
       send(res, 404, { error: "Not found" });
     }

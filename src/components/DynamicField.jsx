@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Check, Eye, Filter, Images, Pencil, RefreshCcw, Scissors, Star, Trash2, Upload, X } from "lucide-react";
+import { Check, Eye, Filter, Folder, Images, Link, Loader2, Pencil, RefreshCcw, Scissors, Star, Trash2, Upload, X } from "lucide-react";
 import { ImageEditorModal } from "./ImageEditorModal";
 import { MaskEditorModal } from "./MaskEditorModal";
 import { defaultValue, getActiveSubInputs, isMenuSub, normalizeId } from "../lib/template";
@@ -224,6 +224,9 @@ export function DynamicField({
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxImage, setLightboxImage] = useState(null);
   const [uploadImageSize, setUploadImageSize] = useState({ width: 0, height: 0 });
+  const [imageUrlInput, setImageUrlInput] = useState("");
+  const [imageUrlLoading, setImageUrlLoading] = useState(false);
+  const [imageUrlError, setImageUrlError] = useState("");
   const [lightboxScale, setLightboxScale] = useState(1);
   const [lightboxPan, setLightboxPan] = useState({ x: 0, y: 0 });
   const [isPanningLightbox, setIsPanningLightbox] = useState(false);
@@ -345,6 +348,35 @@ export function DynamicField({
     }
   }
 
+  async function loadImageFromUrl(sourceUrl, { clearInput = false } = {}) {
+    if (!sourceUrl) return;
+    setImageUrlLoading(true);
+    setImageUrlError("");
+    try {
+      const response = await fetch("/api/input-images/from-url", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ url: sourceUrl })
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || "Không tải được ảnh từ URL");
+      setInputImages(data.images || []);
+      if (data.image) {
+        onChange({ kind: "input-image", ...data.image });
+        if (clearInput) setImageUrlInput("");
+      }
+    } catch (error) {
+      setImageUrlError(error.message || "Không tải được ảnh từ URL");
+    } finally {
+      setImageUrlLoading(false);
+    }
+  }
+
+  async function handleLoadImageFromUrl(event) {
+    event.preventDefault();
+    await loadImageFromUrl(imageUrlInput.trim(), { clearInput: true });
+  }
+
   function firstDroppedUri(dataTransfer) {
     const uriList = dataTransfer.getData("text/uri-list");
     if (!uriList) return "";
@@ -370,7 +402,7 @@ export function DynamicField({
     }
     const uri = firstDroppedUri(event.dataTransfer);
     if (uri) {
-      await handlePickedImageUrl(uri.split("\n")[0]);
+      await loadImageFromUrl(uri.split("\n")[0]);
       return;
     }
     await handlePickedFile(event.dataTransfer.files?.[0]);
@@ -609,6 +641,7 @@ export function DynamicField({
     );
   }
   if (ui.type === "image" || ui.type === "image_mask" || ui.type === "file") {
+    const acceptsImageUrl = ui.type === "image" || ui.type === "image_mask";
     const visibleInputImages = inputImages.filter(image => {
       if (libraryFavoritesOnly && !favoriteInputImages.has(image.name)) return false;
       return matchesTimeFilter(inferImageDate(image), libraryTimeFilter);
@@ -756,19 +789,56 @@ export function DynamicField({
               />
             </div>
           )}
-          <button
-            type="button"
-            className="inputLibraryButton"
-            onClick={event => {
-              event.preventDefault();
-              event.stopPropagation();
-              refreshInputImages();
-              setLibraryOpen(true);
-            }}
-          >
-            <Images size={14} />
-            <span>Chọn ảnh từ thư mục input</span>
-          </button>
+          {acceptsImageUrl ? (
+            <form className="imageUrlLoader" onSubmit={handleLoadImageFromUrl}>
+              <div className="imageUrlInputRow">
+                <Link size={14} />
+                <input
+                  type="url"
+                  value={imageUrlInput}
+                  placeholder="Dán URL ảnh hoặc link gallery"
+                  onChange={event => {
+                    setImageUrlInput(event.target.value);
+                    if (imageUrlError) setImageUrlError("");
+                  }}
+                />
+                <button type="submit" disabled={imageUrlLoading || !imageUrlInput.trim()}>
+                  {imageUrlLoading ? <Loader2 size={14} className="spin" /> : <Upload size={14} />}
+                  <span>Tải URL</span>
+                </button>
+                <button
+                  type="button"
+                  className="inputFolderButton"
+                  onClick={event => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    refreshInputImages();
+                    setLibraryOpen(true);
+                  }}
+                  title="Chọn ảnh từ thư mục input"
+                >
+                  <Folder size={14} />
+                  <span>Input</span>
+                </button>
+              </div>
+              {imageUrlError ? <small className="imageUrlStatus bad">{imageUrlError}</small> : null}
+            </form>
+          ) : null}
+          {!acceptsImageUrl ? (
+            <button
+              type="button"
+              className="inputLibraryButton"
+              onClick={event => {
+                event.preventDefault();
+                event.stopPropagation();
+                refreshInputImages();
+                setLibraryOpen(true);
+              }}
+            >
+              <Images size={14} />
+              <span>Chọn ảnh từ thư mục input</span>
+            </button>
+          ) : null}
           {description ? <small className="fieldDescription">{description}</small> : null}
         </label>
         {libraryOpen ? createPortal(

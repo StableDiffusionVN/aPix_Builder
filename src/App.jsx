@@ -36,6 +36,17 @@ import { useServerList } from "./hooks/useServerList";
 import { useWorkspace, sanitizeWorkspaceValues } from "./hooks/useWorkspace";
 import { useImageViewer } from "./hooks/useImageViewer";
 import { useExecution } from "./hooks/useExecution";
+import {
+  buildNodeDefaults,
+  loadExecutionMode,
+  nodeFieldKey,
+  RUNNINGHUB_APP_OPTIONS,
+  useRunningHub
+} from "./hooks/useRunningHub";
+import { buildRunningHubJob, useRunningHubExecution } from "./hooks/useRunningHubExecution";
+import { ExecutionModeToggle, RunningHubPanel } from "./components/RunningHubPanel";
+import { RunningHubRunningState } from "./components/RunningHubRunningState";
+import { RunningHubSettings } from "./components/RunningHubSettings";
 
 const SERVER_STORAGE_KEY = "comfyui-build:server:v2";
 const THEME_STORAGE_KEY = "comfyui-build:theme";
@@ -127,28 +138,46 @@ export default function App() {
   const [showWaitScreen, setShowWaitScreen] = useState(false);
   const [notifyEnabled, setNotifyEnabled] = useState(loadNotifyEnabled);
   const [addServerOpen, setAddServerOpen] = useState(false);
+  const [executionMode, setExecutionMode] = useState(loadExecutionMode);
+  const [rhValues, setRhValues] = useState({});
+  const [rhTestResult, setRhTestResult] = useState(null);
+  const [rhTesting, setRhTesting] = useState(false);
 
-  const { discovery, discoveryLoading } = useDiscovery(comfyAddress);
+  const { discovery, discoveryLoading } = useDiscovery(executionMode === "local" ? comfyAddress : "");
+  const {
+    settings: rhSettings,
+    updateSettings: updateRhSettings,
+    nodes: rhNodes,
+    restoreNodes: restoreRhNodes,
+    nodesLoading: rhNodesLoading,
+    nodesError: rhNodesError,
+    fetchNodes: fetchRhNodes
+  } = useRunningHub();
   const { history, setHistory, loadOutputHistory, deleteHistoryItem } = useHistory();
   const { inputImages, setInputImages, refreshInputImages } = useInputImages();
   const { workspaceRef, getStoredValues, saveValues, getLastTemplate } = useWorkspace();
   const { getPresets, savePreset, updatePreset, deletePreset, presetsVersion } = usePresets();
   const { getServers, addServer, removeServer } = useServerList();
 
+  const onRunComplete = (historyItem) => {
+    if (historyItem) setHistory(current => [historyItem, ...current]);
+    setSelectedOutputIndex(0);
+    if (notifyEnabled && typeof Notification !== "undefined" && Notification.permission === "granted") {
+      const body = executionMode === "runninghub" ? "RunningHub đã hoàn thành!" : "Workflow đã hoàn thành!";
+      new Notification("aPix Builder", { body, icon: "/sdvn-icon.png" });
+    }
+  };
+
+  const localExecution = useExecution({ onComplete: onRunComplete });
+  const rhExecution = useRunningHubExecution({ onComplete: onRunComplete });
   const {
     running, activeRunId, runQueue,
     status, setStatus, error, setError,
     result, setResult, progress,
     runWorkflow, cancelWorkflow
-  } = useExecution({
-    onComplete: (historyItem) => {
-      if (historyItem) setHistory(current => [historyItem, ...current]);
-      setSelectedOutputIndex(0);
-      if (notifyEnabled && typeof Notification !== "undefined" && Notification.permission === "granted") {
-        new Notification("aPix Builder", { body: "Workflow đã hoàn thành!", icon: "/sdvn-icon.png" });
-      }
-    }
-  });
+  } = executionMode === "runninghub" ? rhExecution : localExecution;
+
+  const isRunningHub = executionMode === "runninghub";
 
   const inputs = useMemo(() => flattenInputs(config?.input), [config]);
   const outputs = useMemo(() => Object.values(config?.output || {}), [config]);
@@ -156,14 +185,26 @@ export default function App() {
   const app = config?.app || {};
   const serverAddress = config?.server?.address || config?.sever?.address || "";
   const selectedTemplateName = templates.find(item => item.id === selectedTemplate)?.name || selectedTemplate || "Default";
+  const selectedRunningHubApp = RUNNINGHUB_APP_OPTIONS.find(app => app.id === rhSettings.webappId);
+  const selectedRunningHubName = selectedRunningHubApp?.name || (rhSettings.webappId ? `RunningHub ${rhSettings.webappId}` : "RunningHub");
+  const brandSubtitle = isRunningHub ? selectedRunningHubName : selectedTemplateName;
   const resultOutputs = result?.outputs || [];
   const selectedOutput = resultOutputs[selectedOutputIndex] || resultOutputs[0];
-  const outputLabel = selectedOutput?.label || outputs[0]?.ui?.label || "Ảnh kết quả";
+  const outputLabel = selectedOutput?.label || (isRunningHub ? "Ảnh kết quả RunningHub" : outputs[0]?.ui?.label || "Ảnh kết quả");
   const heroImage = selectedOutput?.url;
   const resultTiming = result?.historyItem || result || {};
   const showStatus = Boolean(error || result || running || activeRunId || runQueue.length);
 
   const compareInputImage = useMemo(() => {
+    if (isRunningHub) {
+      for (const node of rhNodes) {
+        if (String(node.fieldType).toUpperCase() !== "IMAGE") continue;
+        const value = rhValues[`${node.nodeId}|${node.fieldName}`];
+        if (typeof value === "string" && value.startsWith("data:image")) return value;
+        if (value?.kind === "input-image" && value.url) return value.url;
+      }
+      return "";
+    }
     for (const item of inputs) {
       const type = item.ui?.type;
       if (type !== "image" && type !== "image_mask") continue;
@@ -172,7 +213,7 @@ export default function App() {
       if (value?.kind === "input-image" && value.url) return value.url;
     }
     return "";
-  }, [inputs, values]);
+  }, [isRunningHub, rhNodes, rhValues, inputs, values]);
 
   const canCompare = Boolean(heroImage && compareInputImage);
   const discoverySystem = discovery?.system?.system || discovery?.system || null;
@@ -241,6 +282,21 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem(NOTIFY_STORAGE_KEY, JSON.stringify(notifyEnabled));
   }, [notifyEnabled]);
+
+  useEffect(() => {
+    localStorage.setItem("comfyui-build:execution-mode", executionMode);
+  }, [executionMode]);
+
+  useEffect(() => {
+    if (executionMode !== "runninghub" || !rhSettings.apiKey) return;
+    if (!String(rhSettings.webappId || "").trim()) return;
+    const timer = window.setTimeout(() => {
+      fetchRhNodes().then(nextNodes => {
+        if (nextNodes.length) setRhValues(current => ({ ...buildNodeDefaults(nextNodes), ...current }));
+      });
+    }, 500);
+    return () => window.clearTimeout(timer);
+  }, [executionMode, rhSettings.apiKey, rhSettings.webappId, fetchRhNodes]);
 
   // Persist workspace on every change
   useEffect(() => {
@@ -449,14 +505,84 @@ export default function App() {
     };
   }
 
+  function isRunningHubHistoryItem(item) {
+    return item?.provider === "runninghub"
+      || item?.result?.provider === "runninghub"
+      || String(item?.templateId || item?.result?.template || "").startsWith("runninghub:");
+  }
+
+  function runningHubValuesFromHistory(item) {
+    if (item?.values && Object.keys(item.values).length) return item.values;
+    const restoredValues = {};
+    for (const node of item?.nodes || []) {
+      if (!node?.nodeId || !node?.fieldName) continue;
+      restoredValues[nodeFieldKey(node)] = node.fieldValue ?? "";
+    }
+    return restoredValues;
+  }
+
   function handleRunClick() {
     setShowWaitScreen(true);
+    if (executionMode === "runninghub") {
+      if (!rhSettings.apiKey?.trim()) {
+        setError("Chưa nhập RunningHub API Key trong Settings");
+        setStatus("Thiếu cấu hình RunningHub");
+        setShowWaitScreen(false);
+        return;
+      }
+      if (!rhNodes.length) {
+        setError("Chưa tải được node từ RunningHub");
+        setStatus("Thiếu node RunningHub");
+        setShowWaitScreen(false);
+        return;
+      }
+      runWorkflow(buildRunningHubJob({
+        apiKey: rhSettings.apiKey.trim(),
+        webappId: rhSettings.webappId.trim(),
+        nodes: rhNodes,
+        values: rhValues
+      }));
+      return;
+    }
     runWorkflow(makeRunJob());
+  }
+
+  async function handleRhTestConnection() {
+    setRhTesting(true);
+    setRhTestResult(null);
+    try {
+      const nextNodes = await fetchRhNodes({
+        apiKey: rhSettings.apiKey,
+        webappId: rhSettings.webappId,
+        throwOnError: true
+      });
+      if (!nextNodes.length) throw new Error("RunningHub trả về 0 node");
+      setRhValues(current => ({ ...buildNodeDefaults(nextNodes), ...current }));
+      setRhTestResult({ ok: true, message: `Kết nối OK — ${nextNodes.length} node khả dụng.` });
+    } catch (err) {
+      setRhTestResult({ ok: false, message: err.message });
+    } finally {
+      setRhTesting(false);
+    }
+  }
+
+  async function handleRefreshRhNodes() {
+    try {
+      const nextNodes = await fetchRhNodes({
+        apiKey: rhSettings.apiKey,
+        webappId: rhSettings.webappId,
+        throwOnError: true
+      });
+      if (nextNodes.length) setRhValues(current => ({ ...buildNodeDefaults(nextNodes), ...current }));
+    } catch (err) {
+      setRhTestResult({ ok: false, message: err.message });
+    }
   }
 
   async function restoreHistory(item) {
     if (!item) return;
-    setError("");
+    localExecution.setError("");
+    rhExecution.setError("");
     setShowWaitScreen(false);
     resetImageView();
     setSelectedOutputIndex(0);
@@ -470,10 +596,40 @@ export default function App() {
       durationMs: item.durationMs,
       outputs: item.outputs || []
     };
-    setResult(restoredResult);
-    if (item.templateId === "image-editor") { setStatus("Đã mở ảnh từ Image Editor"); return; }
+    if (isRunningHubHistoryItem(item)) {
+      const webappId = item.webappId || item.result?.webappId || String(item.templateId || "").replace(/^runninghub:/, "");
+      setExecutionMode("runninghub");
+      rhExecution.setResult(restoredResult);
+      rhExecution.setStatus("Đã mở lại lịch sử RunningHub");
+      if (webappId) updateRhSettings({ webappId });
+      if (Array.isArray(item.nodes) && item.nodes.length) {
+        restoreRhNodes(item.nodes);
+        setRhValues({ ...buildNodeDefaults(item.nodes), ...runningHubValuesFromHistory(item) });
+      } else {
+        setRhValues({});
+        if (rhSettings.apiKey?.trim() && webappId) {
+          rhExecution.setStatus("Đang tải lại node RunningHub cho bản ghi cũ...");
+          const nextNodes = await fetchRhNodes({ apiKey: rhSettings.apiKey, webappId });
+          if (nextNodes.length) {
+            setRhValues(buildNodeDefaults(nextNodes));
+            rhExecution.setStatus("Đã mở lại lịch sử RunningHub, bản ghi cũ không có value input đã lưu");
+          } else {
+            rhExecution.setStatus("Đã mở lại lịch sử RunningHub, nhưng bản ghi cũ chưa có metadata node");
+          }
+        } else {
+          rhExecution.setStatus("Đã mở lại lịch sử RunningHub, nhưng bản ghi cũ chưa có metadata node");
+        }
+      }
+      return;
+    }
+    setExecutionMode("local");
+    localExecution.setResult(restoredResult);
+    if (item.templateId === "image-editor") {
+      localExecution.setStatus("Đã mở ảnh từ Image Editor");
+      return;
+    }
     await loadConfig(item.templateId, { values: item.values, keepResult: true, preserveServerAddress: true });
-    setStatus("Đã mở lại lịch sử");
+    localExecution.setStatus("Đã mở lại lịch sử");
   }
 
   async function handleDeleteHistoryItem(id) {
@@ -515,14 +671,16 @@ export default function App() {
   // Màn hình chờ chỉ chiếm preview khi đang chạy VÀ người dùng đang xem nó
   const showRunningScreen = running && showWaitScreen;
 
+  const canRun = isRunningHub ? Boolean(rhNodes.length && rhSettings.apiKey) : Boolean(config);
+
   return (
-    <main className="appShell">
+    <main className={`appShell ${isRunningHub ? "is-runninghub" : ""}`}>
       <aside className="sidebar">
         <div className="brand">
           <div className="mark"><img src="/sdvn-icon.png" alt="SDVN" /></div>
           <div>
             <h1 className="title-font">aPix Builder</h1>
-            <p>{selectedTemplateName}</p>
+            <p>{brandSubtitle}</p>
           </div>
           <div className="brandActions">
             <button className="settingsButton" onClick={() => { setInfoOpen(false); setSettingsOpen(true); }} title="Mở settings" aria-label="Mở settings">
@@ -534,71 +692,95 @@ export default function App() {
           </div>
         </div>
 
-        <section className="settingsGroup">
-          <div className="settingsHeader">
-            <Settings2 size={16} />
-            <h2>API Workflow</h2>
-            <span className={`healthDot health-${healthStatus}`} title={
-              healthStatus === "online" ? `ComfyUI online · ${discoverySystem?.comfyui_version || ""}` :
-              healthStatus === "loading" ? "Đang kết nối..." : "Không kết nối được ComfyUI"
-            } aria-label={healthStatus === "online" ? "Online" : healthStatus === "loading" ? "Đang kết nối" : "Offline"}>
-              {healthStatus === "loading" ? <Loader2 size={10} className="spin" /> :
-               healthStatus === "online" ? <Wifi size={10} /> : <WifiOff size={10} />}
-            </span>
-          </div>
-          <TemplateSelector
-            templates={templates}
-            selectedTemplate={selectedTemplate}
-            onChange={loadConfig}
-            onEdit={() => setTemplateEditorOpen(true)}
-          />
-          <PresetBar
-            templateId={selectedTemplate}
-            presets={currentPresets}
-            onLoad={nextValues => setValues(current => ({ ...current, ...nextValues }))}
-            onSave={name => savePreset(selectedTemplate, name, values)}
-            onUpdate={id => updatePreset(selectedTemplate, id, values)}
-            onDelete={id => deletePreset(selectedTemplate, id)}
-          />
-        </section>
+        <ExecutionModeToggle mode={executionMode} onChange={setExecutionMode} />
 
-        <section className="settingsGroup workflowSettings">
-          <div className="settingsHeader">
-            <Settings2 size={16} />
-            <h2>Workflow settings</h2>
-          </div>
-          <div className="formStack">
-            {inputs.map(item => {
-              const valueKey = itemValueKey(item);
-              return (
-                <DynamicField
-                  key={item.key}
-                  item={item}
-                  value={valueKey ? values[valueKey] : values[normalizeId(item.id)]}
-                  onChange={next => {
-                    const key = valueKey || normalizeId(item.id);
-                    setValues(current => ({ ...current, [key]: next }));
-                  }}
-                  allValues={values}
-                  onValueChange={(key, next) => setValues(current => ({ ...current, [key]: next }))}
-                  inputImages={inputImages}
-                  onRefreshInputImages={refreshInputImages}
-                  onUpdateInputImages={setInputImages}
-                  discovery={discovery}
-                  discoveryLoading={discoveryLoading}
-                />
-              );
-            })}
-          </div>
-        </section>
+        {isRunningHub ? (
+          <RunningHubPanel
+            settings={rhSettings}
+            onSettingsChange={patch => {
+              updateRhSettings(patch);
+              setRhTestResult(null);
+            }}
+            nodes={rhNodes}
+            values={rhValues}
+            onValuesChange={setRhValues}
+            nodesLoading={rhNodesLoading}
+            nodesError={rhNodesError}
+            onRefreshNodes={handleRefreshRhNodes}
+            inputImages={inputImages}
+            onRefreshInputImages={refreshInputImages}
+            onUpdateInputImages={setInputImages}
+          />
+        ) : (
+          <>
+            <section className="settingsGroup">
+              <div className="settingsHeader">
+                <Settings2 size={16} />
+                <h2>API Workflow</h2>
+                <span className={`healthDot health-${healthStatus}`} title={
+                  healthStatus === "online" ? `ComfyUI online · ${discoverySystem?.comfyui_version || ""}` :
+                  healthStatus === "loading" ? "Đang kết nối..." : "Không kết nối được ComfyUI"
+                } aria-label={healthStatus === "online" ? "Online" : healthStatus === "loading" ? "Đang kết nối" : "Offline"}>
+                  {healthStatus === "loading" ? <Loader2 size={10} className="spin" /> :
+                   healthStatus === "online" ? <Wifi size={10} /> : <WifiOff size={10} />}
+                </span>
+              </div>
+              <TemplateSelector
+                templates={templates}
+                selectedTemplate={selectedTemplate}
+                onChange={loadConfig}
+                onEdit={() => setTemplateEditorOpen(true)}
+              />
+              <PresetBar
+                templateId={selectedTemplate}
+                presets={currentPresets}
+                onLoad={nextValues => setValues(current => ({ ...current, ...nextValues }))}
+                onSave={name => savePreset(selectedTemplate, name, values)}
+                onUpdate={id => updatePreset(selectedTemplate, id, values)}
+                onDelete={id => deletePreset(selectedTemplate, id)}
+              />
+            </section>
+
+            <section className="settingsGroup workflowSettings">
+              <div className="settingsHeader">
+                <Settings2 size={16} />
+                <h2>Workflow settings</h2>
+              </div>
+              <div className="formStack">
+                {inputs.map(item => {
+                  const valueKey = itemValueKey(item);
+                  return (
+                    <DynamicField
+                      key={item.key}
+                      item={item}
+                      value={valueKey ? values[valueKey] : values[normalizeId(item.id)]}
+                      onChange={next => {
+                        const key = valueKey || normalizeId(item.id);
+                        setValues(current => ({ ...current, [key]: next }));
+                      }}
+                      allValues={values}
+                      onValueChange={(key, next) => setValues(current => ({ ...current, [key]: next }))}
+                      inputImages={inputImages}
+                      onRefreshInputImages={refreshInputImages}
+                      onUpdateInputImages={setInputImages}
+                      discovery={discovery}
+                      discoveryLoading={discoveryLoading}
+                    />
+                  );
+                })}
+              </div>
+            </section>
+          </>
+        )}
 
         <RunControls
           running={running}
-          canRun={Boolean(config)}
+          canRun={canRun}
           canCancel={Boolean(running && activeRunId)}
           queueCount={runQueue.length}
           onRun={handleRunClick}
           onCancel={cancelWorkflow}
+          runLabel={isRunningHub ? "Run" : undefined}
         />
       </aside>
 
@@ -643,8 +825,12 @@ export default function App() {
               onPointerCancel={handlePreviewPointerUp}
             >
               {showRunningScreen ? (
-                <div className="emptyState">
-                  <RunningState progress={progress} status={status} progressPct={progressPct} />
+                <div className={`emptyState ${isRunningHub ? "rhEmptyState" : ""}`}>
+                  {isRunningHub ? (
+                    <RunningHubRunningState progress={progress} status={status} />
+                  ) : (
+                    <RunningState progress={progress} status={status} progressPct={progressPct} />
+                  )}
                 </div>
               ) : heroImage ? (
                 <div
@@ -850,6 +1036,17 @@ export default function App() {
                 </button>
               )}
             </div>
+
+            <RunningHubSettings
+              settings={rhSettings}
+              onChange={patch => {
+                updateRhSettings(patch);
+                setRhTestResult(null);
+              }}
+              onTestConnection={handleRhTestConnection}
+              testing={rhTesting}
+              testResult={rhTestResult}
+            />
           </section>
         </div>
       ) : null}
@@ -867,7 +1064,8 @@ export default function App() {
 
             <div className="infoIntro">
               <div><span>Template hiện tại</span><b>{selectedTemplateName}</b></div>
-              <div><span>Comfy Server</span><b>{comfyAddress || serverAddress || "Chưa cấu hình"}</b></div>
+              <div><span>Chế độ</span><b>{isRunningHub ? "RunningHub Cloud" : "ComfyUI Local"}</b></div>
+              <div><span>{isRunningHub ? "WebApp ID" : "Comfy Server"}</span><b>{isRunningHub ? rhSettings.webappId : (comfyAddress || serverAddress || "Chưa cấu hình")}</b></div>
               <div><span>Phiên bản</span><b>beta v1.0</b></div>
             </div>
 

@@ -1,4 +1,5 @@
-import { CheckCircle2, Cloud, Loader2 } from "lucide-react";
+import { CheckCircle2, Loader2 } from "lucide-react";
+import { estimateRhProgressPct, SdvnWaterLogo } from "./SdvnWaterLogo";
 
 export function RunningHubRunningState({ progress, status }) {
   const phase =
@@ -9,17 +10,16 @@ export function RunningHubRunningState({ progress, status }) {
     : 2;
 
   const detail = progress?.label || status || "Đang kết nối RunningHub cloud...";
+  const progressPct = estimateRhProgressPct(progress);
 
   return (
     <div className="rhRunningState">
-      <div className="rhCloudOrb" aria-hidden="true">
-        <span className="rhCloudRing rhCloudRing1" />
-        <span className="rhCloudRing rhCloudRing2" />
-        <span className="rhCloudRing rhCloudRing3" />
-        <span className="rhCloudCore">
-          <Cloud size={26} />
-        </span>
-      </div>
+      <SdvnWaterLogo
+        percent={progressPct}
+        indeterminate={progressPct === null}
+        tone="rh"
+        title="RunningHub đang xử lý"
+      />
 
       <p className="rhRunningTitle">RunningHub đang xử lý</p>
       <p className="rhRunningSubtitle">Workflow chạy trên cloud — không cần GPU local</p>

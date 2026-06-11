@@ -51,6 +51,7 @@ import { rhWfWorkspaceKey } from "./lib/runningHubTemplate";
 import { buildRunningHubJob, buildRunningHubWfJob, useRunningHubExecution } from "./hooks/useRunningHubExecution";
 import { ExecutionModeToggle, RunningHubPanel } from "./components/RunningHubPanel";
 import { RunningHubRunningState } from "./components/RunningHubRunningState";
+import { SdvnWaterLogo } from "./components/SdvnWaterLogo";
 import { RunningHubSettings } from "./components/RunningHubSettings";
 
 const SERVER_STORAGE_KEY = "comfyui-build:server:v2";
@@ -59,9 +60,11 @@ const MAIN_FONT_STORAGE_KEY = "comfyui-build:main-font";
 const NOTIFY_STORAGE_KEY = "comfyui-build:notify:v1";
 const RH_WF_TEMPLATE_STORAGE_KEY = "comfyui-build:rh-wf-template:v1";
 const DEFAULT_COMFY_SERVER = "http://127.0.0.1:8188";
-const THEME_OPTIONS = [
-  { id: "dark", label: "Dark", swatch: "#121212" },
-  { id: "light", label: "Light", swatch: "#f5f5f5" },
+const PRO_THEME_OPTIONS = [
+  { id: "dark", label: "Dark", swatch: "#0b0d12" },
+  { id: "light", label: "Light", swatch: "#ffffff" }
+];
+const COLORFUL_THEME_OPTIONS = [
   { id: "sdvn", label: "SDVN", swatch: "linear-gradient(to bottom, #5858e6, #151523)" },
   { id: "vietnam", label: "Việt Nam", swatch: "radial-gradient(ellipse at bottom, #c62921, #a21a14)" },
   { id: "skyline", label: "Skyline", swatch: "linear-gradient(to right, #6FB1FC, #4364F7, #0052D4)" },
@@ -73,12 +76,12 @@ const THEME_OPTIONS = [
   { id: "emerald", label: "Emerald Lab", swatch: "radial-gradient(circle at 15% 20%, #34d399 0%, #10231d 58%, #030b08 100%)" },
   { id: "violet", label: "Violet Studio", swatch: "radial-gradient(circle at 15% 20%, #a78bfa 0%, #1b1730 58%, #05030b 100%)" }
 ];
+const THEME_OPTIONS = [...PRO_THEME_OPTIONS, ...COLORFUL_THEME_OPTIONS];
 const MAIN_FONT_OPTIONS = [
-  { id: "be-vietnam", label: "Be Vietnam Pro", family: "\"Be Vietnam Pro\"" },
   { id: "inter", label: "Inter", family: "\"Inter\"" },
+  { id: "noto", label: "Noto Sans", family: "\"Noto Sans\"" },
   { id: "manrope", label: "Manrope", family: "\"Manrope\"" },
   { id: "jakarta", label: "Plus Jakarta Sans", family: "\"Plus Jakarta Sans\"" },
-  { id: "noto", label: "Noto Sans", family: "\"Noto Sans\"" },
   { id: "system", label: "System UI", family: "ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\"" }
 ];
 
@@ -90,7 +93,7 @@ function loadTheme() {
 
 function loadMainFont() {
   const stored = localStorage.getItem(MAIN_FONT_STORAGE_KEY) || "";
-  return MAIN_FONT_OPTIONS.some(option => option.id === stored) ? stored : "be-vietnam";
+  return MAIN_FONT_OPTIONS.some(option => option.id === stored) ? stored : "inter";
 }
 
 function loadServerAddress() {
@@ -128,6 +131,11 @@ function isTextEntryTarget(target) {
     target.isContentEditable ||
     ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)
   );
+}
+
+function isLogToggleKey(event) {
+  if (event.code === "Backquote" || event.code === "IntlBackslash") return true;
+  return event.key === "`" || event.key === "~";
 }
 
 export default function App() {
@@ -172,7 +180,7 @@ export default function App() {
   const { history, setHistory, loadOutputHistory, deleteHistoryItem } = useHistory();
   const { inputImages, setInputImages, refreshInputImages } = useInputImages();
   const { workspaceRef, getStoredValues, saveValues, getLastTemplate } = useWorkspace();
-  const { getPresets, savePreset, updatePreset, deletePreset, presetsVersion } = usePresets();
+  const { getPresets, savePreset, updatePreset, deletePreset, presetsVersion, presetsStorageWarning } = usePresets();
   const { getServers, addServer, removeServer } = useServerList();
 
   const runLogHistory = useRunLogHistory();
@@ -207,6 +215,14 @@ export default function App() {
     if (!runLogOpen) return;
     refreshRunLogSessions();
   }, [runLogOpen, refreshRunLogSessions]);
+
+  useEffect(() => {
+    if (!runLogOpen || !running) return;
+    const timer = window.setInterval(() => {
+      refreshRunLogSessions();
+    }, 2500);
+    return () => window.clearInterval(timer);
+  }, [runLogOpen, running, refreshRunLogSessions]);
 
   const isRunningHub = isRunningHubMode(executionMode);
   const isRunningHubApp = executionMode === "runninghub-app";
@@ -410,11 +426,14 @@ export default function App() {
     return () => window.removeEventListener("keydown", handleInfoShortcut, true);
   }, [infoOpen]);
 
-  // Log panel shortcut
+  // Log panel shortcut (` or Ctrl+`; Cmd+` is reserved by macOS window switching)
   useEffect(() => {
     function handleLogShortcut(event) {
-      if (event.key !== "F1") return;
-      if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
+      if (!isLogToggleKey(event)) return;
+      if (event.metaKey || event.altKey) return;
+      const bareBacktick = !event.ctrlKey && !event.shiftKey;
+      const ctrlBacktick = event.ctrlKey && !event.shiftKey;
+      if (!bareBacktick && !ctrlBacktick) return;
       if (isTextEntryTarget(event.target)) return;
       event.preventDefault();
       event.stopPropagation();
@@ -911,11 +930,34 @@ export default function App() {
       ? Boolean(rhWfConfig && rhWfInputs.length && rhSettings.apiKey && String(rhWfConfig?.runninghub?.workflowId || "").trim())
       : Boolean(config);
 
+  const handleRunClickRef = useRef(handleRunClick);
+  handleRunClickRef.current = handleRunClick;
+
+  useEffect(() => {
+    function hasBlockingOverlay() {
+      return Boolean(document.querySelector(
+        ".imageEditorModal, .maskEditorModal, .templateEditorModal, .modalBackdrop"
+      ));
+    }
+    function handleRunShortcut(event) {
+      if (event.key !== "Enter") return;
+      if (!event.metaKey && !event.ctrlKey) return;
+      if (event.altKey || event.shiftKey) return;
+      if (hasBlockingOverlay()) return;
+      if (!canRun) return;
+      event.preventDefault();
+      event.stopPropagation();
+      handleRunClickRef.current();
+    }
+    window.addEventListener("keydown", handleRunShortcut, true);
+    return () => window.removeEventListener("keydown", handleRunShortcut, true);
+  }, [canRun]);
+
   return (
     <main className={`appShell ${isRunningHub ? "is-runninghub" : ""}`}>
       <aside className="sidebar">
         <div className="brand">
-          <div className="mark"><img src="/sdvn-icon.png" alt="SDVN" /></div>
+          <div className="mark" role="img" aria-label="SDVN" />
           <div>
             <h1 className="title-font">aPix Builder</h1>
             <p>{brandSubtitle}</p>
@@ -976,6 +1018,7 @@ export default function App() {
                 onSave={name => savePreset(rhWfWorkspaceKey(rhWfSelectedTemplate), name, rhWfValues)}
                 onUpdate={id => updatePreset(rhWfWorkspaceKey(rhWfSelectedTemplate), id, rhWfValues)}
                 onDelete={id => deletePreset(rhWfWorkspaceKey(rhWfSelectedTemplate), id)}
+                storageWarning={presetsStorageWarning}
               />
             </section>
 
@@ -1040,6 +1083,7 @@ export default function App() {
                 onSave={name => savePreset(selectedTemplate, name, values)}
                 onUpdate={id => updatePreset(selectedTemplate, id, values)}
                 onDelete={id => deletePreset(selectedTemplate, id)}
+                storageWarning={presetsStorageWarning}
               />
             </section>
 
@@ -1211,8 +1255,10 @@ export default function App() {
                 open={runLogOpen}
                 onToggle={() => setRunLogOpen(current => !current)}
                 sessions={runLogSessions}
+                outputHistory={history}
                 onDeleteSession={deleteRunLogSession}
                 onClearHistory={clearRunLogHistory}
+                onRestoreOutput={restoreHistory}
                 rhApiKey={rhSettings.apiKey}
                 onRhTaskInspected={(session, detail) => {
                   if (!session?.runId || !detail) return;
@@ -1265,7 +1311,17 @@ export default function App() {
                 </button>
                 {themeMenuOpen ? (
                   <div className="themeMenu" role="listbox" aria-label="Theme">
-                    {THEME_OPTIONS.map(option => (
+                    {PRO_THEME_OPTIONS.map(option => (
+                      <button key={option.id} type="button" role="option" aria-selected={theme === option.id}
+                        className={`themeMenuItem ${theme === option.id ? "active" : ""}`}
+                        style={{ "--theme-swatch": option.swatch }}
+                        onClick={() => { setTheme(option.id); setThemeMenuOpen(false); }}>
+                        <span className="themeSwatch" aria-hidden="true" />
+                        <span>{option.label}</span>
+                      </button>
+                    ))}
+                    <div className="themeMenuDivider" role="presentation">Colorful</div>
+                    {COLORFUL_THEME_OPTIONS.map(option => (
                       <button key={option.id} type="button" role="option" aria-selected={theme === option.id}
                         className={`themeMenuItem ${theme === option.id ? "active" : ""}`}
                         style={{ "--theme-swatch": option.swatch }}
@@ -1446,6 +1502,7 @@ export default function App() {
                 <h3>Phím tắt chung</h3>
                 <p>Hoạt động ở màn hình chính khi bạn không nhập text.</p>
                 <div className="shortcutList">
+                  <ShortcutRow label="Run hoặc thêm hàng chờ" keys={["Cmd/Ctrl", "Enter"]} />
                   <ShortcutRow label="Mở bảng hướng dẫn này" keys={["Cmd/Ctrl", "/"]} />
                   <ShortcutRow label="Đóng/mở bảng log" keys={["F1"]} />
                   <ShortcutRow label="Đóng popup" keys={["Esc"]} />
@@ -1529,9 +1586,6 @@ function ShortcutRow({ label, keys }) {
   );
 }
 
-const RING_R = 36;
-const RING_C = 2 * Math.PI * RING_R;
-
 function RunningState({ progress, status, progressPct }) {
   const phase =
     !progress || progress.type === "start" ? 1
@@ -1542,38 +1596,12 @@ function RunningState({ progress, status, progressPct }) {
 
   return (
     <div className="runningState">
-      <div className="runningRing">
-        <svg viewBox="0 0 80 80" fill="none" aria-hidden="true">
-          <circle cx="40" cy="40" r={RING_R} stroke="var(--border-strong)" strokeWidth="5" />
-          {progressPct !== null ? (
-            <circle
-              cx="40" cy="40" r={RING_R}
-              stroke="var(--accent)"
-              strokeWidth="5"
-              strokeLinecap="round"
-              strokeDasharray={RING_C}
-              strokeDashoffset={RING_C * (1 - progressPct / 100)}
-              transform="rotate(-90 40 40)"
-              style={{ transition: "stroke-dashoffset 0.35s ease" }}
-            />
-          ) : (
-            <circle
-              cx="40" cy="40" r={RING_R}
-              stroke="var(--accent)"
-              strokeWidth="5"
-              strokeLinecap="round"
-              strokeDasharray={`${RING_C * 0.28} ${RING_C * 0.72}`}
-              className="runningRingSpin"
-            />
-          )}
-        </svg>
-        <span className="runningRingCenter">
-          {progressPct !== null
-            ? <span className="runningRingPct">{progressPct}%</span>
-            : <Loader2 size={20} className="spin runningRingSpinner" />
-          }
-        </span>
-      </div>
+      <SdvnWaterLogo
+        percent={progressPct}
+        indeterminate={progressPct === null}
+        tone="accent"
+        title="ComfyUI đang xử lý"
+      />
 
       <p className="runningTitle">ComfyUI đang xử lý</p>
 

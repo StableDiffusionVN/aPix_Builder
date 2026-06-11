@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Cloud, ExternalLink, Eye, EyeOff, Loader2, RefreshCcw } from "lucide-react";
+import { ExternalLink, Eye, EyeOff, Loader2, RefreshCcw } from "lucide-react";
+import { RunningHubLogomark } from "./icons/RunningHubIcon";
 
 const RUNNINGHUB_API_GUIDE_URL = "https://www.runninghub.ai/enterprise-api/consumerApi";
 
@@ -17,7 +18,7 @@ export function RunningHubSettings({
       <div className="modalSectionTitle">
         <h3>RunningHub API</h3>
         <span className="rhSettingsBadge">
-          <Cloud size={11} />
+          <RunningHubLogomark size={11} title="RunningHub" />
           Cloud
         </span>
       </div>

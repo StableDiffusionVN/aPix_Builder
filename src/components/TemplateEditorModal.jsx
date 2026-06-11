@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   Box,
-  Cloud,
   Dices,
   FileJson,
   FileText,
@@ -23,6 +22,7 @@ import YAML from "yaml";
 import { DYNAMIC_FIELD_TYPES, canonicalDynamicType, inferDynamicTypeFromField } from "../lib/dynamicTypes";
 import { DEFAULT_RH_WF_ID } from "../hooks/useRunningHub";
 import { menuChoiceOptions, menuChoiceValue, parseMenuChoices, resolveMenuStoredValue } from "../lib/menuChoices";
+import { RunningHubLogomark } from "./icons/RunningHubIcon";
 
 function menuOptsFromRow(row) {
   return menuChoiceOptions(row);
@@ -1348,7 +1348,7 @@ export function TemplateEditorModal({
             <div className="rhWfEditorConfig">
               <section className="rhWfConfigPanel rhWfConfigPanel--source">
                 <header className="rhWfConfigPanelHead rhWfConfigPanelHead--compact">
-                  <span className="rhWfConfigPanelIcon rhWfConfigPanelIcon--sm"><Cloud size={13} /></span>
+                  <span className="rhWfConfigPanelIcon rhWfConfigPanelIcon--sm"><RunningHubLogomark size={13} title="RunningHub" /></span>
                   <strong>Nguồn workflow</strong>
                 </header>
                 <div className="rhWfSourceActions">
@@ -1359,7 +1359,7 @@ export function TemplateEditorModal({
                     disabled={loadingWorkflow}
                     title="Load workflow từ RunningHub theo ID"
                   >
-                    <Cloud size={13} />
+                    <RunningHubLogomark size={13} title="RunningHub" />
                     <span>{loadingWorkflow ? "Đang tải..." : "Load ID"}</span>
                   </button>
                   <label className="rhWfSourceBtn" title="Import file JSON api_format">

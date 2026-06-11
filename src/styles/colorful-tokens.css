@@ -1,0 +1,59 @@
+/* Semantic tokens for colorful themes — typography aligned with pro UI, friendlier radii */
+
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) {
+  color-scheme: dark;
+  line-height: 1.45;
+
+  --radius: 16px;
+  --radius-sm: 10px;
+  --radius-lg: 20px;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+
+  --font-caption: 11px;
+  --font-body: 13px;
+  --font-section: 13px;
+  --font-title: 20px;
+
+  --text-primary: var(--text);
+  --text-secondary: var(--muted);
+  --text-tertiary: var(--muted-2);
+  --border-subtle: rgba(255, 255, 255, 0.1);
+  --border-default: var(--border);
+  --surface-1: var(--panel);
+  --surface-2: var(--panel-soft);
+  --surface-3: rgba(255, 255, 255, 0.08);
+  --accent-muted: rgba(var(--accent-rgb), 0.12);
+  --accent-muted-hover: rgba(var(--accent-rgb), 0.18);
+  --danger-text: var(--danger, #ff4444);
+  --danger-muted: rgba(255, 68, 68, 0.12);
+  --link: var(--accent-hover);
+  --transition-fast: 120ms ease;
+
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23cbd5f5' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  --sdvn-mark-url: url("/sdvn-mark.png");
+
+  --log-bg: var(--panel);
+  --log-text: var(--muted);
+  --log-text-bright: var(--text);
+  --log-muted: var(--muted-2);
+  --log-border: var(--border-subtle);
+  --log-border-strong: var(--border-default);
+  --log-accent: var(--accent);
+  --log-accent-hover: var(--accent-hover);
+  --log-success: var(--success);
+  --log-danger: var(--danger, #ff4444);
+  --log-warning: #d29922;
+  --log-link: var(--accent-hover);
+  --log-row-hover: rgba(255, 255, 255, 0.04);
+  --log-row-active: rgba(var(--accent-rgb), 0.06);
+  --log-coin: #ffa657;
+  --rh-brand: #cfff0e;
+  --rh-brand-rgb: 207, 255, 14;
+  --comfy-brand: #fbbf24;
+  --comfy-brand-rgb: 251, 191, 36;
+}

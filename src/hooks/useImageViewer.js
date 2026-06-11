@@ -80,7 +80,7 @@ export function useImageViewer(heroImage, canCompare) {
 
   function handlePreviewWheel(event) {
     if (!heroImage) return;
-    if (event.target instanceof Element && event.target.closest(".outputLogDock")) return;
+    if (isPreviewOverlayTarget(event.target)) return;
     event.preventDefault();
 
     const area = previewAreaRef.current;
@@ -125,9 +125,13 @@ export function useImageViewer(heroImage, canCompare) {
     setCompareDividerX(rect.left - event.currentTarget.getBoundingClientRect().left + rect.width * (clamped / 100));
   }
 
+  function isPreviewOverlayTarget(target) {
+    return target instanceof Element && target.closest(".outputLogDock, .outputNavButton, .outputRail, .outputMetaStack");
+  }
+
   function handlePreviewPointerDown(event) {
     if (!heroImage || event.button !== 0) return;
-    if (event.target instanceof Element && event.target.closest(".outputNavButton, .outputRail")) return;
+    if (isPreviewOverlayTarget(event.target)) return;
     event.preventDefault();
     event.currentTarget.setPointerCapture(event.pointerId);
     imageDragRef.current = {
@@ -141,6 +145,7 @@ export function useImageViewer(heroImage, canCompare) {
   }
 
   function handlePreviewPointerMove(event) {
+    if (isPreviewOverlayTarget(event.target)) return;
     if (compareMode && !imageDragRef.current) {
       updateComparePosition(event);
       return;

@@ -1,8 +1,31 @@
 const MAX_SESSIONS = 150;
+const MAX_LOGS_PER_SESSION = 500;
 let logCounter = 0;
 
-/** In-memory run log buffer — cleared when the Node server restarts. */
+/** In-memory run log — cleared when the server process restarts. */
 let sessions = [];
+let initialized = false;
+
+function trimSessionLogs(logs = []) {
+  if (logs.length <= MAX_LOGS_PER_SESSION) return logs;
+  return logs.slice(logs.length - MAX_LOGS_PER_SESSION);
+}
+
+function normalizeSessions(items) {
+  if (!Array.isArray(items)) return [];
+  return items
+    .filter(item => item && item.id && item.runId)
+    .slice(0, MAX_SESSIONS)
+    .map(session => ({
+      ...session,
+      logs: trimSessionLogs(Array.isArray(session.logs) ? session.logs : [])
+    }));
+}
+
+function commit(nextSessions) {
+  sessions = normalizeSessions(nextSessions);
+  return snapshot();
+}
 
 function createLogEntry(level, message, meta = {}) {
   return {
@@ -26,6 +49,13 @@ function snapshot() {
   return sessions;
 }
 
+export async function initRunLogStore() {
+  if (initialized) return snapshot();
+  sessions = [];
+  initialized = true;
+  return snapshot();
+}
+
 export function getRunLogSessions() {
   return snapshot();
 }
@@ -46,18 +76,17 @@ export function startRunLogSession(job, meta = {}) {
     template: job.template || "",
     templateId: job.templateId || "",
     webappId: job.webappId || "",
+    error: "",
     logs: []
   };
-  sessions = [session, ...sessions.filter(item => item.runId !== job.runId)].slice(0, MAX_SESSIONS);
-  return snapshot();
+  return commit([session, ...sessions.filter(item => item.runId !== job.runId)]);
 }
 
 export function updateRunLogSession(runId, patch = {}) {
   if (!runId) return snapshot();
-  sessions = sessions.map(session => (
+  return commit(sessions.map(session => (
     session.runId === runId ? { ...session, ...patch } : session
-  ));
-  return snapshot();
+  )));
 }
 
 export function appendRunLog(runId, level, message, meta = {}) {
@@ -65,40 +94,39 @@ export function appendRunLog(runId, level, message, meta = {}) {
   const entry = createLogEntry(level, message, { runId, ...meta });
   const exists = sessions.some(session => session.runId === runId);
   if (exists) {
-    sessions = sessions.map(session => {
+    return commit(sessions.map(session => {
       if (session.runId !== runId) return session;
       return {
         ...session,
         taskId: meta.taskId || session.taskId,
         rhCoins: meta.rhCoins ?? session.rhCoins,
-        logs: [...session.logs, entry]
+        logs: trimSessionLogs([...session.logs, entry])
       };
-    });
-  } else {
-    sessions = [{
-      id: runId,
-      runId,
-      jobLabel: meta.jobLabel || runId.slice(0, 8),
-      provider: meta.provider || "local",
-      status: "running",
-      startedAt: new Date().toISOString(),
-      completedAt: null,
-      durationMs: null,
-      rhCoins: null,
-      taskId: meta.taskId || "",
-      template: "",
-      templateId: "",
-      webappId: "",
-      logs: [entry]
-    }, ...sessions].slice(0, MAX_SESSIONS);
+    }));
   }
-  return snapshot();
+  return commit([{
+    id: runId,
+    runId,
+    jobLabel: meta.jobLabel || runId.slice(0, 8),
+    provider: meta.provider || "local",
+    status: "running",
+    startedAt: new Date().toISOString(),
+    completedAt: null,
+    durationMs: null,
+    rhCoins: null,
+    taskId: meta.taskId || "",
+    template: "",
+    templateId: "",
+    webappId: "",
+    error: "",
+    logs: [entry]
+  }, ...sessions]);
 }
 
 export function endRunLogSession(runId, status, meta = {}) {
   if (!runId) return snapshot();
   const completedAt = new Date().toISOString();
-  sessions = sessions.map(session => {
+  return commit(sessions.map(session => {
     if (session.runId !== runId) return session;
     return {
       ...session,
@@ -109,17 +137,32 @@ export function endRunLogSession(runId, status, meta = {}) {
       rhCoins: meta.rhCoins ?? session.rhCoins,
       error: meta.error || session.error || ""
     };
-  });
-  return snapshot();
+  }));
+}
+
+export function endRunLogSessions(runIds = [], status = "cancelled", meta = {}) {
+  const idSet = new Set(runIds.filter(Boolean));
+  if (!idSet.size) return snapshot();
+  const completedAt = new Date().toISOString();
+  return commit(sessions.map(session => {
+    if (!idSet.has(session.runId)) return session;
+    return {
+      ...session,
+      status,
+      completedAt,
+      durationMs: meta.durationMs ?? session.durationMs,
+      taskId: meta.taskId || session.taskId,
+      rhCoins: meta.rhCoins ?? session.rhCoins,
+      error: meta.error || session.error || ""
+    };
+  }));
 }
 
 export function deleteRunLogSession(sessionId) {
   if (!sessionId) return snapshot();
-  sessions = sessions.filter(session => session.id !== sessionId);
-  return snapshot();
+  return commit(sessions.filter(session => session.id !== sessionId));
 }
 
 export function clearRunLogSessions() {
-  sessions = [];
-  return snapshot();
+  return commit([]);
 }

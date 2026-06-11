@@ -543,12 +543,14 @@ export function DynamicField({
       <section className="menuSubField">
         <label className="field">
           <span>{label}</span>
-          <select value={menuValue} onChange={event => onChange(event.target.value)}>
-            {parsedChoices.length === 0 ? <option value="">Chưa có lựa chọn</option> : null}
-            {parsedChoices.map(choice => (
-              <option key={choice.value} value={choice.value}>{choice.label}</option>
-            ))}
-          </select>
+          <div className="fieldSelectWrap">
+            <select value={menuValue} onChange={event => onChange(event.target.value)}>
+              {parsedChoices.length === 0 ? <option value="">Chưa có lựa chọn</option> : null}
+              {parsedChoices.map(choice => (
+                <option key={choice.value} value={choice.value}>{choice.label}</option>
+              ))}
+            </select>
+          </div>
           {description ? <small className="fieldDescription">{description}</small> : null}
         </label>
         {activeSubs.length ? (
@@ -601,8 +603,8 @@ export function DynamicField({
             value={isRandomSeed ? "" : value}
             onChange={handleSeedChange}
           />
-          <button type="button" className="iconButton" onClick={() => onChange("random_seed")} title="Random seed mỗi lần run">
-            <RefreshCcw size={16} />
+          <button type="button" className="fieldResetButton" onClick={() => onChange("random_seed")} title="Random seed mỗi lần run">
+            <RefreshCcw size={13} />
           </button>
         </div>
       </label>
@@ -1019,14 +1021,16 @@ export function DynamicField({
     return (
       <label className="field">
         <span>{label}</span>
-        <select value={selectValue} onChange={event => onChange(event.target.value)} disabled={isDynamicList && discoveryLoading}>
-          {isDynamicList && rawChoices.length === 0 ? (
-            <option value="">{discoveryLoading ? "Đang quét server..." : "Không tìm thấy dữ liệu"}</option>
-          ) : null}
-          {parsedChoices.map(choice => (
-            <option key={choice.value} value={choice.value}>{choice.label}</option>
-          ))}
-        </select>
+        <div className="fieldSelectWrap">
+          <select value={selectValue} onChange={event => onChange(event.target.value)} disabled={isDynamicList && discoveryLoading}>
+            {isDynamicList && rawChoices.length === 0 ? (
+              <option value="">{discoveryLoading ? "Đang quét server..." : "Không tìm thấy dữ liệu"}</option>
+            ) : null}
+            {parsedChoices.map(choice => (
+              <option key={choice.value} value={choice.value}>{choice.label}</option>
+            ))}
+          </select>
+        </div>
         {description ? <small className="fieldDescription">{description}</small> : null}
       </label>
     );
@@ -1075,12 +1079,12 @@ export function DynamicField({
           />
           <button
             type="button"
-            className="iconButton"
+            className="fieldResetButton"
             onClick={() => onChange(resetValue)}
             disabled={isAtResetValue}
             title="Reset về mặc định"
           >
-            <RefreshCcw size={16} />
+            <RefreshCcw size={13} />
           </button>
         </div>
         {description ? <small className="fieldDescription">{description}</small> : null}

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Bookmark, BookmarkPlus, Check, RefreshCw, Tag, Trash2, X } from "lucide-react";
 
-export function PresetBar({ templateId, presets, onLoad, onSave, onUpdate, onDelete }) {
+export function PresetBar({ templateId, presets, onLoad, onSave, onUpdate, onDelete, storageWarning = "" }) {
   const [selectedId, setSelectedId] = useState("");
   const [saving, setSaving] = useState(false);
   const [saveName, setSaveName] = useState("");
@@ -100,6 +100,7 @@ export function PresetBar({ templateId, presets, onLoad, onSave, onUpdate, onDel
           ) : null}
         </div>
       )}
+      {!saving && storageWarning ? <span className="presetStorageWarning">{storageWarning}</span> : null}
     </label>
   );
 }

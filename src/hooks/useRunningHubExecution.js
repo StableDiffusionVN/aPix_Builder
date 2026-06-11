@@ -60,7 +60,7 @@ export function useRunningHubExecution({ onComplete, runLog } = {}) {
         }
         setTaskStatus({ status: nextStatus, label });
         setProgress({ type: nextStatus, label });
-        if (nextStatus === "queued" || nextStatus === "running" || nextStatus === "waiting" || nextStatus === "upload" || nextStatus === "submit") {
+        if (nextStatus === "queued" || nextStatus === "running" || nextStatus === "waiting" || nextStatus === "token_wait" || nextStatus === "upload" || nextStatus === "submit") {
           setStatus(label);
         }
         appendLog("info", label, { runId, taskId: taskId || undefined });
@@ -68,6 +68,12 @@ export function useRunningHubExecution({ onComplete, runLog } = {}) {
       }
       default:
         break;
+    }
+  }
+
+  function endQueuedSessions(status = "cancelled") {
+    for (const queuedJob of runQueueRef.current) {
+      runLog?.endSession?.(queuedJob.runId, status);
     }
   }
 
@@ -192,6 +198,7 @@ export function useRunningHubExecution({ onComplete, runLog } = {}) {
   async function cancelWorkflow() {
     if (!activeRunIdRef.current) return;
     if (runQueueRef.current.length) {
+      endQueuedSessions("cancelled");
       setQueue([]);
       appendLog("warn", "Đã xóa toàn bộ request đang chờ trong hàng chờ client");
     }

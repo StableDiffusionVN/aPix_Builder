@@ -1,0 +1,148 @@
+/* Semantic design tokens — Dark & Light professional UI */
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --surface-base: #090b0f;
+  --surface-1: #0b0d12;
+  --surface-2: #10141b;
+  --surface-3: #161b26;
+  --text-primary: #e6edf3;
+  --text-secondary: #8b949e;
+  --text-tertiary: #6e7681;
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --border-default: rgba(255, 255, 255, 0.1);
+  --accent-muted: rgba(88, 166, 255, 0.12);
+  --accent-muted-hover: rgba(88, 166, 255, 0.18);
+  --danger-text: #f85149;
+  --danger-muted: rgba(248, 81, 73, 0.12);
+  --warning: #d29922;
+  --link: #79c0ff;
+
+  --bg: var(--surface-base);
+  --panel: var(--surface-1);
+  --panel-soft: var(--surface-2);
+  --panel-strong: #07090d;
+  --border: var(--border-default);
+  --border-strong: rgba(255, 255, 255, 0.14);
+  --text: var(--text-primary);
+  --muted: var(--text-secondary);
+  --muted-2: var(--text-tertiary);
+  --accent: #58a6ff;
+  --accent-hover: #79c0ff;
+  --accent-rgb: 88, 166, 255;
+  --rh-brand: #cfff0e;
+  --rh-brand-rgb: 207, 255, 14;
+  --comfy-brand: #fbbf24;
+  --comfy-brand-rgb: 251, 191, 36;
+  --success: #3fb950;
+  --shadow: 0 8px 24px rgba(0, 0, 0, 0.42);
+  --radius: 6px;
+  --radius-sm: 4px;
+  --radius-lg: 8px;
+  --canvas-bg: var(--surface-1);
+  --canvas-checker: rgba(255, 255, 255, 0.03);
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+
+  --font-caption: 11px;
+  --font-body: 13px;
+  --font-section: 13px;
+  --font-title: 20px;
+
+  --log-bg: var(--surface-1);
+  --log-text: #c9d1d9;
+  --log-text-bright: var(--text-primary);
+  --log-muted: var(--text-tertiary);
+  --log-border: var(--border-subtle);
+  --log-border-strong: var(--border-default);
+  --log-accent: var(--accent);
+  --log-accent-hover: var(--accent-hover);
+  --log-success: var(--success);
+  --log-danger: var(--danger-text);
+  --log-warning: var(--warning);
+  --log-link: var(--link);
+  --log-row-hover: rgba(255, 255, 255, 0.04);
+  --log-row-active: rgba(88, 166, 255, 0.06);
+  --log-coin: #ffa657;
+
+  --transition-fast: 120ms ease;
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%238b949e' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  --sdvn-mark-url: url("/sdvn-mark.png");
+}
+
+html[data-theme="light"] {
+  color-scheme: light;
+  --surface-base: #e8e8ec;
+  --surface-1: #ffffff;
+  --surface-2: #f3f3f6;
+  --surface-3: #ebebef;
+  --text-primary: #18181b;
+  --text-secondary: #52525b;
+  --text-tertiary: #71717a;
+  --border-subtle: rgba(15, 15, 18, 0.08);
+  --border-default: rgba(15, 15, 18, 0.12);
+  --accent-muted: rgba(9, 105, 218, 0.1);
+  --accent-muted-hover: rgba(9, 105, 218, 0.16);
+  --danger-text: #cf222e;
+  --danger-muted: rgba(207, 34, 46, 0.1);
+  --warning: #9a6700;
+  --link: #0969da;
+
+  --bg: var(--surface-base);
+  --panel: var(--surface-1);
+  --panel-soft: var(--surface-2);
+  --panel-strong: #ffffff;
+  --border: var(--border-default);
+  --border-strong: rgba(15, 15, 18, 0.18);
+  --text: var(--text-primary);
+  --muted: var(--text-secondary);
+  --muted-2: var(--text-tertiary);
+  --accent: #0969da;
+  --accent-hover: #0550ae;
+  --accent-rgb: 9, 105, 218;
+  --rh-brand: #9ecc0b;
+  --rh-brand-rgb: 158, 204, 11;
+  --comfy-brand: #ca8a04;
+  --comfy-brand-rgb: 202, 138, 4;
+  --success: #1a7f37;
+  --danger-bg: rgba(220, 38, 38, 0.08);
+  --shadow: 0 1px 3px rgba(15, 15, 18, 0.08);
+  --radius: 6px;
+  --radius-sm: 4px;
+  --radius-lg: 8px;
+  --canvas-bg: #dddee3;
+  --canvas-checker: rgba(15, 15, 18, 0.05);
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+
+  --font-caption: 11px;
+  --font-body: 13px;
+  --font-section: 13px;
+  --font-title: 20px;
+
+  --log-bg: #f6f8fa;
+  --log-text: #24292f;
+  --log-text-bright: #24292f;
+  --log-muted: #656d76;
+  --log-border: rgba(27, 31, 36, 0.08);
+  --log-border-strong: rgba(27, 31, 36, 0.12);
+  --log-accent: #0969da;
+  --log-accent-hover: #0550ae;
+  --log-success: #1a7f37;
+  --log-danger: #cf222e;
+  --log-warning: #9a6700;
+  --log-link: #0969da;
+  --log-row-hover: rgba(27, 31, 36, 0.04);
+  --log-row-active: rgba(9, 105, 218, 0.08);
+  --log-coin: #bc4c00;
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2352525b' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  --sdvn-mark-url: url("/sdvn-mark-light.png");
+}

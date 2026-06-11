@@ -43,14 +43,18 @@ import {
   extractRhConsumeCoins,
   fetchAccountRemainCoins,
   resolveRhTaskCoins,
-  inspectRhTask
+  inspectRhTask,
+  submitRhTaskWhenReady,
+  waitForRhApiKeyIdle
 } from "./lib/runningHubClient.js";
+import { withRhApiKeyLock } from "./lib/rhTokenLock.js";
 import {
   appendRunLog,
   clearRunLogSessions,
   deleteRunLogSession,
   endRunLogSession,
   getRunLogSessions,
+  initRunLogStore,
   startRunLogSession,
   updateRunLogSession
 } from "./lib/runLogStore.js";
@@ -68,6 +72,7 @@ const outputDir = path.join(root, "output");
 const outputHistoryPath = path.join(outputDir, "history.json");
 const presetsDir = path.join(root, "presets");
 const presetsFilePath = path.join(presetsDir, "presets.json");
+const workflowPresetsFilePath = path.join(presetsDir, "workflow-presets.json");
 const port = Number(process.env.PORT || 8787);
 const comfyTimeoutMs = Number(process.env.COMFY_TIMEOUT_MS || 10 * 60 * 1000);
 const maxImageBodyBytes = Number(process.env.MAX_IMAGE_BODY_BYTES || 512 * 1024 * 1024);
@@ -162,6 +167,22 @@ async function readCustomPresets() {
 async function writeCustomPresets(presets) {
   await mkdir(presetsDir, { recursive: true });
   await writeFile(presetsFilePath, JSON.stringify(presets, null, 2), "utf8");
+}
+
+async function readWorkflowPresets() {
+  try {
+    await mkdir(presetsDir, { recursive: true });
+    const raw = await readFile(workflowPresetsFilePath, "utf8");
+    const parsed = JSON.parse(raw);
+    return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+async function writeWorkflowPresets(presets) {
+  await mkdir(presetsDir, { recursive: true });
+  await writeFile(workflowPresetsFilePath, JSON.stringify(presets, null, 2), "utf8");
 }
 
 async function assertTemplateWorkflow(config, template, options = {}) {
@@ -1050,6 +1071,10 @@ async function handleRunningHubRun(req, res) {
     });
   };
 
+  const onTokenWait = ({ label, status }) => {
+    emitRhStatus(status || "waiting", label || "Đang chờ API key RunningHub rảnh...");
+  };
+
   try {
     if (!apiKey) throw new Error("Missing RunningHub API key");
     if (!webappId) throw new Error("Missing RunningHub webappId");
@@ -1057,62 +1082,76 @@ async function handleRunningHubRun(req, res) {
       throw new Error("Missing RunningHub node list");
     }
 
-    const coinsBefore = await fetchAccountRemainCoins(apiKey, abortController.signal);
-    emitRhStatus("upload", "Đang upload dữ liệu lên RunningHub...");
-    const nodeInfoList = await prepareNodeInfoList(apiKey, body.nodes, {
-      inputDir,
-      signal: abortController.signal,
-      onProgress: ({ label }) => emitRhStatus("upload", label || "Đang upload dữ liệu...")
-    });
-    emitRhStatus("submit", "Đang gửi task lên RunningHub...");
-    const submitData = await submitAiAppTask(apiKey, webappId, nodeInfoList, abortController.signal);
-    const taskId = submitData.taskId;
-    if (!taskId) throw new Error("RunningHub không trả về taskId");
-    run.taskId = taskId;
-    broadcastRunEvent(run, {
-      type: "rh_task_submitted",
-      data: { taskId: String(taskId) }
-    });
+    await withRhApiKeyLock(apiKey, runId, async () => {
+      await waitForRhApiKeyIdle(apiKey, {
+        signal: abortController.signal,
+        onWait: onTokenWait
+      });
 
-    const promptTips = parsePromptTips(submitData.promptTips);
-    if (promptTips?.node_errors && Object.keys(promptTips.node_errors).length > 0) {
-      const firstError = Object.entries(promptTips.node_errors)[0];
-      throw new Error(`Node ${firstError[0]} lỗi: ${JSON.stringify(firstError[1])}`);
-    }
+      const coinsBefore = await fetchAccountRemainCoins(apiKey, abortController.signal);
+      emitRhStatus("upload", "Đang upload dữ liệu lên RunningHub...");
+      const nodeInfoList = await prepareNodeInfoList(apiKey, body.nodes, {
+        inputDir,
+        signal: abortController.signal,
+        onProgress: ({ label }) => emitRhStatus("upload", label || "Đang upload dữ liệu...")
+      });
+      emitRhStatus("submit", "Đang gửi task lên RunningHub...");
+      const submitData = await submitRhTaskWhenReady(
+        apiKey,
+        () => submitAiAppTask(apiKey, webappId, nodeInfoList, abortController.signal),
+        { signal: abortController.signal, onWait: onTokenWait }
+      );
+      const taskId = submitData.taskId;
+      if (!taskId) throw new Error("RunningHub không trả về taskId");
+      run.taskId = taskId;
+      broadcastRunEvent(run, {
+        type: "rh_task_submitted",
+        data: { taskId: String(taskId) }
+      });
 
-    const { outputs, rhCoins } = await waitForTaskOutputs(apiKey, taskId, {
-      timeoutMs: runningHubTimeoutMs,
+      const promptTips = parsePromptTips(submitData.promptTips);
+      if (promptTips?.node_errors && Object.keys(promptTips.node_errors).length > 0) {
+        const firstError = Object.entries(promptTips.node_errors)[0];
+        throw new Error(`Node ${firstError[0]} lỗi: ${JSON.stringify(firstError[1])}`);
+      }
+
+      const { outputs, rhCoins } = await waitForTaskOutputs(apiKey, taskId, {
+        timeoutMs: runningHubTimeoutMs,
+        signal: abortController.signal,
+        onStatus: ({ type, label }) => emitRhStatus(type || "waiting", label || "Đang chờ RunningHub...", taskId)
+      });
+      const resolvedRhCoins = await resolveRhTaskCoins(apiKey, {
+        outputs,
+        rhCoins,
+        coinsBefore,
+        signal: abortController.signal
+      });
+      const historyItem = await archiveRunningHubOutputs({
+        runId,
+        webappId,
+        rhMode: "app",
+        taskId,
+        outputs,
+        rhCoins: resolvedRhCoins,
+        nodes: body.nodes,
+        submittedAt
+      });
+      send(res, 200, {
+        runId,
+        taskId: String(taskId),
+        provider: "runninghub",
+        rhMode: "app",
+        webappId,
+        submittedAt: historyItem.submittedAt,
+        completedAt: historyItem.completedAt,
+        durationMs: historyItem.durationMs,
+        rhCoins: historyItem.rhCoins,
+        outputs: historyItem.outputs,
+        historyItem
+      });
+    }, {
       signal: abortController.signal,
-      onStatus: ({ type, label }) => emitRhStatus(type || "waiting", label || "Đang chờ RunningHub...", taskId)
-    });
-    const resolvedRhCoins = await resolveRhTaskCoins(apiKey, {
-      outputs,
-      rhCoins,
-      coinsBefore,
-      signal: abortController.signal
-    });
-    const historyItem = await archiveRunningHubOutputs({
-      runId,
-      webappId,
-      rhMode: "app",
-      taskId,
-      outputs,
-      rhCoins: resolvedRhCoins,
-      nodes: body.nodes,
-      submittedAt
-    });
-    send(res, 200, {
-      runId,
-      taskId: String(taskId),
-      provider: "runninghub",
-      rhMode: "app",
-      webappId,
-      submittedAt: historyItem.submittedAt,
-      completedAt: historyItem.completedAt,
-      durationMs: historyItem.durationMs,
-      rhCoins: historyItem.rhCoins,
-      outputs: historyItem.outputs,
-      historyItem
+      onWait: onTokenWait
     });
   } finally {
     closeRhRun(run, runId);
@@ -1134,6 +1173,10 @@ async function handleRunningHubWfRun(req, res) {
     });
   };
 
+  const onTokenWait = ({ label, status }) => {
+    emitRhStatus(status || "waiting", label || "Đang chờ API key RunningHub rảnh...");
+  };
+
   try {
     if (!apiKey) throw new Error("Missing RunningHub API key");
     if (!templateId) throw new Error("Missing RunningHub Workflow template");
@@ -1151,86 +1194,105 @@ async function handleRunningHubWfRun(req, res) {
     if (!Object.keys(request).length) {
       throw new Error("Template chưa có input nào để gửi");
     }
-    const coinsBefore = await fetchAccountRemainCoins(apiKey, abortController.signal);
-    emitRhStatus("upload", "Đang chuẩn bị dữ liệu workflow...");
-    let submitData;
-    if (useSavedWorkflowJson) {
-      if (!template.workflowPath) {
-        throw new Error("Template bật lưu JSON nhưng thiếu file api.json");
+
+    await withRhApiKeyLock(apiKey, runId, async () => {
+      await waitForRhApiKeyIdle(apiKey, {
+        signal: abortController.signal,
+        onWait: onTokenWait
+      });
+
+      const coinsBefore = await fetchAccountRemainCoins(apiKey, abortController.signal);
+      emitRhStatus("upload", "Đang chuẩn bị dữ liệu workflow...");
+      let submitData;
+      if (useSavedWorkflowJson) {
+        if (!template.workflowPath) {
+          throw new Error("Template bật lưu JSON nhưng thiếu file api.json");
+        }
+        const workflow = structuredClone(JSON.parse(await readFile(template.workflowPath, "utf8")));
+        const patchedWorkflow = await buildPatchedRunningHubWorkflow(workflow, request, apiKey, {
+          inputDir,
+          signal: abortController.signal
+        });
+        emitRhStatus("submit", "Đang gửi workflow lên RunningHub...");
+        submitData = await submitRhTaskWhenReady(
+          apiKey,
+          () => submitWorkflowTask(apiKey, {
+            workflow: patchedWorkflow,
+            ...taskOptions,
+            workflowId: sourceWorkflowId
+          }, abortController.signal),
+          { signal: abortController.signal, onWait: onTokenWait }
+        );
+      } else {
+        const nodeInfoList = await buildRunningHubNodeInfoList(request, apiKey, {
+          inputDir,
+          signal: abortController.signal
+        });
+        emitRhStatus("submit", "Đang gửi workflow lên RunningHub...");
+        submitData = await submitRhTaskWhenReady(
+          apiKey,
+          () => submitWorkflowTask(apiKey, {
+            nodeInfoList,
+            ...taskOptions,
+            workflowId: sourceWorkflowId
+          }, abortController.signal),
+          { signal: abortController.signal, onWait: onTokenWait }
+        );
       }
-      const workflow = structuredClone(JSON.parse(await readFile(template.workflowPath, "utf8")));
-      const patchedWorkflow = await buildPatchedRunningHubWorkflow(workflow, request, apiKey, {
-        inputDir,
+      const taskId = submitData.taskId;
+      if (!taskId) throw new Error("RunningHub không trả về taskId");
+      run.taskId = taskId;
+      broadcastRunEvent(run, {
+        type: "rh_task_submitted",
+        data: { taskId: String(taskId) }
+      });
+
+      const promptTips = parsePromptTips(submitData.promptTips);
+      if (promptTips?.node_errors && Object.keys(promptTips.node_errors).length > 0) {
+        const firstError = Object.entries(promptTips.node_errors)[0];
+        throw new Error(`Node ${firstError[0]} lỗi: ${JSON.stringify(firstError[1])}`);
+      }
+
+      const { outputs, rhCoins } = await waitForTaskOutputs(apiKey, taskId, {
+        timeoutMs: runningHubTimeoutMs,
+        signal: abortController.signal,
+        onStatus: ({ type, label }) => emitRhStatus(type || "waiting", label || "Đang chờ RunningHub...", taskId)
+      });
+      const resolvedRhCoins = await resolveRhTaskCoins(apiKey, {
+        outputs,
+        rhCoins,
+        coinsBefore,
         signal: abortController.signal
       });
-      emitRhStatus("submit", "Đang gửi workflow lên RunningHub...");
-      submitData = await submitWorkflowTask(apiKey, {
-        workflow: patchedWorkflow,
-        ...taskOptions,
-        workflowId: sourceWorkflowId
-      }, abortController.signal);
-    } else {
-      const nodeInfoList = await buildRunningHubNodeInfoList(request, apiKey, {
-        inputDir,
-        signal: abortController.signal
+      const historyItem = await archiveRunningHubOutputs({
+        runId,
+        workflowId: sourceWorkflowId,
+        rhMode: "wf",
+        rhWfTemplateId: templateId,
+        taskId,
+        outputs,
+        rhCoins: resolvedRhCoins,
+        nodes: [],
+        values: body.values || {},
+        submittedAt
       });
-      emitRhStatus("submit", "Đang gửi workflow lên RunningHub...");
-      submitData = await submitWorkflowTask(apiKey, {
-        nodeInfoList,
-        ...taskOptions,
-        workflowId: sourceWorkflowId
-      }, abortController.signal);
-    }
-    const taskId = submitData.taskId;
-    if (!taskId) throw new Error("RunningHub không trả về taskId");
-    run.taskId = taskId;
-    broadcastRunEvent(run, {
-      type: "rh_task_submitted",
-      data: { taskId: String(taskId) }
-    });
-
-    const promptTips = parsePromptTips(submitData.promptTips);
-    if (promptTips?.node_errors && Object.keys(promptTips.node_errors).length > 0) {
-      const firstError = Object.entries(promptTips.node_errors)[0];
-      throw new Error(`Node ${firstError[0]} lỗi: ${JSON.stringify(firstError[1])}`);
-    }
-
-    const { outputs, rhCoins } = await waitForTaskOutputs(apiKey, taskId, {
-      timeoutMs: runningHubTimeoutMs,
+      send(res, 200, {
+        runId,
+        taskId: String(taskId),
+        provider: "runninghub",
+        rhMode: "wf",
+        workflowId: sourceWorkflowId,
+        templateId,
+        submittedAt: historyItem.submittedAt,
+        completedAt: historyItem.completedAt,
+        durationMs: historyItem.durationMs,
+        rhCoins: historyItem.rhCoins,
+        outputs: historyItem.outputs,
+        historyItem
+      });
+    }, {
       signal: abortController.signal,
-      onStatus: ({ type, label }) => emitRhStatus(type || "waiting", label || "Đang chờ RunningHub...", taskId)
-    });
-    const resolvedRhCoins = await resolveRhTaskCoins(apiKey, {
-      outputs,
-      rhCoins,
-      coinsBefore,
-      signal: abortController.signal
-    });
-    const historyItem = await archiveRunningHubOutputs({
-      runId,
-      workflowId: sourceWorkflowId,
-      rhMode: "wf",
-      rhWfTemplateId: templateId,
-      taskId,
-      outputs,
-      rhCoins: resolvedRhCoins,
-      nodes: [],
-      values: body.values || {},
-      submittedAt
-    });
-    send(res, 200, {
-      runId,
-      taskId: String(taskId),
-      provider: "runninghub",
-      rhMode: "wf",
-      workflowId: sourceWorkflowId,
-      templateId,
-      submittedAt: historyItem.submittedAt,
-      completedAt: historyItem.completedAt,
-      durationMs: historyItem.durationMs,
-      rhCoins: historyItem.rhCoins,
-      outputs: historyItem.outputs,
-      historyItem
+      onWait: onTokenWait
     });
   } finally {
     closeRhRun(run, runId);
@@ -1383,6 +1445,15 @@ const server = http.createServer(async (req, res) => {
       const nextPresets = body.presets || [];
       await writeCustomPresets(nextPresets);
       send(res, 200, { success: true, presets: nextPresets });
+    } else if (req.method === "GET" && url.pathname === "/api/workflow-presets") {
+      send(res, 200, { presets: await readWorkflowPresets() });
+    } else if (req.method === "POST" && url.pathname === "/api/workflow-presets") {
+      const body = JSON.parse(await readBody(req) || "{}");
+      const nextPresets = body.presets && typeof body.presets === "object" && !Array.isArray(body.presets)
+        ? body.presets
+        : {};
+      await writeWorkflowPresets(nextPresets);
+      send(res, 200, { success: true, presets: nextPresets });
     } else if (req.method === "POST" && url.pathname === "/api/runninghub/nodes") {
       await handleRunningHubNodes(req, res);
     } else if (req.method === "POST" && url.pathname === "/api/runninghub/run") {
@@ -1415,10 +1486,17 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(port, "127.0.0.1", () => {
-  console.log(`ComfyUI YAML app server listening on http://127.0.0.1:${port}`);
-  cleanupUploads().catch(console.error);
-  setInterval(() => {
-    cleanupUploads().catch(console.error);
-  }, 6 * 60 * 60 * 1000).unref();
-});
+initRunLogStore()
+  .then(() => {
+    server.listen(port, "127.0.0.1", () => {
+      console.log(`ComfyUI YAML app server listening on http://127.0.0.1:${port}`);
+      cleanupUploads().catch(console.error);
+      setInterval(() => {
+        cleanupUploads().catch(console.error);
+      }, 6 * 60 * 60 * 1000).unref();
+    });
+  })
+  .catch(error => {
+    console.error("Failed to initialize run log store:", error);
+    process.exit(1);
+  });

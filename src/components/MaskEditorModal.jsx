@@ -767,7 +767,7 @@ export function MaskEditorModal({ source, initialMask, title = "Tô Mask", onClo
       >
         <div className="modalHeader">
           <div>
-            <h2>Mask Editor</h2>
+            <h2>{title}</h2>
           </div>
           <div className="maskHeaderActions">
             <label className="maskBrushSize">

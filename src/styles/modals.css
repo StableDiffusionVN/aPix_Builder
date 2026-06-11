@@ -1,0 +1,815 @@
+/* Modals & popups — dark/light/colorful design system */
+
+/* ── Backdrops ──────────────────────────────────────────── */
+
+html[data-theme="dark"] .modalBackdrop,
+html[data-theme="dark"] .inputLibraryModal,
+html[data-theme="dark"] .imageEditorBackdrop,
+html[data-theme="dark"] .maskEditorBackdrop,
+html[data-theme="dark"] .imageLightbox,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .modalBackdrop,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .inputLibraryModal,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .imageEditorBackdrop,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .maskEditorBackdrop,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .imageLightbox,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .imageLightbox,
+html[data-theme="light"] .modalBackdrop,
+html[data-theme="light"] .inputLibraryModal,
+html[data-theme="light"] .imageEditorBackdrop,
+html[data-theme="light"] .maskEditorBackdrop,
+html[data-theme="light"] .imageLightbox {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+html[data-theme="dark"] .modalBackdrop,
+html[data-theme="dark"] .inputLibraryModal {
+  background: rgba(9, 11, 15, 0.78);
+}
+
+html[data-theme="light"] .modalBackdrop,
+html[data-theme="light"] .inputLibraryModal {
+  background: rgba(15, 15, 18, 0.42);
+}
+
+html[data-theme="dark"] .imageEditorBackdrop,
+html[data-theme="dark"] .maskEditorBackdrop,
+html[data-theme="dark"] .imageLightbox {
+  background: rgba(9, 11, 15, 0.88);
+}
+
+html[data-theme="light"] .imageEditorBackdrop,
+html[data-theme="light"] .maskEditorBackdrop,
+html[data-theme="light"] .imageLightbox {
+  background: rgba(15, 15, 18, 0.52);
+}
+
+/* ── Modal shells ───────────────────────────────────────── */
+
+html[data-theme="dark"] .settingsModal,
+html[data-theme="dark"] .infoModal,
+html[data-theme="dark"] .templateEditorModal,
+html[data-theme="dark"] .templateDeleteModal,
+html[data-theme="dark"] .maskEditorModal,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .settingsModal,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .infoModal,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .templateEditorModal,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .templateDeleteModal,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .maskEditorModal,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .maskEditorModal,
+html[data-theme="light"] .settingsModal,
+html[data-theme="light"] .infoModal,
+html[data-theme="light"] .templateEditorModal,
+html[data-theme="light"] .templateDeleteModal,
+html[data-theme="light"] .maskEditorModal {
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--surface-1);
+  box-shadow: var(--shadow);
+}
+
+html[data-theme="dark"] .inputLibraryPanel,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .inputLibraryPanel,
+html[data-theme="light"] .inputLibraryPanel {
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--surface-1);
+  box-shadow: var(--shadow);
+  backdrop-filter: none;
+}
+
+html[data-theme="dark"] .imageEditorModal,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .imageEditorModal,
+html[data-theme="light"] .imageEditorModal {
+  border-color: var(--border-subtle);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+}
+
+/* ── Modal headers ──────────────────────────────────────── */
+
+html[data-theme="dark"] .modalHeader,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .modalHeader,
+html[data-theme="light"] .modalHeader {
+  gap: var(--space-2);
+  padding-bottom: var(--space-3);
+  border-bottom-color: var(--border-subtle);
+}
+
+html[data-theme="dark"] .modalHeader h2,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .modalHeader h2,
+html[data-theme="light"] .modalHeader h2,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .modalHeader h2,
+html[data-theme="dark"] .infoModalHeader h2,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .infoModalHeader h2,
+html[data-theme="light"] .infoModalHeader h2 {
+  color: var(--text-primary);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+}
+
+html[data-theme="dark"] .templateEditorModal .modalHeader h2,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .templateEditorModal .modalHeader h2,
+html[data-theme="light"] .templateEditorModal .modalHeader h2 {
+  font-size: 15px;
+}
+
+html[data-theme="dark"] .modalHeader p,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .modalHeader p,
+html[data-theme="light"] .modalHeader p {
+  margin-top: 2px;
+  font-size: var(--font-caption);
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+html[data-theme="dark"] .modalSection h3,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .modalSection h3,
+html[data-theme="light"] .modalSection h3 {
+  font-size: var(--font-section);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+html[data-theme="dark"] .inputLibraryHeader,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .inputLibraryHeader,
+html[data-theme="light"] .inputLibraryHeader {
+  padding-bottom: var(--space-2);
+  border-bottom-color: var(--border-subtle);
+}
+
+html[data-theme="dark"] .inputLibraryHeader h3,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .inputLibraryHeader h3,
+html[data-theme="light"] .inputLibraryHeader h3 {
+  font-size: var(--font-section);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+html[data-theme="dark"] .inputLibraryHeader p,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .inputLibraryHeader p,
+html[data-theme="light"] .inputLibraryHeader p {
+  font-size: var(--font-caption);
+  color: var(--text-tertiary);
+}
+
+/* ── Theme picker (settings modal) ──────────────────────── */
+
+html[data-theme="dark"] .themeSelectButton,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .themeSelectButton,
+html[data-theme="light"] .themeSelectButton {
+  height: 32px;
+  padding: 0 10px;
+  border-color: var(--border-subtle);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+html[data-theme="dark"] .themeSelectButton:hover,
+html[data-theme="dark"] .themeSelectWrap.open .themeSelectButton,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .themeSelectButton:hover,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .themeSelectWrap.open .themeSelectButton,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .themeSelectWrap.open .themeSelectButton,
+html[data-theme="light"] .themeSelectButton:hover,
+html[data-theme="light"] .themeSelectWrap.open .themeSelectButton {
+  border-color: var(--border-default);
+  background: var(--surface-3);
+}
+
+html[data-theme="dark"] .themeMenu,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .themeMenu,
+html[data-theme="light"] .themeMenu {
+  padding: 4px;
+  border-color: var(--border-subtle);
+  border-radius: var(--radius);
+  background: var(--surface-1);
+  box-shadow: var(--shadow);
+  backdrop-filter: none;
+}
+
+html[data-theme="dark"] .themeMenuItem,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .themeMenuItem,
+html[data-theme="light"] .themeMenuItem {
+  min-height: 30px;
+  gap: 8px;
+  padding: 0 8px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+html[data-theme="dark"] .themeMenuItem:hover,
+html[data-theme="dark"] .themeMenuItem.active,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .themeMenuItem:hover,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .themeMenuItem.active,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .themeMenuItem.active,
+html[data-theme="light"] .themeMenuItem:hover,
+html[data-theme="light"] .themeMenuItem.active {
+  color: var(--text-primary);
+  background: var(--surface-2);
+}
+
+html[data-theme="dark"] .themeMenuItem.active,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .themeMenuItem.active,
+html[data-theme="light"] .themeMenuItem.active {
+  background: var(--accent-muted);
+  color: var(--accent);
+}
+
+html[data-theme="dark"] .themeSwatch,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .themeSwatch,
+html[data-theme="light"] .themeSwatch {
+  border-color: var(--border-default);
+}
+
+/* ── Info modal ─────────────────────────────────────────── */
+
+html[data-theme="dark"] .infoIntro div,
+html[data-theme="dark"] .infoNotice,
+html[data-theme="dark"] .infoCredits,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .infoIntro div,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .infoNotice,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .infoCredits,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .infoCredits,
+html[data-theme="light"] .infoIntro div,
+html[data-theme="light"] .infoNotice,
+html[data-theme="light"] .infoCredits {
+  border-color: var(--border-subtle);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+
+html[data-theme="dark"] .infoIntro span,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .infoIntro span,
+html[data-theme="light"] .infoIntro span {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+}
+
+html[data-theme="dark"] .infoIntro b,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .infoIntro b,
+html[data-theme="light"] .infoIntro b {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+html[data-theme="dark"] .infoCredits h3,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .infoCredits h3,
+html[data-theme="light"] .infoCredits h3 {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+html[data-theme="dark"] .infoNotice b,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .infoNotice b,
+html[data-theme="light"] .infoNotice b {
+  color: var(--accent);
+}
+
+/* ── Modal actions ──────────────────────────────────────── */
+
+html[data-theme="dark"] .secondaryActionButton,
+html[data-theme="dark"] .dangerActionButton,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .secondaryActionButton,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .dangerActionButton,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .dangerActionButton,
+html[data-theme="light"] .secondaryActionButton,
+html[data-theme="light"] .dangerActionButton {
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: var(--radius);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+html[data-theme="dark"] .secondaryActionButton,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .secondaryActionButton,
+html[data-theme="light"] .secondaryActionButton {
+  border-color: var(--border-subtle);
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+html[data-theme="dark"] .secondaryActionButton:hover:not(:disabled),
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .secondaryActionButton:hover:not(:disabled),
+html[data-theme="light"] .secondaryActionButton:hover:not(:disabled) {
+  border-color: var(--border-default);
+  background: var(--surface-3);
+  color: var(--text-primary);
+}
+
+html[data-theme="dark"] .serverDetailToggle,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .serverDetailToggle,
+html[data-theme="light"] .serverDetailToggle {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+html[data-theme="dark"] .healthBadge,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .healthBadge,
+html[data-theme="light"] .healthBadge {
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+}
+
+/* ── Input library popup ────────────────────────────────── */
+
+html[data-theme="dark"] .inputLibraryItem,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .inputLibraryItem,
+html[data-theme="light"] .inputLibraryItem {
+  border-color: var(--border-subtle);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+
+html[data-theme="dark"] .inputLibraryItem.isSelected,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .inputLibraryItem.isSelected,
+html[data-theme="light"] .inputLibraryItem.isSelected {
+  border-color: rgba(var(--accent-rgb), 0.4);
+  background: var(--accent-muted);
+}
+
+html[data-theme="dark"] .inputLibraryActions button,
+html[data-theme="dark"] .inputLibraryButton,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .inputLibraryActions button,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .inputLibraryButton,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .inputLibraryButton,
+html[data-theme="light"] .inputLibraryActions button,
+html[data-theme="light"] .inputLibraryButton {
+  border-color: var(--border-subtle);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+html[data-theme="dark"] .inputLibraryActions button:hover,
+html[data-theme="dark"] .inputLibraryButton:hover,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .inputLibraryActions button:hover,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .inputLibraryButton:hover,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .inputLibraryButton:hover,
+html[data-theme="light"] .inputLibraryActions button:hover,
+html[data-theme="light"] .inputLibraryButton:hover {
+  border-color: var(--border-default);
+  background: var(--surface-3);
+  color: var(--text-primary);
+}
+
+html[data-theme="dark"] .assetFilter,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .assetFilter,
+html[data-theme="light"] .assetFilter {
+  min-height: 32px;
+  border-color: var(--border-subtle);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+
+html[data-theme="dark"] .imageLightboxClose,
+html[data-theme="dark"] .imageLightboxClose.inPanel,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .imageLightboxClose,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .imageLightboxClose.inPanel,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .imageLightboxClose.inPanel,
+html[data-theme="light"] .imageLightboxClose,
+html[data-theme="light"] .imageLightboxClose.inPanel {
+  width: 36px;
+  height: 36px;
+  border-color: var(--border-subtle);
+  border-radius: var(--radius);
+  background: var(--surface-1);
+  color: var(--text-secondary);
+  box-shadow: var(--shadow);
+}
+
+html[data-theme="dark"] .imageLightboxClose:hover,
+html[data-theme="dark"] .imageLightboxClose.inPanel:hover,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .imageLightboxClose:hover,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .imageLightboxClose.inPanel:hover,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .imageLightboxClose.inPanel:hover,
+html[data-theme="light"] .imageLightboxClose:hover,
+html[data-theme="light"] .imageLightboxClose.inPanel:hover {
+  border-color: var(--border-default);
+  background: var(--surface-3);
+  color: var(--text-primary);
+}
+
+html[data-theme="dark"] .imageLightboxStage img,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .imageLightboxStage img,
+html[data-theme="light"] .imageLightboxStage img {
+  border-color: var(--border-subtle);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+}
+
+/* ── Template editor modal ──────────────────────────────── */
+
+html[data-theme="dark"] .templateEditorUploadZone,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .templateEditorUploadZone,
+html[data-theme="light"] .templateEditorUploadZone {
+  border-color: var(--border-subtle);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+
+html[data-theme="dark"] .uploadJsonButton,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .uploadJsonButton,
+html[data-theme="light"] .uploadJsonButton {
+  border-radius: var(--radius);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+html[data-theme="dark"] .templateDeleteError,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .templateDeleteError,
+html[data-theme="light"] .templateDeleteError {
+  border-radius: var(--radius);
+  font-size: 12px;
+}
+
+/* ── Image / mask editor ────────────────────────────────── */
+
+html[data-theme="dark"] .imageEditorControls,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .imageEditorControls,
+html[data-theme="light"] .imageEditorControls {
+  gap: var(--space-2);
+}
+
+html[data-theme="dark"] .imageEditorPanelHeader h2,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .imageEditorPanelHeader h2,
+html[data-theme="light"] .imageEditorPanelHeader h2 {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  text-transform: none;
+}
+
+html[data-theme="dark"] .imageEditorPanelHeader button,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .imageEditorPanelHeader button,
+html[data-theme="light"] .imageEditorPanelHeader button {
+  min-height: 28px;
+  padding: 0 10px;
+  border-color: var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+html[data-theme="dark"] .imageEditorPanelHeader button:hover,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .imageEditorPanelHeader button:hover,
+html[data-theme="light"] .imageEditorPanelHeader button:hover {
+  border-color: var(--border-default);
+  background: var(--surface-3);
+  color: var(--text-primary);
+}
+
+html[data-theme="dark"] .imageEditorRail,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .imageEditorRail,
+html[data-theme="light"] .imageEditorRail {
+  padding: 5px;
+  border-color: var(--border-subtle);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+
+html[data-theme="dark"] .imageEditorRail button,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .imageEditorRail button,
+html[data-theme="light"] .imageEditorRail button {
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+html[data-theme="dark"] .imageEditorRail button:hover,
+html[data-theme="dark"] .imageEditorRail button.active,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .imageEditorRail button:hover,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .imageEditorRail button.active,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .imageEditorRail button.active,
+html[data-theme="light"] .imageEditorRail button:hover,
+html[data-theme="light"] .imageEditorRail button.active {
+  background: var(--surface-3);
+  color: var(--text-primary);
+}
+
+html[data-theme="dark"] .imageEditorRail button.active,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .imageEditorRail button.active,
+html[data-theme="light"] .imageEditorRail button.active {
+  background: var(--accent-muted);
+  color: var(--accent);
+}
+
+html[data-theme="dark"] .imageEditorFloatingBar,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .imageEditorFloatingBar,
+html[data-theme="light"] .imageEditorFloatingBar {
+  height: 34px;
+  padding: 0 8px;
+  border-color: var(--border-subtle);
+  border-radius: var(--radius);
+  background: var(--surface-1);
+  box-shadow: var(--shadow);
+  backdrop-filter: none;
+}
+
+html[data-theme="dark"] .imageEditorFloatingBar button,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .imageEditorFloatingBar button,
+html[data-theme="light"] .imageEditorFloatingBar button {
+  color: var(--text-secondary);
+}
+
+html[data-theme="dark"] .imageEditorFloatingBar button.active,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .imageEditorFloatingBar button.active,
+html[data-theme="light"] .imageEditorFloatingBar button.active {
+  color: var(--text-primary);
+  background: var(--surface-3);
+  box-shadow: none;
+}
+
+html[data-theme="dark"] .zoomReadout,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .zoomReadout,
+html[data-theme="light"] .zoomReadout {
+  color: var(--text-secondary) !important;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+html[data-theme="dark"] .imageEditorAccordion,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .imageEditorAccordion,
+html[data-theme="light"] .imageEditorAccordion {
+  border-color: var(--border-subtle);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+
+html[data-theme="dark"] .imageEditorAccordionHeader,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .imageEditorAccordionHeader,
+html[data-theme="light"] .imageEditorAccordionHeader {
+  min-height: 32px;
+  padding: 0 10px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  text-transform: none;
+  color: var(--text-secondary);
+}
+
+html[data-theme="dark"] .imageEditorAccordion.isOpen .imageEditorAccordionHeader,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .imageEditorAccordion.isOpen .imageEditorAccordionHeader,
+html[data-theme="light"] .imageEditorAccordion.isOpen .imageEditorAccordionHeader {
+  color: var(--text-primary);
+  background: var(--surface-3);
+  border-bottom-color: var(--border-subtle);
+}
+
+html[data-theme="dark"] .editorRange,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .editorRange,
+html[data-theme="light"] .editorRange {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+html[data-theme="dark"] .editorRange b,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .editorRange b,
+html[data-theme="light"] .editorRange b {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-tertiary);
+}
+
+html[data-theme="dark"] .presetGroupTitle,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .presetGroupTitle,
+html[data-theme="light"] .presetGroupTitle {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+}
+
+html[data-theme="dark"] .presetButton,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .presetButton,
+html[data-theme="light"] .presetButton {
+  min-height: 28px;
+  font-size: 11px;
+  font-weight: 500;
+  border-color: var(--border-subtle);
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+html[data-theme="dark"] .imageEditorFooter .saveTemplateButton,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .imageEditorFooter .saveTemplateButton,
+html[data-theme="light"] .imageEditorFooter .saveTemplateButton {
+  background: var(--accent);
+  border-color: rgba(var(--accent-rgb), 0.35);
+  color: #ffffff;
+  box-shadow: none;
+}
+
+html[data-theme="dark"] .imageEditorFooter .smallActionButton,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .imageEditorFooter .smallActionButton,
+html[data-theme="light"] .imageEditorFooter .smallActionButton {
+  border-color: var(--border-subtle);
+  background: transparent;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+html[data-theme="dark"] .maskTool,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .maskTool,
+html[data-theme="light"] .maskTool {
+  border-color: var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+html[data-theme="dark"] .maskTool:hover,
+html[data-theme="dark"] .maskTool.active,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .maskTool:hover,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .maskTool.active,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .maskTool.active,
+html[data-theme="light"] .maskTool:hover,
+html[data-theme="light"] .maskTool.active {
+  border-color: var(--border-default);
+  background: var(--surface-3);
+  color: var(--text-primary);
+}
+
+html[data-theme="dark"] .maskTool.active,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .maskTool.active,
+html[data-theme="light"] .maskTool.active {
+  background: var(--accent-muted);
+  color: var(--accent);
+}
+
+html[data-theme="dark"] .maskToolbar,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .maskToolbar,
+html[data-theme="light"] .maskToolbar {
+  border-bottom-color: var(--border-subtle);
+}
+
+html[data-theme="dark"] .maskEditorModal .modalHeader h2,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .maskEditorModal .modalHeader h2,
+html[data-theme="light"] .maskEditorModal .modalHeader h2 {
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+  color: var(--text-primary);
+  text-transform: none;
+}
+
+html[data-theme="dark"] .maskEditorModal .maskBrushSize,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .maskEditorModal .maskBrushSize,
+html[data-theme="light"] .maskEditorModal .maskBrushSize {
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+html[data-theme="dark"] .maskEditorModal .maskBrushSize b,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .maskEditorModal .maskBrushSize b,
+html[data-theme="light"] .maskEditorModal .maskBrushSize b {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-tertiary);
+}
+
+html[data-theme="dark"] .maskEditorModal .maskToolIconOnly,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .maskEditorModal .maskToolIconOnly,
+html[data-theme="light"] .maskEditorModal .maskToolIconOnly {
+  width: 32px;
+  height: 32px;
+  border-color: var(--border-subtle);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+html[data-theme="dark"] .maskEditorModal .maskToolIconOnly:hover,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .maskEditorModal .maskToolIconOnly:hover,
+html[data-theme="light"] .maskEditorModal .maskToolIconOnly:hover {
+  border-color: var(--border-default);
+  background: var(--surface-3);
+  color: var(--text-primary);
+}
+
+html[data-theme="dark"] .maskColorPick span,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .maskColorPick span,
+html[data-theme="light"] .maskColorPick span {
+  border-color: var(--border-default);
+  box-shadow: none;
+}
+
+html[data-theme="dark"] .maskStage,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .maskStage,
+html[data-theme="light"] .maskStage {
+  border-color: var(--border-subtle);
+  border-radius: var(--radius);
+  background-color: var(--canvas-bg);
+  background-image:
+    linear-gradient(45deg, var(--canvas-checker) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--canvas-checker) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--canvas-checker) 75%),
+    linear-gradient(-45deg, transparent 75%, var(--canvas-checker) 75%);
+  background-size: 20px 20px;
+  background-position: 0 0, 0 10px, 10px -10px, -10px 0;
+}
+
+html[data-theme="dark"] .maskLoading,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .maskLoading,
+html[data-theme="light"] .maskLoading {
+  color: var(--text-tertiary);
+  background: rgba(9, 11, 15, 0.45);
+}
+
+html[data-theme="light"] .maskLoading {
+  background: rgba(255, 255, 255, 0.55);
+}
+
+html[data-theme="dark"] .maskFooter .maskCancel,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .maskFooter .maskCancel,
+html[data-theme="light"] .maskFooter .maskCancel {
+  width: auto;
+  min-height: 32px;
+  padding: 0 14px;
+  border-color: var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+html[data-theme="dark"] .maskFooter .maskCancel:hover,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .maskFooter .maskCancel:hover,
+html[data-theme="light"] .maskFooter .maskCancel:hover {
+  border-color: var(--border-default);
+  background: var(--surface-3);
+  color: var(--text-primary);
+}
+
+html[data-theme="dark"] .maskSave,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .maskSave,
+html[data-theme="light"] .maskSave {
+  min-height: 32px;
+  padding: 0 14px;
+  border: 1px solid rgba(var(--accent-rgb), 0.35);
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  color: #ffffff;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  box-shadow: none;
+}
+
+html[data-theme="dark"] .maskSave:hover:not(:disabled),
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .maskSave:hover:not(:disabled),
+html[data-theme="light"] .maskSave:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: rgba(var(--accent-rgb), 0.45);
+}
+
+/* ── Settings modal fields ──────────────────────────────── */
+
+html[data-theme="dark"] .settingsModal .field > span,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .settingsModal .field > span,
+html[data-theme="light"] .settingsModal .field > span {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-tertiary);
+}
+
+html[data-theme="dark"] .settingsModal select,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .settingsModal select,
+html[data-theme="light"] .settingsModal select {
+  min-height: 32px;
+  border-color: var(--border-subtle);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  font-size: 12px;
+}

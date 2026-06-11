@@ -8,6 +8,35 @@ export const RUNNINGHUB_DEFAULT_FULL_WF_ID = "2064644362323189762";
 
 const DEFAULT_POLL_MS = 5000;
 const DEFAULT_TIMEOUT_MS = 10 * 60 * 1000;
+const TOKEN_IDLE_POLL_MS = 5000;
+const TOKEN_IDLE_TIMEOUT_MS = 30 * 60 * 1000;
+const TOKEN_SUBMIT_MAX_ATTEMPTS = 120;
+
+export class RhApiError extends Error {
+  constructor(code, msg, raw = null) {
+    super(msg || `RunningHub error ${code}`);
+    this.name = "RhApiError";
+    this.code = code;
+    this.msg = msg || "";
+    this.raw = raw;
+  }
+}
+
+function rhSleep(ms, signal) {
+  if (!signal) return new Promise(resolve => setTimeout(resolve, ms));
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) {
+      reject(new Error("Đã hủy task RunningHub"));
+      return;
+    }
+    const timer = setTimeout(resolve, ms);
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(new Error("Đã hủy task RunningHub"));
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+}
 
 function rhHeaders(apiKey, extra = {}) {
   const headers = { Host: RUNNINGHUB_HOST, ...extra };
@@ -41,9 +70,131 @@ async function readRunningHubEnvelope(response) {
   }
   const code = data.code;
   if (code !== 0 && code !== "0") {
-    throw new Error(data.msg || data.message || text || `RunningHub error ${code}`);
+    const message = data.msg || data.message || text || `RunningHub error ${code}`;
+    throw new RhApiError(code, message, data);
   }
   return data;
+}
+
+export function normalizeRhErrorCode(code) {
+  if (code === 0 || code === "0") return 0;
+  const numeric = Number(code);
+  return Number.isFinite(numeric) ? numeric : code;
+}
+
+export function isRhTokenBusyCode(code) {
+  const normalized = normalizeRhErrorCode(code);
+  return normalized === 804 || normalized === 421;
+}
+
+export function isRhRetryLaterCode(code) {
+  const normalized = normalizeRhErrorCode(code);
+  return normalized === 415
+    || normalized === 1011
+    || normalized === 1010
+    || normalized === 1003
+    || normalized === 1005;
+}
+
+function parseRhTaskCount(value) {
+  const count = Number(value);
+  return Number.isFinite(count) ? Math.max(0, count) : 0;
+}
+
+export async function fetchFullAccountStatus(apiKey, signal) {
+  const response = await fetch(`${RUNNINGHUB_BASE}/uc/openapi/accountStatus`, {
+    method: "POST",
+    signal,
+    headers: rhHeaders(apiKey, { "content-type": "application/json" }),
+    body: JSON.stringify({ apikey: apiKey })
+  });
+  const data = await readRunningHubEnvelope(response);
+  return data.data || {};
+}
+
+export async function fetchRhQueueStatus(apiKey, signal) {
+  const response = await fetch(`${RUNNINGHUB_BASE}/openapi/v2/queue/status`, {
+    method: "GET",
+    signal,
+    headers: rhHeaders(apiKey)
+  });
+  const data = await readRunningHubEnvelope(response);
+  return data.data || {};
+}
+
+export async function getRhApiKeyActiveTaskCount(apiKey, signal) {
+  let maxCount = 0;
+  try {
+    const queue = await fetchRhQueueStatus(apiKey, signal);
+    const running = parseRhTaskCount(queue.runningCount);
+    const queued = parseRhTaskCount(queue.queuedCount);
+    const total = parseRhTaskCount(queue.totalCurrentTasks);
+    maxCount = Math.max(maxCount, total, running + queued);
+  } catch {}
+
+  try {
+    const account = await fetchFullAccountStatus(apiKey, signal);
+    maxCount = Math.max(maxCount, parseRhTaskCount(account.currentTaskCounts));
+  } catch {}
+
+  return maxCount;
+}
+
+export async function waitForRhApiKeyIdle(apiKey, options = {}) {
+  const {
+    signal,
+    onWait,
+    pollMs = TOKEN_IDLE_POLL_MS,
+    timeoutMs = TOKEN_IDLE_TIMEOUT_MS
+  } = options;
+  const started = Date.now();
+  let lastLabel = "";
+
+  while (true) {
+    if (signal?.aborted) throw new Error("Đã hủy task RunningHub");
+    const activeCount = await getRhApiKeyActiveTaskCount(apiKey, signal);
+    if (activeCount <= 0) return;
+
+    const label = activeCount === 1
+      ? "API key đang xử lý 1 task khác, đang chờ hoàn tất..."
+      : `API key đang xử lý ${activeCount} task khác, đang chờ slot trống...`;
+    if (label !== lastLabel) {
+      lastLabel = label;
+      onWait?.({ type: "token_wait", status: "waiting", label });
+    }
+
+    if (Date.now() - started > timeoutMs) {
+      throw new Error("Timeout khi chờ API key RunningHub rảnh");
+    }
+    await rhSleep(pollMs, signal);
+  }
+}
+
+export async function submitRhTaskWhenReady(apiKey, submitFn, options = {}) {
+  const {
+    signal,
+    onWait,
+    pollMs = TOKEN_IDLE_POLL_MS,
+    maxAttempts = TOKEN_SUBMIT_MAX_ATTEMPTS
+  } = options;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    if (signal?.aborted) throw new Error("Đã hủy task RunningHub");
+    await waitForRhApiKeyIdle(apiKey, { signal, onWait, pollMs, timeoutMs: 5 * 60 * 1000 });
+    try {
+      return await submitFn();
+    } catch (error) {
+      const code = error instanceof RhApiError ? error.code : null;
+      if (!code || (!isRhTokenBusyCode(code) && !isRhRetryLaterCode(code))) throw error;
+      onWait?.({
+        type: "token_wait",
+        status: "waiting",
+        label: error.msg || "API key RunningHub đang bận, đang chờ thử lại..."
+      });
+      await rhSleep(pollMs, signal);
+    }
+  }
+  throw new Error("Không gửi được task RunningHub sau khi chờ API key rảnh");
 }
 
 export async function getWorkflowJson(apiKey, workflowId, signal) {

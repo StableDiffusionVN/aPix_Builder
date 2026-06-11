@@ -1,52 +1,87 @@
-import { Cloud, Loader2, RefreshCcw, Wifi, WifiOff } from "lucide-react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Loader2, RefreshCcw, Settings2, Wifi, WifiOff } from "lucide-react";
 import { RunningHubField } from "./RunningHubField";
+import { ComfyUiLogomark } from "./icons/ComfyUiIcon";
+import { RunningHubLogomark } from "./icons/RunningHubIcon";
 import { RUNNINGHUB_APP_OPTIONS } from "../hooks/useRunningHub";
 
+const EXECUTION_MODE_OPTIONS = [
+  { id: "local", label: "ComfyUI", icon: ComfyUiLogomark, iconTitle: "ComfyUI" },
+  { id: "runninghub-wf", label: "RH Workflow", title: "RunningHub Workflow", icon: RunningHubLogomark, iconTitle: "RunningHub" },
+  { id: "runninghub-app", label: "RH App", title: "RunningHub App", icon: RunningHubLogomark, iconTitle: "RunningHub" }
+];
+
 export function ExecutionModeToggle({ mode, onChange }) {
-  const isRunningHub = mode === "runninghub-wf" || mode === "runninghub-app";
+  const trackRef = useRef(null);
+  const buttonRefs = useRef({});
+  const [indicator, setIndicator] = useState({ left: 0, width: 0, ready: false });
+
+  const syncIndicator = useCallback(() => {
+    const track = trackRef.current;
+    const button = buttonRefs.current[mode];
+    if (!track || !button) return;
+    const trackRect = track.getBoundingClientRect();
+    const buttonRect = button.getBoundingClientRect();
+    setIndicator({
+      left: buttonRect.left - trackRect.left,
+      width: buttonRect.width,
+      ready: true
+    });
+  }, [mode]);
+
+  useLayoutEffect(() => {
+    syncIndicator();
+  }, [syncIndicator]);
+
+  useEffect(() => {
+    const track = trackRef.current;
+    if (!track) return undefined;
+    const observer = new ResizeObserver(syncIndicator);
+    observer.observe(track);
+    window.addEventListener("resize", syncIndicator);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", syncIndicator);
+    };
+  }, [syncIndicator]);
 
   return (
     <div className="executionModeToggle" role="tablist" aria-label="Chế độ thực thi">
-      <button
-        type="button"
-        role="tab"
-        aria-selected={mode === "local"}
-        className={`executionModeComfyBtn ${mode === "local" ? "active" : ""}`}
-        onClick={() => onChange("local")}
-      >
-        ComfyUI
-      </button>
-      <div
-        className={`executionModeRhGroup ${isRunningHub ? "is-active" : ""}`}
-        role="group"
-        aria-label="RunningHub"
-      >
-        <span className="executionModeRhLabel">
-          <Cloud size={12} aria-hidden />
-          RunningHub
-        </span>
-        <div className="executionModeRhTabs">
+      <div className="executionModeTrack" ref={trackRef}>
+        <span
+          className={`executionModeIndicator ${indicator.ready ? "is-ready" : ""}`}
+          style={{
+            width: indicator.width,
+            transform: `translateX(${indicator.left}px)`
+          }}
+          aria-hidden="true"
+        />
+        {EXECUTION_MODE_OPTIONS.map(option => {
+          const Icon = option.icon;
+          return (
           <button
+            key={option.id}
             type="button"
             role="tab"
-            aria-selected={mode === "runninghub-wf"}
-            className={mode === "runninghub-wf" ? "active" : ""}
-            onClick={() => onChange("runninghub-wf")}
-            title="RunningHub Workflow"
+            ref={node => {
+              buttonRefs.current[option.id] = node;
+            }}
+            aria-selected={mode === option.id}
+            className={`${mode === option.id ? "active" : ""}${Icon ? " hasModeIcon" : ""}`}
+            title={option.title}
+            onClick={() => onChange(option.id)}
           >
-            Workflow
+            {Icon ? (
+              <Icon
+                size={option.id === "local" ? 14 : 12}
+                className="executionModeIcon"
+                title={option.iconTitle}
+              />
+            ) : null}
+            {option.label}
           </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={mode === "runninghub-app"}
-            className={mode === "runninghub-app" ? "active" : ""}
-            onClick={() => onChange("runninghub-app")}
-            title="RunningHub App"
-          >
-            App
-          </button>
-        </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -74,7 +109,7 @@ export function RunningHubPanel({
   return (
     <section className="settingsGroup runningHubPanel">
       <div className="settingsHeader">
-        <Cloud size={16} />
+        <Settings2 size={16} />
         <h2>RunningHub App</h2>
         <span className={`healthDot health-${healthStatus}`} title={
           healthStatus === "online" ? "Đã kết nối RunningHub API" :
@@ -140,7 +175,7 @@ export function RunningHubPanel({
         ))}
         {!nodesLoading && !nodes.length ? (
           <div className="rhPanelEmpty">
-            <Cloud size={28} />
+            <RunningHubLogomark size={28} title="RunningHub" />
             <p>Nhập API Key trong Settings rồi bấm &quot;Tải lại node&quot;.</p>
           </div>
         ) : null}

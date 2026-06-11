@@ -20,6 +20,7 @@ export function useExecution({ onComplete, runLog } = {}) {
   const [activeJob, setActiveJob] = useState(null);
   const runQueueRef = useRef([]);
   const activeRunIdRef = useRef("");
+  const progressLogRef = useRef(new Map());
 
   function appendLog(level, message, meta = {}) {
     const runId = meta.runId || activeRunIdRef.current;
@@ -52,10 +53,17 @@ export function useExecution({ onComplete, runLog } = {}) {
           appendLog("info", `Đang xử lý node ${data.node}`);
         }
         break;
-      case "progress":
+      case "progress": {
         setProgress({ value: data.value, max: data.max, node: data.node, type: "progress", label: `${data.value} / ${data.max}` });
-        appendLog("info", `Tiến độ node ${data.node ?? "?"}: ${data.value}/${data.max}`);
+        const nodeKey = String(data.node ?? "?");
+        const now = Date.now();
+        const lastLoggedAt = progressLogRef.current.get(nodeKey) || 0;
+        if (now - lastLoggedAt >= 1000) {
+          progressLogRef.current.set(nodeKey, now);
+          appendLog("info", `Tiến độ node ${nodeKey}: ${data.value}/${data.max}`);
+        }
         break;
+      }
       case "status":
         if (data.exec_info?.queue_remaining > 0) {
           const queueRemaining = data.exec_info.queue_remaining;
@@ -68,10 +76,17 @@ export function useExecution({ onComplete, runLog } = {}) {
     }
   }
 
+  function endQueuedSessions(status = "cancelled") {
+    for (const queuedJob of runQueueRef.current) {
+      runLog?.endSession?.(queuedJob.runId, status);
+    }
+  }
+
   async function executeRun(job) {
     activeRunIdRef.current = job.runId;
     setActiveRunId(job.runId);
     setActiveJob(job);
+    progressLogRef.current = new Map();
     runLog?.updateSession?.(job.runId, { status: "running" });
     setRunning(true);
     setError("");
@@ -158,6 +173,7 @@ export function useExecution({ onComplete, runLog } = {}) {
   async function cancelWorkflow() {
     if (!activeRunIdRef.current) return;
     if (runQueueRef.current.length) {
+      endQueuedSessions("cancelled");
       setQueue([]);
       appendLog("warn", "Đã xóa toàn bộ request đang chờ trong hàng chờ client");
     }

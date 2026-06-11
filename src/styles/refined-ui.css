@@ -1,0 +1,1111 @@
+/* Refined UI — flat, cohesive dark/light/colorful system */
+
+html[data-theme="dark"],
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]),
+html[data-theme="light"] {
+  line-height: 1.45;
+}
+
+/* ── Layout ─────────────────────────────────────────────── */
+
+html[data-theme="dark"] .appShell,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .appShell,
+html[data-theme="light"] .appShell {
+  gap: var(--space-2);
+  padding: var(--space-3);
+}
+
+html[data-theme="dark"] .sidebar,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .sidebar,
+html[data-theme="light"] .sidebar {
+  gap: var(--space-3);
+  padding: var(--space-4);
+}
+
+html[data-theme="dark"] .workspace,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .workspace,
+html[data-theme="light"] .workspace {
+  gap: var(--space-2);
+  grid-template-rows: minmax(420px, 1fr) auto;
+}
+
+html[data-theme="dark"] .historyPanel,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .historyPanel,
+html[data-theme="light"] .historyPanel {
+  align-self: start;
+  height: auto;
+  grid-template-rows: auto auto;
+}
+
+/* ── Surfaces ───────────────────────────────────────────── */
+
+html[data-theme="dark"] .sidebar,
+html[data-theme="dark"] .previewPanel,
+html[data-theme="dark"] .historyPanel,
+html[data-theme="dark"] .settingsModal,
+html[data-theme="dark"] .infoModal,
+html[data-theme="dark"] .templateEditorModal,
+html[data-theme="dark"] .templateDeleteModal,
+html[data-theme="dark"] .maskEditorModal,
+html[data-theme="dark"] .inputLibraryPanel,
+html[data-theme="dark"] .imageEditorModal,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .sidebar,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .previewPanel,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .historyPanel,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .settingsModal,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .infoModal,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .templateEditorModal,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .templateDeleteModal,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .maskEditorModal,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .inputLibraryPanel,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .imageEditorModal,
+html[data-theme="light"] .sidebar,
+html[data-theme="light"] .previewPanel,
+html[data-theme="light"] .historyPanel,
+html[data-theme="light"] .settingsModal,
+html[data-theme="light"] .infoModal,
+html[data-theme="light"] .templateEditorModal,
+html[data-theme="light"] .templateDeleteModal,
+html[data-theme="light"] .maskEditorModal,
+html[data-theme="light"] .inputLibraryPanel,
+html[data-theme="light"] .imageEditorModal {
+  background: var(--surface-1);
+  border-color: var(--border-subtle);
+  backdrop-filter: none;
+}
+
+html[data-theme="dark"] .appShell.is-runninghub .sidebar,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .appShell.is-runninghub .sidebar,
+html[data-theme="light"] .appShell.is-runninghub .sidebar {
+  background: var(--surface-1);
+}
+
+html[data-theme="dark"] .mark,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .mark,
+html[data-theme="light"] .mark {
+  border-radius: var(--radius-sm);
+  box-shadow: none;
+}
+
+html[data-theme="dark"] .modalBackdrop,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .modalBackdrop,
+html[data-theme="light"] .modalBackdrop {
+  backdrop-filter: none;
+}
+
+html[data-theme="dark"] .modalBackdrop {
+  background: rgba(9, 11, 15, 0.78);
+}
+
+html[data-theme="light"] .modalBackdrop {
+  background: rgba(15, 15, 18, 0.38);
+}
+
+/* ── Typography hierarchy ───────────────────────────────── */
+
+html[data-theme="dark"] .brand,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .brand,
+html[data-theme="light"] .brand {
+  padding-bottom: var(--space-3);
+  border-bottom-color: var(--border-subtle);
+}
+
+html[data-theme="dark"] .brand h1,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .brand h1,
+html[data-theme="light"] .brand h1 {
+  color: var(--text-primary);
+  font-size: var(--font-title);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+html[data-theme="dark"] .brand p,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .brand p,
+html[data-theme="light"] .brand p {
+  font-size: var(--font-caption);
+  color: var(--text-secondary);
+}
+
+html[data-theme="dark"] .settingsHeader,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .settingsHeader,
+html[data-theme="light"] .settingsHeader {
+  color: var(--text-secondary);
+}
+
+html[data-theme="dark"] .sidebar .settingsHeader h2,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .sidebar .settingsHeader h2,
+html[data-theme="light"] .sidebar .settingsHeader h2,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .sidebar .settingsHeader h2,
+html[data-theme="dark"] .panelTitle h3,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .panelTitle h3,
+html[data-theme="light"] .panelTitle h3 {
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.3;
+  letter-spacing: normal;
+  color: var(--text-secondary);
+}
+
+html[data-theme="dark"] .panelTitle span,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .panelTitle span,
+html[data-theme="light"] .panelTitle span {
+  font-size: var(--font-caption);
+  color: var(--text-tertiary);
+}
+
+/* ── Icon buttons (unified) ─────────────────────────────── */
+
+html[data-theme="dark"] .settingsButton,
+html[data-theme="dark"] .modalClose,
+html[data-theme="dark"] .downloadButton,
+html[data-theme="dark"] .historyIconButton,
+html[data-theme="dark"] .historyIconFilter,
+html[data-theme="dark"] .templateEditButton,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .settingsButton,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .modalClose,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .downloadButton,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .historyIconButton,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .historyIconFilter,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .templateEditButton,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .templateEditButton,
+html[data-theme="light"] .settingsButton,
+html[data-theme="light"] .modalClose,
+html[data-theme="light"] .downloadButton,
+html[data-theme="light"] .historyIconButton,
+html[data-theme="light"] .historyIconFilter,
+html[data-theme="light"] .templateEditButton {
+  width: 32px;
+  min-height: 32px;
+  height: 32px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-secondary);
+  font-weight: 600;
+  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+  transform: none;
+}
+
+html[data-theme="dark"] .settingsButton:hover,
+html[data-theme="dark"] .modalClose:hover,
+html[data-theme="dark"] .downloadButton:hover:not(:disabled),
+html[data-theme="dark"] .historyIconButton:hover,
+html[data-theme="dark"] .historyIconFilter:hover,
+html[data-theme="dark"] .templateEditButton:hover,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .settingsButton:hover,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .modalClose:hover,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .downloadButton:hover:not(:disabled),
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .historyIconButton:hover,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .historyIconFilter:hover,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .templateEditButton:hover,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .templateEditButton:hover,
+html[data-theme="light"] .settingsButton:hover,
+html[data-theme="light"] .modalClose:hover,
+html[data-theme="light"] .downloadButton:hover:not(:disabled),
+html[data-theme="light"] .historyIconButton:hover,
+html[data-theme="light"] .historyIconFilter:hover,
+html[data-theme="light"] .templateEditButton:hover {
+  border-color: var(--border-default);
+  background: var(--surface-3);
+  color: var(--text-primary);
+  transform: none;
+}
+
+html[data-theme="dark"] .compareButton.active,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .compareButton.active,
+html[data-theme="light"] .compareButton.active {
+  border-color: rgba(var(--accent-rgb), 0.35);
+  background: var(--accent-muted);
+  color: var(--accent);
+  box-shadow: none;
+}
+
+html[data-theme="dark"] .historyIconButton.active,
+html[data-theme="dark"] .historyIconFilter.active,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .historyIconButton.active,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .historyIconFilter.active,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .historyIconFilter.active,
+html[data-theme="light"] .historyIconButton.active,
+html[data-theme="light"] .historyIconFilter.active {
+  border-color: rgba(var(--accent-rgb), 0.35);
+  background: var(--accent-muted);
+  color: var(--accent);
+}
+
+/* ── Primary / secondary actions ────────────────────────── */
+
+html[data-theme="dark"] .runButton,
+html[data-theme="dark"] .saveTemplateButton,
+html[data-theme="dark"] .addServerSave,
+html[data-theme="dark"] .rhActionRow .rhRunButton,
+html[data-theme="dark"] .rhRunButton,
+html[data-theme="dark"] .imageEditorFooter .saveTemplateButton,
+html[data-theme="light"] .runButton,
+html[data-theme="light"] .rhRunButton {
+  border: 1px solid rgba(var(--accent-rgb), 0.35);
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: #ffffff;
+  font-size: var(--font-body);
+  font-weight: 600;
+  box-shadow: none;
+  transform: none;
+}
+
+html[data-theme="dark"] .runButton:hover:not(:disabled),
+html[data-theme="dark"] .saveTemplateButton:hover:not(:disabled),
+html[data-theme="dark"] .addServerSave:hover,
+html[data-theme="dark"] .rhActionRow .rhRunButton:hover:not(:disabled),
+html[data-theme="light"] .runButton:hover:not(:disabled) {
+  background: var(--accent-hover);
+  transform: none;
+}
+
+html[data-theme="dark"] .stopButton,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .stopButton,
+html[data-theme="light"] .stopButton {
+  border: 1px solid rgba(248, 81, 73, 0.28);
+  border-radius: var(--radius);
+  background: var(--danger-muted);
+  color: var(--danger-text);
+  font-weight: 600;
+  transform: none;
+}
+
+html[data-theme="light"] .stopButton {
+  border-color: rgba(207, 34, 46, 0.22);
+  color: var(--danger-text);
+}
+
+html[data-theme="dark"] .stopButton:hover:not(:disabled),
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .stopButton:hover:not(:disabled),
+html[data-theme="light"] .stopButton:hover:not(:disabled),
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .stopButton:hover:not(:disabled),
+html[data-theme="dark"] .runButton:hover:not(:disabled),
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .runButton:hover:not(:disabled),
+html[data-theme="light"] .runButton:hover:not(:disabled),
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .runButton:hover:not(:disabled),
+html[data-theme="dark"] .thumbAction:hover:not(:disabled),
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .thumbAction:hover:not(:disabled),
+html[data-theme="light"] .thumbAction:hover:not(:disabled) {
+  transform: none;
+}
+
+html[data-theme="dark"] .assetFavoriteToggle.active,
+html[data-theme="dark"] .thumbAction.isFavorite,
+html[data-theme="dark"] .inputLibraryActions button.isFavorite,
+html[data-theme="dark"] .imageEditorFloatingBar button.active,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .assetFavoriteToggle.active,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .thumbAction.isFavorite,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .inputLibraryActions button.isFavorite {
+  background: var(--accent);
+  color: #ffffff;
+  box-shadow: none;
+}
+
+html[data-theme="light"] .saveTemplateButton,
+html[data-theme="light"] .saveTemplateButton:hover:not(:disabled) {
+  background: var(--text-primary);
+  color: #ffffff;
+  box-shadow: none;
+}
+
+html[data-theme="dark"] .runButton,
+html[data-theme="dark"] .stopButton,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .runButton,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .stopButton,
+html[data-theme="light"] .runButton,
+html[data-theme="light"] .stopButton,
+html[data-theme="dark"] .rhActionRow .runButton,
+html[data-theme="dark"] .rhActionRow .stopButton,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .rhActionRow .runButton,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .rhActionRow .stopButton,
+html[data-theme="light"] .rhActionRow .runButton,
+html[data-theme="light"] .rhActionRow .stopButton {
+  border-radius: var(--radius);
+  min-height: 36px;
+}
+
+/* ── Status (frameless) ─────────────────────────────────── */
+
+html[data-theme="dark"] .status,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .status,
+html[data-theme="light"] .status {
+  gap: var(--space-1);
+  min-height: 28px;
+  padding: 4px var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--font-caption);
+  font-weight: 500;
+}
+
+html[data-theme="dark"] .status.good,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .status.good,
+html[data-theme="light"] .status.good {
+  color: var(--success);
+}
+
+html[data-theme="dark"] .status.bad,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .status.bad,
+html[data-theme="light"] .status.bad {
+  color: var(--danger-text);
+}
+
+/* ── Execution mode toggle ──────────────────────────────── */
+
+html[data-theme="dark"] .executionModeToggle,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .executionModeToggle,
+html[data-theme="light"] .executionModeToggle {
+  justify-content: center;
+  margin-bottom: var(--space-3);
+}
+
+html[data-theme="dark"] .executionModeTrack,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .executionModeTrack,
+html[data-theme="light"] .executionModeTrack {
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+
+html[data-theme="dark"] .executionModeIndicator,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .executionModeIndicator,
+html[data-theme="light"] .executionModeIndicator {
+  background: var(--surface-1);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+}
+
+html[data-theme="light"] .executionModeIndicator {
+  box-shadow: 0 1px 2px rgba(15, 15, 18, 0.1);
+}
+
+html[data-theme="dark"] .executionModeToggle button,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .executionModeToggle button,
+html[data-theme="light"] .executionModeToggle button {
+  min-height: 30px;
+  padding: 5px 12px;
+  font-size: var(--font-caption);
+  font-weight: 500;
+  color: var(--text-tertiary);
+}
+
+html[data-theme="dark"] .executionModeToggle button.active,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .executionModeToggle button.active,
+html[data-theme="light"] .executionModeToggle button.active {
+  background: transparent;
+  color: var(--text-primary);
+  font-weight: 600;
+  box-shadow: none;
+}
+
+html[data-theme="dark"] .executionModeToggle button:hover:not(.active),
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .executionModeToggle button:hover:not(.active),
+html[data-theme="light"] .executionModeToggle button:hover:not(.active) {
+  color: var(--text-secondary);
+}
+
+/* ── Forms ──────────────────────────────────────────────── */
+
+html[data-theme="dark"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+html[data-theme="dark"] textarea,
+html[data-theme="dark"] .addressInput,
+html[data-theme="dark"] .templateSelect,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) textarea,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .addressInput,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .templateSelect,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .templateSelect,
+html[data-theme="light"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+html[data-theme="light"] textarea,
+html[data-theme="light"] .addressInput,
+html[data-theme="light"] .templateSelect {
+  min-height: 32px;
+  border-color: var(--border-subtle);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  color: var(--text-primary);
+  font-size: var(--font-body);
+}
+
+html[data-theme="dark"] select,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) select,
+html[data-theme="light"] select {
+  min-height: 32px;
+  border-color: var(--border-subtle);
+  border-radius: var(--radius);
+  background-color: var(--surface-2);
+  color: var(--text-primary);
+  font-size: var(--font-body);
+  appearance: none;
+  padding-right: 28px;
+  background-image: var(--select-chevron);
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  background-size: 14px 14px;
+  cursor: pointer;
+}
+
+html[data-theme="dark"] .fieldSelectWrap select,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .fieldSelectWrap select,
+html[data-theme="light"] .fieldSelectWrap select {
+  background-image: none;
+}
+
+html[data-theme="dark"] select:focus,
+html[data-theme="dark"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):focus,
+html[data-theme="dark"] textarea:focus,
+html[data-theme="dark"] .field input:focus,
+html[data-theme="dark"] .field select:focus,
+html[data-theme="dark"] .field textarea:focus,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) select:focus,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):focus,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) textarea:focus,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .field input:focus,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .field select:focus,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .field textarea:focus,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .field textarea:focus,
+html[data-theme="light"] select:focus,
+html[data-theme="light"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):focus,
+html[data-theme="light"] textarea:focus,
+html[data-theme="light"] .field input:focus,
+html[data-theme="light"] .field select:focus,
+html[data-theme="light"] .field textarea:focus {
+  border-color: rgba(var(--accent-rgb), 0.45);
+  box-shadow: 0 0 0 2px rgba(var(--accent-rgb), 0.12);
+}
+
+html[data-theme="dark"] .sidebar .field > span,
+html[data-theme="dark"] .sidebar .field legend,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .sidebar .field > span,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .sidebar .field legend,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .sidebar .field legend,
+html[data-theme="light"] .sidebar .field > span,
+html[data-theme="light"] .sidebar .field legend {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-tertiary);
+}
+
+html[data-theme="dark"] .sidebar .templateSelect,
+html[data-theme="dark"] .sidebar .addressInput,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .sidebar .templateSelect,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .sidebar .addressInput,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .sidebar .addressInput,
+html[data-theme="light"] .sidebar .templateSelect,
+html[data-theme="light"] .sidebar .addressInput {
+  min-height: 28px;
+  border-color: var(--border-subtle);
+  background: var(--surface-2);
+}
+
+html[data-theme="dark"] .sidebar .templateSelect select,
+html[data-theme="dark"] .sidebar .presetInput,
+html[data-theme="dark"] .sidebar .field select,
+html[data-theme="dark"] .sidebar .field input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .sidebar .templateSelect select,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .sidebar .presetInput,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .sidebar .field select,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .sidebar .field input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .sidebar .field input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+html[data-theme="light"] .sidebar .templateSelect select,
+html[data-theme="light"] .sidebar .presetInput,
+html[data-theme="light"] .sidebar .field select,
+html[data-theme="light"] .sidebar .field input:not([type="checkbox"]):not([type="radio"]):not([type="range"]) {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-primary);
+}
+
+html[data-theme="dark"] .sidebar .templateEditButton,
+html[data-theme="dark"] .sidebar .templateDeleteButton,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .sidebar .templateEditButton,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .sidebar .templateDeleteButton,
+html[data-theme="light"] .sidebar .templateEditButton,
+html[data-theme="light"] .sidebar .templateDeleteButton {
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  min-height: 32px;
+  padding: 0;
+  background: transparent;
+  border-color: var(--border-subtle);
+}
+
+html[data-theme="dark"] .sidebar .imageUrlInputRow,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .sidebar .imageUrlInputRow,
+html[data-theme="light"] .sidebar .imageUrlInputRow {
+  border-color: var(--border-subtle);
+  background: var(--surface-2);
+}
+
+html[data-theme="dark"] .sidebar .imageUrlInputRow button,
+html[data-theme="dark"] .sidebar .imageUrlInputRow .inputFolderButton,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .sidebar .imageUrlInputRow button,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .sidebar .imageUrlInputRow .inputFolderButton,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .sidebar .imageUrlInputRow .inputFolderButton,
+html[data-theme="light"] .sidebar .imageUrlInputRow button,
+html[data-theme="light"] .sidebar .imageUrlInputRow .inputFolderButton {
+  border-color: var(--border-subtle);
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+html[data-theme="dark"] .sidebar .imageUrlInputRow button:hover:not(:disabled),
+html[data-theme="dark"] .sidebar .imageUrlInputRow .inputFolderButton:hover:not(:disabled),
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .sidebar .imageUrlInputRow button:hover:not(:disabled),
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .sidebar .imageUrlInputRow .inputFolderButton:hover:not(:disabled),
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .sidebar .imageUrlInputRow .inputFolderButton:hover:not(:disabled),
+html[data-theme="light"] .sidebar .imageUrlInputRow button:hover:not(:disabled),
+html[data-theme="light"] .sidebar .imageUrlInputRow .inputFolderButton:hover:not(:disabled) {
+  border-color: var(--border-default);
+  background: var(--surface-3);
+  color: var(--text-primary);
+}
+
+html[data-theme="dark"] .sidebar .inlineControl,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .sidebar .inlineControl,
+html[data-theme="light"] .sidebar .inlineControl {
+  border-color: var(--border-subtle);
+  background: var(--surface-2);
+}
+
+html[data-theme="dark"] .sidebar .inlineControl:focus-within,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .sidebar .inlineControl:focus-within,
+html[data-theme="light"] .sidebar .inlineControl:focus-within {
+  border-color: rgba(var(--accent-rgb), 0.45);
+  box-shadow: 0 0 0 2px rgba(var(--accent-rgb), 0.12);
+}
+
+html[data-theme="dark"] .sidebar .inlineControl .fieldResetButton,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .sidebar .inlineControl .fieldResetButton,
+html[data-theme="light"] .sidebar .inlineControl .fieldResetButton {
+  color: var(--text-tertiary);
+}
+
+html[data-theme="dark"] .sidebar .inlineControl .fieldResetButton:hover:not(:disabled),
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .sidebar .inlineControl .fieldResetButton:hover:not(:disabled),
+html[data-theme="light"] .sidebar .inlineControl .fieldResetButton:hover:not(:disabled) {
+  color: var(--text-primary);
+  background: var(--surface-3);
+}
+
+/* ── RH panels & action row ─────────────────────────────── */
+
+html[data-theme="dark"] .rhWfConfigPanel,
+html[data-theme="dark"] .rhWfConfigPanel--source,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .rhWfConfigPanel,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .rhWfConfigPanel--source,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .rhWfConfigPanel--source,
+html[data-theme="light"] .rhWfConfigPanel,
+html[data-theme="light"] .rhWfConfigPanel--source {
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  box-shadow: none;
+}
+
+html[data-theme="dark"] .rhActionRow,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .rhActionRow,
+html[data-theme="light"] .rhActionRow {
+  padding: var(--space-2) 0 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  backdrop-filter: none;
+  box-shadow: none;
+}
+
+html[data-theme="dark"] .rhActionRow .runButton,
+html[data-theme="dark"] .rhActionRow .stopButton {
+  min-height: 40px;
+}
+
+html[data-theme="dark"] .previewArea,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .previewArea,
+html[data-theme="light"] .previewArea {
+  border-radius: var(--radius);
+}
+
+html[data-theme="dark"] .outputSizeBadge,
+html[data-theme="dark"] .outputTimingBadge,
+html[data-theme="dark"] .imageSizeBadge,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .outputSizeBadge,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .outputTimingBadge,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .imageSizeBadge,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .imageSizeBadge,
+html[data-theme="light"] .outputSizeBadge,
+html[data-theme="light"] .outputTimingBadge,
+html[data-theme="light"] .imageSizeBadge {
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--surface-1);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: var(--font-caption);
+  font-weight: 500;
+  line-height: 1.3;
+  letter-spacing: normal;
+  text-shadow: none;
+}
+
+html[data-theme="dark"] .outputMetaStack,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .outputMetaStack,
+html[data-theme="light"] .outputMetaStack {
+  gap: var(--space-1);
+}
+
+html[data-theme="dark"] .infoIntro div,
+html[data-theme="dark"] .infoNotice,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .infoIntro div,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .infoNotice,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .infoNotice,
+html[data-theme="light"] .infoIntro div,
+html[data-theme="light"] .infoNotice {
+  border-radius: var(--radius);
+}
+
+/* ── Log terminal (token-mapped) ────────────────────────── */
+
+html[data-theme="dark"] .outputLogPopup,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .outputLogPopup,
+html[data-theme="light"] .outputLogPopup {
+  border-color: var(--log-border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--log-bg);
+  box-shadow: var(--shadow);
+}
+
+html[data-theme="dark"] .outputLogButton,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .outputLogButton,
+html[data-theme="light"] .outputLogButton {
+  border-radius: var(--radius);
+  background: var(--surface-1);
+  border-color: var(--border-default);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+html[data-theme="light"] .outputLogButton {
+  border-color: var(--border-default);
+  background: rgba(255, 255, 255, 0.96);
+  color: var(--text-secondary);
+  box-shadow: 0 2px 10px rgba(15, 15, 18, 0.14);
+}
+
+html[data-theme="light"] .outputLogButton:hover,
+html[data-theme="light"] .outputLogButton:focus-visible,
+html[data-theme="light"] .outputLogButton.active,
+html[data-theme="light"] .outputLogButton.hasActivity {
+  border-color: rgba(var(--accent-rgb), 0.45);
+  background: var(--surface-2);
+  color: var(--accent);
+}
+
+html[data-theme="dark"] .logTerminal,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .logTerminal,
+html[data-theme="light"] .logTerminal {
+  color: var(--log-text);
+  font-size: var(--font-caption);
+}
+
+html[data-theme="dark"] .outputLogResizeHandle,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .outputLogResizeHandle,
+html[data-theme="light"] .outputLogResizeHandle {
+  border-bottom-color: var(--log-border);
+  color: var(--log-muted);
+}
+
+html[data-theme="dark"] .outputLogResizeHandle:hover,
+html[data-theme="dark"] .outputLogResizeHandle:focus-visible,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .outputLogResizeHandle:hover,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .outputLogResizeHandle:focus-visible,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .outputLogResizeHandle:focus-visible,
+html[data-theme="light"] .outputLogResizeHandle:hover,
+html[data-theme="light"] .outputLogResizeHandle:focus-visible {
+  color: var(--log-accent);
+  background: var(--accent-muted);
+}
+
+html[data-theme="dark"] .logHeader,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .logHeader,
+html[data-theme="light"] .logHeader {
+  border-bottom-color: var(--log-border);
+}
+
+html[data-theme="dark"] .logHeaderTitle,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .logHeaderTitle,
+html[data-theme="light"] .logHeaderTitle {
+  color: var(--log-text-bright);
+  font-size: var(--font-caption);
+  font-weight: 600;
+}
+
+html[data-theme="dark"] .logHeaderMeta,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .logHeaderMeta,
+html[data-theme="light"] .logHeaderMeta {
+  color: var(--log-muted);
+}
+
+html[data-theme="dark"] .logPrompt,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .logPrompt,
+html[data-theme="light"] .logPrompt {
+  color: var(--log-success);
+}
+
+html[data-theme="dark"] .logAction,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .logAction,
+html[data-theme="light"] .logAction {
+  color: var(--text-secondary);
+  border-radius: var(--radius-sm);
+}
+
+html[data-theme="dark"] .logAction:hover,
+html[data-theme="dark"] .logAction:focus-visible,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .logAction:hover,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .logAction:focus-visible,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .logAction:focus-visible,
+html[data-theme="light"] .logAction:hover,
+html[data-theme="light"] .logAction:focus-visible {
+  color: var(--log-accent);
+}
+
+html[data-theme="dark"] .logLive,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .logLive,
+html[data-theme="light"] .logLive {
+  border-bottom-color: var(--log-border);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+html[data-theme="light"] .logLive {
+  background: rgba(27, 31, 36, 0.03);
+}
+
+html[data-theme="dark"] .logLiveTag,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .logLiveTag,
+html[data-theme="light"] .logLiveTag {
+  color: var(--log-muted);
+  font-weight: 600;
+}
+
+html[data-theme="dark"] .logLiveTag.run,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .logLiveTag.run,
+html[data-theme="light"] .logLiveTag.run {
+  color: var(--log-accent);
+}
+
+html[data-theme="dark"] .logLiveText,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .logLiveText,
+html[data-theme="light"] .logLiveText {
+  color: var(--log-text-bright);
+}
+
+html[data-theme="dark"] .logLiveMeta,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .logLiveMeta,
+html[data-theme="light"] .logLiveMeta {
+  color: var(--text-secondary);
+}
+
+html[data-theme="dark"] .logQueue,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .logQueue,
+html[data-theme="light"] .logQueue {
+  border-bottom-color: var(--log-border);
+}
+
+html[data-theme="dark"] .logQueueLine,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .logQueueLine,
+html[data-theme="light"] .logQueueLine {
+  border-top-color: var(--log-border);
+  color: var(--text-secondary);
+}
+
+html[data-theme="dark"] .logToolbar,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .logToolbar,
+html[data-theme="light"] .logToolbar {
+  border-bottom-color: var(--log-border);
+  font-size: 9px;
+}
+
+html[data-theme="dark"] .logSearchInput,
+html[data-theme="dark"] .logFilterSelect,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .logSearchInput,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .logFilterSelect,
+html[data-theme="light"] .logSearchInput,
+html[data-theme="light"] .logFilterSelect {
+  font-size: 9px;
+  font-weight: 500;
+}
+
+html[data-theme="dark"] .logTableHead,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .logTableHead,
+html[data-theme="light"] .logTableHead {
+  background: var(--log-bg);
+  border-bottom-color: var(--log-border);
+  color: var(--log-muted);
+  font-size: 9px;
+}
+
+html[data-theme="dark"] .logSession,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .logSession,
+html[data-theme="light"] .logSession {
+  border-bottom-color: var(--log-border);
+}
+
+html[data-theme="dark"] .logSession.active,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .logSession.active,
+html[data-theme="light"] .logSession.active {
+  background: var(--log-row-active);
+}
+
+html[data-theme="dark"] .logSessionRow:hover,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .logSessionRow:hover,
+html[data-theme="light"] .logSessionRow:hover {
+  background: var(--log-row-hover);
+}
+
+html[data-theme="dark"] .logSessionRow:focus-visible,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .logSessionRow:focus-visible,
+html[data-theme="light"] .logSessionRow:focus-visible {
+  background: var(--accent-muted);
+  box-shadow: inset 0 0 0 1px rgba(var(--accent-rgb), 0.35);
+}
+
+html[data-theme="dark"] .logExpand,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .logExpand,
+html[data-theme="light"] .logExpand {
+  color: var(--log-muted);
+}
+
+html[data-theme="dark"] .logExpand.open,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .logExpand.open,
+html[data-theme="light"] .logExpand.open {
+  color: var(--log-accent);
+}
+
+html[data-theme="dark"] .logDelete,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .logDelete,
+html[data-theme="light"] .logDelete {
+  color: var(--log-muted);
+}
+
+html[data-theme="dark"] .logDelete:hover,
+html[data-theme="dark"] .logDelete:focus-visible,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .logDelete:hover,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .logDelete:focus-visible,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .logDelete:focus-visible,
+html[data-theme="light"] .logDelete:hover,
+html[data-theme="light"] .logDelete:focus-visible {
+  color: var(--log-danger);
+  background: var(--danger-muted);
+}
+
+html[data-theme="dark"] .logColTime,
+html[data-theme="dark"] .logColCount,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .logColTime,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .logColCount,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .logColCount,
+html[data-theme="light"] .logColTime,
+html[data-theme="light"] .logColCount {
+  color: var(--log-muted);
+}
+
+html[data-theme="dark"] .logColStatus.running,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .logColStatus.running,
+html[data-theme="light"] .logColStatus.running {
+  color: var(--log-accent);
+}
+
+html[data-theme="dark"] .logColStatus.success,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .logColStatus.success,
+html[data-theme="light"] .logColStatus.success {
+  color: var(--log-success);
+}
+
+html[data-theme="dark"] .logColStatus.error,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .logColStatus.error,
+html[data-theme="light"] .logColStatus.error {
+  color: var(--log-danger);
+}
+
+html[data-theme="dark"] .logColStatus.queued,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .logColStatus.queued,
+html[data-theme="light"] .logColStatus.queued {
+  color: var(--log-warning);
+}
+
+html[data-theme="dark"] .logColStatus.cancelled,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .logColStatus.cancelled,
+html[data-theme="light"] .logColStatus.cancelled {
+  color: var(--text-secondary);
+}
+
+html[data-theme="dark"] .logColProvider,
+html[data-theme="dark"] .logColRun,
+html[data-theme="dark"] .logColTask,
+html[data-theme="dark"] .logTaskButton,
+html[data-theme="dark"] .logMetaAction,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .logColProvider,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .logColRun,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .logColTask,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .logTaskButton,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .logMetaAction,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .logMetaAction,
+html[data-theme="light"] .logColProvider,
+html[data-theme="light"] .logColRun,
+html[data-theme="light"] .logColTask,
+html[data-theme="light"] .logTaskButton,
+html[data-theme="light"] .logMetaAction {
+  color: var(--log-link);
+}
+
+html[data-theme="dark"] .logTaskButton:hover,
+html[data-theme="dark"] .logTaskButton:focus-visible,
+html[data-theme="dark"] .logTaskButton.active,
+html[data-theme="dark"] .logMetaAction:hover,
+html[data-theme="dark"] .logMetaAction:focus-visible,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .logTaskButton:hover,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .logTaskButton:focus-visible,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .logTaskButton.active,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .logMetaAction:hover,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .logMetaAction:focus-visible,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .logMetaAction:focus-visible,
+html[data-theme="light"] .logTaskButton:hover,
+html[data-theme="light"] .logTaskButton:focus-visible,
+html[data-theme="light"] .logTaskButton.active,
+html[data-theme="light"] .logMetaAction:hover,
+html[data-theme="light"] .logMetaAction:focus-visible {
+  color: var(--log-accent);
+}
+
+html[data-theme="dark"] .logColTarget,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .logColTarget,
+html[data-theme="light"] .logColTarget {
+  color: var(--log-text-bright);
+}
+
+html[data-theme="dark"] .logColDur,
+html[data-theme="dark"] .logColMsg,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .logColDur,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .logColMsg,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .logColMsg,
+html[data-theme="light"] .logColDur,
+html[data-theme="light"] .logColMsg {
+  color: var(--log-text);
+}
+
+html[data-theme="dark"] .logColCoin,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .logColCoin,
+html[data-theme="light"] .logColCoin {
+  color: var(--log-coin);
+}
+
+html[data-theme="dark"] .logColQueue,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .logColQueue,
+html[data-theme="light"] .logColQueue {
+  color: var(--log-warning);
+}
+
+html[data-theme="dark"] .logTaskInspect,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .logTaskInspect,
+html[data-theme="light"] .logTaskInspect {
+  border-top-color: var(--log-border);
+  background: var(--accent-muted);
+}
+
+html[data-theme="dark"] .logTaskInspectError,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .logTaskInspectError,
+html[data-theme="light"] .logTaskInspectError {
+  background: var(--danger-muted);
+}
+
+html[data-theme="dark"] .logTaskInspectHead,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .logTaskInspectHead,
+html[data-theme="light"] .logTaskInspectHead {
+  color: var(--log-accent);
+  font-weight: 600;
+}
+
+html[data-theme="dark"] .logTaskInspectLine,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .logTaskInspectLine,
+html[data-theme="light"] .logTaskInspectLine {
+  color: var(--log-text);
+}
+
+html[data-theme="dark"] .logTaskInspectLine.muted,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .logTaskInspectLine.muted,
+html[data-theme="light"] .logTaskInspectLine.muted {
+  color: var(--log-muted);
+}
+
+html[data-theme="dark"] .logTaskInspectLink,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .logTaskInspectLink,
+html[data-theme="light"] .logTaskInspectLink {
+  color: var(--log-link);
+}
+
+html[data-theme="dark"] .logSessionMeta,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .logSessionMeta,
+html[data-theme="light"] .logSessionMeta {
+  border-top-color: var(--log-border);
+  color: var(--log-muted);
+}
+
+html[data-theme="dark"] .logSessionBody,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .logSessionBody,
+html[data-theme="light"] .logSessionBody {
+  border-top-color: var(--log-border);
+  background: rgba(0, 0, 0, 0.15);
+}
+
+html[data-theme="light"] .logSessionBody {
+  background: rgba(27, 31, 36, 0.04);
+}
+
+html[data-theme="dark"] .logLine.lvl-ok .logColLevel,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .logLine.lvl-ok .logColLevel,
+html[data-theme="light"] .logLine.lvl-ok .logColLevel {
+  color: var(--log-success);
+}
+
+html[data-theme="dark"] .logLine.lvl-err .logColLevel,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .logLine.lvl-err .logColLevel,
+html[data-theme="light"] .logLine.lvl-err .logColLevel {
+  color: var(--log-danger);
+}
+
+html[data-theme="dark"] .logLine.lvl-wrn .logColLevel,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .logLine.lvl-wrn .logColLevel,
+html[data-theme="light"] .logLine.lvl-wrn .logColLevel {
+  color: var(--log-warning);
+}
+
+/* ── Settings theme menu ────────────────────────────────── */
+
+html[data-theme="dark"] .themeMenuDivider,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .themeMenuDivider,
+html[data-theme="light"] .themeMenuDivider {
+  margin: var(--space-1) 0;
+  padding: var(--space-1) var(--space-3) 0;
+  border-top: 1px solid var(--border-subtle);
+  color: var(--text-tertiary);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+@media (max-width: 680px) {
+  html[data-theme="dark"] .sidebar,
+  html[data-theme="dark"] .previewPanel,
+  html[data-theme="dark"] .historyPanel,
+  html[data-theme="light"] .sidebar,
+  html[data-theme="light"] .previewPanel,
+  html[data-theme="light"] .historyPanel {
+    border-radius: var(--radius);
+  }
+}

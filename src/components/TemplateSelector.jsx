@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { FilePenLine, Trash2, Workflow } from "lucide-react";
+import { useI18n } from "../i18n/I18nContext";
 
 export function TemplateSelector({
   templates,
@@ -9,6 +10,7 @@ export function TemplateSelector({
   onDelete,
   deleteScope = "local"
 }) {
+  const { t } = useI18n();
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState("");
@@ -23,7 +25,7 @@ export function TemplateSelector({
       setConfirmOpen(false);
       setDeleteError("");
     } catch (error) {
-      setDeleteError(error?.message || "Không xóa được template");
+      setDeleteError(error?.message || t("template.deleteError"));
     } finally {
       setDeleting(false);
     }
@@ -32,7 +34,7 @@ export function TemplateSelector({
   return (
     <>
       <label className="field templateField">
-        <span>Mẫu API</span>
+        <span>{t("template.label")}</span>
         <div className="templateSelectRow">
           <div className="templateSelect">
             <Workflow size={16} />
@@ -42,7 +44,7 @@ export function TemplateSelector({
               ))}
             </select>
           </div>
-          <button type="button" className="templateEditButton" onClick={onEdit} title="Tạo / sửa YAML, JSON">
+          <button type="button" className="templateEditButton" onClick={onEdit} title={t("template.edit")}>
             <FilePenLine size={16} />
           </button>
           <button
@@ -53,7 +55,7 @@ export function TemplateSelector({
               setConfirmOpen(true);
             }}
             disabled={!canDelete}
-            title={selected?.isDefault ? "Không thể xóa template mặc định" : "Xóa template"}
+            title={selected?.isDefault ? t("template.cannotDelete") : t("template.delete")}
           >
             <Trash2 size={16} />
           </button>
@@ -66,25 +68,22 @@ export function TemplateSelector({
             className="settingsModal templateDeleteModal"
             role="dialog"
             aria-modal="true"
-            aria-label="Xác nhận xóa template"
+            aria-label={t("template.deleteTitle")}
             onMouseDown={event => event.stopPropagation()}
           >
             <div className="modalHeader">
               <div>
-                <h2>Xóa template?</h2>
-                <p>
-                  Bạn có chắc muốn xóa <b>{selected?.name || selectedTemplate}</b>?
-                  Thư mục template và file YAML/JSON sẽ bị xóa vĩnh viễn.
-                </p>
+                <h2>{t("template.deleteTitle")}</h2>
+                <p>{t("template.deleteConfirm", { name: selected?.name || selectedTemplate })}</p>
               </div>
             </div>
             {deleteError ? <p className="templateDeleteError">{deleteError}</p> : null}
             <div className="templateDeleteActions">
               <button type="button" className="secondaryActionButton" onClick={() => setConfirmOpen(false)} disabled={deleting}>
-                Hủy
+                {t("common.cancel")}
               </button>
               <button type="button" className="dangerActionButton" onClick={handleConfirmDelete} disabled={deleting}>
-                {deleting ? "Đang xóa..." : "Xóa template"}
+                {deleting ? t("template.deleting") : t("template.delete")}
               </button>
             </div>
           </section>

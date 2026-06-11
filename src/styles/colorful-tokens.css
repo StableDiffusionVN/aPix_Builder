@@ -54,6 +54,6 @@ html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) {
   --log-coin: #ffa657;
   --rh-brand: #cfff0e;
   --rh-brand-rgb: 207, 255, 14;
-  --comfy-brand: #fbbf24;
-  --comfy-brand-rgb: 251, 191, 36;
+  --comfy-brand: #f0ff41;
+  --comfy-brand-rgb: 240, 255, 65;
 }

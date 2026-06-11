@@ -660,12 +660,8 @@ html[data-theme="light"] .outputMetaStack {
   gap: var(--space-1);
 }
 
-html[data-theme="dark"] .infoIntro div,
 html[data-theme="dark"] .infoNotice,
-html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .infoIntro div,
 html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .infoNotice,
-html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .infoNotice,
-html[data-theme="light"] .infoIntro div,
 html[data-theme="light"] .infoNotice {
   border-radius: var(--radius);
 }

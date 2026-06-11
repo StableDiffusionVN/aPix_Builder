@@ -23,6 +23,7 @@ import { DYNAMIC_FIELD_TYPES, canonicalDynamicType, inferDynamicTypeFromField } 
 import { DEFAULT_RH_WF_ID } from "../hooks/useRunningHub";
 import { menuChoiceOptions, menuChoiceValue, parseMenuChoices, resolveMenuStoredValue } from "../lib/menuChoices";
 import { RunningHubLogomark } from "./icons/RunningHubIcon";
+import { localizeRuntimeMessage, useI18n } from "../i18n/I18nContext";
 
 function menuOptsFromRow(row) {
   return menuChoiceOptions(row);
@@ -72,21 +73,23 @@ function inputRowIcon(row) {
   return icons[row.type] || Box;
 }
 
-function inputRowLabel(row) {
+function inputRowLabel(row, locale = "vi") {
   if (row.kind === "note") {
     const firstLine = String(row.markdown || "").split("\n").find(line => line.trim()) || "";
-    return firstLine.replace(/^#+\s*/, "").trim() || "Chú thích";
+    return firstLine.replace(/^#+\s*/, "").trim() || (locale === "vi" ? "Chú thích" : "Note");
   }
   return row.label || row.field || "Input";
 }
 
-function inputRowMeta(row, nodes) {
-  if (row.kind === "note") return "Markdown · chú thích";
+function inputRowMeta(row, nodes, locale = "vi") {
+  if (row.kind === "note") return locale === "vi" ? "Markdown · chú thích" : "Markdown · note";
   if (row.kind === "menu-sub") {
     const choices = parseChoicesText(row.choicesText);
     const subCount = Object.values(row.sub || {}).reduce((sum, items) => sum + (items?.length || 0), 0);
-    const target = row.hasTargetId ? `${row.nodeId}-${row.field}` : "không target";
-    return `${choices.length} lựa chọn · ${subCount} sub-input · ${target}`;
+    const target = row.hasTargetId ? `${row.nodeId}-${row.field}` : (locale === "vi" ? "không target" : "no target");
+    return locale === "vi"
+      ? `${choices.length} lựa chọn · ${subCount} sub-input · ${target}`
+      : `${choices.length} choices · ${subCount} sub-inputs · ${target}`;
   }
   const node = nodes.find(item => item.id === row.nodeId);
   const nodeLabel = node ? `${row.nodeId} · ${node.title}` : row.nodeId || "—";
@@ -94,11 +97,11 @@ function inputRowMeta(row, nodes) {
 }
 
 function InputDetailPanel({ row, nodes, fieldTypes, onUpdate, onDelete }) {
-  if (!row) {
+  const { locale, t } = useI18n();  if (!row) {
     return (
       <div className="inputDetailEmpty">
-        <p>Chọn một input bên trái để chỉnh chi tiết.</p>
-        <small>Hoặc bấm <b>Thêm input</b> sau khi đã upload workflow JSON.</small>
+        <p>{locale === "vi" ? "Chọn một input bên trái để chỉnh chi tiết." : "Select an input on the left to edit its details."}</p>
+        <small>{locale === "vi" ? <>Hoặc bấm <b>Thêm input</b> sau khi đã upload workflow JSON.</> : <>Or select <b>Add input</b> after uploading a workflow JSON file.</>}</small>
       </div>
     );
   }
@@ -113,16 +116,16 @@ function InputDetailPanel({ row, nodes, fieldTypes, onUpdate, onDelete }) {
           <div className="inputDetailTitle">
             <span className={`typeBadge typeBadge--note`}><FileText size={14} /></span>
             <div>
-              <h4>Chú thích Markdown</h4>
-              <p>Hiển thị hướng dẫn trong form, không gửi sang ComfyUI.</p>
+              <h4>{t("templateEditor.markdownNote")}</h4>
+              <p>{t("templateEditor.markdownNoteDesc")}</p>
             </div>
           </div>
-          <button type="button" className="rowDeleteButton" onClick={onDelete} title="Xóa chú thích">
+          <button type="button" className="rowDeleteButton" onClick={onDelete} title={t("templateEditor.deleteNote")}>
             <Trash2 size={16} />
           </button>
         </div>
         <label className="field inputDetailFieldWide">
-          <span>Nội dung Markdown</span>
+          <span>{t("templateEditor.markdownContent")}</span>
           <textarea rows={12} value={row.markdown} onChange={event => onUpdate({ markdown: event.target.value })} />
         </label>
       </div>
@@ -136,10 +139,10 @@ function InputDetailPanel({ row, nodes, fieldTypes, onUpdate, onDelete }) {
           <span className={`typeBadge typeBadge--${row.type || "string"}`}><Icon size={14} /></span>
           <div>
             <h4>{row.label || row.field || "Input"}</h4>
-            <p>{inputRowMeta(row, nodes)}</p>
+            <p>{inputRowMeta(row, nodes, locale)}</p>
           </div>
         </div>
-        <button type="button" className="rowDeleteButton" onClick={onDelete} title="Xóa input">
+        <button type="button" className="rowDeleteButton" onClick={onDelete} title={t("templateEditor.deleteInput")}>
           <Trash2 size={16} />
         </button>
       </div>
@@ -153,7 +156,7 @@ function InputDetailPanel({ row, nodes, fieldTypes, onUpdate, onDelete }) {
           </select>
         </label>
         <label className="field">
-          <span>Trường</span>
+          <span>{t("templateEditor.field")}</span>
           <select value={row.field} onChange={event => onUpdate({ field: event.target.value })}>
             {(selectedNode?.fields || []).map(field => (
               <option key={field} value={field}>{field}</option>
@@ -161,13 +164,13 @@ function InputDetailPanel({ row, nodes, fieldTypes, onUpdate, onDelete }) {
           </select>
         </label>
         <label className="field">
-          <span>Kiểu dữ liệu</span>
+          <span>{t("templateEditor.dataType")}</span>
           <select value={row.type} onChange={event => onUpdate({ type: event.target.value })}>
             {fieldTypes.map(type => <option key={type} value={type}>{type}</option>)}
           </select>
         </label>
         <label className="field">
-          <span>Hiển thị</span>
+          <span>{t("templateEditor.display")}</span>
           <select
             value={row.display}
             onChange={event => onUpdate({ display: event.target.value })}
@@ -179,7 +182,7 @@ function InputDetailPanel({ row, nodes, fieldTypes, onUpdate, onDelete }) {
           </select>
         </label>
         <label className="field inputDetailFieldWide">
-          <span>Tên hiển thị</span>
+          <span>{t("templateEditor.displayName")}</span>
           <input value={row.label} onChange={event => onUpdate({ label: event.target.value })} />
         </label>
         {(row.type === "int" || row.type === "float" || row.type === "seed") ? (
@@ -202,8 +205,8 @@ function InputDetailPanel({ row, nodes, fieldTypes, onUpdate, onDelete }) {
           <>
             <RhWfSwitch
               compact
-              title="Cú pháp Nhãn:giá trị"
-              hint="Bật để hiển thị nhãn khác giá trị gửi API"
+              title={t("templateEditor.labelSyntax")}
+              hint={t("templateEditor.labelSyntaxHint")}
               checked={Boolean(row.menuLabelSyntax)}
               onChange={event => {
                 const menuLabelSyntax = event.target.checked;
@@ -217,7 +220,7 @@ function InputDetailPanel({ row, nodes, fieldTypes, onUpdate, onDelete }) {
               }}
             />
             <label className="field inputDetailFieldWide">
-              <span>Menu choices, mỗi dòng một lựa chọn</span>
+              <span>{t("templateEditor.menuChoices")}</span>
               <textarea
                 rows={4}
                 value={row.choicesText}
@@ -233,14 +236,14 @@ function InputDetailPanel({ row, nodes, fieldTypes, onUpdate, onDelete }) {
                 }}
               />
               {row.menuLabelSyntax ? (
-                <small>Dùng <b>Nhãn:giá trị API</b>. Ví dụ: <b>Chất lượng cao:high</b></small>
+                <small>{<>{t("templateEditor.menuLabelHint")}</>}</small>
               ) : null}
             </label>
           </>
         ) : null}
         {row.type !== "image" ? (
           <label className="field">
-            <span>Mặc định</span>
+            <span>{t("templateEditor.default")}</span>
             {(row.type === "checkbox" || row.type === "boolean") ? (
               <select value={String(booleanValue(row.value))} onChange={event => onUpdate({ value: event.target.value === "true" })}>
                 <option value="true">True</option>
@@ -263,12 +266,12 @@ function InputDetailPanel({ row, nodes, fieldTypes, onUpdate, onDelete }) {
 }
 
 function SubInputEditor({ subRow, nodes, workflow, fieldTypes, onUpdate, onDelete }) {
-  const selectedNode = nodes.find(node => node.id === subRow.nodeId);
+  const { locale, t } = useI18n();  const selectedNode = nodes.find(node => node.id === subRow.nodeId);
   return (
     <div className="subInputEditorCard">
       <div className="subInputEditorHeader">
         <strong>{subRow.label || subRow.field || "Sub-input"}</strong>
-        <button type="button" className="rowDeleteButton" onClick={onDelete} title="Xóa sub-input">
+        <button type="button" className="rowDeleteButton" onClick={onDelete} title={t("templateEditor.deleteSubInput")}>
           <Trash2 size={14} />
         </button>
       </div>
@@ -282,7 +285,7 @@ function SubInputEditor({ subRow, nodes, workflow, fieldTypes, onUpdate, onDelet
           </select>
         </label>
         <label className="field">
-          <span>Trường</span>
+          <span>{t("templateEditor.field")}</span>
           <select value={subRow.field} onChange={event => onUpdate({ field: event.target.value })}>
             {(selectedNode?.fields || []).map(field => (
               <option key={field} value={field}>{field}</option>
@@ -290,13 +293,13 @@ function SubInputEditor({ subRow, nodes, workflow, fieldTypes, onUpdate, onDelet
           </select>
         </label>
         <label className="field">
-          <span>Kiểu dữ liệu</span>
+          <span>{t("templateEditor.dataType")}</span>
           <select value={subRow.type} onChange={event => onUpdate({ type: event.target.value })}>
             {fieldTypes.map(type => <option key={type} value={type}>{type}</option>)}
           </select>
         </label>
         <label className="field">
-          <span>Hiển thị</span>
+          <span>{t("templateEditor.display")}</span>
           <select
             value={subRow.display}
             onChange={event => onUpdate({ display: event.target.value })}
@@ -308,7 +311,7 @@ function SubInputEditor({ subRow, nodes, workflow, fieldTypes, onUpdate, onDelet
           </select>
         </label>
         <label className="field inputDetailFieldWide">
-          <span>Tên hiển thị</span>
+          <span>{t("templateEditor.displayName")}</span>
           <input value={subRow.label} onChange={event => onUpdate({ label: event.target.value })} />
         </label>
         {(subRow.type === "int" || subRow.type === "float" || subRow.type === "seed") ? (
@@ -331,7 +334,7 @@ function SubInputEditor({ subRow, nodes, workflow, fieldTypes, onUpdate, onDelet
           <>
             <RhWfSwitch
               compact
-              title="Cú pháp Nhãn:giá trị"
+              title={t("templateEditor.labelSyntax")}
               checked={Boolean(subRow.menuLabelSyntax)}
               onChange={event => {
                 const menuLabelSyntax = event.target.checked;
@@ -360,13 +363,13 @@ function SubInputEditor({ subRow, nodes, workflow, fieldTypes, onUpdate, onDelet
                   });
                 }}
               />
-              {subRow.menuLabelSyntax ? <small>Dùng <b>Nhãn:giá trị API</b></small> : null}
+              {subRow.menuLabelSyntax ? <small>{<>{t("templateEditor.menuLabelSyntaxShort")}</>}</small> : null}
             </label>
           </>
         ) : null}
         {subRow.type !== "image" ? (
           <label className="field">
-            <span>Mặc định</span>
+            <span>{t("templateEditor.default")}</span>
             {(subRow.type === "checkbox" || subRow.type === "boolean") ? (
               <select value={String(booleanValue(subRow.value))} onChange={event => onUpdate({ value: event.target.value === "true" })}>
                 <option value="true">True</option>
@@ -389,7 +392,7 @@ function SubInputEditor({ subRow, nodes, workflow, fieldTypes, onUpdate, onDelet
 }
 
 function MenuSubDetailPanel({ row, nodes, workflow, fieldTypes, onUpdate, onDelete, onUpdateSubInput, onAddSubInput, onDeleteSubInput }) {
-  const menuOpts = menuOptsFromRow(row);
+  const { locale, t } = useI18n();  const menuOpts = menuOptsFromRow(row);
   const parsedChoices = parseMenuChoices(parseChoicesText(row.choicesText), menuOpts);
   const [activeChoice, setActiveChoice] = useState(parsedChoices[0]?.value || "");
 
@@ -414,10 +417,10 @@ function MenuSubDetailPanel({ row, nodes, workflow, fieldTypes, onUpdate, onDele
           <span className="typeBadge typeBadge--menu-sub"><Layers size={14} /></span>
           <div>
             <h4>{row.label || "Menu sub"}</h4>
-            <p>Menu điều khiển sub-input hiển thị theo từng lựa chọn.</p>
+            <p>{t("templateEditor.menuSubDesc")}</p>
           </div>
         </div>
-        <button type="button" className="rowDeleteButton" onClick={onDelete} title="Xóa menu-sub">
+        <button type="button" className="rowDeleteButton" onClick={onDelete} title={t("templateEditor.deleteMenuSub")}>
           <Trash2 size={16} />
         </button>
       </div>
@@ -433,7 +436,7 @@ function MenuSubDetailPanel({ row, nodes, workflow, fieldTypes, onUpdate, onDele
                 field: event.target.checked ? (row.field || nodes[0]?.fields?.[0] || "") : ""
               })}
             />
-            {" "}Gửi giá trị menu sang ComfyUI (có target id)
+            {" "}{t("templateEditor.sendMenuValue")}
           </span>
         </label>
         {row.hasTargetId ? (
@@ -447,7 +450,7 @@ function MenuSubDetailPanel({ row, nodes, workflow, fieldTypes, onUpdate, onDele
               </select>
             </label>
             <label className="field">
-              <span>Trường</span>
+              <span>{t("templateEditor.field")}</span>
               <select value={row.field} onChange={event => onUpdate({ field: event.target.value })}>
                 {(selectedNode?.fields || []).map(field => (
                   <option key={field} value={field}>{field}</option>
@@ -457,13 +460,13 @@ function MenuSubDetailPanel({ row, nodes, workflow, fieldTypes, onUpdate, onDele
           </>
         ) : null}
         <label className="field inputDetailFieldWide">
-          <span>Tên hiển thị menu</span>
+          <span>{t("templateEditor.menuDisplayName")}</span>
           <input value={row.label} onChange={event => onUpdate({ label: event.target.value })} />
         </label>
         <RhWfSwitch
           compact
-          title="Cú pháp Nhãn:giá trị"
-          hint="Bật để hiển thị nhãn khác giá trị gửi API"
+          title={t("templateEditor.labelSyntax")}
+          hint={t("templateEditor.labelSyntaxHint")}
           checked={Boolean(row.menuLabelSyntax)}
           onChange={event => {
             const menuLabelSyntax = event.target.checked;
@@ -483,7 +486,7 @@ function MenuSubDetailPanel({ row, nodes, workflow, fieldTypes, onUpdate, onDele
           }}
         />
         <label className="field inputDetailFieldWide">
-          <span>Lựa chọn menu, mỗi dòng một giá trị</span>
+          <span>{t("templateEditor.menuChoicesPerLine")}</span>
           <textarea
             rows={4}
             value={row.choicesText}
@@ -505,11 +508,11 @@ function MenuSubDetailPanel({ row, nodes, workflow, fieldTypes, onUpdate, onDele
             }}
           />
           {row.menuLabelSyntax ? (
-            <small>Dùng <b>Nhãn:giá trị API</b>. Ví dụ: <b>Upscale nhanh:fast</b></small>
+            <small>{<>{t("templateEditor.menuLabelExample")}</>}</small>
           ) : null}
         </label>
         <label className="field">
-          <span>Mặc định</span>
+          <span>{t("templateEditor.default")}</span>
           <select value={row.value} onChange={event => onUpdate({ value: event.target.value })}>
             {parsedChoices.map(choice => (
               <option key={choice.value} value={choice.value}>{choice.label}</option>
@@ -529,14 +532,14 @@ function MenuSubDetailPanel({ row, nodes, workflow, fieldTypes, onUpdate, onDele
             <span>{row.sub?.[choice.value]?.length || 0}</span>
           </button>
         ))}
-        {parsedChoices.length === 0 ? <span className="menuSubChoiceEmpty">Thêm lựa chọn menu ở trên.</span> : null}
+        {parsedChoices.length === 0 ? <span className="menuSubChoiceEmpty">{t("templateEditor.addMenuChoices")}</span> : null}
       </div>
       <div className="menuSubSubInputs">
         <div className="menuSubSubInputsHeader">
-          <h5>Sub-input cho <b>{activeChoiceLabel || "—"}</b></h5>
+          <h5>{t("templateEditor.subInputsFor")} <b>{activeChoiceLabel || "—"}</b></h5>
           <button type="button" className="smallActionButton" onClick={() => activeChoice && onAddSubInput(activeChoice)} disabled={!activeChoice}>
             <Plus size={14} />
-            <span>Thêm sub-input</span>
+            <span>{t("templateEditor.addSubInput")}</span>
           </button>
         </div>
         {subRows.map(subRow => (
@@ -551,7 +554,7 @@ function MenuSubDetailPanel({ row, nodes, workflow, fieldTypes, onUpdate, onDele
           />
         ))}
         {!subRows.length && activeChoice ? (
-          <div className="editorEmpty menuSubSubEmpty">Chưa có sub-input cho lựa chọn này.</div>
+          <div className="editorEmpty menuSubSubEmpty">{t("templateEditor.noSubInputs")}</div>
         ) : null}
       </div>
     </div>
@@ -757,11 +760,11 @@ function rowFromConfig(item, workflow, fallbackKey) {
   };
 }
 
-function outputFromConfig(item) {
+function outputFromConfig(item, locale = "vi") {
   return {
     rowId: crypto.randomUUID(),
     nodeId: String(item.id || ""),
-    label: item.ui?.label || "Ảnh kết quả"
+    label: item.ui?.label || (locale === "vi" ? "Ảnh kết quả" : "Output image")
   };
 }
 
@@ -824,10 +827,11 @@ function buildConfig({
   outputRows,
   workflowId,
   mode = "local",
-  saveWorkflowJson = true,
+  saveWorkflowJson = false,
   addMetadata = false,
   accessPassword = "",
-  usePersonalQueue = false
+  usePersonalQueue = false,
+  locale = "vi"
 }) {
   const usedInputKeys = new Set();
   const input = {};
@@ -890,7 +894,7 @@ function buildConfig({
       id: row.nodeId,
       ui: {
         type: "image",
-        label: row.label || "Ảnh kết quả"
+        label: row.label || (locale === "vi" ? "Ảnh kết quả" : "Output image")
       }
     };
   }
@@ -959,6 +963,8 @@ export function TemplateEditorModal({
   onClose,
   onSaved
 }) {
+  const { locale, t } = useI18n();
+  const l = (vi, en) => locale === "vi" ? vi : en;
   const isRhWf = mode === "runninghub-wf";
   const fieldTypes = editorFieldTypes(mode);
   const apiScope = isRhWf ? "runninghub-wf" : "local";
@@ -1005,22 +1011,22 @@ export function TemplateEditorModal({
       try {
         const response = await fetch(`/api/template-editor?template=${encodeURIComponent(selectedTemplate)}&scope=${apiScope}`);
         const data = await response.json();
-        if (!response.ok) throw new Error(data.error || "Không đọc được template");
+        if (!response.ok) throw new Error(localizeRuntimeMessage(data.error, locale) || l("Không đọc được template", "Could not read the template"));
         if (cancelled) return;
         setTemplateId(data.template?.id || selectedTemplate);
         setEditingDefaultTemplate(Boolean(data.template?.isDefault));
         setAppName(data.config?.app?.name || data.template?.name || "");
         const rh = data.config?.runninghub || {};
         setWorkflowId(rh.workflowId || "");
-        setSaveWorkflowJson(rh.saveWorkflowJson !== false && Boolean(data.workflow));
+        setSaveWorkflowJson(rh.saveWorkflowJson === true);
         setAddMetadata(Boolean(rh.addMetadata));
         setAccessPassword(rh.accessPassword || "");
         setUsePersonalQueue(Boolean(rh.usePersonalQueue));
         setWorkflow(data.workflow || null);
         setInputRows(Object.entries(data.config?.input || {}).map(([key, item]) => rowFromConfig(item, data.workflow, key)));
-        setOutputRows(isRhWf ? [] : Object.values(data.config?.output || {}).map(outputFromConfig));
+        setOutputRows(isRhWf ? [] : Object.values(data.config?.output || {}).map(item => outputFromConfig(item, locale)));
       } catch (err) {
-        if (!cancelled) setError(err.message);
+        if (!cancelled) setError(localizeRuntimeMessage(err.message, locale));
       }
     }
     loadCurrentTemplate();
@@ -1041,14 +1047,14 @@ export function TemplateEditorModal({
     if (nextConfig?.runninghub?.workflowId) setWorkflowId(nextConfig.runninghub.workflowId);
     if (nextConfig) {
       setInputRows(Object.entries(nextConfig.input || {}).map(([key, item]) => rowFromConfig(item, nextWorkflow, key)));
-      setOutputRows(isRhWf ? [] : Object.values(nextConfig.output || {}).map(outputFromConfig));
+      setOutputRows(isRhWf ? [] : Object.values(nextConfig.output || {}).map(item => outputFromConfig(item, locale)));
       return;
     }
     setInputRows(current => pruneInputRows(current, nextWorkflow));
     if (!isRhWf) {
       const nextNodes = workflowNodes(nextWorkflow);
       const firstSave = nextNodes.find(node => node.classType.toLowerCase().includes("save"));
-      setOutputRows(firstSave ? [{ rowId: crypto.randomUUID(), nodeId: firstSave.id, label: "Ảnh kết quả" }] : []);
+      setOutputRows(firstSave ? [{ rowId: crypto.randomUUID(), nodeId: firstSave.id, label: l("Ảnh kết quả", "Output image") }] : []);
     } else {
       setOutputRows([]);
     }
@@ -1056,11 +1062,11 @@ export function TemplateEditorModal({
 
   async function handleLoadWorkflowById() {
     if (!workflowId.trim()) {
-      setError("Cần nhập Workflow ID");
+      setError(l("Cần nhập Workflow ID", "Enter a Workflow ID"));
       return;
     }
     if (!apiKey.trim()) {
-      setError("Cần nhập RunningHub API Key trong Settings trước");
+      setError(l("Cần nhập RunningHub API Key trong Settings trước", "Enter a RunningHub API Key in Settings first"));
       return;
     }
     setLoadingWorkflow(true);
@@ -1074,13 +1080,13 @@ export function TemplateEditorModal({
       const text = await response.text();
       let data = {};
       try { data = text ? JSON.parse(text) : {}; } catch {
-        throw new Error(text || "Backend không trả về JSON khi load workflow");
+        throw new Error(text || l("Backend không trả về JSON khi load workflow", "The backend did not return JSON while loading the workflow"));
       }
-      if (!response.ok) throw new Error(data.error || "Không tải được workflow từ RunningHub");
-      if (!data.workflow) throw new Error("RunningHub không trả về workflow JSON");
+      if (!response.ok) throw new Error(localizeRuntimeMessage(data.error, locale) || l("Không tải được workflow từ RunningHub", "Could not load the workflow from RunningHub"));
+      if (!data.workflow) throw new Error(l("RunningHub không trả về workflow JSON", "RunningHub did not return workflow JSON"));
       await applyWorkflow(data.workflow, `workflow-${workflowId}`);
     } catch (err) {
-      setError(err.message);
+      setError(localizeRuntimeMessage(err.message, locale));
     } finally {
       setLoadingWorkflow(false);
     }
@@ -1093,22 +1099,32 @@ export function TemplateEditorModal({
     try {
       const yamlFile = preferredFile(files, ["app_build.yaml", "app_build.yml"], isYamlFile);
       const jsonFile = preferredFile(files, ["api.json", "workflow.json"], isJsonFile);
-      if (!jsonFile) throw new Error("Không tìm thấy workflow JSON hợp lệ");
+      if (!jsonFile) throw new Error(l("Không tìm thấy workflow JSON hợp lệ", "No valid workflow JSON file was found"));
       const nextWorkflow = JSON.parse(await readTextFile(jsonFile));
       const nextConfig = yamlFile ? YAML.parse(await readTextFile(yamlFile)) : null;
       if (nextConfig && !nextConfig.input) {
-        throw new Error("YAML thiếu input");
+        throw new Error(l("YAML thiếu input", "YAML is missing input"));
       }
       if (!isRhWf && nextConfig && !nextConfig.output) {
-        throw new Error("YAML thiếu output");
+        throw new Error(l("YAML thiếu output", "YAML is missing output"));
       }
       if (isRhWf && nextConfig && !nextConfig.runninghub?.workflowId) {
-        throw new Error("YAML thiếu runninghub.workflowId");
+        throw new Error(l("YAML thiếu runninghub.workflowId", "YAML is missing runninghub.workflowId"));
       }
       setTemplateId(slugify(nextConfig?.template?.id || nextConfig?.app?.id || templateIdFromFile(yamlFile || jsonFile)));
+      if (isRhWf && nextConfig?.runninghub) {
+        const rh = nextConfig.runninghub;
+        if (rh.workflowId) setWorkflowId(rh.workflowId);
+        setSaveWorkflowJson(rh.saveWorkflowJson === false ? false : true);
+        setAddMetadata(Boolean(rh.addMetadata));
+        setAccessPassword(rh.accessPassword || "");
+        setUsePersonalQueue(Boolean(rh.usePersonalQueue));
+      } else if (isRhWf) {
+        setSaveWorkflowJson(true);
+      }
       await applyWorkflow(nextWorkflow, jsonFile.name, nextConfig);
     } catch (err) {
-      setError(`Không đọc được tệp upload: ${err.message}`);
+      setError(l(`Không đọc được tệp upload: ${err.message}`, `Could not read the uploaded file: ${localizeRuntimeMessage(err.message, locale)}`));
     }
   }
 
@@ -1119,7 +1135,7 @@ export function TemplateEditorModal({
       const nextWorkflow = await readJsonFile(file);
       await applyWorkflow(nextWorkflow, file.name);
     } catch (err) {
-      setError(`JSON không hợp lệ: ${err.message}`);
+      setError(l(`JSON không hợp lệ: ${err.message}`, `Invalid JSON: ${localizeRuntimeMessage(err.message, locale)}`));
     }
   }
 
@@ -1144,7 +1160,7 @@ export function TemplateEditorModal({
     setInputRows(current => [...current, {
       rowId,
       kind: "note",
-      markdown: "### Ghi chú\n\nNhập nội dung **Markdown** tại đây."
+      markdown: l("### Ghi chú\n\nNhập nội dung **Markdown** tại đây.", "### Note\n\nEnter **Markdown** content here.")
     }]);
     setSelectedInputId(rowId);
   }
@@ -1269,7 +1285,7 @@ export function TemplateEditorModal({
     setOutputRows(current => [...current, {
       rowId: crypto.randomUUID(),
       nodeId: first?.id || "",
-      label: "Ảnh kết quả"
+      label: l("Ảnh kết quả", "Output image")
     }]);
   }
 
@@ -1283,18 +1299,18 @@ export function TemplateEditorModal({
 
   async function saveTemplate() {
     if (!isRhWf && !workflow) {
-      setError("Cần upload hoặc load workflow JSON trước khi Save");
+      setError(l("Cần upload hoặc load workflow JSON trước khi Save", "Upload or load workflow JSON before saving"));
       return;
     }
     if (isRhWf && saveWorkflowJson && !workflow) {
-      setError("Cần load hoặc import workflow JSON trước khi lưu (hoặc bỏ chọn Lưu JSON workflow)");
+      setError(l("Cần load hoặc import workflow JSON trước khi lưu (hoặc bỏ chọn Lưu JSON workflow)", "Load or import workflow JSON before saving, or disable workflow JSON storage"));
       return;
     }
     setSaving(true);
     setError("");
     try {
       if (isRhWf && !workflowId.trim()) {
-        throw new Error("Cần nhập Workflow ID trước khi lưu template RunningHub");
+        throw new Error(l("Cần nhập Workflow ID trước khi lưu template RunningHub", "Enter a Workflow ID before saving the RunningHub template"));
       }
       const config = buildConfig({
         appName,
@@ -1305,7 +1321,8 @@ export function TemplateEditorModal({
         saveWorkflowJson,
         addMetadata,
         accessPassword,
-        usePersonalQueue
+        usePersonalQueue,
+        locale
       });
       const response = await fetch(`/api/templates/save?scope=${apiScope}`, {
         method: "POST",
@@ -1318,11 +1335,11 @@ export function TemplateEditorModal({
         })
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Không lưu được template");
+      if (!response.ok) throw new Error(localizeRuntimeMessage(data.error, locale) || l("Không lưu được template", "Could not save the template"));
       await onSaved(data.template.id, { savedAsCopy: data.savedAsCopy });
       onClose();
     } catch (err) {
-      setError(err.message);
+      setError(localizeRuntimeMessage(err.message, locale));
     } finally {
       setSaving(false);
     }
@@ -1330,15 +1347,15 @@ export function TemplateEditorModal({
 
   return (
     <div className="modalBackdrop templateEditorBackdrop" role="presentation" onMouseDown={onClose}>
-      <section className="settingsModal templateEditorModal" role="dialog" aria-modal="true" aria-label="Tạo hoặc sửa template" onMouseDown={event => event.stopPropagation()}>
+      <section className="settingsModal templateEditorModal" role="dialog" aria-modal="true" aria-label={l("Tạo hoặc sửa template", "Create or edit template")} onMouseDown={event => event.stopPropagation()}>
         <div className="modalHeader">
           <div>
-            <h2>{isRhWf ? "Tạo / sửa template RunningHub Wf" : "Tạo / sửa YAML, JSON"}</h2>
+            <h2>{isRhWf ? l("Tạo / sửa template RunningHub Wf", "Create / edit RunningHub Wf template") : l("Tạo / sửa YAML, JSON", "Create / edit YAML and JSON")}</h2>
             <p>{isRhWf
-              ? "Map input từ workflow, cấu hình template và tùy chọn API."
-              : "Upload workflow JSON hoặc chỉnh template đang chọn, sau đó lưu thành API template."}</p>
+              ? l("Map input từ workflow, cấu hình template và tùy chọn API.", "Map workflow inputs, configure the template, and set API options.")
+              : l("Upload workflow JSON hoặc chỉnh template đang chọn, sau đó lưu thành API template.", "Upload a workflow JSON file or edit the selected template, then save it as an API template.")}</p>
           </div>
-          <button className="modalClose" onClick={onClose} title="Đóng">
+          <button className="modalClose" onClick={onClose} title={t("common.close")}>
             <X size={18} />
           </button>
         </div>
@@ -1349,7 +1366,7 @@ export function TemplateEditorModal({
               <section className="rhWfConfigPanel rhWfConfigPanel--source">
                 <header className="rhWfConfigPanelHead rhWfConfigPanelHead--compact">
                   <span className="rhWfConfigPanelIcon rhWfConfigPanelIcon--sm"><RunningHubLogomark size={13} title="RunningHub" /></span>
-                  <strong>Nguồn workflow</strong>
+                  <strong>{l("Nguồn workflow", "Workflow source")}</strong>
                 </header>
                 <div className="rhWfSourceActions">
                   <button
@@ -1357,10 +1374,10 @@ export function TemplateEditorModal({
                     className="rhWfSourceBtn rhWfSourceBtn--primary"
                     onClick={handleLoadWorkflowById}
                     disabled={loadingWorkflow}
-                    title="Load workflow từ RunningHub theo ID"
+                    title={l("Load workflow từ RunningHub theo ID", "Load a workflow from RunningHub by ID")}
                   >
                     <RunningHubLogomark size={13} title="RunningHub" />
-                    <span>{loadingWorkflow ? "Đang tải..." : "Load ID"}</span>
+                    <span>{loadingWorkflow ? l("Đang tải...", "Loading...") : "Load ID"}</span>
                   </button>
                   <label className="rhWfSourceBtn" title="Import file JSON api_format">
                     <FileJson size={13} />
@@ -1371,6 +1388,21 @@ export function TemplateEditorModal({
                       onChange={event => {
                         setSaveWorkflowJson(true);
                         handleJsonUpload(event.target.files?.[0]);
+                        event.target.value = "";
+                      }}
+                    />
+                  </label>
+                  <label className="rhWfSourceBtn" title={l("Import thư mục YAML + JSON", "Import YAML + JSON folder")}>
+                    <Upload size={13} />
+                    <span>{l("Import folder", "Import folder")}</span>
+                    <input
+                      type="file"
+                      multiple
+                      webkitdirectory=""
+                      directory=""
+                      onChange={event => {
+                        handleTemplateUpload(event.target.files);
+                        event.target.value = "";
                       }}
                     />
                   </label>
@@ -1378,8 +1410,8 @@ export function TemplateEditorModal({
                 <RhWfSwitch
                   checked={saveWorkflowJson}
                   onChange={event => setSaveWorkflowJson(event.target.checked)}
-                  title="Lưu JSON"
-                  hint={saveWorkflowJson ? "Patch khi chạy" : "Chỉ nodeInfoList"}
+                  title={l("Lưu JSON", "Save JSON")}
+                  hint={saveWorkflowJson ? l("Patch khi chạy", "Patch at runtime") : l("Chỉ nodeInfoList", "nodeInfoList only")}
                   compact
                 />
               </section>
@@ -1409,7 +1441,7 @@ export function TemplateEditorModal({
                     />
                   </label>
                   <label className="rhWfField">
-                    <span>Tên ứng dụng</span>
+                    <span>{l("Tên ứng dụng", "Application name")}</span>
                     <input
                       value={appName}
                       onChange={event => setAppName(event.target.value)}
@@ -1458,7 +1490,7 @@ export function TemplateEditorModal({
                 </label>
                 <label className="uploadJsonButton">
                   <Upload size={16} />
-                  <span>Upload thư mục</span>
+                  <span>{l("Upload thư mục", "Upload folder")}</span>
                   <input type="file" multiple webkitdirectory="" directory="" onChange={event => handleTemplateUpload(event.target.files)} />
                 </label>
               </div>
@@ -1468,7 +1500,7 @@ export function TemplateEditorModal({
                   <input value={templateId} onChange={event => setTemplateId(event.target.value)} placeholder="fashion-flatlay" />
                 </label>
                 <label className="field">
-                  <span>Tên ứng dụng</span>
+                  <span>{l("Tên ứng dụng", "Application name")}</span>
                   <input value={appName} onChange={event => setAppName(event.target.value)} placeholder="Fashion Flatlay" />
                 </label>
               </div>
@@ -1483,15 +1515,15 @@ export function TemplateEditorModal({
               <div className="editorHeaderActions">
                 <button type="button" className="smallActionButton" onClick={addInputRow} disabled={!workflow}>
                   <Plus size={15} />
-                  <span>Thêm input</span>
+                  <span>{l("Thêm input", "Add input")}</span>
                 </button>
                 <button type="button" className="smallActionButton" onClick={addMenuSubRow} disabled={!workflow}>
                   <Layers size={15} />
-                  <span>Thêm menu-sub</span>
+                  <span>{l("Thêm menu-sub", "Add menu-sub")}</span>
                 </button>
                 <button type="button" className="smallActionButton" onClick={addNoteRow} disabled={!workflow}>
                   <FileText size={15} />
-                  <span>Thêm chú thích</span>
+                  <span>{l("Thêm chú thích", "Add note")}</span>
                 </button>
               </div>
             </div>
@@ -1546,8 +1578,11 @@ export function TemplateEditorModal({
                               moveInputRow(row.rowId, 1);
                             }
                           }}
-                          title="Kéo để đổi thứ tự. Có thể dùng ↑/↓ khi đang focus."
-                          aria-label={`Di chuyển ${row.kind === "note" ? "chú thích" : "input"} ${index + 1}`}
+                          title={l("Kéo để đổi thứ tự. Có thể dùng ↑/↓ khi đang focus.", "Drag to reorder. You can also use ↑/↓ while focused.")}
+                          aria-label={l(
+                            `Di chuyển ${row.kind === "note" ? "chú thích" : "input"} ${index + 1}`,
+                            `Move ${row.kind === "note" ? "note" : "input"} ${index + 1}`
+                          )}
                         >
                           <GripVertical size={16} />
                         </button>
@@ -1555,8 +1590,8 @@ export function TemplateEditorModal({
                           <Icon size={14} />
                         </span>
                         <div className="inputListItemMain">
-                          <span className="inputListItemLabel">{inputRowLabel(row)}</span>
-                          <span className="inputListItemMeta">{inputRowMeta(row, nodes)}</span>
+                          <span className="inputListItemLabel">{inputRowLabel(row, locale)}</span>
+                          <span className="inputListItemMeta">{inputRowMeta(row, nodes, locale)}</span>
                         </div>
                         {row.kind === "menu-sub" ? (
                           <span className="inputListItemType">menu-sub</span>
@@ -1568,8 +1603,8 @@ export function TemplateEditorModal({
                   })}
                   {inputRows.length === 0 ? (
                     <div className="editorEmpty inputListEmpty">
-                      <p>Chưa có input.</p>
-                      <small>Upload workflow JSON rồi bấm <b>Thêm input</b>.</small>
+                      <p>{l("Chưa có input.", "No inputs yet.")}</p>
+                      <small>{locale === "vi" ? <>Upload workflow JSON rồi bấm <b>Thêm input</b>.</> : <>Upload a workflow JSON file, then select <b>Add input</b>.</>}</small>
                     </div>
                   ) : null}
                 </div>
@@ -1606,7 +1641,7 @@ export function TemplateEditorModal({
               <div className="editorHeaderActions">
                 <button type="button" className="smallActionButton" onClick={addOutputRow} disabled={!workflow}>
                   <Plus size={15} />
-                  <span>Thêm output</span>
+                  <span>{l("Thêm output", "Add output")}</span>
                 </button>
               </div>
             </div>
@@ -1647,8 +1682,8 @@ export function TemplateEditorModal({
                         moveOutputRow(row.rowId, 1);
                       }
                     }}
-                    title="Kéo để đổi thứ tự output. Có thể dùng ↑/↓ khi đang focus."
-                    aria-label={`Di chuyển output ${index + 1}`}
+                    title={l("Kéo để đổi thứ tự output. Có thể dùng ↑/↓ khi đang focus.", "Drag to reorder outputs. You can also use ↑/↓ while focused.")}
+                    aria-label={l(`Di chuyển output ${index + 1}`, `Move output ${index + 1}`)}
                   >
                     <GripVertical size={16} />
                   </button>
@@ -1661,15 +1696,15 @@ export function TemplateEditorModal({
                     </select>
                   </label>
                   <label className="field">
-                    <span>Tên output</span>
+                    <span>{l("Tên output", "Output name")}</span>
                     <input value={row.label} onChange={event => updateOutputRow(row.rowId, { label: event.target.value })} />
                   </label>
-                  <button type="button" className="rowDeleteButton" onClick={() => setOutputRows(current => current.filter(item => item.rowId !== row.rowId))} title="Xóa output">
+                  <button type="button" className="rowDeleteButton" onClick={() => setOutputRows(current => current.filter(item => item.rowId !== row.rowId))} title={l("Xóa output", "Delete output")}>
                     <Trash2 size={16} />
                   </button>
                 </div>
               ))}
-              {outputRows.length === 0 ? <div className="editorEmpty">Chưa có output. Chọn node có class_type chứa "Save".</div> : null}
+              {outputRows.length === 0 ? <div className="editorEmpty">{l("Chưa có output. Chọn node có class_type chứa \"Save\".", "No outputs yet. Select a node whose class_type contains \"Save\".")}</div> : null}
             </div>
           </section> : null}
         </div>
@@ -1677,21 +1712,24 @@ export function TemplateEditorModal({
         {error ? <div className="editorError">{error}</div> : null}
         {editingDefaultTemplate ? (
           <p className="templateEditorDefaultHint">
-            Đang sửa template mặc định — <b>Lưu</b> sẽ tạo bản copy trong thư mục templates, không ghi đè bản gốc.
+            {l(
+              <>Đang sửa template mặc định — <b>Lưu</b> sẽ tạo bản copy trong thư mục templates, không ghi đè bản gốc.</>,
+              <>You are editing a default template. <b>Save</b> creates a copy in the templates folder without overwriting the original.</>
+            )}
           </p>
         ) : null}
         <div className="templateEditorFooter">
           <span className="templateEditorStatus">
             {workflow
               ? isRhWf
-                ? `${nodes.length} nodes · ${inputRows.length} input · WF ${workflowId || "—"} · ${saveWorkflowJson ? "lưu JSON" : "chỉ workflowId"}`
+                ? `${nodes.length} nodes · ${inputRows.length} input · WF ${workflowId || "—"} · ${saveWorkflowJson ? l("lưu JSON", "save JSON") : l("chỉ workflowId", "workflowId only")}`
                 : `${nodes.length} nodes · ${inputRows.length} input · ${outputRows.length} output`
               : isRhWf
-                ? "Chưa có workflow — load theo ID hoặc import JSON"
-                : "Chưa có workflow — upload JSON để bắt đầu"}
+                ? l("Chưa có workflow — load theo ID hoặc import JSON", "No workflow yet — load by ID or import JSON")
+                : l("Chưa có workflow — upload JSON để bắt đầu", "No workflow yet — upload JSON to begin")}
           </span>
           <div className="templateEditorFooterActions">
-            <button type="button" className="smallActionButton secondary" onClick={onClose}>Hủy</button>
+            <button type="button" className="secondaryActionButton" onClick={onClose}>{t("common.cancel")}</button>
             <button
               type="button"
               className="saveTemplateButton"
@@ -1699,7 +1737,7 @@ export function TemplateEditorModal({
               disabled={saving || (!isRhWf ? !workflow : (saveWorkflowJson && !workflow))}
             >
               <Save size={16} />
-              <span>{saving ? "Đang lưu..." : editingDefaultTemplate ? "Lưu bản copy" : "Lưu template"}</span>
+              <span>{saving ? t("editor.saving") : editingDefaultTemplate ? l("Lưu bản copy", "Save a copy") : l("Lưu template", "Save template")}</span>
             </button>
           </div>
         </div>

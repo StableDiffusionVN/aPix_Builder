@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { describeJob } from "../lib/runLog";
 import { nodeFieldKey } from "./useRunningHub";
+import { localizeRuntimeMessage, useI18n } from "../i18n/I18nContext";
 
 function formatDuration(ms) {
   if (!Number.isFinite(ms)) return "";
@@ -11,6 +12,7 @@ function formatDuration(ms) {
 }
 
 export function useRunningHubExecution({ onComplete, runLog } = {}) {
+  const { locale, t } = useI18n();
   const [running, setRunning] = useState(false);
   const [activeRunId, setActiveRunId] = useState("");
   const [activeTaskId, setActiveTaskId] = useState("");
@@ -24,6 +26,11 @@ export function useRunningHubExecution({ onComplete, runLog } = {}) {
   const runQueueRef = useRef([]);
   const activeRunIdRef = useRef("");
   const activeTaskIdRef = useRef("");
+
+  function rhStatusLabel(nextStatus, dataLabel) {
+    if (locale === "vi") return dataLabel || t("execRh.waitingRh");
+    return t(`execRh.status.${nextStatus}`) || t("execRh.waitingRh");
+  }
 
   function appendLog(level, message, meta = {}) {
     const runId = meta.runId || activeRunIdRef.current;
@@ -43,16 +50,17 @@ export function useRunningHubExecution({ onComplete, runLog } = {}) {
         activeTaskIdRef.current = taskId;
         setActiveTaskId(taskId);
         runLog?.updateSession?.(runId, { taskId });
-        setTaskStatus({ status: "submitted", label: "Đã tạo task trên RunningHub" });
-        setProgress({ type: "queued", label: "Đã tạo task trên RunningHub" });
-        setStatus(`RunningHub task ${taskId} đã được tạo`);
+        const submittedLabel = t("execRh.taskCreated");
+        setTaskStatus({ status: "submitted", label: submittedLabel });
+        setProgress({ type: "queued", label: submittedLabel });
+        setStatus(t("execRh.taskCreatedStatus", { taskId }));
         appendLog("info", `RunningHub task ID: ${taskId}`, { runId, taskId });
         break;
       }
       case "rh_task_status": {
         const taskId = data.taskId ? String(data.taskId) : "";
         const nextStatus = data.status || "waiting";
-        const label = data.label || "Đang chờ RunningHub...";
+        const label = rhStatusLabel(nextStatus, data.label);
         if (taskId) {
           activeTaskIdRef.current = taskId;
           setActiveTaskId(taskId);
@@ -88,14 +96,14 @@ export function useRunningHubExecution({ onComplete, runLog } = {}) {
     setRunning(true);
     setError("");
     setResult(null);
-    setProgress({ type: "submit", label: "Đang gửi task lên RunningHub cloud..." });
+    setProgress({ type: "submit", label: t("execRh.submittingCloud") });
     const clientSubmittedAt = new Date().toISOString();
     const queueAhead = runQueueRef.current.length;
     setStatus(queueAhead
-      ? `Đang chạy trên RunningHub, còn ${queueAhead} trong hàng chờ...`
-      : "Đang gửi task lên RunningHub...");
-    appendLog("info", `Bắt đầu chạy ${describeJob(job)} trên RunningHub`, { runId: job.runId });
-    if (queueAhead) appendLog("info", `Còn ${queueAhead} request chờ sau lệnh này`);
+      ? t("execRh.runningWithQueue", { count: queueAhead })
+      : t("execRh.submitting"));
+    appendLog("info", t("execRh.startingJob", { job: describeJob(job) }), { runId: job.runId });
+    if (queueAhead) appendLog("info", t("exec.queueRemaining", { count: queueAhead }));
 
     let eventSource = null;
     try {
@@ -120,15 +128,16 @@ export function useRunningHubExecution({ onComplete, runLog } = {}) {
         body: JSON.stringify(job)
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Run failed");
+      if (!response.ok) throw new Error(localizeRuntimeMessage(data.error, locale) || "Run failed");
 
       const taskId = String(data.taskId || "");
       if (taskId) {
         activeTaskIdRef.current = taskId;
         setActiveTaskId(taskId);
       }
-      setTaskStatus({ status: "success", label: "Hoàn tất trên RunningHub" });
-      setProgress({ type: "success", label: "Hoàn tất trên RunningHub" });
+      const successLabel = t("execRh.complete");
+      setTaskStatus({ status: "success", label: successLabel });
+      setProgress({ type: "success", label: successLabel });
       const clientCompletedAt = new Date().toISOString();
       const clientDurationMs = new Date(clientCompletedAt).getTime() - new Date(clientSubmittedAt).getTime();
       const timedHistoryItem = data.historyItem ? {
@@ -153,7 +162,8 @@ export function useRunningHubExecution({ onComplete, runLog } = {}) {
         ? `${durationLabel} - ${Number(rhCoins)} RHcoin`
         : durationLabel;
       setResult(timedResult);
-      setStatus(`RunningHub hoàn tất task ${taskId}${finishLabel ? ` · ${finishLabel}` : ""}`);
+      const suffix = finishLabel ? ` · ${finishLabel}` : "";
+      setStatus(t("execRh.taskComplete", { taskId, suffix }));
       appendLog("success", `done task=${taskId}${durationLabel ? ` duration=${durationLabel}` : ""}${rhCoins != null ? ` rh_coins=${rhCoins}` : ""}`, {
         runId: job.runId,
         taskId,
@@ -163,15 +173,17 @@ export function useRunningHubExecution({ onComplete, runLog } = {}) {
       onComplete?.(timedHistoryItem, timedResult);
     } catch (err) {
       setProgress(null);
-      setTaskStatus({ status: "error", label: err.message || "RunningHub request thất bại" });
-      setError(err.message);
-      setStatus("RunningHub request thất bại");
-      appendLog("error", err.message || "RunningHub request thất bại", {
+      const message = localizeRuntimeMessage(err.message, locale);
+      const failedLabel = t("execRh.requestFailed");
+      setTaskStatus({ status: "error", label: message || failedLabel });
+      setError(message);
+      setStatus(failedLabel);
+      appendLog("error", message || failedLabel, {
         runId: job.runId,
         taskId: activeTaskIdRef.current || undefined
       });
       runLog?.endSession?.(job.runId, "error", {
-        error: err.message,
+        error: message,
         taskId: activeTaskIdRef.current || undefined
       });
     } finally {
@@ -185,8 +197,8 @@ export function useRunningHubExecution({ onComplete, runLog } = {}) {
       const [nextJob, ...remaining] = runQueueRef.current;
       setQueue(remaining);
       if (nextJob) {
-        setStatus(`Đang lấy request tiếp theo, còn ${remaining.length} trong hàng chờ...`);
-        appendLog("info", `Chuyển sang request tiếp theo: ${describeJob(nextJob)}`, { runId: nextJob.runId });
+        setStatus(t("exec.nextRequest", { count: remaining.length }));
+        appendLog("info", t("exec.movingToNext", { job: describeJob(nextJob) }), { runId: nextJob.runId });
         executeRun(nextJob);
       } else {
         setRunning(false);
@@ -200,10 +212,10 @@ export function useRunningHubExecution({ onComplete, runLog } = {}) {
     if (runQueueRef.current.length) {
       endQueuedSessions("cancelled");
       setQueue([]);
-      appendLog("warn", "Đã xóa toàn bộ request đang chờ trong hàng chờ client");
+      appendLog("warn", t("exec.queueCleared"));
     }
-    setStatus("Đang hủy task RunningHub...");
-    appendLog("warn", "Đang gửi lệnh hủy task RunningHub", {
+    setStatus(t("execRh.cancelling"));
+    appendLog("warn", t("execRh.sendingCancel"), {
       runId: activeRunIdRef.current,
       taskId: activeTaskIdRef.current || undefined
     });
@@ -215,7 +227,7 @@ export function useRunningHubExecution({ onComplete, runLog } = {}) {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Cancel failed");
-      const cancelMessage = data.message || "Đã gửi yêu cầu hủy RunningHub";
+      const cancelMessage = localizeRuntimeMessage(data.message, locale) || t("execRh.cancelSent");
       setStatus(cancelMessage);
       appendLog("warn", cancelMessage, {
         runId: activeRunIdRef.current,
@@ -223,9 +235,10 @@ export function useRunningHubExecution({ onComplete, runLog } = {}) {
       });
       runLog?.endSession?.(activeRunIdRef.current, "cancelled", { taskId: activeTaskIdRef.current || undefined });
     } catch (err) {
-      setError(err.message);
-      setStatus("Không hủy được task RunningHub");
-      appendLog("error", err.message || "Không hủy được task RunningHub", {
+      const message = localizeRuntimeMessage(err.message, locale);
+      setError(message);
+      setStatus(t("execRh.cancelFailed"));
+      appendLog("error", message || t("execRh.cancelFailed"), {
         runId: activeRunIdRef.current,
         taskId: activeTaskIdRef.current || undefined
       });
@@ -236,9 +249,9 @@ export function useRunningHubExecution({ onComplete, runLog } = {}) {
     if (running) {
       setQueue([...runQueueRef.current, job]);
       const queueSize = runQueueRef.current.length;
-      setStatus(`Đã thêm vào hàng chờ RunningHub (${queueSize} request)`);
+      setStatus(t("execRh.addedToQueue", { count: queueSize }));
       runLog?.startSession?.(job, { provider: "runninghub", status: "queued" });
-      appendLog("queue", `Thêm vào hàng chờ RunningHub: ${describeJob(job)} (vị trí #${queueSize})`, { runId: job.runId });
+      appendLog("queue", t("execRh.queueAdded", { job: describeJob(job), position: queueSize }), { runId: job.runId });
       return;
     }
     runLog?.startSession?.(job, { provider: "runninghub", status: "running" });
@@ -253,7 +266,7 @@ export function useRunningHubExecution({ onComplete, runLog } = {}) {
   };
 }
 
-export function buildRunningHubJob({ runId, apiKey, webappId, nodes, values }) {
+export function buildRunningHubJob({ runId, apiKey, webappId, nodes, values, queuedAt }) {
   const nodePayload = nodes.map(node => ({
     nodeId: node.nodeId,
     fieldName: node.fieldName,
@@ -265,16 +278,16 @@ export function buildRunningHubJob({ runId, apiKey, webappId, nodes, values }) {
     apiKey,
     webappId,
     nodes: nodePayload,
-    queuedAt: new Date().toISOString()
+    queuedAt: queuedAt || new Date().toISOString()
   };
 }
 
-export function buildRunningHubWfJob({ runId, apiKey, templateId, values }) {
+export function buildRunningHubWfJob({ runId, apiKey, templateId, values, queuedAt }) {
   return {
     runId: runId || crypto.randomUUID(),
     apiKey,
     templateId,
     values,
-    queuedAt: new Date().toISOString()
+    queuedAt: queuedAt || new Date().toISOString()
   };
 }

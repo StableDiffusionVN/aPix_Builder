@@ -25,6 +25,7 @@ import {
   ZoomIn,
   ZoomOut
 } from "lucide-react";
+import { useI18n } from "../i18n/I18nContext";
 
 const CurveIcon = ({ size = 14, ...props }) => (
   <svg
@@ -888,6 +889,7 @@ function snapshot(adjustments, brush, strokes, extra = {}) {
 }
 
 export function ImageEditorModal({ source, title = "Image Editor", onClose, onSave }) {
+  const { t } = useI18n();
   const canvasRef = useRef(null);
   const stageRef = useRef(null);
   const imageRef = useRef(null);
@@ -1172,7 +1174,7 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
         setIsReady(true);
       })
       .catch(() => {
-        if (!cancelled) setError("Không tải được ảnh vào editor");
+        if (!cancelled) setError(t("editor.loadError"));
       });
     return () => {
       cancelled = true;
@@ -2583,7 +2585,7 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
   function renderEditedDataUrl() {
     const canvas = document.createElement("canvas");
     const meta = applyAdjustments(canvas, { fullResolution: true });
-    if (!meta) throw new Error("Không render được ảnh");
+    if (!meta) throw new Error(t("editor.renderError"));
     const ctx = canvas.getContext("2d");
     // Render strokes on their own layer so eraser strokes don't cut the image.
     if (strokesRef.current.length) {
@@ -2618,7 +2620,7 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
       link.click();
       link.remove();
     } catch (err) {
-      setError(err.message || "Không tải được ảnh");
+      setError(err.message || t("editor.downloadError"));
     } finally {
       setDownloading(false);
     }
@@ -2632,7 +2634,7 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
       await onSave(dataUrl);
       onClose();
     } catch (err) {
-      setError(err.message || "Không lưu được ảnh");
+      setError(err.message || t("editor.saveError"));
     } finally {
       setSaving(false);
     }
@@ -2662,49 +2664,49 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
           <button type="button" className={activeTool === "crop" ? "active" : ""} onClick={() => { setActiveTool("crop"); openSection("crop"); }} title="Crop">
             <Crop size={15} />
           </button>
-          <button type="button" onClick={() => updateAdjustment("rotation", (adjustments.rotation + 90) % 360, true)} title="Xoay 90 độ">
+          <button type="button" onClick={() => updateAdjustment("rotation", (adjustments.rotation + 90) % 360, true)} title={t("editor.rotate")}>
             <RotateCw size={15} />
           </button>
-          <button type="button" className={adjustments.invert ? "active" : ""} onClick={() => updateAdjustment("invert", !adjustments.invert, true)} title="Đảo màu">
+          <button type="button" className={adjustments.invert ? "active" : ""} onClick={() => updateAdjustment("invert", !adjustments.invert, true)} title={t("editor.invert")}>
             <X size={15} />
           </button>
           <span className="imageEditorRailDivider" />
-          <button type="button" className={activeTool === "hand" ? "active" : ""} onClick={() => setActiveTool("hand")} title="Di chuyển">
+          <button type="button" className={activeTool === "hand" ? "active" : ""} onClick={() => setActiveTool("hand")} title={t("editor.move")}>
             <Hand size={15} />
           </button>
-          <button type="button" className={activeTool === "zoom" ? "active" : ""} onClick={() => setActiveTool("zoom")} title="Thu phóng (Z)">
+          <button type="button" className={activeTool === "zoom" ? "active" : ""} onClick={() => setActiveTool("zoom")} title={`${t("editor.zoom")} (Z)`}>
             <ZoomIn size={15} />
           </button>
-          <button type="button" className={adjustments.flipH ? "active" : ""} onClick={() => updateAdjustment("flipH", !adjustments.flipH, true)} title="Lật ngang">
+          <button type="button" className={adjustments.flipH ? "active" : ""} onClick={() => updateAdjustment("flipH", !adjustments.flipH, true)} title={t("editor.flipHorizontal")}>
             <FlipHorizontal size={15} />
           </button>
-          <button type="button" className={adjustments.flipV ? "active" : ""} onClick={() => updateAdjustment("flipV", !adjustments.flipV, true)} title="Lật dọc">
+          <button type="button" className={adjustments.flipV ? "active" : ""} onClick={() => updateAdjustment("flipV", !adjustments.flipV, true)} title={t("editor.flipVertical")}>
             <FlipVertical size={15} />
           </button>
           <span className="imageEditorRailDivider" />
-          <button type="button" className={activeTool === "brush" ? "active" : ""} onClick={() => { setActiveTool("brush"); openSection("brush"); }} title="Cọ vẽ">
+          <button type="button" className={activeTool === "brush" ? "active" : ""} onClick={() => { setActiveTool("brush"); openSection("brush"); }} title={t("editor.brush")}>
             <Brush size={15} />
           </button>
-          <button type="button" className={activeTool === "eraser" ? "active" : ""} onClick={() => { setActiveTool("eraser"); openSection("brush"); }} title="Tẩy">
+          <button type="button" className={activeTool === "eraser" ? "active" : ""} onClick={() => { setActiveTool("eraser"); openSection("brush"); }} title={t("editor.eraser")}>
             <Eraser size={15} />
           </button>
-          <button type="button" className={activeTool === "healing" ? "active" : ""} onClick={() => { setActiveTool("healing"); openSection("brush"); }} title="Sửa ảnh (Healing - J)">
+          <button type="button" className={activeTool === "healing" ? "active" : ""} onClick={() => { setActiveTool("healing"); openSection("brush"); }} title={`${t("editor.healing")} (J)`}>
             <HealingIcon size={15} />
           </button>
-          <button type="button" className={activeTool === "colorpicker" ? "active" : ""} onClick={() => setActiveTool("colorpicker")} title="Chấm màu">
+          <button type="button" className={activeTool === "colorpicker" ? "active" : ""} onClick={() => setActiveTool("colorpicker")} title={t("editor.colorPicker")}>
             <Pipette size={15} />
           </button>
           <span className="imageEditorRailDivider" />
           <button type="button" className={activeTool === "pen" ? "active" : ""} onClick={() => { setActiveTool("pen"); openSection("toolOptions"); }} title="Pen Tool (P)">
             <PenTool size={15} />
           </button>
-          <button type="button" className={activeTool === "rectSelect" ? "active" : ""} onClick={() => { setActiveTool("rectSelect"); openSection("toolOptions"); }} title="Vùng chọn chữ nhật (M)">
+          <button type="button" className={activeTool === "rectSelect" ? "active" : ""} onClick={() => { setActiveTool("rectSelect"); openSection("toolOptions"); }} title={`${t("editor.rectangleSelect")} (M)`}>
             <Square size={15} />
           </button>
-          <button type="button" className={activeTool === "ellipseSelect" ? "active" : ""} onClick={() => { setActiveTool("ellipseSelect"); openSection("toolOptions"); }} title="Vùng chọn elip (Shift+M)">
+          <button type="button" className={activeTool === "ellipseSelect" ? "active" : ""} onClick={() => { setActiveTool("ellipseSelect"); openSection("toolOptions"); }} title={`${t("editor.ellipseSelect")} (Shift+M)`}>
             <Circle size={15} />
           </button>
-          <label className="imageEditorColorSwatch" title="Màu cọ">
+          <label className="imageEditorColorSwatch" title={t("editor.brushColor")}>
             <input type="color" value={brush.color} onChange={event => setBrush(current => ({ ...current, color: event.target.value }))} onBlur={commitCurrent} />
             <span style={{ backgroundColor: brush.color }} />
           </label>
@@ -2716,7 +2718,7 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
             ref={stageRef}
             onMouseLeave={() => { setBrushCursor(null); setSelectionHoverInside(false); }}
           >
-            {!isReady ? <span className="editorLoading">Đang tải ảnh...</span> : null}
+            {!isReady ? <span className="editorLoading">{t("editor.loading")}</span> : null}
             {brushCursor && (activeTool === "brush" || activeTool === "eraser" || activeTool === "healing") ? (
               <div
                 className={`brushCursorCircle ${activeTool === "eraser" ? "eraserMode" : activeTool === "healing" ? "healingMode" : "brushMode"}`}
@@ -2814,10 +2816,10 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
               />
             ) : null}
             <div className="imageEditorFloatingBar">
-              <button type="button" onClick={handleUndo} disabled={!canUndo} title="Hoàn tác">
+              <button type="button" onClick={handleUndo} disabled={!canUndo} title={t("editor.undo")}>
                 <Undo2 size={13} />
               </button>
-              <button type="button" onClick={handleRedo} disabled={!canRedo} title="Làm lại">
+              <button type="button" onClick={handleRedo} disabled={!canRedo} title={t("editor.redo")}>
                 <Redo2 size={13} />
               </button>
               <span className="floatingDivider" />
@@ -2825,22 +2827,22 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
                 type="button"
                 className={editorCompareMode ? "active" : ""}
                 onClick={toggleEditorCompare}
-                title={editorCompareMode ? "Tắt so sánh Trước/Sau (S)" : "Bật so sánh Trước/Sau (S)"}
+                title={`${editorCompareMode ? t("editor.compareOff") : t("editor.compareOn")} (S)`}
               >
                 <GitCompare size={13} />
               </button>
               <span className="floatingDivider" />
-              <button type="button" onClick={() => updateZoom(-0.1)} title="Thu nhỏ">
+              <button type="button" onClick={() => updateZoom(-0.1)} title={t("editor.zoomOut")}>
                 <ZoomOut size={13} />
               </button>
-              <button type="button" className="zoomReadout" onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }} title="Về 100%">
+              <button type="button" className="zoomReadout" onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }} title={t("editor.zoomReset")}>
                 <span>{Math.round(zoom * 100)}%</span>
               </button>
-              <button type="button" onClick={() => updateZoom(0.1)} title="Phóng to">
+              <button type="button" onClick={() => updateZoom(0.1)} title={t("editor.zoomIn")}>
                 <ZoomIn size={13} />
               </button>
               <span className="floatingDivider" />
-              <button type="button" onClick={() => setActiveTool("hand")} title="Di chuyển">
+              <button type="button" onClick={() => setActiveTool("hand")} title={t("editor.move")}>
                 <Hand size={13} />
               </button>
             </div>
@@ -2888,7 +2890,7 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
             <div className="imageEditorAccordionList">
               <AccordionSection icon={Sparkles} title="Presets" open={!!openSections.presets} onToggle={() => toggleSection("presets")}>
                 <div className="presetAccordionContent">
-                  <div className="presetGroupTitle">Mặc định</div>
+                  <div className="presetGroupTitle">{t("editor.defaults")}</div>
                   <div className="presetGrid">
                     {PRESETS.map(preset => (
                       <button
@@ -2902,9 +2904,9 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
                     ))}
                   </div>
 
-                  <div className="presetGroupTitle custom">Tùy chỉnh</div>
+                  <div className="presetGroupTitle custom">{t("editor.custom")}</div>
                   {customPresets.length === 0 ? (
-                    <p className="noCustomPresets">Chưa có preset tự lưu</p>
+                    <p className="noCustomPresets">{t("editor.noCustomPresets")}</p>
                   ) : (
                     <div className="customPresetList">
                       {customPresets.map(preset => (
@@ -2923,8 +2925,8 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
                                 className="presetRenameInput"
                               />
                               <div className="presetRenameActions">
-                                <button type="button" className="presetRenameBtn confirm" onClick={() => handleSaveRename(preset.id)}>Lưu</button>
-                                <button type="button" className="presetRenameBtn cancel" onClick={() => setEditingPresetId(null)}>Hủy</button>
+                                <button type="button" className="presetRenameBtn confirm" onClick={() => handleSaveRename(preset.id)}>{t("common.save")}</button>
+                                <button type="button" className="presetRenameBtn cancel" onClick={() => setEditingPresetId(null)}>{t("common.cancel")}</button>
                               </div>
                             </div>
                           ) : (
@@ -2939,14 +2941,14 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
                               <div className="customPresetActions">
                                 <button
                                   type="button"
-                                  title="Ghi đè cài đặt hiện tại vào preset này"
+                                  title={t("editor.overwritePreset")}
                                   onClick={() => handleUpdatePresetSettings(preset.id)}
                                 >
                                   <RotateCcw size={11} style={{ transform: "rotate(180deg)" }} />
                                 </button>
                                 <button
                                   type="button"
-                                  title="Đổi tên preset"
+                                  title={t("editor.renamePreset")}
                                   onClick={() => {
                                     setEditingPresetId(preset.id);
                                     setRenameValue(preset.name);
@@ -2957,7 +2959,7 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
                                 <button
                                   type="button"
                                   className="delete"
-                                  title="Xóa preset này"
+                                  title={t("editor.deletePreset")}
                                   onClick={() => handleDeletePreset(preset.id)}
                                 >
                                   <X size={11} />
@@ -2974,7 +2976,7 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
                     <div className="newPresetForm">
                       <input
                         type="text"
-                        placeholder="Tên Preset mới..."
+                        placeholder={t("editor.newPresetName")}
                         value={newPresetName}
                         onChange={e => setNewPresetName(e.target.value)}
                         onKeyDown={e => {
@@ -2985,13 +2987,13 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
                         className="newPresetInput"
                       />
                       <div className="newPresetFormBtns">
-                        <button type="button" className="newPresetBtn cancel" onClick={() => setShowNewPresetForm(false)}>Hủy</button>
-                        <button type="button" className="newPresetBtn save" onClick={handleCreatePreset}>Lưu lại</button>
+                        <button type="button" className="newPresetBtn cancel" onClick={() => setShowNewPresetForm(false)}>{t("common.cancel")}</button>
+                        <button type="button" className="newPresetBtn save" onClick={handleCreatePreset}>{t("editor.savePreset")}</button>
                       </div>
                     </div>
                   ) : (
                     <button type="button" className="saveNewPresetBtn" onClick={() => { setShowNewPresetForm(true); setNewPresetName(""); }}>
-                      + Lưu cài đặt làm Preset mới
+                      {t("editor.saveNewPreset")}
                     </button>
                   )}
                 </div>
@@ -3074,7 +3076,7 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
 
               {activeTool === "crop" ? (
                 <AccordionSection icon={Crop} title="Crop" open={!!openSections.crop} onToggle={() => toggleSection("crop")}>
-                  <p className="cropHint">Kéo khung trên ảnh để cắt. Chọn tỉ lệ để khoá khung cắt.</p>
+                  <p className="cropHint">{t("editor.cropHint")}</p>
                   <div className="cropRatioGrid">
                     {CROP_RATIOS.map(option => (
                       <button
@@ -3083,12 +3085,12 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
                         className={cropRatio === option.id ? "active" : ""}
                         onClick={() => applyCropRatio(option.id)}
                       >
-                        {option.label}
+                        {option.id === "free" ? t("editor.free") : option.label}
                       </button>
                     ))}
                   </div>
                   <button type="button" className="cropResetButton" onClick={resetCrop}>
-                    <RotateCcw size={13} /> Đặt lại khung cắt
+                    <RotateCcw size={13} /> {t("editor.cropReset")}
                   </button>
                 </AccordionSection>
               ) : null}
@@ -3160,17 +3162,17 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
                     <div className="curvesPointInfo">
                       {selectedCurvePointIndex !== null ? (
                         <span>
-                          Điểm: {adjustments.curves[activeCurveChannel][selectedCurvePointIndex].x}, {adjustments.curves[activeCurveChannel][selectedCurvePointIndex].y}
+                          {t("editor.point")}: {adjustments.curves[activeCurveChannel][selectedCurvePointIndex].x}, {adjustments.curves[activeCurveChannel][selectedCurvePointIndex].y}
                         </span>
                       ) : (
-                        <span className="curvesHelpText">Click lên lưới để thêm điểm</span>
+                        <span className="curvesHelpText">{t("editor.addCurvePoint")}</span>
                       )}
                     </div>
                     <div className="curvesActions">
                       <button
                         type="button"
                         className="curvesActionBtn delete"
-                        title="Xóa điểm đang chọn"
+                        title={t("editor.deletePoint")}
                         disabled={selectedCurvePointIndex === null || selectedCurvePointIndex === 0 || selectedCurvePointIndex === adjustments.curves[activeCurveChannel].length - 1}
                         onClick={() => {
                           const points = adjustments.curves[activeCurveChannel];
@@ -3188,12 +3190,12 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
                           }
                         }}
                       >
-                        Xóa điểm
+                        {t("editor.deletePoint")}
                       </button>
                       <button
                         type="button"
                         className="curvesActionBtn reset"
-                        title="Đặt lại đường cong kênh này"
+                        title={t("editor.resetCurve")}
                         onClick={() => {
                           setAdjustments(current => ({
                             ...current,
@@ -3206,7 +3208,7 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
                           commitCurrent();
                         }}
                       >
-                        Đặt lại
+                        {t("editor.reset")}
                       </button>
                     </div>
                   </div>
@@ -3266,15 +3268,15 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
           {error ? <div className="editorError">{error}</div> : null}
           <div className="imageEditorFooter">
             <button type="button" className="smallActionButton secondary" onClick={onClose}>
-              <span>Cancel</span>
+              <span>{t("common.cancel")}</span>
             </button>
             <button type="button" className="smallActionButton secondary" onClick={handleDownloadEdited} disabled={downloading || !isReady}>
               <Download size={14} />
-              <span>{downloading ? "Downloading..." : "Download"}</span>
+              <span>{downloading ? t("editor.downloading") : t("preview.download")}</span>
             </button>
             <button type="button" className="smallActionButton secondary" onClick={handleSave} disabled={saving || !isReady}>
               <Save size={15} />
-              <span>{saving ? "Saving..." : "Save"}</span>
+              <span>{saving ? t("editor.saving") : t("common.save")}</span>
             </button>
           </div>
         </aside>
@@ -3420,6 +3422,7 @@ function AccordionSection({ icon: Icon, title, open, onToggle, children }) {
 }
 
 function EditorRange({ label, value, min, max, step = 1, resetValue = 0, onChange, onCommit }) {
+  const { t } = useI18n();
   const isDefault = Number(value) === Number(resetValue);
   return (
     <label className="editorRange">
@@ -3428,7 +3431,7 @@ function EditorRange({ label, value, min, max, step = 1, resetValue = 0, onChang
       <button
         type="button"
         className="editorRangeReset"
-        title="Đặt lại"
+        title={t("editor.reset")}
         disabled={isDefault}
         onClick={event => {
           event.preventDefault();

@@ -1,31 +1,23 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
   CheckCircle2,
-  ChevronLeft,
-  ChevronRight,
-  Download,
-  GitCompare,
   Image as ImageIcon,
   Info,
   Loader2,
-  Pencil,
-  RotateCcw,
   Settings2,
-  ChevronsUpDown,
   Wifi,
   WifiOff,
   X
 } from "lucide-react";
-import { ConnectionPanel, SavedServerList, AddServerForm } from "./components/ConnectionPanel";
 import { DynamicField } from "./components/DynamicField";
-import { ImageEditorModal } from "./components/ImageEditorModal";
 import { OutputGallery } from "./components/OutputGallery";
-import { RunLogPanel } from "./components/RunLogPanel";
+import { PreviewPanel } from "./components/PreviewPanel";
+import { SettingsModal } from "./components/SettingsModal";
+import { ImageEditorModal, TemplateEditorModal } from "./components/lazyModals";
 import { formatOutputTimingLabel } from "./lib/runLog";
 import { PresetBar } from "./components/PresetBar";
 import { RunControls } from "./components/RunControls";
-import { TemplateEditorModal } from "./components/TemplateEditorModal";
 import { TemplateSelector } from "./components/TemplateSelector";
 import { downloadImage } from "./lib/download";
 import { canonicalDynamicType, dynamicFieldChoices } from "./lib/dynamicTypes";
@@ -37,7 +29,8 @@ import { usePresets } from "./hooks/usePresets";
 import { useServerList } from "./hooks/useServerList";
 import { useWorkspace, sanitizeWorkspaceValues } from "./hooks/useWorkspace";
 import { useImageViewer } from "./hooks/useImageViewer";
-import { useExecution } from "./hooks/useExecution";
+import { useRunOrchestration } from "./hooks/useRunOrchestration";
+import { useSidebarLayout } from "./hooks/useSidebarLayout";
 import { useRunLogHistory } from "./hooks/useRunLogHistory";
 import {
   buildNodeDefaults,
@@ -48,53 +41,24 @@ import {
   useRunningHub
 } from "./hooks/useRunningHub";
 import { rhWfWorkspaceKey } from "./lib/runningHubTemplate";
-import { buildRunningHubJob, buildRunningHubWfJob, useRunningHubExecution } from "./hooks/useRunningHubExecution";
 import { ExecutionModeToggle, RunningHubPanel } from "./components/RunningHubPanel";
-import { RunningHubRunningState } from "./components/RunningHubRunningState";
+import { SidebarLayoutHandles } from "./components/SidebarLayoutHandles";
 import { SdvnWaterLogo } from "./components/SdvnWaterLogo";
-import { RunningHubSettings } from "./components/RunningHubSettings";
+import { ComfyUiLogomark } from "./components/icons/ComfyUiIcon";
+import { localizeRuntimeMessage, useI18n } from "./i18n/I18nContext";
+import {
+  loadMainFont,
+  loadTheme,
+  MAIN_FONT_OPTIONS,
+  MAIN_FONT_STORAGE_KEY,
+  THEME_OPTIONS,
+  THEME_STORAGE_KEY
+} from "./constants/appearance";
 
 const SERVER_STORAGE_KEY = "comfyui-build:server:v2";
-const THEME_STORAGE_KEY = "comfyui-build:theme";
-const MAIN_FONT_STORAGE_KEY = "comfyui-build:main-font";
 const NOTIFY_STORAGE_KEY = "comfyui-build:notify:v1";
 const RH_WF_TEMPLATE_STORAGE_KEY = "comfyui-build:rh-wf-template:v1";
 const DEFAULT_COMFY_SERVER = "http://127.0.0.1:8188";
-const PRO_THEME_OPTIONS = [
-  { id: "dark", label: "Dark", swatch: "#0b0d12" },
-  { id: "light", label: "Light", swatch: "#ffffff" }
-];
-const COLORFUL_THEME_OPTIONS = [
-  { id: "sdvn", label: "SDVN", swatch: "linear-gradient(to bottom, #5858e6, #151523)" },
-  { id: "vietnam", label: "Việt Nam", swatch: "radial-gradient(ellipse at bottom, #c62921, #a21a14)" },
-  { id: "skyline", label: "Skyline", swatch: "linear-gradient(to right, #6FB1FC, #4364F7, #0052D4)" },
-  { id: "hidden-jaguar", label: "Hidden Jaguar", swatch: "linear-gradient(to top, #0fd850 0%, #f9f047 100%)" },
-  { id: "wide-matrix", label: "Wide Matrix", swatch: "linear-gradient(to top, #fcc5e4 0%, #fda34b 15%, #ff7882 35%, #c8699e 52%, #7046aa 71%, #0c1db8 87%, #020f75 100%)" },
-  { id: "rainbow", label: "RainBow", swatch: "linear-gradient(to right, #0575E6, #00F260)" },
-  { id: "soundcloud", label: "SoundCloud", swatch: "linear-gradient(to right, #f83600, #fe8c00)" },
-  { id: "amin", label: "Amin", swatch: "linear-gradient(to right, #4A00E0, #8E2DE2)" },
-  { id: "emerald", label: "Emerald Lab", swatch: "radial-gradient(circle at 15% 20%, #34d399 0%, #10231d 58%, #030b08 100%)" },
-  { id: "violet", label: "Violet Studio", swatch: "radial-gradient(circle at 15% 20%, #a78bfa 0%, #1b1730 58%, #05030b 100%)" }
-];
-const THEME_OPTIONS = [...PRO_THEME_OPTIONS, ...COLORFUL_THEME_OPTIONS];
-const MAIN_FONT_OPTIONS = [
-  { id: "inter", label: "Inter", family: "\"Inter\"" },
-  { id: "noto", label: "Noto Sans", family: "\"Noto Sans\"" },
-  { id: "manrope", label: "Manrope", family: "\"Manrope\"" },
-  { id: "jakarta", label: "Plus Jakarta Sans", family: "\"Plus Jakarta Sans\"" },
-  { id: "system", label: "System UI", family: "ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\"" }
-];
-
-function loadTheme() {
-  const stored = localStorage.getItem(THEME_STORAGE_KEY) || "";
-  if (stored === "minimal") return "dark";
-  return THEME_OPTIONS.some(option => option.id === stored) ? stored : "dark";
-}
-
-function loadMainFont() {
-  const stored = localStorage.getItem(MAIN_FONT_STORAGE_KEY) || "";
-  return MAIN_FONT_OPTIONS.some(option => option.id === stored) ? stored : "inter";
-}
 
 function loadServerAddress() {
   const stored = localStorage.getItem(SERVER_STORAGE_KEY) || "";
@@ -139,12 +103,15 @@ function isLogToggleKey(event) {
 }
 
 export default function App() {
+  const { locale, preference: languagePreference, setPreference: setLanguagePreference, t } = useI18n();
+  const { side: sidebarSide, width: sidebarWidth, startMove: startSidebarMove, startResize: startSidebarResize } = useSidebarLayout();
   const [config, setConfig] = useState(null);
   const [values, setValues] = useState({});
   const [templates, setTemplates] = useState([]);
   const [selectedTemplate, setSelectedTemplate] = useState("");
   const [comfyAddress, setComfyAddress] = useState(loadServerAddress);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsTab, setSettingsTab] = useState("appearance");
   const [infoOpen, setInfoOpen] = useState(false);
   const [showServerDetails, setShowServerDetails] = useState(false);
   const [themeMenuOpen, setThemeMenuOpen] = useState(false);
@@ -166,6 +133,9 @@ export default function App() {
   const [rhWfValues, setRhWfValues] = useState({});
   const [rhTestResult, setRhTestResult] = useState(null);
   const [rhTesting, setRhTesting] = useState(false);
+  const [rhAccount, setRhAccount] = useState(null);
+  const [rhAccountLoading, setRhAccountLoading] = useState(false);
+  const [rhAccountError, setRhAccountError] = useState("");
 
   const { discovery, discoveryLoading } = useDiscovery(executionMode === "local" ? comfyAddress : "");
   const {
@@ -189,19 +159,20 @@ export default function App() {
     if (historyItem) setHistory(current => [historyItem, ...current]);
     setSelectedOutputIndex(0);
     if (notifyEnabled && typeof Notification !== "undefined" && Notification.permission === "granted") {
-      const body = isRunningHubMode(executionMode) ? "RunningHub đã hoàn thành!" : "Workflow đã hoàn thành!";
+      const body = isRunningHubMode(executionMode)
+        ? t("notify.rhComplete")
+        : t("notify.workflowComplete");
       new Notification("aPix Builder", { body, icon: "/sdvn-icon.png" });
     }
   };
 
-  const localExecution = useExecution({ onComplete: onRunComplete, runLog: runLogHistory });
-  const rhExecution = useRunningHubExecution({ onComplete: onRunComplete, runLog: runLogHistory });
   const {
     running, activeRunId, activeJob, activeTaskId, taskStatus, runQueue,
     status, setStatus, error, setError,
     result, setResult, progress,
-    runWorkflow, cancelWorkflow
-  } = isRunningHubMode(executionMode) ? rhExecution : localExecution;
+    runWorkflow, cancelWorkflow, runStep,
+    localExecution, rhExecution
+  } = useRunOrchestration({ onComplete: onRunComplete, runLog: runLogHistory, executionMode });
 
   const {
     sessions: runLogSessions,
@@ -249,7 +220,9 @@ export default function App() {
       : selectedTemplateName;
   const resultOutputs = result?.outputs || [];
   const selectedOutput = resultOutputs[selectedOutputIndex] || resultOutputs[0];
-  const outputLabel = selectedOutput?.label || (isRunningHub ? "Ảnh kết quả RunningHub" : outputs[0]?.ui?.label || "Ảnh kết quả");
+  const outputLabel = selectedOutput?.label || (isRunningHub
+    ? t("preview.rhResult")
+    : outputs[0]?.ui?.label || t("preview.result"));
   const heroImage = selectedOutput?.url;
   const resultTiming = useMemo(() => {
     const base = result?.historyItem || result || {};
@@ -285,37 +258,28 @@ export default function App() {
   const discoverySystem = discovery?.system?.system || discovery?.system || null;
   const discoveryDevice = discovery?.system?.devices?.[0] || null;
   const selectedThemeOption = THEME_OPTIONS.find(option => option.id === theme) || THEME_OPTIONS[0];
-  const selectedMainFont = MAIN_FONT_OPTIONS.find(option => option.id === mainFont) || MAIN_FONT_OPTIONS[0];
+  const selectedMainFont = MAIN_FONT_OPTIONS.find(option => option.id === mainFont)
+    || MAIN_FONT_OPTIONS.find(option => option.id === "system");
 
   // Health indicator: online/loading/offline
   const healthStatus = discoveryLoading ? "loading" : discovery ? "online" : "offline";
 
-  const serverDetailRows = discovery ? [
-    ["Address", discovery.address || comfyAddress],
-    ["Fetched at", discovery.fetchedAt || ""],
-    ["Cache", discovery.cached ? "Đang dùng cache" : "Dữ liệu mới"],
-    ["ComfyUI", discoverySystem?.comfyui_version || ""],
-    ["Frontend", discoverySystem?.required_frontend_version || ""],
-    ["Python", discoverySystem?.python_version || ""],
-    ["PyTorch", discoverySystem?.pytorch_version || ""],
-    ["OS", discoverySystem?.os || ""],
-    ["RAM total", formatBytes(discoverySystem?.ram_total)],
-    ["RAM free", formatBytes(discoverySystem?.ram_free)],
-    ["Device", discoveryDevice?.name || discoveryDevice?.type || ""],
-    ["VRAM total", formatBytes(discoveryDevice?.vram_total)],
-    ["VRAM free", formatBytes(discoveryDevice?.vram_free)],
-    ["Node types", discovery.nodeTypes?.length || 0],
-    ["Model folders", discovery.modelFolders?.length || 0],
-    ["Checkpoints", discovery.dynamicChoices?.checkpoints?.length || 0],
-    ["LoRAs", discovery.dynamicChoices?.loras?.length || 0],
-    ["ControlNets", discovery.dynamicChoices?.controlnets?.length || 0],
-    ["Samplers", discovery.dynamicChoices?.samplers?.length || 0],
-    ["Schedulers", discovery.dynamicChoices?.schedulers?.length || 0],
-    ["VAE", discovery.dynamicChoices?.vae?.length || 0],
-    ["UNET", discovery.dynamicChoices?.unet?.length || 0],
-    ["Style models", discovery.dynamicChoices?.style_models?.length || 0],
-    ["Embeddings", discovery.dynamicChoices?.embeddings?.length || 0]
-  ].filter(([, value]) => value !== "" && value !== null && value !== undefined) : [];
+  const serverDetailRows = useMemo(() => discovery ? [
+    [t("serverDetail.address"), discovery.address || comfyAddress],
+    [t("serverDetail.fetchedAt"), discovery.fetchedAt || ""],
+    [t("serverDetail.comfyui"), discoverySystem?.comfyui_version || ""],
+    [t("serverDetail.frontend"), discoverySystem?.required_frontend_version || ""],
+    [t("serverDetail.python"), discoverySystem?.python_version || ""],
+    [t("serverDetail.pytorch"), discoverySystem?.pytorch_version || ""],
+    [t("serverDetail.os"), discoverySystem?.os || ""],
+    [t("serverDetail.ramTotal"), formatBytes(discoverySystem?.ram_total)],
+    [t("serverDetail.ramFree"), formatBytes(discoverySystem?.ram_free)],
+    [t("serverDetail.device"), discoveryDevice?.name || discoveryDevice?.type || ""],
+    [t("serverDetail.vramTotal"), formatBytes(discoveryDevice?.vram_total)],
+    [t("serverDetail.vramFree"), formatBytes(discoveryDevice?.vram_free)],
+    [t("serverDetail.nodeTypes"), discovery.nodeTypes?.length || 0],
+    [t("serverDetail.modelFolders"), discovery.modelFolders?.length || 0]
+  ].filter(([, value]) => value !== "" && value !== null && value !== undefined) : [], [discovery, comfyAddress, discoverySystem, discoveryDevice, t]);
 
   const {
     imageScale, imagePan, imageFitSize, outputImageSize,
@@ -365,6 +329,12 @@ export default function App() {
   }, [executionMode, rhSettings.apiKey, rhSettings.webappId, fetchRhNodes]);
 
   useEffect(() => {
+    if (!settingsOpen || settingsTab !== "runninghub" || !rhSettings.apiKey?.trim()) return;
+    if (rhAccount || rhAccountLoading || rhAccountError) return;
+    handleRhAccountRefresh();
+  }, [settingsOpen, settingsTab, rhSettings.apiKey, rhAccount, rhAccountLoading, rhAccountError]);
+
+  useEffect(() => {
     if (!isRunningHubWf || rhWfTemplates.length) return;
     loadRhWfTemplateRegistry()
       .then(data => {
@@ -375,9 +345,9 @@ export default function App() {
         if (nextId) return loadRhWfConfig(nextId);
         setRhWfConfig(null);
         setRhWfValues({});
-        setStatus("Chưa có template RunningHub Workflow — bấm sửa template để tạo mới");
+        setStatus(t("status.rhWfNoTemplate"));
       })
-      .catch(err => setError(err.message));
+      .catch(err => setError(localizeRuntimeMessage(err.message, locale)));
   }, [isRunningHubWf, rhWfTemplates.length]);
 
   // Persist workspace on every change
@@ -528,21 +498,21 @@ export default function App() {
   async function loadTemplateConfig(templateId) {
     const suffix = templateId ? `?template=${encodeURIComponent(templateId)}` : "";
     const response = await fetch(`/api/config${suffix}`);
-    if (!response.ok) throw new Error("Không đọc được cấu hình template từ API");
+    if (!response.ok) throw new Error(t("error.templateConfigApi"));
     const data = await response.json();
-    if (data.error) throw new Error(data.error);
+    if (data.error) throw new Error(localizeRuntimeMessage(data.error, locale));
     return data;
   }
 
   async function loadTemplateRegistry() {
     const response = await fetch("/api/templates");
-    if (!response.ok) throw new Error("Không đọc được danh sách template từ API");
+    if (!response.ok) throw new Error(t("error.templateListApi"));
     return response.json();
   }
 
   async function loadRhWfTemplateRegistry() {
     const response = await fetch("/api/templates?scope=runninghub-wf");
-    if (!response.ok) throw new Error("Không đọc được danh sách template RunningHub Workflow");
+    if (!response.ok) throw new Error(t("error.rhWfListApi"));
     return response.json();
   }
 
@@ -551,14 +521,14 @@ export default function App() {
       ? `?template=${encodeURIComponent(templateId)}&scope=runninghub-wf`
       : "?scope=runninghub-wf";
     const response = await fetch(`/api/config${suffix}`);
-    if (!response.ok) throw new Error("Không đọc được cấu hình template RunningHub Workflow");
+    if (!response.ok) throw new Error(t("error.rhWfConfigApi"));
     const data = await response.json();
-    if (data.error) throw new Error(data.error);
+    if (data.error) throw new Error(localizeRuntimeMessage(data.error, locale));
     return data;
   }
 
   async function loadRhWfConfig(templateId, options = {}) {
-    setStatus("Đang tải template RunningHub Workflow...");
+    setStatus(t("status.rhWfLoading"));
     setError("");
     if (!options.keepResult) {
       setResult(null);
@@ -573,11 +543,11 @@ export default function App() {
         setRhWfConfig(data.config);
         setRhWfValues(options.values || { ...defaults, ...(storedValues || {}) });
         setRhWfSelectedTemplate(nextTemplateId);
-        setStatus(`Template RH Wf sẵn sàng: ${data.template?.name || data.template?.id || "Default"}`);
+        setStatus(`${t("status.rhWfReady")}: ${data.template?.name || data.template?.id || "Default"}`);
       })
       .catch(err => {
-        setError(err.message);
-        setStatus("Không đọc được template RunningHub Workflow");
+        setError(localizeRuntimeMessage(err.message, locale));
+        setStatus(t("status.rhWfLoadFailed"));
       });
   }
 
@@ -588,12 +558,12 @@ export default function App() {
       await loadRhWfConfig(nextTemplateId || registry.default);
     }
     if (options.savedAsCopy) {
-      setStatus("Đã lưu bản copy vào templates-rh — template mặc định giữ nguyên");
+      setStatus(t("status.rhWfSavedCopy"));
     }
   }
 
   async function loadConfig(templateId, options = {}) {
-    setStatus("Đang tải cấu hình YAML...");
+    setStatus(t("status.yamlLoading"));
     setError("");
     if (!options.keepResult) {
       setResult(null);
@@ -611,11 +581,11 @@ export default function App() {
         if (!options.preserveServerAddress) {
           setComfyAddress(current => options.address || current || data.server?.address || DEFAULT_COMFY_SERVER);
         }
-        setStatus(`YAML đã sẵn sàng: ${data.template?.name || data.template?.id || "Default"}`);
+        setStatus(`${t("status.yamlReady")}: ${data.template?.name || data.template?.id || "Default"}`);
       })
       .catch(err => {
-        setError(err.message);
-        setStatus("Không đọc được YAML");
+        setError(localizeRuntimeMessage(err.message, locale));
+        setStatus(t("status.yamlFailed"));
       });
   }
 
@@ -624,7 +594,7 @@ export default function App() {
     setTemplates(registry.templates || []);
     await loadConfig(nextTemplateId || registry.default);
     if (options.savedAsCopy) {
-      setStatus("Đã lưu bản copy vào templates — template mặc định giữ nguyên");
+      setStatus(t("status.templateSavedCopy"));
     }
   }
 
@@ -635,17 +605,17 @@ export default function App() {
       body: JSON.stringify({ templateId, scope })
     });
     const data = await response.json();
-    if (!response.ok) throw new Error(data.error || "Không xóa được template");
+    if (!response.ok) throw new Error(localizeRuntimeMessage(data.error, locale) || t("template.deleteError"));
     if (scope === "runninghub-wf") {
       setRhWfTemplates(data.registry?.templates || []);
       if (data.registry?.default) {
         await loadRhWfConfig(data.registry.default);
-        setStatus("Đã xóa template RunningHub Workflow");
+        setStatus(t("status.rhWfDeleted"));
       } else {
         setRhWfConfig(null);
         setRhWfValues({});
         setRhWfSelectedTemplate("");
-        setStatus("Đã xóa template. Chưa có template RunningHub Workflow nào.");
+        setStatus(t("status.rhWfDeletedEmpty"));
       }
       setError("");
       return;
@@ -653,7 +623,7 @@ export default function App() {
     setTemplates(data.registry?.templates || []);
     await loadConfig(data.registry?.default || "");
     setError("");
-    setStatus("Đã xóa template");
+    setStatus(t("status.templateDeleted"));
   }
 
   // Initial load
@@ -681,16 +651,6 @@ export default function App() {
     if (resultOutputs.length < 2) return;
     setSelectedOutputIndex(current => (current + direction + resultOutputs.length) % resultOutputs.length);
     resetImageView();
-  }
-
-  function makeRunJob() {
-    return {
-      runId: crypto.randomUUID(),
-      template: selectedTemplate,
-      address: comfyAddress,
-      values: requestPayload(inputs, values),
-      queuedAt: new Date().toISOString()
-    };
   }
 
   function isRunningHubHistoryItem(item) {
@@ -726,53 +686,88 @@ export default function App() {
     setShowWaitScreen(true);
     if (isRunningHubApp) {
       if (!rhSettings.apiKey?.trim()) {
-        setError("Chưa nhập RunningHub API Key trong Settings");
-        setStatus("Thiếu cấu hình RunningHub");
+        setError(t("error.rhMissingApiKey"));
+        setStatus(t("error.rhMissingConfig"));
         setShowWaitScreen(false);
         return;
       }
       if (!rhNodes.length) {
-        setError("Chưa tải được node từ RunningHub App");
-        setStatus("Thiếu node RunningHub App");
+        setError(t("error.rhMissingNodes"));
+        setStatus(t("error.rhMissingAppNodes"));
         setShowWaitScreen(false);
         return;
       }
-      runWorkflow(buildRunningHubJob({
+      runStep({
         apiKey: rhSettings.apiKey.trim(),
         webappId: rhSettings.webappId.trim(),
         nodes: rhNodes,
         values: rhValues
-      }));
+      });
       return;
     }
     if (isRunningHubWf) {
       const workflowId = String(rhWfConfig?.runninghub?.workflowId || "").trim();
       if (!rhSettings.apiKey?.trim()) {
-        setError("Chưa nhập RunningHub API Key trong Settings");
-        setStatus("Thiếu cấu hình RunningHub");
+        setError(t("error.rhMissingApiKey"));
+        setStatus(t("error.rhMissingConfig"));
         setShowWaitScreen(false);
         return;
       }
       if (!rhWfConfig || !rhWfInputs.length) {
-        setError("Chưa chọn template RunningHub Workflow hoặc template chưa có input");
-        setStatus("Thiếu template RunningHub Workflow");
+        setError(t("error.rhWfMissingTemplate"));
+        setStatus(t("error.rhWfMissingTemplateShort"));
         setShowWaitScreen(false);
         return;
       }
       if (!workflowId) {
-        setError("Template chưa có runninghub.workflowId");
-        setStatus("Thiếu Workflow ID trong template");
+        setError(t("error.rhMissingWorkflowId"));
+        setStatus(t("error.rhMissingWorkflowIdShort"));
         setShowWaitScreen(false);
         return;
       }
-      runWorkflow(buildRunningHubWfJob({
+      runStep({
         apiKey: rhSettings.apiKey.trim(),
         templateId: rhWfSelectedTemplate,
         values: rhWfValues
-      }));
+      });
       return;
     }
-    runWorkflow(makeRunJob());
+    runStep({
+      template: selectedTemplate,
+      address: comfyAddress,
+      values: requestPayload(inputs, values)
+    });
+  }
+
+  async function handleRhAccountRefresh() {
+    const apiKey = rhSettings.apiKey?.trim();
+    if (!apiKey) {
+      const message = t("error.rhNoApiKey");
+      setRhAccount(null);
+      setRhAccountError(message);
+      return null;
+    }
+
+    setRhAccountLoading(true);
+    setRhAccountError("");
+    try {
+      const response = await fetch("/api/runninghub/account-status", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ apiKey })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || data.msg || t("error.rhAccountInfo"));
+      setRhAccount(data.account || null);
+      return data.account || null;
+    } catch (err) {
+      const message = localizeRuntimeMessage(err.message, locale);
+      setRhAccount(null);
+      setRhAccountError(message);
+      return null;
+    } finally {
+      setRhAccountLoading(false);
+    }
   }
 
   async function handleRhTestConnection() {
@@ -784,11 +779,12 @@ export default function App() {
         webappId: rhSettings.webappId,
         throwOnError: true
       });
-      if (!nextNodes.length) throw new Error("RunningHub trả về 0 node");
+      if (!nextNodes.length) throw new Error(t("error.rhZeroNodes"));
       setRhValues(current => ({ ...buildNodeDefaults(nextNodes), ...current }));
-      setRhTestResult({ ok: true, message: `Kết nối OK — ${nextNodes.length} node khả dụng.` });
+      setRhTestResult({ ok: true, message: t("error.rhConnectionOk", { count: nextNodes.length }) });
+      await handleRhAccountRefresh();
     } catch (err) {
-      setRhTestResult({ ok: false, message: err.message });
+      setRhTestResult({ ok: false, message: localizeRuntimeMessage(err.message, locale) });
     } finally {
       setRhTesting(false);
     }
@@ -803,7 +799,7 @@ export default function App() {
       });
       if (nextNodes.length) setRhValues(current => ({ ...buildNodeDefaults(nextNodes), ...current }));
     } catch (err) {
-      setRhTestResult({ ok: false, message: err.message });
+      setRhTestResult({ ok: false, message: localizeRuntimeMessage(err.message, locale) });
     }
   }
 
@@ -839,7 +835,7 @@ export default function App() {
       const workflowId = item.workflowId || item.result?.workflowId || templateId.replace(/^runninghub-wf:/, "");
       setExecutionMode(historyMode);
       rhExecution.setResult(restoredResult);
-      rhExecution.setStatus("Đã mở lại lịch sử RunningHub");
+      rhExecution.setStatus(t("status.rhHistoryRestored"));
       if (historyMode === "runninghub-wf") {
         const rhWfTemplateId = item.rhWfTemplateId || item.result?.rhWfTemplateId
           || String(item.templateId || "").replace(/^runninghub-wf-template:/, "");
@@ -850,7 +846,7 @@ export default function App() {
           });
         } else if (workflowId) {
           setRhWfValues(item.values || {});
-          rhExecution.setStatus("Đã mở lại lịch sử RunningHub Wf, nhưng bản ghi cũ chưa gắn template");
+          rhExecution.setStatus(t("status.rhWfHistoryNoTemplate"));
         }
         return;
       }
@@ -861,16 +857,16 @@ export default function App() {
       } else {
         setRhValues({});
         if (rhSettings.apiKey?.trim() && webappId) {
-          rhExecution.setStatus("Đang tải lại node RunningHub App cho bản ghi cũ...");
+          rhExecution.setStatus(t("status.rhAppReloadNodes"));
           const nextNodes = await fetchRhNodes({ apiKey: rhSettings.apiKey, webappId });
           if (nextNodes.length) {
             setRhValues(buildNodeDefaults(nextNodes));
-            rhExecution.setStatus("Đã mở lại lịch sử RunningHub App, bản ghi cũ không có value input đã lưu");
+            rhExecution.setStatus(t("status.rhAppHistoryNoValues"));
           } else {
-            rhExecution.setStatus("Đã mở lại lịch sử RunningHub App, nhưng bản ghi cũ chưa có metadata node");
+            rhExecution.setStatus(t("status.rhAppHistoryNoMeta"));
           }
         } else {
-          rhExecution.setStatus("Đã mở lại lịch sử RunningHub App, nhưng bản ghi cũ chưa có metadata node");
+          rhExecution.setStatus(t("status.rhAppHistoryNoMeta"));
         }
       }
       return;
@@ -878,11 +874,11 @@ export default function App() {
     setExecutionMode("local");
     localExecution.setResult(restoredResult);
     if (item.templateId === "image-editor") {
-      localExecution.setStatus("Đã mở ảnh từ Image Editor");
+      localExecution.setStatus(t("status.imageFromEditor"));
       return;
     }
     await loadConfig(item.templateId, { values: item.values, keepResult: true, preserveServerAddress: true });
-    localExecution.setStatus("Đã mở lại lịch sử");
+    localExecution.setStatus(t("status.historyRestored"));
   }
 
   async function handleDeleteHistoryItem(id) {
@@ -891,13 +887,13 @@ export default function App() {
       setResult(null);
       setSelectedOutputIndex(0);
       resetImageView();
-      setStatus("Đã xóa ảnh khỏi lịch sử");
+      setStatus(t("status.historyDeleted"));
     }
   }
 
   async function handleDownload(output) {
     try { await downloadImage(output); }
-    catch (err) { setError(err.message); setStatus("Không tải được ảnh"); }
+    catch (err) { setError(localizeRuntimeMessage(err.message, locale)); setStatus(t("error.downloadFailed")); }
   }
 
   async function handleSaveEditedOutput(dataUrl) {
@@ -908,15 +904,15 @@ export default function App() {
     });
     const text = await response.text();
     let data = {};
-    try { data = text ? JSON.parse(text) : {}; } catch { throw new Error(text || "Backend không trả về JSON khi lưu ảnh"); }
-    if (!response.ok) throw new Error(data.error || "Không lưu được ảnh đã sửa");
-    if (!data.historyItem) throw new Error("Backend chưa trả về ảnh đã lưu. Hãy restart backend rồi thử lại.");
+    try { data = text ? JSON.parse(text) : {}; } catch { throw new Error(text || t("error.saveNoJson")); }
+    if (!response.ok) throw new Error(localizeRuntimeMessage(data.error, locale) || t("error.saveEditedFailed"));
+    if (!data.historyItem) throw new Error(t("error.saveNoHistoryItem"));
     const historyItem = data.historyItem;
     setResult(historyItem.result || historyItem);
     setSelectedOutputIndex(0);
     setHistory(current => data.history || (historyItem ? [historyItem, ...current] : current));
     resetImageView();
-    setStatus("Đã lưu ảnh Image Editor vào output");
+    setStatus(t("status.editorSaved"));
   }
 
   // Compute progress percentage
@@ -954,8 +950,12 @@ export default function App() {
   }, [canRun]);
 
   return (
-    <main className={`appShell ${isRunningHub ? "is-runninghub" : ""}`}>
+    <main
+      className={`appShell ${isRunningHub ? "is-runninghub" : ""}${sidebarSide === "right" ? " sidebar-right" : ""}`}
+      style={{ "--sidebar-width": `${sidebarWidth}px` }}
+    >
       <aside className="sidebar">
+        <SidebarLayoutHandles onMoveStart={startSidebarMove} onResizeStart={startSidebarResize} />
         <div className="brand">
           <div className="mark" role="img" aria-label="SDVN" />
           <div>
@@ -963,10 +963,10 @@ export default function App() {
             <p>{brandSubtitle}</p>
           </div>
           <div className="brandActions">
-            <button className="settingsButton" onClick={() => { setInfoOpen(false); setSettingsOpen(true); }} title="Mở settings" aria-label="Mở settings">
+            <button className="settingsButton" onClick={() => { setInfoOpen(false); setSettingsOpen(true); }} title={t("settings.open")} aria-label={t("settings.open")}>
               <Settings2 size={18} />
             </button>
-            <button className="settingsButton" onClick={() => { setSettingsOpen(false); setInfoOpen(true); }} title="Thông tin ứng dụng (Cmd/Ctrl + /)" aria-label="Thông tin ứng dụng">
+            <button className="settingsButton" onClick={() => { setSettingsOpen(false); setInfoOpen(true); }} title={`${t("info.open")} (Cmd/Ctrl + /)`} aria-label={t("info.open")}>
               <Info size={18} />
             </button>
           </div>
@@ -998,7 +998,7 @@ export default function App() {
                 <Settings2 size={16} />
                 <h2>RunningHub Workflow</h2>
                 <span className={`healthDot health-${rhWfConfig ? "online" : "offline"}`} title={
-                  rhWfConfig ? "Template RunningHub Workflow đã sẵn sàng" : "Chưa chọn template"
+                  rhWfConfig ? t("health.rhWfReady") : t("health.noTemplate")
                 }>
                   {rhWfConfig ? <Wifi size={10} /> : <WifiOff size={10} />}
                 </span>
@@ -1025,7 +1025,7 @@ export default function App() {
             <section className="settingsGroup workflowSettings">
               <div className="settingsHeader">
                 <Settings2 size={16} />
-                <h2>Workflow settings</h2>
+                <h2>{t("workflow.settings")}</h2>
               </div>
               <div className="formStack">
                 {rhWfInputs.map(item => {
@@ -1049,7 +1049,7 @@ export default function App() {
                 })}
                 {!rhWfInputs.length ? (
                   <div className="rhPanelEmpty">
-                    <p>Chưa có template hoặc input. Bấm biểu tượng sửa template để tạo mới.</p>
+                    <p>{t("workflow.empty")}</p>
                   </div>
                 ) : null}
               </div>
@@ -1063,8 +1063,8 @@ export default function App() {
                 <h2>API Workflow</h2>
                 <span className={`healthDot health-${healthStatus}`} title={
                   healthStatus === "online" ? `ComfyUI online · ${discoverySystem?.comfyui_version || ""}` :
-                  healthStatus === "loading" ? "Đang kết nối..." : "Không kết nối được ComfyUI"
-                } aria-label={healthStatus === "online" ? "Online" : healthStatus === "loading" ? "Đang kết nối" : "Offline"}>
+                  healthStatus === "loading" ? t("health.connecting") : t("health.comfyOffline")
+                } aria-label={healthStatus === "online" ? "Online" : healthStatus === "loading" ? t("health.connectingShort") : "Offline"}>
                   {healthStatus === "loading" ? <Loader2 size={10} className="spin" /> :
                    healthStatus === "online" ? <Wifi size={10} /> : <WifiOff size={10} />}
                 </span>
@@ -1090,7 +1090,7 @@ export default function App() {
             <section className="settingsGroup workflowSettings">
               <div className="settingsHeader">
                 <Settings2 size={16} />
-                <h2>Workflow settings</h2>
+                <h2>{t("workflow.settings")}</h2>
               </div>
               <div className="formStack">
                 {inputs.map(item => {
@@ -1131,150 +1131,59 @@ export default function App() {
       </aside>
 
       <section className="workspace">
-        <section className="previewPanel">
-          <div className="panelTitle">
-            <h3>{outputLabel}{resultOutputs.length > 1 ? ` (${selectedOutputIndex + 1}/${resultOutputs.length})` : ""}</h3>
-            <div className="previewActions">
-              {showStatus ? (
-                <div className={`status ${error ? "bad" : result ? "good" : ""}`}>
-                  {error ? <AlertCircle size={17} /> : result ? <CheckCircle2 size={17} /> : running ? <Loader2 className="spin" size={17} /> : <ImageIcon size={17} />}
-                  <span>{status}</span>
-                </div>
-              ) : null}
-              {selectedOutput ? (
-                <>
-                  {canCompare ? (
-                    <button
-                      className={`downloadButton compareButton ${compareMode ? "active" : ""}`}
-                      onClick={() => setCompareMode(current => !current)}
-                      title={compareMode ? "Tắt so sánh (S)" : "Bật so sánh input/output (S)"}
-                    >
-                      <GitCompare size={14} />
-                    </button>
-                  ) : null}
-                  <button className="downloadButton" onClick={resetImageView} title="Đặt lại zoom (Space)"><RotateCcw size={14} /></button>
-                  <button className="downloadButton" onClick={() => setOutputEditorOpen(true)} title="Image Editor"><Pencil size={14} /></button>
-                  <button className="downloadButton" onClick={() => handleDownload(selectedOutput)} title="Tải ảnh xuống"><Download size={14} /></button>
-                </>
-              ) : null}
-            </div>
-          </div>
-
-          <div className="outputViewer">
-            <div
-              className={`previewArea ${heroImage && !showRunningScreen ? "isInteractive" : ""} ${resultOutputs.length > 1 ? "hasOutputRail" : ""} ${compareMode ? "isCompareMode" : ""} ${draggingImage || isWheeling ? "isDragging" : ""}`}
-              ref={previewAreaRef}
-              onWheel={handlePreviewWheel}
-              onPointerDown={handlePreviewPointerDown}
-              onPointerMove={handlePreviewPointerMove}
-              onPointerUp={handlePreviewPointerUp}
-              onPointerCancel={handlePreviewPointerUp}
-            >
-              {showRunningScreen ? (
-                <div className={`emptyState ${isRunningHub ? "rhEmptyState" : ""}`}>
-                  {isRunningHub ? (
-                    <RunningHubRunningState progress={progress} status={status} />
-                  ) : (
-                    <RunningState progress={progress} status={status} progressPct={progressPct} />
-                  )}
-                </div>
-              ) : heroImage ? (
-                <div
-                  className={`imageStage ${compareMode && canCompare ? "isCompare" : ""}`}
-                  style={{
-                    "--image-scale": imageScale,
-                    "--image-pan-x": `${imagePan.x}px`,
-                    "--image-pan-y": `${imagePan.y}px`,
-                    "--image-fit-width": imageFitSize.width ? `${imageFitSize.width}px` : "100%",
-                    "--image-fit-height": imageFitSize.height ? `${imageFitSize.height}px` : "100%",
-                    "--compare-position": `${comparePosition}%`,
-                    "--compare-divider-x": `${compareDividerX}px`
-                  }}
-                >
-                  {compareMode && canCompare ? (
-                    <>
-                      <img className="resultImage compareInputImage" src={compareInputImage} alt="Ảnh input" draggable="false" />
-                      <img ref={imageElementRef} className="resultImage compareOutputImage" src={heroImage} alt={outputLabel} draggable="false" onLoad={handleResultImageLoad} />
-                    </>
-                  ) : (
-                    <img ref={imageElementRef} className="resultImage" src={heroImage} alt={outputLabel} draggable="false" onLoad={handleResultImageLoad} />
-                  )}
-                </div>
-              ) : (
-                <div className="emptyState">
-                  <ImageIcon size={42} />
-                  <h3>Chưa có ảnh kết quả</h3>
-                  <p>Điền input bên trái rồi chạy workflow để xem output.</p>
-                </div>
-              )}
-
-              {heroImage && resultOutputs.length > 1 ? (
-                <>
-                  <button type="button" className="outputNavButton previous" onClick={event => { event.stopPropagation(); stepOutput(-1); }} title="Ảnh trước (←)" aria-label="Ảnh trước">
-                    <ChevronLeft size={20} />
-                  </button>
-                  <button type="button" className="outputNavButton next" onClick={event => { event.stopPropagation(); stepOutput(1); }} title="Ảnh tiếp theo (→)" aria-label="Ảnh tiếp theo">
-                    <ChevronRight size={20} />
-                  </button>
-                </>
-              ) : null}
-
-              {heroImage && resultOutputs.length > 1 ? (
-                <div className="outputRail" aria-label="Danh sách ảnh output">
-                  {resultOutputs.map((output, index) => (
-                    <button
-                      type="button"
-                      key={`${output.url || output.filename || "output"}-${index}`}
-                      className={`outputThumb ${index === selectedOutputIndex ? "active" : ""}`}
-                      onClick={() => selectOutput(index)}
-                      title={`Xem output ${index + 1}`}
-                      aria-label={`Xem output ${index + 1}`}
-                      aria-pressed={index === selectedOutputIndex}
-                    >
-                      <img src={output.url} alt={output.filename || `Output ${index + 1}`} draggable="false" />
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-
-              {heroImage && compareMode && canCompare ? (
-                <div className="compareDivider" style={{ "--compare-divider-x": `${compareDividerX}px` }} aria-hidden="true" />
-              ) : null}
-              {heroImage && (outputImageSize.width && outputImageSize.height || outputTimingLabel) ? (
-                <div className="outputMetaStack">
-                  {outputImageSize.width && outputImageSize.height ? (
-                    <div className="outputSizeBadge">{outputImageSize.width} x {outputImageSize.height}</div>
-                  ) : null}
-                  {outputTimingLabel ? (
-                    <div className="outputTimingBadge">{outputTimingLabel}</div>
-                  ) : null}
-                </div>
-              ) : null}
-
-              <RunLogPanel
-                open={runLogOpen}
-                onToggle={() => setRunLogOpen(current => !current)}
-                sessions={runLogSessions}
-                outputHistory={history}
-                onDeleteSession={deleteRunLogSession}
-                onClearHistory={clearRunLogHistory}
-                onRestoreOutput={restoreHistory}
-                rhApiKey={rhSettings.apiKey}
-                onRhTaskInspected={(session, detail) => {
-                  if (!session?.runId || !detail) return;
-                  updateRunLogSession(session.runId, {
-                    taskId: detail.taskId || session.taskId,
-                    rhCoins: detail.rhCoins ?? session.rhCoins
-                  });
-                }}
-                runQueue={runQueue}
-                activeRunId={activeRunId}
-                status={status}
-                running={running}
-              />
-            </div>
-          </div>
-        </section>
+        <PreviewPanel
+          outputLabel={outputLabel}
+          resultOutputs={resultOutputs}
+          selectedOutputIndex={selectedOutputIndex}
+          showStatus={showStatus}
+          error={error}
+          result={result}
+          running={running}
+          status={status}
+          selectedOutput={selectedOutput}
+          canCompare={canCompare}
+          compareMode={compareMode}
+          setCompareMode={setCompareMode}
+          resetImageView={resetImageView}
+          onOpenEditor={() => setOutputEditorOpen(true)}
+          onDownload={handleDownload}
+          showRunningScreen={showRunningScreen}
+          isRunningHub={isRunningHub}
+          progress={progress}
+          progressPct={progressPct}
+          heroImage={heroImage}
+          compareInputImage={compareInputImage}
+          imageScale={imageScale}
+          imagePan={imagePan}
+          imageFitSize={imageFitSize}
+          outputImageSize={outputImageSize}
+          outputTimingLabel={outputTimingLabel}
+          draggingImage={draggingImage}
+          isWheeling={isWheeling}
+          comparePosition={comparePosition}
+          compareDividerX={compareDividerX}
+          previewAreaRef={previewAreaRef}
+          imageElementRef={imageElementRef}
+          handleResultImageLoad={handleResultImageLoad}
+          handlePreviewWheel={handlePreviewWheel}
+          handlePreviewPointerDown={handlePreviewPointerDown}
+          handlePreviewPointerMove={handlePreviewPointerMove}
+          handlePreviewPointerUp={handlePreviewPointerUp}
+          stepOutput={stepOutput}
+          selectOutput={selectOutput}
+          RunningState={RunningState}
+          runLogOpen={runLogOpen}
+          setRunLogOpen={setRunLogOpen}
+          runLogSessions={runLogSessions}
+          history={history}
+          deleteRunLogSession={deleteRunLogSession}
+          clearRunLogHistory={clearRunLogHistory}
+          restoreHistory={restoreHistory}
+          rhApiKey={rhSettings.apiKey}
+          updateRunLogSession={updateRunLogSession}
+          runQueue={runQueue}
+          activeRunId={activeRunId}
+        />
 
         <OutputGallery
           history={history}
@@ -1290,288 +1199,195 @@ export default function App() {
         />
       </section>
 
-      {settingsOpen ? (
-        <div className="modalBackdrop" role="presentation" onMouseDown={() => setSettingsOpen(false)}>
-          <section className="settingsModal" role="dialog" aria-modal="true" aria-label="Settings" onMouseDown={event => event.stopPropagation()}>
-            <div className="modalHeader">
-              <div>
-                <h2>Settings</h2>
-                <p>Thiết lập giao diện và Comfy Server.</p>
-              </div>
-              <button className="modalClose" onClick={() => setSettingsOpen(false)} title="Đóng"><X size={18} /></button>
-            </div>
-
-            <div className="field themeSelectField">
-              <span>Theme</span>
-              <div className={`themeSelectWrap ${themeMenuOpen ? "open" : ""}`} style={{ "--theme-swatch": selectedThemeOption.swatch }}>
-                <button type="button" className="themeSelectButton" onClick={() => setThemeMenuOpen(current => !current)} aria-haspopup="listbox" aria-expanded={themeMenuOpen}>
-                  <span className="themeSwatch" aria-hidden="true" />
-                  <span>{selectedThemeOption.label}</span>
-                  <ChevronsUpDown size={17} />
-                </button>
-                {themeMenuOpen ? (
-                  <div className="themeMenu" role="listbox" aria-label="Theme">
-                    {PRO_THEME_OPTIONS.map(option => (
-                      <button key={option.id} type="button" role="option" aria-selected={theme === option.id}
-                        className={`themeMenuItem ${theme === option.id ? "active" : ""}`}
-                        style={{ "--theme-swatch": option.swatch }}
-                        onClick={() => { setTheme(option.id); setThemeMenuOpen(false); }}>
-                        <span className="themeSwatch" aria-hidden="true" />
-                        <span>{option.label}</span>
-                      </button>
-                    ))}
-                    <div className="themeMenuDivider" role="presentation">Colorful</div>
-                    {COLORFUL_THEME_OPTIONS.map(option => (
-                      <button key={option.id} type="button" role="option" aria-selected={theme === option.id}
-                        className={`themeMenuItem ${theme === option.id ? "active" : ""}`}
-                        style={{ "--theme-swatch": option.swatch }}
-                        onClick={() => { setTheme(option.id); setThemeMenuOpen(false); }}>
-                        <span className="themeSwatch" aria-hidden="true" />
-                        <span>{option.label}</span>
-                      </button>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-            </div>
-
-            <label className="field">
-              <span>Main font</span>
-              <select value={mainFont} onChange={event => setMainFont(event.target.value)}>
-                {MAIN_FONT_OPTIONS.map(option => (
-                  <option key={option.id} value={option.id}>{option.label}</option>
-                ))}
-              </select>
-            </label>
-
-            <div className="modalSection">
-              <div className="modalSectionTitle">
-                <h3>Comfy Server</h3>
-                <div className={`healthBadge health-${healthStatus}`}>
-                  {healthStatus === "loading" ? <Loader2 size={11} className="spin" /> :
-                   healthStatus === "online" ? <Wifi size={11} /> : <WifiOff size={11} />}
-                  <span>{healthStatus === "online" ? "Online" : healthStatus === "loading" ? "Đang kết nối..." : "Offline"}</span>
-                </div>
-                <label className="serverDetailToggle">
-                  <input type="checkbox" checked={showServerDetails} onChange={event => setShowServerDetails(event.target.checked)} />
-                  <span>Hiện chi tiết</span>
-                </label>
-                <label className="serverDetailToggle" title={typeof Notification !== "undefined" && Notification.permission === "denied" ? "Trình duyệt đã chặn thông báo — mở lại trong Site Settings" : "Nhận thông báo khi workflow hoàn thành"}>
-                  <input
-                    type="checkbox"
-                    checked={notifyEnabled}
-                    onChange={async event => {
-                      const next = event.target.checked;
-                      if (next && typeof Notification !== "undefined" && Notification.permission !== "granted") {
-                        const perm = await Notification.requestPermission();
-                        if (perm !== "granted") return;
-                      }
-                      setNotifyEnabled(next);
-                    }}
-                  />
-                  <span>Thông báo</span>
-                </label>
-              </div>
-              <ConnectionPanel comfyAddress={comfyAddress} serverAddress={serverAddress} onAddressChange={setComfyAddress} />
-              <div className="note serverDiscoverySummary">
-                {discoveryLoading ? (
-                  <span>Đang quét ComfyUI server...</span>
-                ) : discovery ? (
-                  <span>
-                    ComfyUI {discoverySystem?.comfyui_version || "unknown"} · {discoveryDevice?.type || "device unknown"}
-                    {discoveryDevice?.vram_free ? ` · VRAM trống ${formatBytes(discoveryDevice.vram_free)}` : ""}
-                    {discovery.cached ? " · cache" : ""}
-                    <br />
-                    {discovery.nodeTypes?.length || 0} node · {discovery.dynamicChoices?.checkpoints?.length || 0} checkpoints · {discovery.dynamicChoices?.loras?.length || 0} loras · {discovery.dynamicChoices?.controlnets?.length || 0} controlnets
-                  </span>
-                ) : (
-                  <span>Chưa quét được ComfyUI server.</span>
-                )}
-              </div>
-              {showServerDetails ? (
-                <div className="serverDetailTable" role="table" aria-label="Thông tin ComfyUI server">
-                  {serverDetailRows.length ? serverDetailRows.map(([label, value]) => (
-                    <div className="serverDetailRow" role="row" key={label}>
-                      <span role="cell">{label}</span>
-                      <b role="cell">{String(value)}</b>
-                    </div>
-                  )) : (
-                    <div className="serverDetailEmpty">Chưa có dữ liệu server để hiển thị.</div>
-                  )}
-                </div>
-              ) : null}
-
-              <SavedServerList
-                servers={getServers()}
-                currentAddress={comfyAddress}
-                onSwitch={addr => { setComfyAddress(addr); }}
-                onRemove={removeServer}
-              />
-              {addServerOpen ? (
-                <AddServerForm
-                  onAdd={(label, address) => { addServer(label, address); setAddServerOpen(false); }}
-                  onCancel={() => setAddServerOpen(false)}
-                />
-              ) : (
-                <button className="addServerToggleBtn" onClick={() => setAddServerOpen(true)}>
-                  + Lưu địa chỉ server
-                </button>
-              )}
-            </div>
-
-            <RunningHubSettings
-              settings={rhSettings}
-              onChange={patch => {
-                updateRhSettings(patch);
-                setRhTestResult(null);
-              }}
-              onTestConnection={handleRhTestConnection}
-              testing={rhTesting}
-              testResult={rhTestResult}
-            />
-          </section>
-        </div>
-      ) : null}
+      <SettingsModal
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        settingsTab={settingsTab}
+        setSettingsTab={setSettingsTab}
+        theme={theme}
+        setTheme={setTheme}
+        themeMenuOpen={themeMenuOpen}
+        setThemeMenuOpen={setThemeMenuOpen}
+        selectedThemeOption={selectedThemeOption}
+        mainFont={mainFont}
+        setMainFont={setMainFont}
+        languagePreference={languagePreference}
+        setLanguagePreference={setLanguagePreference}
+        healthStatus={healthStatus}
+        showServerDetails={showServerDetails}
+        setShowServerDetails={setShowServerDetails}
+        notifyEnabled={notifyEnabled}
+        setNotifyEnabled={setNotifyEnabled}
+        comfyAddress={comfyAddress}
+        setComfyAddress={setComfyAddress}
+        serverAddress={serverAddress}
+        discovery={discovery}
+        discoveryLoading={discoveryLoading}
+        discoverySystem={discoverySystem}
+        discoveryDevice={discoveryDevice}
+        serverDetailRows={serverDetailRows}
+        formatBytes={formatBytes}
+        getServers={getServers}
+        addServer={addServer}
+        removeServer={removeServer}
+        addServerOpen={addServerOpen}
+        setAddServerOpen={setAddServerOpen}
+        rhSettings={rhSettings}
+        updateRhSettings={updateRhSettings}
+        handleRhTestConnection={handleRhTestConnection}
+        rhTesting={rhTesting}
+        rhTestResult={rhTestResult}
+        rhAccount={rhAccount}
+        rhAccountLoading={rhAccountLoading}
+        rhAccountError={rhAccountError}
+        handleRhAccountRefresh={handleRhAccountRefresh}
+        setRhTestResult={setRhTestResult}
+        setRhAccount={setRhAccount}
+        setRhAccountError={setRhAccountError}
+      />
 
       {infoOpen ? (
         <div className="modalBackdrop infoBackdrop" role="presentation" onMouseDown={() => setInfoOpen(false)}>
-          <section className="settingsModal infoModal" role="dialog" aria-modal="true" aria-label="Thông tin ứng dụng" onMouseDown={event => event.stopPropagation()}>
+          <section className="settingsModal infoModal" role="dialog" aria-modal="true" aria-label={t("info.dialog")} onMouseDown={event => event.stopPropagation()}>
             <div className="modalHeader infoModalHeader">
               <div>
-                <h2>aPix Builder</h2>
-                <p>Ứng dụng dựng workflow ComfyUI bằng template YAML, tối ưu cho tạo ảnh và chỉnh ảnh nhanh.</p>
+                <h2 className="infoModalTitle">
+                  aPix Builder <span className="infoVersion">beta v1.0</span>
+                </h2>
+                <p>{t("info.description")}</p>
               </div>
-              <button className="modalClose" onClick={() => setInfoOpen(false)} title="Đóng"><X size={18} /></button>
+              <button className="modalClose" onClick={() => setInfoOpen(false)} title={t("common.close")}><X size={18} /></button>
             </div>
 
-            <div className="infoIntro">
-              <div><span>Template hiện tại</span><b>{selectedTemplateName}</b></div>
-              <div><span>Chế độ</span><b>{isRunningHubWf ? "RunningHub Workflow" : isRunningHubApp ? "RunningHub App" : "ComfyUI Local"}</b></div>
-              <div><span>{isRunningHubWf ? "Template / Workflow ID" : isRunningHubApp ? "WebApp ID" : "Comfy Server"}</span><b>{isRunningHubWf ? `${rhWfTemplateName}${rhWfConfig?.runninghub?.workflowId ? ` · ${rhWfConfig.runninghub.workflowId}` : ""}` : isRunningHubApp ? rhSettings.webappId : (comfyAddress || serverAddress || "Chưa cấu hình")}</b></div>
-              <div><span>Phiên bản</span><b>beta v1.0</b></div>
-            </div>
-
-            <div className="infoNotice">
-              <b>Cập nhật</b>
-              <span>Hỗ trợ real-time progress bar, nhiều template, thư viện ảnh input/output, so sánh ảnh, Image Editor và tự quét model từ ComfyUI.</span>
-            </div>
-
-            <section className="infoCredits" aria-label="Thông tin người tạo dự án">
-              <h3>Dự án & liên hệ</h3>
-              <div className="infoCreditsGrid">
-                <div>
-                  <span>Người tạo</span>
-                  <a href="https://www.facebook.com/phamhungd/" target="_blank" rel="noreferrer">© Phạm Hưng</a>
-                </div>
-                <div>
-                  <span>Liên hệ</span>
-                  <a href="https://zalo.me/0355873687" target="_blank" rel="noreferrer">0355873687</a>
-                </div>
-                <div>
-                  <span>Cộng đồng</span>
-                  <a href="https://www.facebook.com/groups/stablediffusion.vn" target="_blank" rel="noreferrer">SDVN - Cộng đồng AI Art</a>
-                </div>
-                <div>
-                  <span>GitHub</span>
-                  <a href="https://github.com/StableDiffusionVN/" target="_blank" rel="noreferrer">StableDiffusionVN</a>
-                </div>
-                <div>
-                  <span>HuggingFace</span>
-                  <a href="https://huggingface.co/StableDiffusionVN/" target="_blank" rel="noreferrer">StableDiffusionVN</a>
-                </div>
+            <div className="infoModalBody">
+              <div className="infoNotice">
+                <b>{t("info.update")}</b>
+                <span>{t("info.updateText")}</span>
               </div>
-              <div className="infoLinkGroup">
-                <span>Website</span>
-                <a href="https://sdvn.vn" target="_blank" rel="noreferrer">sdvn.vn</a>
-                <a href="https://hungdiffusion.com" target="_blank" rel="noreferrer">hungdiffusion.com</a>
-                <a href="https://trainlora.vn" target="_blank" rel="noreferrer">trainlora.vn</a>
-                <a href="https://stablediffusion.vn" target="_blank" rel="noreferrer">stablediffusion.vn</a>
-                <a href="https://comfy.vn" target="_blank" rel="noreferrer">comfy.vn</a>
-              </div>
-              <div className="infoLinkGroup">
-                <span>Tìm hiểu thêm</span>
-                <a href="https://aistudio.google.com/app/u/0/apps/d798af97-ec18-4946-bce4-3b5b0e7d403e?showPreview=true&showAssistant=true&fullscreenApplet=true" target="_blank" rel="noreferrer">aPix Google Studio</a>
-                <a href="https://github.com/StableDiffusionVN/sdvn_apix_python" target="_blank" rel="noreferrer">aPix Python</a>
-                <a href="https://github.com/StableDiffusionVN/sdvn_apix_react" target="_blank" rel="noreferrer">aPix React</a>
-                <a href="https://sdvn.me" target="_blank" rel="noreferrer">Colab SDVN</a>
-              </div>
-            </section>
 
-            <div className="infoGrid">
-              <section className="infoSection">
-                <h3>Phím tắt chung</h3>
-                <p>Hoạt động ở màn hình chính khi bạn không nhập text.</p>
-                <div className="shortcutList">
-                  <ShortcutRow label="Run hoặc thêm hàng chờ" keys={["Cmd/Ctrl", "Enter"]} />
-                  <ShortcutRow label="Mở bảng hướng dẫn này" keys={["Cmd/Ctrl", "/"]} />
-                  <ShortcutRow label="Đóng/mở bảng log" keys={["F1"]} />
-                  <ShortcutRow label="Đóng popup" keys={["Esc"]} />
-                  <ShortcutRow label="Đặt lại zoom/vị trí ảnh" keys={["Space"]} />
-                  <ShortcutRow label="Bật/tắt so sánh input/output" keys={["S"]} />
-                  <ShortcutRow label="Ảnh output trước/sau" keys={["←", "→"]} />
+              <section className="infoCredits" aria-label={t("info.creatorSection")}>
+                <h3>{t("info.project")}</h3>
+                <div className="infoCreditsGrid">
+                  <div>
+                    <span>{t("info.creator")}</span>
+                    <a href="https://www.facebook.com/phamhungd/" target="_blank" rel="noreferrer">© Phạm Hưng</a>
+                  </div>
+                  <div>
+                    <span>{t("info.contact")}</span>
+                    <a href="https://zalo.me/0355873687" target="_blank" rel="noreferrer">0355873687</a>
+                  </div>
+                  <div>
+                    <span>{t("info.community")}</span>
+                    <a href="https://www.facebook.com/groups/stablediffusion.vn" target="_blank" rel="noreferrer">SDVN - Cộng đồng AI Art</a>
+                  </div>
+                  <div>
+                    <span>GitHub</span>
+                    <a href="https://github.com/StableDiffusionVN/" target="_blank" rel="noreferrer">StableDiffusionVN</a>
+                  </div>
+                  <div>
+                    <span>HuggingFace</span>
+                    <a href="https://huggingface.co/StableDiffusionVN/" target="_blank" rel="noreferrer">StableDiffusionVN</a>
+                  </div>
+                </div>
+                <div className="infoLinkGroup">
+                  <span>Website</span>
+                  <a href="https://sdvn.vn" target="_blank" rel="noreferrer">sdvn.vn</a>
+                  <a href="https://hungdiffusion.com" target="_blank" rel="noreferrer">hungdiffusion.com</a>
+                  <a href="https://trainlora.vn" target="_blank" rel="noreferrer">trainlora.vn</a>
+                  <a href="https://stablediffusion.vn" target="_blank" rel="noreferrer">stablediffusion.vn</a>
+                  <a href="https://comfy.vn" target="_blank" rel="noreferrer">comfy.vn</a>
+                </div>
+                <div className="infoLinkGroup">
+                  <span>{t("info.learnMore")}</span>
+                  <a href="https://aistudio.google.com/app/u/0/apps/d798af97-ec18-4946-bce4-3b5b0e7d403e?showPreview=true&showAssistant=true&fullscreenApplet=true" target="_blank" rel="noreferrer">aPix Google Studio</a>
+                  <a href="https://github.com/StableDiffusionVN/sdvn_apix_python" target="_blank" rel="noreferrer">aPix Python</a>
+                  <a href="https://github.com/StableDiffusionVN/sdvn_apix_react" target="_blank" rel="noreferrer">aPix React</a>
+                  <a href="https://sdvn.me" target="_blank" rel="noreferrer">Colab SDVN</a>
                 </div>
               </section>
-              <section className="infoSection">
-                <h3>Canvas preview</h3>
-                <p>Các thao tác chính trong vùng xem ảnh kết quả.</p>
-                <div className="shortcutList">
-                  <ShortcutRow label="Zoom ảnh" keys={["Cuộn chuột"]} />
-                  <ShortcutRow label="Di chuyển ảnh đã zoom" keys={["Kéo ảnh"]} />
-                  <ShortcutRow label="Reset khung xem" keys={["Space"]} />
-                  <ShortcutRow label="So sánh ảnh" keys={["S"]} />
-                  <ShortcutRow label="Chuyển output" keys={["←", "→"]} />
-                </div>
-              </section>
-              <section className="infoSection">
-                <h3>Image Editor</h3>
-                <p>Các công cụ chỉnh ảnh mở từ input hoặc output.</p>
-                <div className="shortcutList">
-                  <ShortcutRow label="Bật/tắt so sánh trước/sau" keys={["S"]} />
-                  <ShortcutRow label="Tạm chuyển sang công cụ Pan" keys={["Giữ Space"]} />
-                  <ShortcutRow label="Thoát thao tác đang sửa" keys={["Esc"]} />
-                  <ShortcutRow label="Lưu ảnh đã chỉnh vào output" keys={["Save"]} />
-                </div>
-              </section>
-              <section className="infoSection">
-                <h3>Mẹo sử dụng</h3>
-                <ul className="tipsList">
-                  <li>Kéo thả ảnh vào trường input để nạp ảnh nhanh hơn.</li>
-                  <li>Dùng thư viện ảnh input/output để tái sử dụng file giữa các lần chạy.</li>
-                  <li>Bật so sánh để kiểm tra khác biệt giữa ảnh đầu vào và ảnh kết quả.</li>
-                  <li>Theo dõi progress bar để biết workflow đang chạy đến node nào.</li>
-                </ul>
-              </section>
+
+              <div className="infoGrid">
+                <section className="infoSection">
+                  <h3>{t("info.shortcutsGeneral")}</h3>
+                  <p>{t("info.shortcutsGeneralDesc")}</p>
+                  <div className="shortcutList">
+                    <ShortcutRow label={t("info.shortcutRun")} keys={["Cmd/Ctrl", "Enter"]} />
+                    <ShortcutRow label={t("info.shortcutHelp")} keys={["Cmd/Ctrl", "/"]} />
+                    <ShortcutRow label={t("info.shortcutLog")} keys={["F1"]} />
+                    <ShortcutRow label={t("info.shortcutClose")} keys={["Esc"]} />
+                    <ShortcutRow label={t("info.shortcutResetZoom")} keys={["Space"]} />
+                    <ShortcutRow label={t("info.shortcutCompare")} keys={["S"]} />
+                    <ShortcutRow label={t("info.shortcutOutputNav")} keys={["←", "→"]} />
+                  </div>
+                </section>
+                <section className="infoSection">
+                  <h3>{t("info.shortcutsPreview")}</h3>
+                  <p>{t("info.shortcutsPreviewDesc")}</p>
+                  <div className="shortcutList">
+                    <ShortcutRow label={t("info.shortcutZoom")} keys={[t("info.mouseWheel")]} />
+                    <ShortcutRow label={t("info.shortcutPan")} keys={[t("info.dragImage")]} />
+                    <ShortcutRow label={t("info.shortcutResetView")} keys={["Space"]} />
+                    <ShortcutRow label={t("info.shortcutCompareImages")} keys={["S"]} />
+                    <ShortcutRow label={t("info.shortcutChangeOutput")} keys={["←", "→"]} />
+                  </div>
+                </section>
+                <section className="infoSection">
+                  <h3>{t("info.shortcutsEditor")}</h3>
+                  <p>{t("info.shortcutsEditorDesc")}</p>
+                  <div className="shortcutList">
+                    <ShortcutRow label={t("info.shortcutBeforeAfter")} keys={["S"]} />
+                    <ShortcutRow label={t("info.shortcutTempPan")} keys={[t("info.holdSpace")]} />
+                    <ShortcutRow label={t("info.shortcutCancelAction")} keys={["Esc"]} />
+                    <ShortcutRow label={t("info.shortcutSaveOutput")} keys={["Save"]} />
+                  </div>
+                </section>
+                <section className="infoSection">
+                  <h3>{t("info.tips")}</h3>
+                  <ul className="tipsList">
+                    <li>{t("info.tipDrag")}</li>
+                    <li>{t("info.tipLibrary")}</li>
+                    <li>{t("info.tipCompare")}</li>
+                    <li>{t("info.tipProgress")}</li>
+                  </ul>
+                </section>
+              </div>
             </div>
           </section>
         </div>
       ) : null}
 
       {templateEditorOpen ? (
-        <TemplateEditorModal
-          selectedTemplate={selectedTemplate}
-          discovery={discovery}
-          onClose={() => setTemplateEditorOpen(false)}
-          onSaved={reloadTemplates}
-        />
+        <Suspense fallback={null}>
+          <TemplateEditorModal
+            selectedTemplate={selectedTemplate}
+            discovery={discovery}
+            onClose={() => setTemplateEditorOpen(false)}
+            onSaved={reloadTemplates}
+          />
+        </Suspense>
       ) : null}
 
       {rhWfTemplateEditorOpen ? (
-        <TemplateEditorModal
-          mode="runninghub-wf"
-          selectedTemplate={rhWfSelectedTemplate}
-          apiKey={rhSettings.apiKey}
-          onClose={() => setRhWfTemplateEditorOpen(false)}
-          onSaved={reloadRhWfTemplates}
-        />
+        <Suspense fallback={null}>
+          <TemplateEditorModal
+            mode="runninghub-wf"
+            selectedTemplate={rhWfSelectedTemplate}
+            apiKey={rhSettings.apiKey}
+            onClose={() => setRhWfTemplateEditorOpen(false)}
+            onSaved={reloadRhWfTemplates}
+          />
+        </Suspense>
       ) : null}
 
       {outputEditorOpen && heroImage ? (
-        <ImageEditorModal
-          source={heroImage}
-          title="Output - Image Editor"
-          onClose={() => setOutputEditorOpen(false)}
-          onSave={handleSaveEditedOutput}
-        />
+        <Suspense fallback={null}>
+          <ImageEditorModal
+            source={heroImage}
+            title="Output - Image Editor"
+            onClose={() => setOutputEditorOpen(false)}
+            onSave={handleSaveEditedOutput}
+          />
+        </Suspense>
       ) : null}
     </main>
   );
@@ -1587,12 +1403,13 @@ function ShortcutRow({ label, keys }) {
 }
 
 function RunningState({ progress, status, progressPct }) {
+  const { t } = useI18n();
   const phase =
     !progress || progress.type === "start" ? 1
     : progress.type === "cached" || progress.type === "executing" || progress.type === "progress" || progress.type === "executed" ? 2
     : 1;
 
-  const detail = progress?.label || status || "Đang chờ ComfyUI...";
+  const detail = progress?.label || status || t("running.waiting");
 
   return (
     <div className="runningState">
@@ -1600,17 +1417,17 @@ function RunningState({ progress, status, progressPct }) {
         percent={progressPct}
         indeterminate={progressPct === null}
         tone="accent"
-        title="ComfyUI đang xử lý"
+        title={t("running.comfy")}
       />
 
-      <p className="runningTitle">ComfyUI đang xử lý</p>
+      <p className="runningTitle">{t("running.comfy")}</p>
 
       <div className="runPhases">
-        <RunPhase label="Gửi workflow" active={phase === 1} done={phase > 1} />
+        <RunPhase label={t("running.submit")} active={phase === 1} done={phase > 1} />
         <span className="runPhaseSep" aria-hidden="true" />
-        <RunPhase label="Xử lý nodes" active={phase === 2} done={phase > 2} />
+        <RunPhase label={t("running.nodes")} active={phase === 2} done={phase > 2} />
         <span className="runPhaseSep" aria-hidden="true" />
-        <RunPhase label="Lưu ảnh" active={phase === 3} done={false} />
+        <RunPhase label={t("running.save")} active={phase === 3} done={false} />
       </div>
 
       <p className="runDetail">{detail}</p>

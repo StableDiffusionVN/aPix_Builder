@@ -1,7 +1,9 @@
 import { CheckCircle2, Loader2 } from "lucide-react";
 import { estimateRhProgressPct, SdvnWaterLogo } from "./SdvnWaterLogo";
+import { useI18n } from "../i18n/I18nContext";
 
 export function RunningHubRunningState({ progress, status }) {
+  const { t } = useI18n();
   const phase =
     progress?.type === "submit" ? 1
     : progress?.type === "queued" ? 2
@@ -9,7 +11,7 @@ export function RunningHubRunningState({ progress, status }) {
     : progress?.type === "success" ? 4
     : 2;
 
-  const detail = progress?.label || status || "Đang kết nối RunningHub cloud...";
+  const detail = progress?.label || status || t("running.rhConnecting");
   const progressPct = estimateRhProgressPct(progress);
 
   return (
@@ -18,20 +20,20 @@ export function RunningHubRunningState({ progress, status }) {
         percent={progressPct}
         indeterminate={progressPct === null}
         tone="rh"
-        title="RunningHub đang xử lý"
+        title={t("running.rh")}
       />
 
-      <p className="rhRunningTitle">RunningHub đang xử lý</p>
-      <p className="rhRunningSubtitle">Workflow chạy trên cloud — không cần GPU local</p>
+      <p className="rhRunningTitle">{t("running.rh")}</p>
+      <p className="rhRunningSubtitle">{t("running.rhSubtitle")}</p>
 
       <div className="rhRunPhases">
-        <RhRunPhase label="Gửi task" active={phase === 1} done={phase > 1} />
+        <RhRunPhase label={t("running.submitTask")} active={phase === 1} done={phase > 1} />
         <span className="rhRunPhaseSep" aria-hidden="true" />
-        <RhRunPhase label="Hàng đợi" active={phase === 2} done={phase > 2} />
+        <RhRunPhase label={t("running.queue")} active={phase === 2} done={phase > 2} />
         <span className="rhRunPhaseSep" aria-hidden="true" />
-        <RhRunPhase label="Cloud render" active={phase === 3} done={phase > 3} />
+        <RhRunPhase label={t("running.cloudRender")} active={phase === 3} done={phase > 3} />
         <span className="rhRunPhaseSep" aria-hidden="true" />
-        <RhRunPhase label="Nhận ảnh" active={phase === 4} done={false} />
+        <RhRunPhase label={t("running.receive")} active={phase === 4} done={false} />
       </div>
 
       <p className="rhRunDetail">{detail}</p>

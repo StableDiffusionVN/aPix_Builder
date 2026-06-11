@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { localizeRuntimeMessage, useI18n } from "../i18n/I18nContext";
 
 export const EXECUTION_MODE_KEY = "comfyui-build:execution-mode";
 export const RUNNINGHUB_STORAGE_KEY = "comfyui-build:runninghub:v1";
@@ -45,6 +46,7 @@ export function buildNodeDefaults(nodes = []) {
 }
 
 export function useRunningHub() {
+  const { locale, t } = useI18n();
   const [settings, setSettings] = useState(loadRunningHubSettings);
   const [nodes, setNodes] = useState([]);
   const [nodesLoading, setNodesLoading] = useState(false);
@@ -68,14 +70,14 @@ export function useRunningHub() {
     const webappId = override.webappId ?? settings.webappId;
     const shouldThrow = override.throwOnError === true;
     if (!apiKey?.trim()) {
-      const message = "Chưa nhập API Key RunningHub";
+      const message = t("rh.noApiKey");
       setNodesError(message);
       setNodes([]);
       if (shouldThrow) throw new Error(message);
       return [];
     }
     if (!webappId?.trim()) {
-      const message = "Chưa nhập WebApp ID";
+      const message = t("rh.noWebappId");
       setNodesError(message);
       setNodes([]);
       if (shouldThrow) throw new Error(message);
@@ -93,21 +95,22 @@ export function useRunningHub() {
       const text = await response.text();
       let data = {};
       try { data = text ? JSON.parse(text) : {}; } catch {
-        throw new Error(text || "Backend không trả về JSON khi lấy node RunningHub");
+        throw new Error(text || t("rh.noJsonNodes"));
       }
-      if (!response.ok) throw new Error(data.error || data.msg || "Không lấy được node từ RunningHub");
+      if (!response.ok) throw new Error(localizeRuntimeMessage(data.error || data.msg, locale) || t("rh.loadNodesFailed"));
       const nextNodes = data.nodes || [];
       setNodes(nextNodes);
       return nextNodes;
     } catch (error) {
-      setNodesError(error.message);
+      const message = localizeRuntimeMessage(error.message, locale);
+      setNodesError(message);
       setNodes([]);
-      if (shouldThrow) throw error;
+      if (shouldThrow) throw new Error(message);
       return [];
     } finally {
       setNodesLoading(false);
     }
-  }, [settings.apiKey, settings.webappId]);
+  }, [locale, settings.apiKey, settings.webappId]);
 
   return {
     settings,

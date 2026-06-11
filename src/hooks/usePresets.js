@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useI18n } from "../i18n/I18nContext";
 
 const PRESETS_KEY = "comfyui-build:presets:v1";
 
@@ -64,6 +65,7 @@ async function persistWorkflowPresets(presets) {
 }
 
 export function usePresets() {
+  const { t } = useI18n();
   const dataRef = useRef({});
   const persistQueueRef = useRef(Promise.resolve());
   const serverAvailableRef = useRef(false);
@@ -87,10 +89,10 @@ export function usePresets() {
       })
       .catch(error => {
         console.error("Failed to save workflow presets to server:", error);
-        setStorageWarning("Preset đang lưu cục bộ trên trình duyệt — restart server để đồng bộ file.");
+        setStorageWarning(t("preset.localStorage"));
       });
     bump();
-  }, [bump]);
+  }, [bump, t]);
 
   useEffect(() => {
     let cancelled = false;
@@ -112,9 +114,9 @@ export function usePresets() {
         console.error("Failed to load workflow presets from server:", error);
         presets = legacy;
         if (hasPresetData(legacy)) {
-          setStorageWarning("Không kết nối API preset — dùng bản sao localStorage. Restart server để đồng bộ file.");
+          setStorageWarning(t("preset.apiUnavailable"));
         } else if (error.message?.includes("404")) {
-          setStorageWarning("Server chưa có API workflow-presets — restart server với code mới nhất.");
+          setStorageWarning(t("preset.noApi"));
         }
       }
 
@@ -130,7 +132,7 @@ export function usePresets() {
     return () => {
       cancelled = true;
     };
-  }, [bump]);
+  }, [bump, t]);
 
   function getPresets(templateId) {
     return dataRef.current[templateId] || [];

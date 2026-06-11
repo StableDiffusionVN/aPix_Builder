@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
-import { Download, Filter, Loader2, Star, Workflow, X } from "lucide-react";
+import { Download, Filter, History, Loader2, Star, Workflow, X } from "lucide-react";
+import { useI18n } from "../i18n/I18nContext";
 
 const HISTORY_FAVORITES_KEY = "comfyui-build:history-favorites:v1";
 
@@ -15,9 +16,9 @@ function writeStoredSet(key, value) {
   localStorage.setItem(key, JSON.stringify([...value]));
 }
 
-function formatTime(value) {
+function formatTime(value, locale) {
   if (!value) return "";
-  return new Intl.DateTimeFormat("vi-VN", {
+  return new Intl.DateTimeFormat(locale === "vi" ? "vi-VN" : "en-US", {
     hour: "2-digit",
     minute: "2-digit",
     day: "2-digit",
@@ -65,6 +66,7 @@ export function OutputGallery({
   queueCount = 0,
   onShowWaiting
 }) {
+  const { locale, t } = useI18n();
   const [timeFilter, setTimeFilter] = useState("all");
   const [templateFilter, setTemplateFilter] = useState("all");
   const [favoritesOnly, setFavoritesOnly] = useState(false);
@@ -101,21 +103,21 @@ export function OutputGallery({
   return (
     <section className="historyPanel">
       <div className="panelTitle">
-        <h3>Lịch sử tạo</h3>
+        <h3>{t("history.title")}</h3>
         <div className="historyHeaderTools">
-          <label className={`historyIconFilter ${timeFilter !== "all" ? "active" : ""}`} title="Lọc thời gian">
+          <label className={`historyIconFilter ${timeFilter !== "all" ? "active" : ""}`} title={t("history.filterTime")}>
             <Filter size={14} />
-            <select value={timeFilter} onChange={event => setTimeFilter(event.target.value)} aria-label="Lọc thời gian lịch sử">
-              <option value="all">Tất cả thời gian</option>
-              <option value="day">Hôm nay</option>
-              <option value="month">Tháng này</option>
-              <option value="year">Năm này</option>
+            <select value={timeFilter} onChange={event => setTimeFilter(event.target.value)} aria-label={t("history.filterTime")}>
+              <option value="all">{t("history.allTime")}</option>
+              <option value="day">{t("history.today")}</option>
+              <option value="month">{t("history.month")}</option>
+              <option value="year">{t("history.year")}</option>
             </select>
           </label>
-          <label className={`historyIconFilter ${templateFilter !== "all" ? "active" : ""}`} title="Lọc mẫu API">
+          <label className={`historyIconFilter ${templateFilter !== "all" ? "active" : ""}`} title={t("history.filterTemplate")}>
             <Workflow size={14} />
-            <select value={templateFilter} onChange={event => setTemplateFilter(event.target.value)} aria-label="Lọc mẫu API lịch sử">
-              <option value="all">Tất cả mẫu API</option>
+            <select value={templateFilter} onChange={event => setTemplateFilter(event.target.value)} aria-label={t("history.filterTemplate")}>
+              <option value="all">{t("history.allTemplates")}</option>
               {templateOptions.map(template => (
                 <option key={template.id} value={template.id}>{template.name}</option>
               ))}
@@ -125,7 +127,7 @@ export function OutputGallery({
             type="button"
             className={`historyIconButton ${favoritesOnly ? "active" : ""}`}
             onClick={() => setFavoritesOnly(current => !current)}
-            title="Chỉ xem favourite"
+            title={t("history.favoritesOnly")}
           >
             <Star size={14} />
           </button>
@@ -144,15 +146,15 @@ export function OutputGallery({
                 onShowWaiting?.();
               }
             }}
-            title="Quay lại màn hình đang xử lý"
+            title={t("history.returnProcessing")}
           >
             <span className="historyThumb pendingThumb">
               <Loader2 size={20} className="spin" />
               {pendingProgressPct !== null ? <b>{pendingProgressPct}%</b> : null}
             </span>
             <div className="historyMeta">
-              <strong>Đang xử lý{queueCount > 0 ? ` (+${queueCount} chờ)` : ""}</strong>
-              <span>{pendingLabel || "ComfyUI đang chạy..."}</span>
+              <strong>{t("history.processing")}{queueCount > 0 ? ` (+${queueCount} ${t("history.queued")})` : ""}</strong>
+              <span>{pendingLabel || t("history.running")}</span>
             </div>
           </article>
         ) : null}
@@ -187,7 +189,7 @@ export function OutputGallery({
               </span>
               <div className="historyMeta">
                 <strong>{item.templateName || item.templateId || "Workflow"}</strong>
-                <span>{formatTime(item.createdAt)}</span>
+                <span>{formatTime(item.createdAt, locale)}</span>
                 {item.durationMs ? (
                   <small>{formatDuration(item.durationMs)}</small>
                 ) : null}
@@ -196,21 +198,21 @@ export function OutputGallery({
                 <button className={`thumbAction ${favorites.has(item.id) ? "isFavorite" : ""}`} onClick={event => {
                   event.stopPropagation();
                   toggleFavorite(item.id);
-                }} title={favorites.has(item.id) ? "Bỏ favourite" : "Favourite ảnh"}>
+                }} title={favorites.has(item.id) ? t("history.unfavorite") : t("history.favorite")}>
                   <Star size={14} />
                 </button>
                 {primaryOutput ? (
                   <button className="thumbAction" onClick={event => {
                     event.stopPropagation();
                     onDownload(primaryOutput);
-                  }} title="Tải ảnh xuống">
+                  }} title={t("preview.download")}>
                     <Download size={14} />
                   </button>
                 ) : null}
                 <button className="thumbAction danger" onClick={event => {
                   event.stopPropagation();
                   onDelete(item.id);
-                }} title="Xóa khỏi lịch sử">
+                }} title={t("history.delete")}>
                   <X size={14} />
                 </button>
               </div>
@@ -219,8 +221,13 @@ export function OutputGallery({
         })}
         {!visibleHistory.length && !pending ? (
           <div className="emptyHistory">
-            <span>{history.length ? "Không có lịch sử khớp bộ lọc" : "Chưa có lịch sử tạo"}</span>
-            <small>{history.length ? "Đổi bộ lọc hoặc tắt Favourite." : "Ảnh đã tạo sẽ được lưu cục bộ trên trình duyệt."}</small>
+            <span className="emptyHistoryIcon" aria-hidden="true">
+              <History size={16} />
+            </span>
+            <span className="emptyHistoryCopy">
+              <strong>{history.length ? t("history.noMatch") : t("history.empty")}</strong>
+              <small>{history.length ? t("history.noMatchHint") : t("history.emptyHint")}</small>
+            </span>
           </div>
         ) : null}
       </div>

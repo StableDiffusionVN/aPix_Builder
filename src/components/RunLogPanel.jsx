@@ -18,6 +18,7 @@ import {
   formatTechTimestamp,
   sumRhCoins
 } from "../lib/runLog";
+import { localizeRuntimeMessage, useI18n } from "../i18n/I18nContext";
 
 const LOG_HEIGHT_KEY = "comfyui-build:run-log-height";
 const DEFAULT_LOG_HEIGHT = 520;
@@ -56,6 +57,7 @@ function confirmAction(message) {
 
 function CopyButton({ value, label, className = "" }) {
   const [copied, setCopied] = useState(false);
+  const { t } = useI18n();
 
   async function handleCopy(event) {
     event.stopPropagation();
@@ -71,7 +73,7 @@ function CopyButton({ value, label, className = "" }) {
       role="button"
       tabIndex={0}
       className={`logCopyButton ${className}`.trim()}
-      title={copied ? "Đã copy" : `Copy ${label}`}
+      title={copied ? t("log.copied") : `Copy ${label}`}
       aria-label={`Copy ${label}`}
       onClick={handleCopy}
       onKeyDown={(event) => {
@@ -149,6 +151,7 @@ function TaskInspectBlock({ inspect }) {
 }
 
 function VirtualLogStream({ logs = [], autoScroll = true }) {
+  const { locale } = useI18n();
   const scrollRef = useRef(null);
   const [viewport, setViewport] = useState({ scrollTop: 0, height: 200 });
   const stickToBottomRef = useRef(true);
@@ -200,7 +203,7 @@ function VirtualLogStream({ logs = [], autoScroll = true }) {
               {entry.runId ? <span className="logCol logColRun">run={formatRunId(entry.runId)}</span> : null}
               {entry.taskId ? <span className="logCol logColTask">task={entry.taskId}</span> : null}
               {entry.rhCoins != null ? <span className="logCol logColCoin">coin={formatRhCoins(entry.rhCoins)}</span> : null}
-              <span className="logCol logColMsg">{entry.message}</span>
+              <span className="logCol logColMsg">{localizeRuntimeMessage(entry.message, locale)}</span>
             </div>
           ))}
         </div>
@@ -222,6 +225,7 @@ function SessionRow({
   rhApiKey = "",
   isActive = false
 }) {
+  const { locale, t } = useI18n();
   const provider = formatProviderCode(session.provider);
   const status = formatStatusCode(session.status);
   const duration = formatDurationMs(session.durationMs);
@@ -229,7 +233,8 @@ function SessionRow({
   const logCount = session.logs?.length || 0;
   const isRh = session.provider === "runninghub";
   const canInspectTask = isRh && Boolean(session.taskId);
-  const statusTitle = session.error ? session.error : session.status || "";
+  const localizedError = localizeRuntimeMessage(session.error, locale);
+  const statusTitle = localizedError || session.status || "";
 
   return (
     <article
@@ -239,7 +244,7 @@ function SessionRow({
       <div
         className="logSessionRow"
         onClick={onToggle}
-        title={session.error || undefined}
+        title={localizedError || undefined}
       >
         <span className={`logExpand ${expanded ? "open" : ""}`} aria-hidden="true">
           <ChevronRight size={12} />
@@ -259,7 +264,7 @@ function SessionRow({
             <button
               type="button"
               className={`logTaskButton ${taskInspect?.open ? "active" : ""}`}
-              title={rhApiKey?.trim() ? "Check task trên server (RunningHub)" : "Cần API key RunningHub để check task"}
+              title={rhApiKey?.trim() ? t("log.checkTask") : t("log.apiRequired")}
               onClick={(event) => onInspectTask?.(session, event)}
             >
               task={session.taskId}
@@ -274,7 +279,7 @@ function SessionRow({
           type="button"
           className="logDelete"
           title="delete session"
-          aria-label="Xóa session log"
+          aria-label={t("log.deleteSession")}
           onClick={(event) => {
             event.stopPropagation();
             onDelete?.(session.id);
@@ -305,7 +310,7 @@ function SessionRow({
           <span>status={session.status || "—"}</span>
           {session.durationMs != null ? <span>duration_ms={session.durationMs}</span> : null}
           {session.provider === "runninghub" && session.rhCoins != null ? <span>rh_coins={session.rhCoins}</span> : null}
-          {session.error ? <span className="logMetaError">error={session.error}</span> : null}
+          {localizedError ? <span className="logMetaError">error={localizedError}</span> : null}
           {outputHistoryItem ? (
             <button
               type="button"
@@ -346,6 +351,7 @@ export function RunLogPanel({
   running = false,
   rhApiKey = ""
 }) {
+  const { t } = useI18n();
   const panelRef = useRef(null);
   const resizeRef = useRef({ dragging: false, startY: 0, startHeight: DEFAULT_LOG_HEIGHT });
   const [popupHeight, setPopupHeight] = useState(loadLogHeight);
@@ -451,13 +457,13 @@ export function RunLogPanel({
 
   function handleDeleteSession(sessionId) {
     if (!sessionId) return;
-    if (!confirmAction("Xóa session log này?")) return;
+    if (!confirmAction(t("log.confirmDelete"))) return;
     onDeleteSession?.(sessionId);
   }
 
   function handleClearHistory() {
     if (!sessions.length) return;
-    if (!confirmAction("Xóa toàn bộ run log history?")) return;
+    if (!confirmAction(t("log.confirmClear"))) return;
     onClearHistory?.();
     setExpandedIds(new Set());
     setFocusedSessionId("");
@@ -519,7 +525,7 @@ export function RunLogPanel({
     if (!rhApiKey?.trim()) {
       setTaskInspectMap(current => ({
         ...current,
-        [sessionId]: { open: true, loading: false, data: null, error: "Thiếu RunningHub API key" }
+        [sessionId]: { open: true, loading: false, data: null, error: t("log.missingApi") }
       }));
       setExpandedIds(current => new Set([...current, sessionId]));
       return;
@@ -538,7 +544,7 @@ export function RunLogPanel({
         body: JSON.stringify({ apiKey: rhApiKey.trim(), taskId: session.taskId })
       });
       const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error || "Check task thất bại");
+      if (!response.ok) throw new Error(payload.error || t("log.checkFailed"));
 
       setTaskInspectMap(current => ({
         ...current,
@@ -552,7 +558,7 @@ export function RunLogPanel({
           open: true,
           loading: false,
           data: current[sessionId]?.data || null,
-          error: error.message || "Check task thất bại"
+          error: error.message || t("log.checkFailed")
         }
       }));
     }
@@ -597,7 +603,7 @@ export function RunLogPanel({
             </div>
             <div className="logHeaderActions">
               {focusedSession ? (
-                <button type="button" className="logAction" onClick={() => handleExportSession(focusedSession)} title="Export session đang focus">
+                <button type="button" className="logAction" onClick={() => handleExportSession(focusedSession)} title={t("log.exportFocused")}>
                   <Download size={12} />
                 </button>
               ) : null}
@@ -621,9 +627,9 @@ export function RunLogPanel({
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
               placeholder="search run/task/message..."
-              aria-label="Tìm trong run log"
+              aria-label={t("log.search")}
             />
-            <select className="logFilterSelect" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} aria-label="Lọc status">
+            <select className="logFilterSelect" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} aria-label={t("log.filterStatus")}>
               <option value="all">all st</option>
               <option value="running">RUN</option>
               <option value="queued">QUE</option>
@@ -631,7 +637,7 @@ export function RunLogPanel({
               <option value="error">ERR</option>
               <option value="cancelled">CNL</option>
             </select>
-            <select className="logFilterSelect" value={providerFilter} onChange={(event) => setProviderFilter(event.target.value)} aria-label="Lọc provider">
+            <select className="logFilterSelect" value={providerFilter} onChange={(event) => setProviderFilter(event.target.value)} aria-label={t("log.filterProvider")}>
               <option value="all">all pv</option>
               <option value="local">CU</option>
               <option value="runninghub">RH</option>

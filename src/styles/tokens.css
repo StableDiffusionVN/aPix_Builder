@@ -32,8 +32,8 @@ html[data-theme="dark"] {
   --accent-rgb: 88, 166, 255;
   --rh-brand: #cfff0e;
   --rh-brand-rgb: 207, 255, 14;
-  --comfy-brand: #fbbf24;
-  --comfy-brand-rgb: 251, 191, 36;
+  --comfy-brand: #f0ff41;
+  --comfy-brand-rgb: 240, 255, 65;
   --success: #3fb950;
   --shadow: 0 8px 24px rgba(0, 0, 0, 0.42);
   --radius: 6px;
@@ -106,8 +106,8 @@ html[data-theme="light"] {
   --accent-rgb: 9, 105, 218;
   --rh-brand: #9ecc0b;
   --rh-brand-rgb: 158, 204, 11;
-  --comfy-brand: #ca8a04;
-  --comfy-brand-rgb: 202, 138, 4;
+  --comfy-brand: #172dd7;
+  --comfy-brand-rgb: 23, 45, 215;
   --success: #1a7f37;
   --danger-bg: rgba(220, 38, 38, 0.08);
   --shadow: 0 1px 3px rgba(15, 15, 18, 0.08);

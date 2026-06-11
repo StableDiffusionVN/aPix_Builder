@@ -1,11 +1,12 @@
-import { useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Check, Eye, Filter, Folder, Images, Link, Loader2, Pencil, RefreshCcw, Scissors, Star, Trash2, Upload, X } from "lucide-react";
-import { ImageEditorModal } from "./ImageEditorModal";
+import { ImageEditorModal } from "./lazyModals";
 import { MaskEditorModal } from "./MaskEditorModal";
 import { defaultValue, getActiveSubInputs, isMenuSub, normalizeId } from "../lib/template";
 import { menuChoiceOptions, parseMenuChoices, resolveMenuStoredValue } from "../lib/menuChoices";
 import { DYNAMIC_FIELD_TYPES, canonicalDynamicType, dynamicFieldChoices, isDynamicFieldType } from "../lib/dynamicTypes";
+import { localizeRuntimeMessage, useI18n } from "../i18n/I18nContext";
 
 const INPUT_FAVORITES_KEY = "comfyui-build:input-image-favorites:v1";
 
@@ -211,6 +212,7 @@ export function DynamicField({
   discovery = null,
   discoveryLoading = false
 }) {
+  const { locale, t } = useI18n();
   const ui = item.ui || {};
   const label = ui.label || item.key;
   const description = ui.description || ui.help || "";
@@ -360,14 +362,14 @@ export function DynamicField({
         body: JSON.stringify({ url: sourceUrl })
       });
       const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.error || "Không tải được ảnh từ URL");
+      if (!response.ok) throw new Error(localizeRuntimeMessage(data.error, locale) || t("field.urlError"));
       setInputImages(data.images || []);
       if (data.image) {
         onChange({ kind: "input-image", ...data.image });
         if (clearInput) setImageUrlInput("");
       }
     } catch (error) {
-      setImageUrlError(error.message || "Không tải được ảnh từ URL");
+      setImageUrlError(localizeRuntimeMessage(error.message, locale) || t("field.urlError"));
     } finally {
       setImageUrlLoading(false);
     }
@@ -545,7 +547,7 @@ export function DynamicField({
           <span>{label}</span>
           <div className="fieldSelectWrap">
             <select value={menuValue} onChange={event => onChange(event.target.value)}>
-              {parsedChoices.length === 0 ? <option value="">Chưa có lựa chọn</option> : null}
+              {parsedChoices.length === 0 ? <option value="">{t("field.noChoices")}</option> : null}
               {parsedChoices.map(choice => (
                 <option key={choice.value} value={choice.value}>{choice.label}</option>
               ))}
@@ -572,7 +574,7 @@ export function DynamicField({
             ))}
           </div>
         ) : (
-          <div className="menuSubEmpty">Không có input cho lựa chọn <b>{selectedChoice?.label || menuValue}</b>.</div>
+          <div className="menuSubEmpty">{t("field.noInputs", { name: selectedChoice?.label || menuValue })}</div>
         )}
       </section>
     );
@@ -599,11 +601,11 @@ export function DynamicField({
             min={ui.minimum ?? 0}
             max={ui.maximum}
             step={ui.step ?? 1}
-            placeholder={isRandomSeed ? "Random mỗi lần run" : ""}
+            placeholder={isRandomSeed ? t("field.randomSeed") : ""}
             value={isRandomSeed ? "" : value}
             onChange={handleSeedChange}
           />
-          <button type="button" className="fieldResetButton" onClick={() => onChange("random_seed")} title="Random seed mỗi lần run">
+          <button type="button" className="fieldResetButton" onClick={() => onChange("random_seed")} title={t("field.randomSeed")}>
             <RefreshCcw size={13} />
           </button>
         </div>
@@ -695,7 +697,7 @@ export function DynamicField({
                     event.stopPropagation();
                     openLightbox({ name: selectedInputName || label, url: selectedImageUrl });
                   }}
-                  title="Mở ảnh đầy đủ"
+                  title={t("field.openFull")}
                 >
                   <Eye size={14} />
                 </button>
@@ -708,7 +710,7 @@ export function DynamicField({
                       event.stopPropagation();
                       setMaskEditorOpen(true);
                     }}
-                    title={maskDataUrl ? "Sửa mask (đã có mask)" : "Tô mask cho ảnh"}
+                    title={maskDataUrl ? t("field.editMask") : t("field.paintMask")}
                   >
                     <Scissors size={14} />
                   </button>
@@ -733,7 +735,7 @@ export function DynamicField({
                     event.stopPropagation();
                     onChange("");
                   }}
-                  title="Xóa ảnh đã tải lên"
+                  title={t("field.removeUpload")}
                 >
                   <X size={14} />
                 </button>
@@ -744,7 +746,7 @@ export function DynamicField({
                 </div>
               ) : null}
               {maskDataUrl ? (
-                <div className="maskBadge" title="Ảnh đã có mask">
+                <div className="maskBadge" title={t("field.hasMask")}>
                   <Scissors size={11} /> Mask
                 </div>
               ) : null}
@@ -772,8 +774,8 @@ export function DynamicField({
               }}
             >
               <Upload size={18} />
-              <strong>{isDraggingFile ? "Thả tệp vào đây" : "Tải ảnh hoặc tệp lên"}</strong>
-              <small>{ui.type === "image_mask" ? "Mask trong React bản này dùng ảnh chính; có thể mở rộng canvas mask sau." : "Kéo-thả hoặc bấm để chọn ảnh."}</small>
+              <strong>{isDraggingFile ? t("field.drop") : t("field.upload")}</strong>
+              <small>{ui.type === "image_mask" ? t("field.maskHint") : t("field.uploadHint")}</small>
               <input
                 type="file"
                 accept={ui.type === "file" ? undefined : "image/*"}
@@ -804,7 +806,7 @@ export function DynamicField({
                 <input
                   type="url"
                   value={imageUrlInput}
-                  placeholder="Dán URL ảnh hoặc link gallery"
+                  placeholder={t("field.urlPlaceholder")}
                   onChange={event => {
                     setImageUrlInput(event.target.value);
                     if (imageUrlError) setImageUrlError("");
@@ -812,7 +814,7 @@ export function DynamicField({
                 />
                 <button type="submit" disabled={imageUrlLoading || !imageUrlInput.trim()}>
                   {imageUrlLoading ? <Loader2 size={14} className="spin" /> : <Upload size={14} />}
-                  <span>Tải URL</span>
+                  <span>{t("field.loadUrl")}</span>
                 </button>
                 <button
                   type="button"
@@ -823,7 +825,7 @@ export function DynamicField({
                     refreshInputImages();
                     setLibraryOpen(true);
                   }}
-                  title="Chọn ảnh từ thư mục input"
+                  title={t("field.chooseInput")}
                 >
                   <Folder size={14} />
                   <span>Input</span>
@@ -844,38 +846,38 @@ export function DynamicField({
               }}
             >
               <Images size={14} />
-              <span>Chọn ảnh từ thư mục input</span>
+              <span>{t("field.chooseInput")}</span>
             </button>
           ) : null}
           {description ? <small className="fieldDescription">{description}</small> : null}
         </label>
         {libraryOpen ? createPortal(
           <div className="inputLibraryModal" role="presentation" onMouseDown={() => setLibraryOpen(false)}>
-            <section className="inputLibraryPanel" role="dialog" aria-modal="true" aria-label="Thư viện ảnh input" onMouseDown={event => event.stopPropagation()}>
+            <section className="inputLibraryPanel" role="dialog" aria-modal="true" aria-label={t("field.inputLibrary")} onMouseDown={event => event.stopPropagation()}>
               <div className="inputLibraryHeader">
                 <div>
-                  <h3>Ảnh trong thư mục input</h3>
-                  <p>{visibleInputImages.length} / {inputImages.length} ảnh</p>
+                  <h3>{t("field.inputLibrary")}</h3>
+                  <p>{t("field.imageCount", { visible: visibleInputImages.length, total: inputImages.length })}</p>
                 </div>
                 <div className="inputLibraryHeaderTools">
-                  <label className={`historyIconFilter ${libraryTimeFilter !== "all" ? "active" : ""}`} title="Lọc thời gian">
+                  <label className={`historyIconFilter ${libraryTimeFilter !== "all" ? "active" : ""}`} title={t("history.filterTime")}>
                     <Filter size={14} />
-                    <select value={libraryTimeFilter} onChange={event => setLibraryTimeFilter(event.target.value)} aria-label="Lọc thời gian thư viện ảnh">
-                      <option value="all">Tất cả thời gian</option>
-                      <option value="day">Hôm nay</option>
-                      <option value="month">Tháng này</option>
-                      <option value="year">Năm này</option>
+                    <select value={libraryTimeFilter} onChange={event => setLibraryTimeFilter(event.target.value)} aria-label={t("history.filterTime")}>
+                      <option value="all">{t("history.allTime")}</option>
+                      <option value="day">{t("history.today")}</option>
+                      <option value="month">{t("history.month")}</option>
+                      <option value="year">{t("history.year")}</option>
                     </select>
                   </label>
                   <button
                     type="button"
                     className={`historyIconButton ${libraryFavoritesOnly ? "active" : ""}`}
                     onClick={() => setLibraryFavoritesOnly(current => !current)}
-                    title="Chỉ xem favourite"
+                    title={t("history.favoritesOnly")}
                   >
                     <Star size={14} />
                   </button>
-                  <button type="button" className="imageLightboxClose inPanel" onClick={() => setLibraryOpen(false)} title="Đóng">
+                  <button type="button" className="imageLightboxClose inPanel" onClick={() => setLibraryOpen(false)} title={t("common.close")}>
                     <X size={18} />
                   </button>
                 </div>
@@ -884,7 +886,7 @@ export function DynamicField({
                 <div className="inputLibraryGrid">
                   {visibleInputImages.map(image => (
                     <article key={image.name} className={`inputLibraryItem ${selectedInputName === image.name ? "isSelected" : ""}`}>
-                      <button type="button" className="inputLibraryThumb" onClick={() => handleInputImageSelect(image.name)} title="Chọn ảnh này">
+                      <button type="button" className="inputLibraryThumb" onClick={() => handleInputImageSelect(image.name)} title={t("field.chooseImage")}>
                         <img src={image.url} alt={image.name} />
                       </button>
                       <div className="inputLibraryActions">
@@ -892,17 +894,17 @@ export function DynamicField({
                           type="button"
                           className={favoriteInputImages.has(image.name) ? "isFavorite" : ""}
                           onClick={() => toggleInputFavorite(image.name)}
-                          title={favoriteInputImages.has(image.name) ? "Bỏ favourite" : "Favourite ảnh"}
+                          title={favoriteInputImages.has(image.name) ? t("history.unfavorite") : t("history.favorite")}
                         >
                           <Star size={15} />
                         </button>
-                        <button type="button" onClick={() => handleInputImageSelect(image.name)} title="Chọn">
+                        <button type="button" onClick={() => handleInputImageSelect(image.name)} title={t("field.select")}>
                           <Check size={15} />
                         </button>
-                        <button type="button" onClick={() => openLightbox(image)} title="Xem ảnh">
+                        <button type="button" onClick={() => openLightbox(image)} title={t("field.viewImage")}>
                           <Eye size={15} />
                         </button>
-                        <button type="button" onClick={() => handleDeleteInputImage(image)} title="Xóa ảnh">
+                        <button type="button" onClick={() => handleDeleteInputImage(image)} title={t("field.deleteImage")}>
                           <Trash2 size={15} />
                         </button>
                       </div>
@@ -912,7 +914,7 @@ export function DynamicField({
               ) : (
                 <div className="inputLibraryEmpty">
                   <Images size={34} />
-                  <strong>{inputImages.length ? "Không có ảnh khớp bộ lọc" : "Chưa có ảnh trong thư mục input"}</strong>
+                  <strong>{inputImages.length ? t("field.noMatchingImages") : t("field.noInputImages")}</strong>
                 </div>
               )}
             </section>
@@ -933,7 +935,7 @@ export function DynamicField({
               }}
               onWheel={handleLightboxWheel}
             >
-              <button type="button" className="imageLightboxClose" onClick={() => setLightboxOpen(false)} title="Đóng">
+              <button type="button" className="imageLightboxClose" onClick={() => setLightboxOpen(false)} title={t("common.close")}>
                 <X size={18} />
               </button>
               <div
@@ -955,19 +957,21 @@ export function DynamicField({
           document.body
         ) : null}
         {editorOpen && selectedImageUrl ? createPortal(
-          <ImageEditorModal
-            source={selectedImageUrl}
-            title={`${label} - Image Editor`}
-            onClose={() => setEditorOpen(false)}
-            onSave={handleSaveEditedInput}
-          />,
+          <Suspense fallback={null}>
+            <ImageEditorModal
+              source={selectedImageUrl}
+              title={`${label} - Image Editor`}
+              onClose={() => setEditorOpen(false)}
+              onSave={handleSaveEditedInput}
+            />
+          </Suspense>,
           document.body
         ) : null}
         {maskEditorOpen && selectedImageUrl ? createPortal(
           <MaskEditorModal
             source={selectedImageUrl}
             initialMask={maskDataUrl}
-            title={`${label} - Tô Mask`}
+            title={`${label} - ${t("mask.title")}`}
             onClose={() => setMaskEditorOpen(false)}
             onSave={handleSaveMask}
           />,
@@ -991,7 +995,7 @@ export function DynamicField({
                 onChange(resetValue);
               }}
               disabled={isAtResetValue}
-              title="Reset về mặc định"
+              title={t("field.reset")}
             >
               <RefreshCcw size={13} />
             </button>
@@ -1024,7 +1028,7 @@ export function DynamicField({
         <div className="fieldSelectWrap">
           <select value={selectValue} onChange={event => onChange(event.target.value)} disabled={isDynamicList && discoveryLoading}>
             {isDynamicList && rawChoices.length === 0 ? (
-              <option value="">{discoveryLoading ? "Đang quét server..." : "Không tìm thấy dữ liệu"}</option>
+              <option value="">{discoveryLoading ? t("field.scanning") : t("field.noData")}</option>
             ) : null}
             {parsedChoices.map(choice => (
               <option key={choice.value} value={choice.value}>{choice.label}</option>
@@ -1082,7 +1086,7 @@ export function DynamicField({
             className="fieldResetButton"
             onClick={() => onChange(resetValue)}
             disabled={isAtResetValue}
-            title="Reset về mặc định"
+            title={t("field.reset")}
           >
             <RefreshCcw size={13} />
           </button>

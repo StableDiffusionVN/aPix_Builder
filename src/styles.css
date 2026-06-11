@@ -19,8 +19,8 @@
   --radius: 16px;
   --canvas-bg: rgba(2, 3, 11, 0.56);
   --canvas-checker: rgba(255, 255, 255, 0.045);
-  --main-font: "Inter";
-  font-family: var(--main-font), Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --main-font: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI";
+  font-family: var(--main-font), sans-serif;
   line-height: 1.5;
   font-weight: 400;
   color: var(--text);
@@ -85,13 +85,27 @@ p {
 
 .appShell {
   display: grid;
-  grid-template-columns: clamp(340px, 32vw, 430px) minmax(0, 1fr);
+  grid-template-columns: var(--sidebar-width, clamp(340px, 32vw, 430px)) minmax(0, 1fr);
   gap: 10px;
   width: auto;
   max-width: 100vw;
   height: 100vh;
   padding: 10px;
   overflow-x: hidden;
+}
+
+.appShell.sidebar-right {
+  grid-template-columns: minmax(0, 1fr) var(--sidebar-width, clamp(340px, 32vw, 430px));
+}
+
+.appShell.sidebar-right .sidebar {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.appShell.sidebar-right .workspace {
+  grid-column: 1;
+  grid-row: 1;
 }
 
 .sidebar,
@@ -108,6 +122,7 @@ p {
 }
 
 .sidebar {
+  position: relative;
   display: flex;
   min-width: 0;
   min-height: 0;
@@ -115,6 +130,84 @@ p {
   gap: 12px;
   overflow: hidden;
   padding: 18px;
+}
+
+.sidebarLayoutHandles {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 4;
+}
+
+.sidebarMoveHandle,
+.sidebarResizeHandle {
+  position: absolute;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.sidebarMoveHandle {
+  top: 0;
+  left: 10px;
+  right: 10px;
+  height: 10px;
+  border-radius: 999px;
+  cursor: grab;
+}
+
+.sidebarMoveHandle::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 50%;
+  width: 36px;
+  height: 3px;
+  border-radius: 999px;
+  transform: translateX(-50%);
+  background: transparent;
+  transition: background 0.15s ease;
+}
+
+.sidebarMoveHandle:hover::after,
+body.sidebar-layout-moving .sidebarMoveHandle::after {
+  background: rgba(var(--accent-rgb), 0.45);
+}
+
+.sidebarResizeHandle {
+  top: 12px;
+  bottom: 12px;
+  width: 8px;
+  cursor: ew-resize;
+}
+
+.sidebarResizeHandle.is-start {
+  left: 0;
+}
+
+.sidebarResizeHandle.is-end {
+  right: 0;
+}
+
+.sidebarResizeHandle:hover,
+body.sidebar-layout-resizing .sidebarResizeHandle {
+  background: linear-gradient(
+    to right,
+    transparent,
+    rgba(var(--accent-rgb), 0.18),
+    transparent
+  );
+}
+
+body.sidebar-layout-dragging {
+  user-select: none;
+}
+
+body.sidebar-layout-moving {
+  cursor: grabbing;
+}
+
+body.sidebar-layout-resizing {
+  cursor: ew-resize;
 }
 
 .brand {
@@ -808,7 +901,7 @@ html[data-theme="light"] .workflowNoteContent a:hover {
   display: grid;
   min-width: 0;
   width: 100%;
-  aspect-ratio: 1;
+  aspect-ratio: 3 / 2;
   place-items: center;
   align-content: center;
   gap: 6px;
@@ -925,18 +1018,31 @@ html[data-theme="light"] .workflowNoteContent a:hover {
   position: relative;
   display: grid;
   width: 100%;
-  aspect-ratio: 1;
+  aspect-ratio: 3 / 2;
   place-items: center;
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: 12px;
-  background: var(--panel-strong);
+  background:
+    linear-gradient(45deg, var(--canvas-checker) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--canvas-checker) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--canvas-checker) 75%),
+    linear-gradient(-45deg, transparent 75%, var(--canvas-checker) 75%);
+  background-color: var(--canvas-bg);
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+  background-size: 16px 16px;
 }
 
 .uploadPreview {
+  position: absolute;
+  inset: 0;
+  display: block;
   width: 100%;
   height: 100%;
+  min-width: 0;
+  min-height: 0;
   object-fit: contain;
+  object-position: center;
 }
 
 .uploadActions {
@@ -3842,85 +3948,287 @@ html[data-theme="light"] .logTaskInspectLine {
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.32);
 }
 
-.infoBackdrop {
+.appSettingsModal {
+  grid-template-rows: auto minmax(0, 1fr);
+  width: min(920px, calc(100vw - 32px));
+  height: min(620px, calc(100vh - 32px));
+  max-height: none;
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+  border-radius: 16px;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.48);
+}
+
+.appSettingsModal > .modalHeader {
+  padding: 18px 20px 16px;
+  background: color-mix(in srgb, var(--panel) 94%, transparent);
+}
+
+.appSettingsModal > .modalHeader h2 {
+  font-size: 18px;
+}
+
+.appSettingsBody {
+  display: grid;
+  grid-template-columns: 230px minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+}
+
+.settingsTabs {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  gap: 6px;
+  padding: 16px 12px;
+  border-right: 1px solid var(--border);
+  background: color-mix(in srgb, var(--panel-strong) 72%, transparent);
+}
+
+.settingsTabs button {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) auto;
+  align-items: center;
+  width: 100%;
+  min-height: 58px;
+  gap: 8px;
+  padding: 9px 10px;
+  border: 1px solid transparent;
+  border-radius: 11px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 150ms ease, background 150ms ease, color 150ms ease;
+}
+
+.settingsTabs button:hover {
+  border-color: var(--border);
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--text);
+}
+
+.settingsTabs button.active {
+  border-color: rgba(var(--accent-rgb), 0.32);
+  background: rgba(var(--accent-rgb), 0.11);
+  color: var(--accent-hover);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.settingsTabs .comfyUiLogomark,
+.settingsTabs .runningHubLogomark {
+  color: currentColor;
+}
+
+.settingsTabs button > svg {
+  justify-self: center;
+}
+
+.settingsTabs button > span {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.settingsTabs b {
+  overflow: hidden;
+  color: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settingsTabs small {
+  overflow: hidden;
+  color: var(--muted-2);
+  font-size: 10px;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settingsTabStatus {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--muted-2);
+}
+
+.settingsTabStatus.health-online {
+  background: var(--success);
+  box-shadow: 0 0 0 3px rgba(74, 222, 128, 0.1);
+}
+
+.settingsTabStatus.health-loading {
+  background: var(--accent);
+}
+
+.settingsTabStatus.health-offline {
+  background: var(--danger);
+}
+
+.settingsTabContent {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 22px 24px 28px;
+}
+
+.settingsPane {
+  display: grid;
+  align-content: start;
+  gap: 18px;
+  min-width: 0;
+}
+
+.settingsPaneHeader {
+  display: grid;
+  gap: 4px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.settingsPaneHeaderWithStatus {
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
 }
 
-.infoModal {
-  width: min(1180px, 100%);
-  gap: 16px;
-  padding: 18px;
-}
-
-.infoModalHeader h2 {
-  font-size: 20px;
-}
-
-.infoIntro {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.infoIntro div,
-.infoNotice {
+.comfySettingsHeading {
+  display: flex;
+  align-items: center;
   min-width: 0;
+  gap: 12px;
+}
+
+.settingsPaneHeader h3 {
+  color: var(--text);
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.settingsPaneHeader p {
+  color: var(--muted-2);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.settingsPaneFields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: 16px;
+}
+
+.settingsPaneFields .themeSelectField {
+  grid-column: 1 / -1;
+}
+
+.settingsInlineOptions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
   padding: 10px 12px;
   border: 1px solid var(--border);
   border-radius: 10px;
   background: var(--panel-soft);
 }
 
-.infoIntro span,
-.infoIntro b {
-  display: block;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.settingsPane > .runningHubSettings {
+  display: grid;
+  gap: 18px;
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
 }
 
-.infoIntro span {
-  color: var(--muted-2);
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
+.infoBackdrop {
+  align-items: center;
 }
 
-.infoIntro b {
+.infoModal {
+  width: min(1180px, 100%);
+  gap: 0;
+  padding: 0;
+  overflow: auto;
+}
+
+.infoModalHeader {
+  padding: 18px 20px 16px;
+}
+
+.infoModalTitle {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
   color: var(--text);
-  font-size: 13px;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.infoVersion {
+  color: var(--muted-2);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.infoModalHeader p {
+  margin-top: 4px;
+  color: var(--muted-2);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.infoModalBody {
+  display: grid;
+  gap: 18px;
+  padding: 18px 20px 22px;
 }
 
 .infoNotice {
   display: flex;
   gap: 10px;
   align-items: flex-start;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel-soft);
   color: var(--muted);
-  font-size: 13px;
+  font-size: 12px;
   line-height: 1.45;
 }
 
 .infoNotice b {
   flex: 0 0 auto;
   color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .infoCredits {
   display: grid;
-  gap: 10px;
+  gap: 12px;
   min-width: 0;
-  padding: 12px;
+  padding: 14px;
   border: 1px solid var(--border);
   border-radius: 10px;
   background: var(--panel-soft);
 }
 
 .infoCredits h3 {
-  color: var(--accent);
-  font-size: 15px;
-  font-weight: 800;
-  line-height: 1.2;
+  margin: 0;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.3;
 }
 
 .infoCreditsGrid {
@@ -3930,24 +4238,27 @@ html[data-theme="light"] .logTaskInspectLine {
 }
 
 .infoCreditsGrid div {
+  display: grid;
+  gap: 3px;
   min-width: 0;
 }
 
 .infoCredits span,
-.infoLinkGroup span {
+.infoLinkGroup > span {
   display: block;
   color: var(--muted-2);
   font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
+  font-weight: 500;
 }
 
 .infoCredits a {
   color: var(--text);
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 1.35;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
   text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .infoCredits a:hover {
@@ -3978,18 +4289,19 @@ html[data-theme="light"] .logTaskInspectLine {
 }
 
 .infoSection h3 {
+  margin: 0;
   padding-bottom: 8px;
-  border-bottom: 1px solid rgba(var(--accent-rgb), 0.32);
-  color: var(--accent);
-  font-size: 17px;
-  font-weight: 800;
-  line-height: 1.2;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.3;
 }
 
 .infoSection p {
   margin: 10px 0 8px;
-  color: var(--muted);
-  font-size: 13px;
+  color: var(--muted-2);
+  font-size: 12px;
   line-height: 1.45;
 }
 
@@ -4003,10 +4315,10 @@ html[data-theme="light"] .logTaskInspectLine {
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
-  min-height: 29px;
+  min-height: 28px;
   color: var(--muted);
-  font-size: 13px;
-  font-weight: 700;
+  font-size: 12px;
+  font-weight: 500;
 }
 
 .keyGroup {
@@ -4036,12 +4348,12 @@ html[data-theme="light"] .shortcutRow kbd {
 
 .tipsList {
   display: grid;
-  gap: 10px;
+  gap: 8px;
   margin: 10px 0 0;
   padding-left: 18px;
   color: var(--muted);
-  font-size: 13px;
-  font-weight: 700;
+  font-size: 12px;
+  font-weight: 400;
   line-height: 1.45;
 }
 
@@ -5331,34 +5643,100 @@ html[data-theme="light"] .saveTemplateButton:hover:not(:disabled) {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
 }
 
 .templateEditorStatus {
   color: var(--muted-2);
   font-size: 12px;
-  font-weight: 650;
+  font-weight: 500;
+  line-height: 1.4;
 }
 
 .templateEditorFooterActions {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
   gap: 8px;
+  flex-shrink: 0;
+}
+
+.templateEditorFooterActions .secondaryActionButton,
+.templateEditorFooterActions .saveTemplateButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: var(--radius);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+  box-sizing: border-box;
+}
+
+.templateEditorFooterActions .saveTemplateButton {
+  gap: 6px;
+  border-color: rgba(var(--accent-rgb), 0.35);
+  background: var(--accent);
+  color: #ffffff;
+  box-shadow: none;
+}
+
+.templateEditorFooterActions .saveTemplateButton:hover:not(:disabled) {
+  background: var(--accent-hover);
+  color: #ffffff;
+}
+
+.templateEditorFooterActions .saveTemplateButton svg {
+  flex-shrink: 0;
 }
 
 .emptyHistory {
   display: grid;
-  align-content: center;
-  gap: 4px;
-  min-height: 120px;
-  padding: 16px;
-  border: 1px dashed var(--border);
-  border-radius: 12px;
-  color: var(--muted);
+  grid-template-columns: 32px minmax(0, 1fr);
+  align-items: center;
+  align-self: start;
+  gap: 10px;
+  width: 100%;
+  min-height: 77px;
+  padding: 10px;
+  border: 1px solid var(--border-subtle, var(--border));
+  border-radius: var(--radius, 6px);
+  background: var(--surface-2, rgba(255, 255, 255, 0.035));
+  color: var(--text-secondary, var(--muted));
 }
 
-.emptyHistory small {
-  color: var(--muted-2);
+.emptyHistoryIcon {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--border-subtle, var(--border));
+  border-radius: var(--radius-sm, 6px);
+  background: var(--surface-3, rgba(255, 255, 255, 0.045));
+  color: var(--text-tertiary, var(--muted-2));
+}
+
+.emptyHistoryCopy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.emptyHistoryCopy strong {
+  color: var(--text-primary, var(--text));
   font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.emptyHistoryCopy small {
+  color: var(--text-tertiary, var(--muted-2));
+  font-size: 11px;
+  line-height: 1.35;
 }
 
 .spin {
@@ -5387,6 +5765,11 @@ html[data-theme="light"] .saveTemplateButton:hover:not(:disabled) {
     width: 100%;
     max-width: 100%;
     min-height: auto;
+  }
+
+  .sidebarMoveHandle,
+  .sidebarResizeHandle {
+    display: none;
   }
 
   .workspace {
@@ -5436,12 +5819,14 @@ html[data-theme="light"] .saveTemplateButton:hover:not(:disabled) {
   }
 
   .templateEditorFooterActions {
+    align-items: stretch;
     justify-content: stretch;
   }
 
-  .templateEditorFooterActions .smallActionButton,
+  .templateEditorFooterActions .secondaryActionButton,
   .templateEditorFooterActions .saveTemplateButton {
     flex: 1;
+    height: 32px;
   }
 
   .imageLightbox {
@@ -5492,8 +5877,12 @@ html[data-theme="light"] .saveTemplateButton:hover:not(:disabled) {
 
 @media (max-width: 1320px) and (min-width: 1081px) {
   .appShell {
-    grid-template-columns: clamp(340px, 31vw, 400px) minmax(0, 1fr);
+    grid-template-columns: var(--sidebar-width, clamp(340px, 31vw, 400px)) minmax(0, 1fr);
     padding: 14px;
+  }
+
+  .appShell.sidebar-right {
+    grid-template-columns: minmax(0, 1fr) var(--sidebar-width, clamp(340px, 31vw, 400px));
   }
 
   .sidebar,
@@ -5555,11 +5944,71 @@ html[data-theme="light"] .saveTemplateButton:hover:not(:disabled) {
   .infoModal {
     align-self: stretch;
     width: 100%;
+  }
+
+  .infoModalHeader {
+    padding: 14px 14px 12px;
+  }
+
+  .infoModalBody {
+    padding: 14px 14px 18px;
+  }
+
+  .appSettingsModal {
+    width: 100%;
+    height: calc(100vh - 20px);
+    border-radius: 14px;
+  }
+
+  .appSettingsModal > .modalHeader {
     padding: 14px;
   }
 
-  .infoIntro {
+  .appSettingsBody {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .settingsTabs {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    padding: 8px;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .settingsTabs button {
     grid-template-columns: 1fr;
+    justify-items: center;
+    min-height: 52px;
+    gap: 3px;
+    padding: 7px 4px;
+    text-align: center;
+  }
+
+  .settingsTabs button.active {
+    box-shadow: inset 0 -3px 0 var(--accent);
+  }
+
+  .settingsTabs button > span {
+    justify-items: center;
+  }
+
+  .settingsTabs small,
+  .settingsTabStatus {
+    display: none;
+  }
+
+  .settingsTabContent {
+    padding: 16px 14px 22px;
+  }
+
+  .settingsPaneFields {
+    grid-template-columns: 1fr;
+  }
+
+  .settingsPaneFields .themeSelectField {
+    grid-column: auto;
   }
 
   .infoNotice {
@@ -6997,25 +7446,6 @@ html:not([data-theme="dark"]):not([data-theme="light"]) .appShell.is-runninghub 
   border: 0;
   background: transparent;
 }
-.rhSettingsBadge .runningHubLogomark {
-  color: var(--rh-brand);
-}
-
-.rhSettingsBadge {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  width: fit-content;
-  padding: 2px 8px;
-  border-radius: 999px;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--rh-brand);
-  background: rgba(var(--rh-brand-rgb), 0.1);
-  border: 1px solid rgba(var(--rh-brand-rgb), 0.28);
-}
 .rhAppPicker {
   display: grid;
   gap: 8px;
@@ -7234,12 +7664,121 @@ html:not([data-theme="dark"]):not([data-theme="light"]) .appShell.is-runninghub 
   padding-top: 18px;
   border-top: 1px solid var(--border);
 }
-.rhSettingsIntro {
-  margin: 0 0 12px;
-  font-size: 12px;
-  color: var(--muted-2);
-  line-height: 1.55;
+
+.rhAccountOverview {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid rgba(var(--rh-brand-rgb), 0.24);
+  border-radius: 12px;
+  background:
+    radial-gradient(circle at 100% 0%, rgba(var(--rh-brand-rgb), 0.09), transparent 38%),
+    var(--panel-soft);
 }
+.rhAccountHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.rhAccountHeader h4 {
+  margin: 0;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+}
+.rhAccountHeader p {
+  margin: 2px 0 0;
+  color: var(--muted-2);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.rhAccountRefresh {
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid rgba(var(--rh-brand-rgb), 0.3);
+  border-radius: 9px;
+  background: rgba(var(--rh-brand-rgb), 0.08);
+  color: var(--rh-brand);
+  cursor: pointer;
+}
+.rhAccountRefresh:hover:not(:disabled) {
+  border-color: rgba(var(--rh-brand-rgb), 0.58);
+  background: rgba(var(--rh-brand-rgb), 0.14);
+}
+.rhAccountRefresh:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+.rhAccountGrid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 7px;
+}
+.rhAccountMetric {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr);
+  align-items: center;
+  min-width: 0;
+  gap: 7px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: rgba(0, 0, 0, 0.12);
+}
+.rhAccountMetricIcon {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  border-radius: 8px;
+  background: rgba(var(--rh-brand-rgb), 0.1);
+  color: var(--rh-brand);
+}
+.rhAccountMetric > span:last-child {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+.rhAccountMetric small {
+  overflow: hidden;
+  color: var(--muted-2);
+  font-size: 11px;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rhAccountMetric b {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rhAccountMetric.is-ok b {
+  color: var(--success);
+}
+.rhAccountMetric.is-bad b {
+  color: var(--danger);
+}
+.rhAccountError {
+  padding: 7px 9px;
+  border-radius: 8px;
+  background: var(--danger-bg);
+  color: var(--danger);
+  font-size: 11px;
+}
+.runningHubSettings .field > small {
+  color: var(--muted-2);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .rhApiKeyInput {
   min-height: 30px;
   padding: 0 4px 0 8px;
@@ -7290,6 +7829,12 @@ html:not([data-theme="dark"]):not([data-theme="light"]) .appShell.is-runninghub 
 .rhTestResult.bad {
   background: var(--danger-bg);
   color: var(--danger);
+}
+
+@media (max-width: 820px) {
+  .rhAccountGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 .emptyState.rhEmptyState {
@@ -7344,8 +7889,9 @@ html:not([data-theme="dark"]):not([data-theme="light"]) .appShell.is-runninghub 
   background: rgba(var(--accent-rgb), 0.07);
 }
 .rhRunPhase.done {
-  border-color: rgba(74, 222, 128, 0.35);
-  color: #4ade80;
+  border-color: color-mix(in srgb, var(--success) 40%, var(--border));
+  color: var(--success);
+  background: color-mix(in srgb, var(--success) 12%, var(--panel));
 }
 .rhRunPhaseSep {
   display: block;
@@ -7361,4 +7907,3 @@ html:not([data-theme="dark"]):not([data-theme="light"]) .appShell.is-runninghub 
   max-width: 300px;
   line-height: 1.6;
 }
-

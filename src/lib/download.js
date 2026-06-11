@@ -2,7 +2,9 @@ export async function downloadImage(output) {
   if (!output?.url) return;
   const response = await fetch(output.url);
   if (!response.ok) {
-    throw new Error(`Không tải được ảnh: ${response.status}`);
+    throw new Error(document.documentElement.lang === "vi"
+      ? `Không tải được ảnh: ${response.status}`
+      : `Could not download the image: ${response.status}`);
   }
   const blob = await response.blob();
   const link = document.createElement("a");

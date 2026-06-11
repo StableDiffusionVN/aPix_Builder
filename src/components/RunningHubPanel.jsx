@@ -4,6 +4,7 @@ import { RunningHubField } from "./RunningHubField";
 import { ComfyUiLogomark } from "./icons/ComfyUiIcon";
 import { RunningHubLogomark } from "./icons/RunningHubIcon";
 import { RUNNINGHUB_APP_OPTIONS } from "../hooks/useRunningHub";
+import { useI18n } from "../i18n/I18nContext";
 
 const EXECUTION_MODE_OPTIONS = [
   { id: "local", label: "ComfyUI", icon: ComfyUiLogomark, iconTitle: "ComfyUI" },
@@ -12,6 +13,7 @@ const EXECUTION_MODE_OPTIONS = [
 ];
 
 export function ExecutionModeToggle({ mode, onChange }) {
+  const { locale } = useI18n();
   const trackRef = useRef(null);
   const buttonRefs = useRef({});
   const [indicator, setIndicator] = useState({ left: 0, width: 0, ready: false });
@@ -46,7 +48,7 @@ export function ExecutionModeToggle({ mode, onChange }) {
   }, [syncIndicator]);
 
   return (
-    <div className="executionModeToggle" role="tablist" aria-label="Chế độ thực thi">
+    <div className={`executionModeToggle mode-${mode}`} role="tablist" aria-label={locale === "vi" ? "Chế độ thực thi" : "Execution mode"}>
       <div className="executionModeTrack" ref={trackRef}>
         <span
           className={`executionModeIndicator ${indicator.ready ? "is-ready" : ""}`}
@@ -100,6 +102,7 @@ export function RunningHubPanel({
   onRefreshInputImages,
   onUpdateInputImages
 }) {
+  const { t } = useI18n();
   const connected = Boolean(nodes.length && !nodesError);
   const healthStatus = nodesLoading ? "loading" : connected ? "online" : "offline";
   const selectedPresetId = RUNNINGHUB_APP_OPTIONS.some(app => app.id === settings.webappId)
@@ -112,8 +115,8 @@ export function RunningHubPanel({
         <Settings2 size={16} />
         <h2>RunningHub App</h2>
         <span className={`healthDot health-${healthStatus}`} title={
-          healthStatus === "online" ? "Đã kết nối RunningHub API" :
-          healthStatus === "loading" ? "Đang tải node..." : "Chưa kết nối RunningHub"
+          healthStatus === "online" ? t("rh.connected") :
+          healthStatus === "loading" ? t("rh.loadingNodes") : t("rh.disconnected")
         }>
           {healthStatus === "loading" ? <Loader2 size={10} className="spin" /> :
            healthStatus === "online" ? <Wifi size={10} /> : <WifiOff size={10} />}
@@ -134,7 +137,7 @@ export function RunningHubPanel({
             {RUNNINGHUB_APP_OPTIONS.map(app => (
               <option key={app.id} value={app.id}>{app.name}</option>
             ))}
-            <option value="custom">Custom WebApp ID</option>
+            <option value="custom">{t("rh.customId")}</option>
           </select>
         </label>
         <div className="rhWebappIdRow">
@@ -148,7 +151,7 @@ export function RunningHubPanel({
           </label>
           <button type="button" className="rhRefreshBtn" onClick={onRefreshNodes} disabled={nodesLoading}>
             {nodesLoading ? <Loader2 size={14} className="spin" /> : <RefreshCcw size={14} />}
-            Reload
+            {t("rh.reload")}
           </button>
         </div>
       </div>
@@ -159,7 +162,7 @@ export function RunningHubPanel({
         {nodesLoading && !nodes.length ? (
           <div className="rhPanelLoading">
             <Loader2 size={20} className="spin" />
-            <span>Đang lấy nodeInfoList từ RunningHub...</span>
+            <span>{t("rh.fetching")}</span>
           </div>
         ) : null}
         {nodes.map(node => (
@@ -176,7 +179,7 @@ export function RunningHubPanel({
         {!nodesLoading && !nodes.length ? (
           <div className="rhPanelEmpty">
             <RunningHubLogomark size={28} title="RunningHub" />
-            <p>Nhập API Key trong Settings rồi bấm &quot;Tải lại node&quot;.</p>
+            <p>{t("rh.empty")}</p>
           </div>
         ) : null}
       </div>

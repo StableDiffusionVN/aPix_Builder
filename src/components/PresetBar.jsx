@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { Bookmark, BookmarkPlus, Check, RefreshCw, Tag, Trash2, X } from "lucide-react";
+import { useI18n } from "../i18n/I18nContext";
 
 export function PresetBar({ templateId, presets, onLoad, onSave, onUpdate, onDelete, storageWarning = "" }) {
+  const { t } = useI18n();
   const [selectedId, setSelectedId] = useState("");
   const [saving, setSaving] = useState(false);
   const [saveName, setSaveName] = useState("");
@@ -27,7 +29,7 @@ export function PresetBar({ templateId, presets, onLoad, onSave, onUpdate, onDel
   function handleConfirmSave() {
     const name = saveName.trim() || "Preset";
     const id = onSave(name);
-    if (id === null) { setNameError(`"${name}" đã tồn tại`); return; }
+    if (id === null) { setNameError(t("preset.exists", { name })); return; }
     setSelectedId(id);
     setSaving(false);
     setNameError("");
@@ -58,17 +60,17 @@ export function PresetBar({ templateId, presets, onLoad, onSave, onUpdate, onDel
               <Tag size={16} />
               <input
                 className="presetInput"
-                placeholder="Tên preset..."
+                placeholder={t("preset.name")}
                 value={saveName}
                 onChange={handleNameChange}
                 onKeyDown={handleSaveKeyDown}
                 autoFocus
               />
             </div>
-            <button type="button" className="templateEditButton presetConfirmBtn" onClick={handleConfirmSave} title="Xác nhận lưu">
+            <button type="button" className="templateEditButton presetConfirmBtn" onClick={handleConfirmSave} title={t("preset.confirm")}>
               <Check size={15} />
             </button>
-            <button type="button" className="templateEditButton" onClick={handleCancelSave} title="Hủy">
+            <button type="button" className="templateEditButton" onClick={handleCancelSave} title={t("common.cancel")}>
               <X size={15} />
             </button>
           </div>
@@ -79,21 +81,21 @@ export function PresetBar({ templateId, presets, onLoad, onSave, onUpdate, onDel
           <div className="templateSelect">
             <Bookmark size={16} />
             <select value={selectedId} onChange={e => handleSelect(e.target.value)}>
-              <option value="">Chưa chọn preset</option>
+              <option value="">{t("preset.none")}</option>
               {presets.map(p => (
                 <option key={p.id} value={p.id}>{p.name}</option>
               ))}
             </select>
           </div>
-          <button type="button" className="templateEditButton" onClick={handleSaveClick} title="Lưu giá trị hiện tại làm preset mới">
+          <button type="button" className="templateEditButton" onClick={handleSaveClick} title={t("preset.saveNew")}>
             <BookmarkPlus size={15} />
           </button>
           {selectedPreset ? (
             <>
-              <button type="button" className="templateEditButton presetUpdateBtn" onClick={() => onUpdate(selectedId)} title={`Cập nhật "${selectedPreset.name}" với giá trị hiện tại`}>
+              <button type="button" className="templateEditButton presetUpdateBtn" onClick={() => onUpdate(selectedId)} title={t("preset.update", { name: selectedPreset.name })}>
                 <RefreshCw size={15} />
               </button>
-              <button type="button" className="templateEditButton presetDeleteBtn" onClick={() => { onDelete(selectedId); setSelectedId(""); }} title="Xóa preset đang chọn">
+              <button type="button" className="templateEditButton presetDeleteBtn" onClick={() => { onDelete(selectedId); setSelectedId(""); }} title={t("preset.delete")}>
                 <Trash2 size={15} />
               </button>
             </>

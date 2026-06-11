@@ -41,6 +41,7 @@ import {
   submitWorkflowTask,
   waitForTaskOutputs,
   extractRhConsumeCoins,
+  fetchFullAccountStatus,
   fetchAccountRemainCoins,
   resolveRhTaskCoins,
   inspectRhTask,
@@ -847,10 +848,9 @@ async function handleTemplateDelete(req, res, url) {
 function buildRunningHubConfigSection(config = {}) {
   const rh = config.runninghub || {};
   const next = {
-    workflowId: String(rh.workflowId || "").trim(),
-    saveWorkflowJson: rh.saveWorkflowJson !== false
+    workflowId: String(rh.workflowId || "").trim()
   };
-  if (rh.saveWorkflowJson === false) next.saveWorkflowJson = false;
+  if (rh.saveWorkflowJson === true) next.saveWorkflowJson = true;
   if (rh.addMetadata) next.addMetadata = true;
   if (rh.usePersonalQueue) next.usePersonalQueue = true;
   const accessPassword = String(rh.accessPassword || "").trim();
@@ -864,7 +864,7 @@ async function handleTemplateSave(req, res, url) {
   const isRhWf = scope === TEMPLATE_SCOPES.runninghubWf;
   const workflow = body.workflow;
   const config = body.config;
-  const saveWorkflowJson = isRhWf ? config?.runninghub?.saveWorkflowJson !== false : true;
+  const saveWorkflowJson = isRhWf ? config?.runninghub?.saveWorkflowJson === true : true;
   if (!isRhWf || saveWorkflowJson) {
     if (!workflow || typeof workflow !== "object" || Array.isArray(workflow)) {
       send(res, 400, { error: "Missing workflow JSON object" });
@@ -959,6 +959,28 @@ async function handleRunningHubNodes(req, res) {
   }
   const nodes = await getWebappNodes(apiKey, webappId);
   send(res, 200, { nodes, webappId });
+}
+
+async function handleRunningHubAccountStatus(req, res) {
+  const body = JSON.parse(await readBody(req) || "{}");
+  const apiKey = String(body.apiKey || "").trim();
+  if (!apiKey) {
+    send(res, 400, { error: "Missing RunningHub API key" });
+    return;
+  }
+
+  const data = await fetchFullAccountStatus(apiKey);
+  send(res, 200, {
+    account: {
+      keyStatus: "valid",
+      apiType: data.apiType ?? null,
+      remainCoins: data.remainCoins ?? null,
+      remainMoney: data.remainMoney ?? null,
+      currency: data.currency ?? null,
+      currentTaskCounts: data.currentTaskCounts ?? null,
+      refreshedAt: new Date().toISOString()
+    }
+  });
 }
 
 async function archiveRunningHubOutputs({
@@ -1456,6 +1478,8 @@ const server = http.createServer(async (req, res) => {
       send(res, 200, { success: true, presets: nextPresets });
     } else if (req.method === "POST" && url.pathname === "/api/runninghub/nodes") {
       await handleRunningHubNodes(req, res);
+    } else if (req.method === "POST" && url.pathname === "/api/runninghub/account-status") {
+      await handleRunningHubAccountStatus(req, res);
     } else if (req.method === "POST" && url.pathname === "/api/runninghub/run") {
       await handleRunningHubRun(req, res);
     } else if (req.method === "POST" && url.pathname === "/api/runninghub-wf/run") {

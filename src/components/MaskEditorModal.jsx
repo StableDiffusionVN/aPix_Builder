@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Brush, Contrast, Eraser, Hand, RotateCcw, X, Check, Loader2, ZoomIn, ZoomOut, Maximize, Undo2, Redo2, PenTool, PaintBucket } from "lucide-react";
+import { useI18n } from "../i18n/I18nContext";
 
 const MIN_ZOOM = 0.2;
 const MAX_ZOOM = 100;
@@ -136,6 +137,8 @@ function restoreCanvasSnapshot(canvas, snapshot) {
 // Mask painter: user paints the region to inpaint.
 // On export, painted region → alpha 0, unpainted → alpha 255 (ComfyUI: mask = 1 - alpha).
 export function MaskEditorModal({ source, initialMask, title = "Tô Mask", onClose, onSave }) {
+  const { t } = useI18n();
+  const displayTitle = title === "Tô Mask" ? t("mask.title") : title;
   const canvasRef = useRef(null);
   const stageRef = useRef(null);
   const imageRef = useRef(null);
@@ -762,12 +765,12 @@ export function MaskEditorModal({ source, initialMask, title = "Tô Mask", onClo
         className="settingsModal maskEditorModal"
         role="dialog"
         aria-modal="true"
-        aria-label={title}
+        aria-label={displayTitle}
         onMouseDown={event => event.stopPropagation()}
       >
         <div className="modalHeader">
           <div>
-            <h2>{title}</h2>
+            <h2>{displayTitle}</h2>
           </div>
           <div className="maskHeaderActions">
             <label className="maskBrushSize">
@@ -775,7 +778,7 @@ export function MaskEditorModal({ source, initialMask, title = "Tô Mask", onClo
               <input type="range" min="5" max="300" value={brushSize} onChange={event => setBrushSize(Number(event.target.value))} />
               <b>{brushSize}</b>
             </label>
-            <label className="maskBrushSize maskGrowPick" title="Grow/Shrink mask trực quan theo pixel">
+            <label className="maskBrushSize maskGrowPick" title={t("mask.growHint")}>
               <span>Grow</span>
               <input
                 type="range"
@@ -793,22 +796,22 @@ export function MaskEditorModal({ source, initialMask, title = "Tô Mask", onClo
               />
               <b>{maskGrowAmount > 0 ? `+${maskGrowAmount}` : maskGrowAmount}</b>
             </label>
-            <label className="maskColorPick" title="Màu hiển thị mask" style={{ "--mask-color": maskColor }}>
+            <label className="maskColorPick" title={t("mask.color")} style={{ "--mask-color": maskColor }}>
               <input type="color" value={maskColor} onChange={event => setMaskColor(event.target.value)} />
               <span aria-hidden="true" />
             </label>
-            <label className="maskBrushSize maskOpacityPick" title="Độ mờ hiển thị mask">
+            <label className="maskBrushSize maskOpacityPick" title={t("mask.opacity")}>
               <span>Opacity</span>
               <input type="range" min="10" max="100" value={maskOpacity} onChange={event => setMaskOpacity(Number(event.target.value))} />
               <b>{maskOpacity}%</b>
             </label>
-            <button type="button" className="maskTool maskToolIconOnly" onClick={handleClear} title="Xóa toàn bộ mask" aria-label="Xóa toàn bộ mask">
+            <button type="button" className="maskTool maskToolIconOnly" onClick={handleClear} title={t("mask.clear")} aria-label={t("mask.clear")}>
               <RotateCcw size={15} />
             </button>
-            <button type="button" className="maskTool maskToolIconOnly" onClick={handleInvert} title="Đảo ngược mask (I)" aria-label="Đảo ngược mask">
+            <button type="button" className="maskTool maskToolIconOnly" onClick={handleInvert} title={`${t("mask.invert")} (I)`} aria-label={t("mask.invert")}>
               <Contrast size={15} />
             </button>
-            <button className="modalClose" onClick={onClose} title="Đóng"><X size={18} /></button>
+            <button className="modalClose" onClick={onClose} title={t("common.close")}><X size={18} /></button>
           </div>
         </div>
 
@@ -872,36 +875,36 @@ export function MaskEditorModal({ source, initialMask, title = "Tô Mask", onClo
           ) : null}
           {!ready ? <div className="maskLoading"><Loader2 size={28} className="spin" /></div> : null}
           <div className="imageEditorFloatingBar maskFloatingBar" onPointerDown={event => event.stopPropagation()}>
-            <button type="button" onClick={undo} disabled={!canUndo} title="Hoàn tác">
+            <button type="button" onClick={undo} disabled={!canUndo} title={t("editor.undo")}>
               <Undo2 size={13} />
             </button>
-            <button type="button" onClick={redo} disabled={!canRedo} title="Làm lại">
+            <button type="button" onClick={redo} disabled={!canRedo} title={t("editor.redo")}>
               <Redo2 size={13} />
             </button>
             <span className="floatingDivider" />
-            <button type="button" onClick={() => updateZoom(-0.2)} title="Thu nhỏ (-)">
+            <button type="button" onClick={() => updateZoom(-0.2)} title={`${t("editor.zoomOut")} (-)`}>
               <ZoomOut size={13} />
             </button>
-            <button type="button" className="zoomReadout" onClick={resetView} title="Về 100%">
+            <button type="button" className="zoomReadout" onClick={resetView} title={t("editor.zoomReset")}>
               <span>{zoomPct}%</span>
             </button>
-            <button type="button" onClick={() => updateZoom(0.2)} title="Phóng to (+)">
+            <button type="button" onClick={() => updateZoom(0.2)} title={`${t("editor.zoomIn")} (+)`}>
               <ZoomIn size={13} />
             </button>
-            <button type="button" onClick={resetView} title="Vừa khung (0)">
+            <button type="button" onClick={resetView} title={`${t("mask.fit")} (0)`}>
               <Maximize size={13} />
             </button>
             <span className="floatingDivider" />
-            <button type="button" className={tool === "brush" ? "active" : ""} onClick={() => setTool("brush")} title="Cọ vẽ mask">
+            <button type="button" className={tool === "brush" ? "active" : ""} onClick={() => setTool("brush")} title={t("mask.brush")}>
               <Brush size={13} />
             </button>
-            <button type="button" className={tool === "erase" ? "active" : ""} onClick={() => setTool("erase")} title="Tẩy mask">
+            <button type="button" className={tool === "erase" ? "active" : ""} onClick={() => setTool("erase")} title={t("mask.erase")}>
               <Eraser size={13} />
             </button>
             <button type="button" className={penActive ? "active" : ""} onClick={() => setTool("pen")} title="Pen Tool">
               <PenTool size={13} />
             </button>
-            <button type="button" className={panActive ? "active" : ""} onClick={() => setTool("pan")} title="Di chuyển (giữ Space)">
+            <button type="button" className={panActive ? "active" : ""} onClick={() => setTool("pan")} title={t("mask.pan")}>
               <Hand size={13} />
             </button>
             <button type="button" onClick={fillPenPath} disabled={!canFillPenPath} title="Fill path (Cmd/Ctrl + Enter)">
@@ -911,10 +914,10 @@ export function MaskEditorModal({ source, initialMask, title = "Tô Mask", onClo
         </div>
 
         <div className="maskFooter">
-          <button type="button" className="downloadButton maskCancel" onClick={onClose}>Hủy</button>
+          <button type="button" className="downloadButton maskCancel" onClick={onClose}>{t("common.cancel")}</button>
           <button type="button" className="maskSave" onClick={handleSave} disabled={saving || !ready}>
             {saving ? <Loader2 size={15} className="spin" /> : <Check size={15} />}
-            <span>Lưu mask</span>
+            <span>{t("mask.save")}</span>
           </button>
         </div>
       </section>

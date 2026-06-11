@@ -104,12 +104,12 @@ html[data-theme="dark"] .modalHeader h2,
 html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .modalHeader h2,
 html[data-theme="light"] .modalHeader h2,
 html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .modalHeader h2,
-html[data-theme="dark"] .infoModalHeader h2,
-html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .infoModalHeader h2,
-html[data-theme="light"] .infoModalHeader h2 {
+html[data-theme="dark"] .infoModalTitle,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .infoModalTitle,
+html[data-theme="light"] .infoModalTitle {
   color: var(--text-primary);
-  font-size: 16px;
-  font-weight: 600;
+  font-size: 17px;
+  font-weight: 700;
   letter-spacing: -0.02em;
   line-height: 1.25;
 }
@@ -234,14 +234,10 @@ html[data-theme="light"] .themeSwatch {
 
 /* ── Info modal ─────────────────────────────────────────── */
 
-html[data-theme="dark"] .infoIntro div,
 html[data-theme="dark"] .infoNotice,
 html[data-theme="dark"] .infoCredits,
-html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .infoIntro div,
 html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .infoNotice,
 html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .infoCredits,
-html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .infoCredits,
-html[data-theme="light"] .infoIntro div,
 html[data-theme="light"] .infoNotice,
 html[data-theme="light"] .infoCredits {
   border-color: var(--border-subtle);
@@ -249,27 +245,22 @@ html[data-theme="light"] .infoCredits {
   background: var(--surface-2);
 }
 
-html[data-theme="dark"] .infoIntro span,
-html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .infoIntro span,
-html[data-theme="light"] .infoIntro span {
-  font-size: 10px;
-  font-weight: 600;
+html[data-theme="dark"] .infoVersion,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .infoVersion,
+html[data-theme="light"] .infoVersion {
   color: var(--text-tertiary);
-}
-
-html[data-theme="dark"] .infoIntro b,
-html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .infoIntro b,
-html[data-theme="light"] .infoIntro b {
   font-size: 12px;
   font-weight: 500;
-  color: var(--text-primary);
 }
 
 html[data-theme="dark"] .infoCredits h3,
 html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .infoCredits h3,
-html[data-theme="light"] .infoCredits h3 {
+html[data-theme="light"] .infoCredits h3,
+html[data-theme="dark"] .infoSection h3,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .infoSection h3,
+html[data-theme="light"] .infoSection h3 {
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
 }
 

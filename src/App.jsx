@@ -21,13 +21,15 @@ import { ConnectionPanel, SavedServerList, AddServerForm } from "./components/Co
 import { DynamicField } from "./components/DynamicField";
 import { ImageEditorModal } from "./components/ImageEditorModal";
 import { OutputGallery } from "./components/OutputGallery";
+import { RunLogPanel } from "./components/RunLogPanel";
+import { formatOutputTimingLabel } from "./lib/runLog";
 import { PresetBar } from "./components/PresetBar";
 import { RunControls } from "./components/RunControls";
 import { TemplateEditorModal } from "./components/TemplateEditorModal";
 import { TemplateSelector } from "./components/TemplateSelector";
 import { downloadImage } from "./lib/download";
 import { canonicalDynamicType, dynamicFieldChoices } from "./lib/dynamicTypes";
-import { buildDefaults, flattenInputs, itemValueKey, normalizeId, requestPayload } from "./lib/template";
+import { buildDefaults, extractImageValueUrl, findCompareInputImage, flattenInputs, itemValueKey, normalizeId, requestPayload } from "./lib/template";
 import { useDiscovery } from "./hooks/useDiscovery";
 import { useHistory } from "./hooks/useHistory";
 import { useInputImages } from "./hooks/useInputImages";
@@ -36,6 +38,7 @@ import { useServerList } from "./hooks/useServerList";
 import { useWorkspace, sanitizeWorkspaceValues } from "./hooks/useWorkspace";
 import { useImageViewer } from "./hooks/useImageViewer";
 import { useExecution } from "./hooks/useExecution";
+import { useRunLogHistory } from "./hooks/useRunLogHistory";
 import {
   buildNodeDefaults,
   isRunningHubMode,
@@ -147,6 +150,7 @@ export default function App() {
   const [theme, setTheme] = useState(loadTheme);
   const [selectedOutputIndex, setSelectedOutputIndex] = useState(0);
   const [showWaitScreen, setShowWaitScreen] = useState(false);
+  const [runLogOpen, setRunLogOpen] = useState(false);
   const [notifyEnabled, setNotifyEnabled] = useState(loadNotifyEnabled);
   const [addServerOpen, setAddServerOpen] = useState(false);
   const [executionMode, setExecutionMode] = useState(loadExecutionMode);
@@ -171,6 +175,8 @@ export default function App() {
   const { getPresets, savePreset, updatePreset, deletePreset, presetsVersion } = usePresets();
   const { getServers, addServer, removeServer } = useServerList();
 
+  const runLogHistory = useRunLogHistory();
+
   const onRunComplete = (historyItem) => {
     if (historyItem) setHistory(current => [historyItem, ...current]);
     setSelectedOutputIndex(0);
@@ -180,14 +186,27 @@ export default function App() {
     }
   };
 
-  const localExecution = useExecution({ onComplete: onRunComplete });
-  const rhExecution = useRunningHubExecution({ onComplete: onRunComplete });
+  const localExecution = useExecution({ onComplete: onRunComplete, runLog: runLogHistory });
+  const rhExecution = useRunningHubExecution({ onComplete: onRunComplete, runLog: runLogHistory });
   const {
-    running, activeRunId, runQueue,
+    running, activeRunId, activeJob, activeTaskId, taskStatus, runQueue,
     status, setStatus, error, setError,
     result, setResult, progress,
     runWorkflow, cancelWorkflow
   } = isRunningHubMode(executionMode) ? rhExecution : localExecution;
+
+  const {
+    sessions: runLogSessions,
+    deleteSession: deleteRunLogSession,
+    clearHistory: clearRunLogHistory,
+    updateSession: updateRunLogSession,
+    refreshSessions: refreshRunLogSessions
+  } = runLogHistory;
+
+  useEffect(() => {
+    if (!runLogOpen) return;
+    refreshRunLogSessions();
+  }, [runLogOpen, refreshRunLogSessions]);
 
   const isRunningHub = isRunningHubMode(executionMode);
   const isRunningHubApp = executionMode === "runninghub-app";
@@ -216,29 +235,34 @@ export default function App() {
   const selectedOutput = resultOutputs[selectedOutputIndex] || resultOutputs[0];
   const outputLabel = selectedOutput?.label || (isRunningHub ? "Ảnh kết quả RunningHub" : outputs[0]?.ui?.label || "Ảnh kết quả");
   const heroImage = selectedOutput?.url;
-  const resultTiming = result?.historyItem || result || {};
+  const resultTiming = useMemo(() => {
+    const base = result?.historyItem || result || {};
+    return {
+      ...base,
+      provider: result?.provider || base.provider,
+      durationMs: result?.durationMs ?? base.durationMs,
+      rhCoins: result?.rhCoins ?? base.rhCoins ?? null
+    };
+  }, [result]);
+  const outputTimingLabel = formatOutputTimingLabel({
+    durationMs: resultTiming.durationMs,
+    provider: resultTiming.provider || (isRunningHub ? "runninghub" : undefined),
+    rhCoins: resultTiming.rhCoins
+  });
   const showStatus = Boolean(error || result || running || activeRunId || runQueue.length);
 
   const compareInputImage = useMemo(() => {
     if (isRunningHubApp) {
       for (const node of rhNodes) {
         if (String(node.fieldType).toUpperCase() !== "IMAGE") continue;
-        const value = rhValues[`${node.nodeId}|${node.fieldName}`];
-        if (typeof value === "string" && value.startsWith("data:image")) return value;
-        if (value?.kind === "input-image" && value.url) return value.url;
+        const url = extractImageValueUrl(rhValues[`${node.nodeId}|${node.fieldName}`]);
+        if (url) return url;
       }
       return "";
     }
-    const compareInputs = isRunningHubWf ? rhWfInputs : inputs;
+    const compareItems = isRunningHubWf ? rhWfInputs : inputs;
     const compareValues = isRunningHubWf ? rhWfValues : values;
-    for (const item of compareInputs) {
-      const type = item.ui?.type;
-      if (type !== "image" && type !== "image_mask") continue;
-      const value = compareValues[normalizeId(item.id)];
-      if (typeof value === "string" && value.startsWith("data:image")) return value;
-      if (value?.kind === "input-image" && value.url) return value.url;
-    }
-    return "";
+    return findCompareInputImage(compareItems, compareValues);
   }, [isRunningHubApp, isRunningHubWf, rhNodes, rhValues, rhWfInputs, rhWfValues, inputs, values]);
 
   const canCompare = Boolean(heroImage && compareInputImage);
@@ -385,6 +409,20 @@ export default function App() {
     window.addEventListener("keydown", handleInfoShortcut, true);
     return () => window.removeEventListener("keydown", handleInfoShortcut, true);
   }, [infoOpen]);
+
+  // Log panel shortcut
+  useEffect(() => {
+    function handleLogShortcut(event) {
+      if (event.key !== "F1") return;
+      if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
+      if (isTextEntryTarget(event.target)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      setRunLogOpen(current => !current);
+    }
+    window.addEventListener("keydown", handleLogShortcut, true);
+    return () => window.removeEventListener("keydown", handleLogShortcut, true);
+  }, []);
 
   // Keyboard: space reset, S compare
   useEffect(() => {
@@ -757,15 +795,23 @@ export default function App() {
     setShowWaitScreen(false);
     resetImageView();
     setSelectedOutputIndex(0);
-    const restoredResult = item.result || {
-      runId: item.id,
-      promptId: item.promptId,
-      template: item.templateId,
-      address: item.address,
-      submittedAt: item.submittedAt,
-      completedAt: item.completedAt || item.createdAt,
-      durationMs: item.durationMs,
-      outputs: item.outputs || []
+    const restoredResult = {
+      ...(item.result || {
+        runId: item.id,
+        promptId: item.promptId,
+        template: item.templateId,
+        address: item.address,
+        submittedAt: item.submittedAt,
+        completedAt: item.completedAt || item.createdAt,
+        durationMs: item.durationMs,
+        outputs: item.outputs || []
+      }),
+      provider: item.provider || item.result?.provider,
+      rhCoins: item.rhCoins ?? item.result?.rhCoins ?? null,
+      durationMs: item.durationMs ?? item.result?.durationMs,
+      submittedAt: item.submittedAt ?? item.result?.submittedAt,
+      completedAt: item.completedAt || item.createdAt || item.result?.completedAt,
+      outputs: item.outputs || item.result?.outputs || []
     };
     if (isRunningHubHistoryItem(item)) {
       const historyMode = runningHubHistoryMode(item);
@@ -1150,12 +1196,36 @@ export default function App() {
               {heroImage && compareMode && canCompare ? (
                 <div className="compareDivider" style={{ "--compare-divider-x": `${compareDividerX}px` }} aria-hidden="true" />
               ) : null}
-              {heroImage && outputImageSize.width && outputImageSize.height ? (
-                <div className="outputSizeBadge">{outputImageSize.width} x {outputImageSize.height}</div>
+              {heroImage && (outputImageSize.width && outputImageSize.height || outputTimingLabel) ? (
+                <div className="outputMetaStack">
+                  {outputImageSize.width && outputImageSize.height ? (
+                    <div className="outputSizeBadge">{outputImageSize.width} x {outputImageSize.height}</div>
+                  ) : null}
+                  {outputTimingLabel ? (
+                    <div className="outputTimingBadge">{outputTimingLabel}</div>
+                  ) : null}
+                </div>
               ) : null}
-              {heroImage && resultTiming.durationMs ? (
-                <div className="outputTimingBadge">Hoàn thành trong {formatDuration(resultTiming.durationMs)}</div>
-              ) : null}
+
+              <RunLogPanel
+                open={runLogOpen}
+                onToggle={() => setRunLogOpen(current => !current)}
+                sessions={runLogSessions}
+                onDeleteSession={deleteRunLogSession}
+                onClearHistory={clearRunLogHistory}
+                rhApiKey={rhSettings.apiKey}
+                onRhTaskInspected={(session, detail) => {
+                  if (!session?.runId || !detail) return;
+                  updateRunLogSession(session.runId, {
+                    taskId: detail.taskId || session.taskId,
+                    rhCoins: detail.rhCoins ?? session.rhCoins
+                  });
+                }}
+                runQueue={runQueue}
+                activeRunId={activeRunId}
+                status={status}
+                running={running}
+              />
             </div>
           </div>
         </section>
@@ -1377,6 +1447,7 @@ export default function App() {
                 <p>Hoạt động ở màn hình chính khi bạn không nhập text.</p>
                 <div className="shortcutList">
                   <ShortcutRow label="Mở bảng hướng dẫn này" keys={["Cmd/Ctrl", "/"]} />
+                  <ShortcutRow label="Đóng/mở bảng log" keys={["F1"]} />
                   <ShortcutRow label="Đóng popup" keys={["Esc"]} />
                   <ShortcutRow label="Đặt lại zoom/vị trí ảnh" keys={["Space"]} />
                   <ShortcutRow label="Bật/tắt so sánh input/output" keys={["S"]} />

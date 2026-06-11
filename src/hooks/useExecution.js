@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { describeJob } from "../lib/runLog";
 
 function formatDuration(ms) {
   if (!Number.isFinite(ms)) return "";
@@ -8,7 +9,7 @@ function formatDuration(ms) {
   return minutes ? `${minutes}m ${rest}s` : `${rest}s`;
 }
 
-export function useExecution({ onComplete } = {}) {
+export function useExecution({ onComplete, runLog } = {}) {
   const [running, setRunning] = useState(false);
   const [activeRunId, setActiveRunId] = useState("");
   const [runQueue, setRunQueue] = useState([]);
@@ -16,7 +17,14 @@ export function useExecution({ onComplete } = {}) {
   const [error, setError] = useState("");
   const [result, setResult] = useState(null);
   const [progress, setProgress] = useState(null);
+  const [activeJob, setActiveJob] = useState(null);
   const runQueueRef = useRef([]);
+  const activeRunIdRef = useRef("");
+
+  function appendLog(level, message, meta = {}) {
+    const runId = meta.runId || activeRunIdRef.current;
+    runLog?.appendLog?.(runId, level, message, { provider: "local", ...meta });
+  }
 
   function setQueue(nextQueue) {
     runQueueRef.current = nextQueue;
@@ -29,24 +37,30 @@ export function useExecution({ onComplete } = {}) {
       case "execution_start":
         setProgress({ value: 0, max: 0, node: null, type: "start", label: "Bắt đầu xử lý..." });
         setStatus("Bắt đầu thực thi workflow...");
+        appendLog("info", "ComfyUI bắt đầu thực thi workflow");
         break;
       case "execution_cached": {
         const count = (data.nodes || []).length;
         setProgress(prev => ({ ...(prev || {}), type: "cached", label: `${count} node từ cache` }));
+        appendLog("info", `${count} node được lấy từ cache`);
         break;
       }
       case "executing":
         if (data.node != null) {
           setProgress(prev => ({ ...(prev || {}), type: "executing", node: data.node, label: `Đang xử lý node ${data.node}...` }));
           setStatus(`Đang xử lý node ${data.node}...`);
+          appendLog("info", `Đang xử lý node ${data.node}`);
         }
         break;
       case "progress":
         setProgress({ value: data.value, max: data.max, node: data.node, type: "progress", label: `${data.value} / ${data.max}` });
+        appendLog("info", `Tiến độ node ${data.node ?? "?"}: ${data.value}/${data.max}`);
         break;
       case "status":
         if (data.exec_info?.queue_remaining > 0) {
-          setStatus(`Đang chờ trong hàng đợi ComfyUI: còn ${data.exec_info.queue_remaining} trước...`);
+          const queueRemaining = data.exec_info.queue_remaining;
+          setStatus(`Đang chờ trong hàng đợi ComfyUI: còn ${queueRemaining} trước...`);
+          appendLog("info", `ComfyUI còn ${queueRemaining} prompt trước trong hàng đợi`);
         }
         break;
       default:
@@ -55,17 +69,22 @@ export function useExecution({ onComplete } = {}) {
   }
 
   async function executeRun(job) {
+    activeRunIdRef.current = job.runId;
     setActiveRunId(job.runId);
+    setActiveJob(job);
+    runLog?.updateSession?.(job.runId, { status: "running" });
     setRunning(true);
     setError("");
     setResult(null);
     setProgress(null);
     const clientSubmittedAt = new Date().toISOString();
-    setStatus(runQueueRef.current.length
-      ? `Đang chạy request, còn ${runQueueRef.current.length} trong hàng chờ...`
+    const queueAhead = runQueueRef.current.length;
+    setStatus(queueAhead
+      ? `Đang chạy request, còn ${queueAhead} trong hàng chờ...`
       : "Đang gửi workflow tới ComfyUI...");
+    appendLog("info", `Bắt đầu chạy ${describeJob(job)}`, { runId: job.runId });
+    if (queueAhead) appendLog("info", `Còn ${queueAhead} request chờ sau lệnh này`);
 
-    // Open SSE before POSTing to catch early events
     let eventSource = null;
     try {
       eventSource = new EventSource(`/api/run-events?runId=${encodeURIComponent(job.runId)}`);
@@ -110,18 +129,25 @@ export function useExecution({ onComplete } = {}) {
       };
       setResult(timedResult);
       setStatus(`Hoàn tất prompt ${data.promptId}${timedResult.durationMs ? ` trong ${formatDuration(timedResult.durationMs)}` : ""}`);
+      appendLog("success", `Hoàn tất prompt ${data.promptId}${timedResult.durationMs ? ` trong ${formatDuration(timedResult.durationMs)}` : ""}`, { runId: job.runId });
+      runLog?.endSession?.(job.runId, "success", { durationMs: timedResult.durationMs });
       onComplete?.(timedHistoryItem, timedResult);
     } catch (err) {
       setProgress(null);
       setError(err.message);
       setStatus("Request thất bại");
+      appendLog("error", err.message || "Request thất bại", { runId: job.runId });
+      runLog?.endSession?.(job.runId, "error", { error: err.message });
     } finally {
       eventSource?.close();
+      activeRunIdRef.current = "";
       setActiveRunId("");
+      setActiveJob(null);
       const [nextJob, ...remaining] = runQueueRef.current;
       setQueue(remaining);
       if (nextJob) {
         setStatus(`Đang lấy request tiếp theo, còn ${remaining.length} trong hàng chờ...`);
+        appendLog("info", `Chuyển sang request tiếp theo: ${describeJob(nextJob)}`, { runId: nextJob.runId });
         executeRun(nextJob);
       } else {
         setRunning(false);
@@ -130,36 +156,47 @@ export function useExecution({ onComplete } = {}) {
   }
 
   async function cancelWorkflow() {
-    if (!activeRunId) return;
-    // Hủy luôn các request đang chờ ở phía client.
-    if (runQueueRef.current.length) setQueue([]);
+    if (!activeRunIdRef.current) return;
+    if (runQueueRef.current.length) {
+      setQueue([]);
+      appendLog("warn", "Đã xóa toàn bộ request đang chờ trong hàng chờ client");
+    }
     setStatus("Đang ngắt request...");
+    appendLog("warn", "Đang gửi lệnh ngắt request", { runId: activeRunIdRef.current });
     try {
       const response = await fetch("/api/cancel", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ runId: activeRunId })
+        body: JSON.stringify({ runId: activeRunIdRef.current })
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Cancel failed");
-      setStatus(data.warning ? `Đã yêu cầu ngắt, cảnh báo: ${data.warning}` : "Đã gửi lệnh ngắt request");
+      const cancelMessage = data.warning ? `Đã yêu cầu ngắt, cảnh báo: ${data.warning}` : "Đã gửi lệnh ngắt request";
+      setStatus(cancelMessage);
+      appendLog("warn", cancelMessage, { runId: activeRunIdRef.current });
+      runLog?.endSession?.(activeRunIdRef.current, "cancelled");
     } catch (err) {
       setError(err.message);
       setStatus("Không gửi được lệnh ngắt");
+      appendLog("error", err.message || "Không gửi được lệnh ngắt", { runId: activeRunIdRef.current });
     }
   }
 
   function runWorkflow(job) {
     if (running) {
       setQueue([...runQueueRef.current, job]);
-      setStatus(`Đã thêm vào hàng chờ (${runQueueRef.current.length + 1} request)`);
+      const queueSize = runQueueRef.current.length;
+      setStatus(`Đã thêm vào hàng chờ (${queueSize} request)`);
+      runLog?.startSession?.(job, { provider: "local", status: "queued" });
+      appendLog("queue", `Thêm vào hàng chờ: ${describeJob(job)} (vị trí #${queueSize})`, { runId: job.runId });
       return;
     }
+    runLog?.startSession?.(job, { provider: "local", status: "running" });
     executeRun(job);
   }
 
   return {
-    running, activeRunId, runQueue,
+    running, activeRunId, activeJob, activeTaskId: "", taskStatus: null, runQueue,
     status, setStatus, error, setError,
     result, setResult, progress,
     runWorkflow, cancelWorkflow

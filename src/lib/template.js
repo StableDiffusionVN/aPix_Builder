@@ -130,3 +130,37 @@ export function itemValueKey(item) {
   if (!item.id) return null;
   return normalizeId(item.id);
 }
+
+export function extractImageValueUrl(value) {
+  if (typeof value === "string" && value.startsWith("data:image")) return value;
+  if (value?.kind === "input-image" && value.url) return value.url;
+  return "";
+}
+
+function isImageFieldType(type) {
+  const normalized = String(type || "").toLowerCase();
+  return normalized === "image" || normalized === "image_mask" || normalized === "file";
+}
+
+export function findCompareInputImage(items, values) {
+  for (const item of items || []) {
+    const uiType = item?.ui?.type;
+    if (uiType === "col") {
+      for (const [childKey, child] of Object.entries(item.ui?.col || {})) {
+        const found = findCompareInputImage([{ key: `${item.key}.${childKey}`, ...child }], values);
+        if (found) return found;
+      }
+      continue;
+    }
+    if (isMenuSub(item)) {
+      const menuValue = values[menuSubValueKey(item)];
+      const found = findCompareInputImage(getActiveSubInputs(item, menuValue), values);
+      if (found) return found;
+      continue;
+    }
+    if (!isImageFieldType(uiType) || !item.id) continue;
+    const url = extractImageValueUrl(values[normalizeId(item.id)]);
+    if (url) return url;
+  }
+  return "";
+}

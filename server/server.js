@@ -39,8 +39,21 @@ import {
   prepareNodeInfoList,
   submitAiAppTask,
   submitWorkflowTask,
-  waitForTaskOutputs
+  waitForTaskOutputs,
+  extractRhConsumeCoins,
+  fetchAccountRemainCoins,
+  resolveRhTaskCoins,
+  inspectRhTask
 } from "./lib/runningHubClient.js";
+import {
+  appendRunLog,
+  clearRunLogSessions,
+  deleteRunLogSession,
+  endRunLogSession,
+  getRunLogSessions,
+  startRunLogSession,
+  updateRunLogSession
+} from "./lib/runLogStore.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
@@ -82,7 +95,7 @@ async function handleRunEvents(req, res, url) {
   });
   res.flushHeaders?.();
   const client = { res };
-  const run = activeRuns.get(runId);
+  const run = activeRuns.get(runId) || activeRhRuns.get(runId);
   if (run) {
     run.sseClients.add(client);
   } else {
@@ -98,8 +111,30 @@ async function handleRunEvents(req, res, url) {
   }
   req.on("close", () => {
     activeRuns.get(runId)?.sseClients?.delete(client);
+    activeRhRuns.get(runId)?.sseClients?.delete(client);
     pendingSseClients.get(runId)?.delete(client);
   });
+}
+
+function attachRhRun(runId, abortController) {
+  const pending = pendingSseClients.get(runId);
+  const run = {
+    abortController,
+    cancelled: false,
+    sseClients: new Set(pending || []),
+    taskId: null
+  };
+  pendingSseClients.delete(runId);
+  activeRhRuns.set(runId, run);
+  return run;
+}
+
+function closeRhRun(run, runId) {
+  broadcastRunEvent(run, { type: "run_end", data: { runId } });
+  for (const client of run.sseClients) {
+    try { client.res.end(); } catch {}
+  }
+  activeRhRuns.delete(runId);
 }
 const templates = createTemplateService({
   configDir,
@@ -913,6 +948,7 @@ async function archiveRunningHubOutputs({
   rhWfTemplateId = "",
   taskId,
   outputs,
+  rhCoins = null,
   nodes,
   values: savedValues,
   submittedAt
@@ -945,6 +981,8 @@ async function archiveRunningHubOutputs({
     throw new Error("RunningHub hoàn tất nhưng không tải được file kết quả");
   }
 
+  const resolvedRhCoins = rhCoins ?? extractRhConsumeCoins(outputs, { data: outputs });
+
   const isWf = rhMode === "wf";
   const resourceId = isWf ? workflowId : webappId;
   const templatePrefix = isWf ? "runninghub-wf" : "runninghub-app";
@@ -963,6 +1001,7 @@ async function archiveRunningHubOutputs({
     submittedAt: submittedAt || completedAt,
     completedAt,
     durationMs,
+    rhCoins: resolvedRhCoins,
     outputs: archivedOutputs,
     status: "success",
     provider: "runninghub",
@@ -987,6 +1026,7 @@ async function archiveRunningHubOutputs({
       submittedAt: submittedAt || completedAt,
       completedAt,
       durationMs,
+      rhCoins: resolvedRhCoins,
       outputs: archivedOutputs
     }
   };
@@ -1002,7 +1042,13 @@ async function handleRunningHubRun(req, res) {
   const apiKey = String(body.apiKey || "").trim();
   const webappId = String(body.webappId || "").trim();
   const abortController = new AbortController();
-  activeRhRuns.set(runId, { abortController, cancelled: false });
+  const run = attachRhRun(runId, abortController);
+  const emitRhStatus = (status, label, taskId = run.taskId) => {
+    broadcastRunEvent(run, {
+      type: "rh_task_status",
+      data: { taskId: taskId ? String(taskId) : null, status, label }
+    });
+  };
 
   try {
     if (!apiKey) throw new Error("Missing RunningHub API key");
@@ -1011,13 +1057,22 @@ async function handleRunningHubRun(req, res) {
       throw new Error("Missing RunningHub node list");
     }
 
+    const coinsBefore = await fetchAccountRemainCoins(apiKey, abortController.signal);
+    emitRhStatus("upload", "Đang upload dữ liệu lên RunningHub...");
     const nodeInfoList = await prepareNodeInfoList(apiKey, body.nodes, {
       inputDir,
-      signal: abortController.signal
+      signal: abortController.signal,
+      onProgress: ({ label }) => emitRhStatus("upload", label || "Đang upload dữ liệu...")
     });
+    emitRhStatus("submit", "Đang gửi task lên RunningHub...");
     const submitData = await submitAiAppTask(apiKey, webappId, nodeInfoList, abortController.signal);
     const taskId = submitData.taskId;
     if (!taskId) throw new Error("RunningHub không trả về taskId");
+    run.taskId = taskId;
+    broadcastRunEvent(run, {
+      type: "rh_task_submitted",
+      data: { taskId: String(taskId) }
+    });
 
     const promptTips = parsePromptTips(submitData.promptTips);
     if (promptTips?.node_errors && Object.keys(promptTips.node_errors).length > 0) {
@@ -1025,8 +1080,15 @@ async function handleRunningHubRun(req, res) {
       throw new Error(`Node ${firstError[0]} lỗi: ${JSON.stringify(firstError[1])}`);
     }
 
-    const outputs = await waitForTaskOutputs(apiKey, taskId, {
+    const { outputs, rhCoins } = await waitForTaskOutputs(apiKey, taskId, {
       timeoutMs: runningHubTimeoutMs,
+      signal: abortController.signal,
+      onStatus: ({ type, label }) => emitRhStatus(type || "waiting", label || "Đang chờ RunningHub...", taskId)
+    });
+    const resolvedRhCoins = await resolveRhTaskCoins(apiKey, {
+      outputs,
+      rhCoins,
+      coinsBefore,
       signal: abortController.signal
     });
     const historyItem = await archiveRunningHubOutputs({
@@ -1035,6 +1097,7 @@ async function handleRunningHubRun(req, res) {
       rhMode: "app",
       taskId,
       outputs,
+      rhCoins: resolvedRhCoins,
       nodes: body.nodes,
       submittedAt
     });
@@ -1047,11 +1110,12 @@ async function handleRunningHubRun(req, res) {
       submittedAt: historyItem.submittedAt,
       completedAt: historyItem.completedAt,
       durationMs: historyItem.durationMs,
+      rhCoins: historyItem.rhCoins,
       outputs: historyItem.outputs,
       historyItem
     });
   } finally {
-    activeRhRuns.delete(runId);
+    closeRhRun(run, runId);
   }
 }
 
@@ -1062,7 +1126,13 @@ async function handleRunningHubWfRun(req, res) {
   const apiKey = String(body.apiKey || "").trim();
   const templateId = String(body.templateId || "").trim();
   const abortController = new AbortController();
-  activeRhRuns.set(runId, { abortController, cancelled: false });
+  const run = attachRhRun(runId, abortController);
+  const emitRhStatus = (status, label, taskId = run.taskId) => {
+    broadcastRunEvent(run, {
+      type: "rh_task_status",
+      data: { taskId: taskId ? String(taskId) : null, status, label }
+    });
+  };
 
   try {
     if (!apiKey) throw new Error("Missing RunningHub API key");
@@ -1081,6 +1151,8 @@ async function handleRunningHubWfRun(req, res) {
     if (!Object.keys(request).length) {
       throw new Error("Template chưa có input nào để gửi");
     }
+    const coinsBefore = await fetchAccountRemainCoins(apiKey, abortController.signal);
+    emitRhStatus("upload", "Đang chuẩn bị dữ liệu workflow...");
     let submitData;
     if (useSavedWorkflowJson) {
       if (!template.workflowPath) {
@@ -1091,6 +1163,7 @@ async function handleRunningHubWfRun(req, res) {
         inputDir,
         signal: abortController.signal
       });
+      emitRhStatus("submit", "Đang gửi workflow lên RunningHub...");
       submitData = await submitWorkflowTask(apiKey, {
         workflow: patchedWorkflow,
         ...taskOptions,
@@ -1101,6 +1174,7 @@ async function handleRunningHubWfRun(req, res) {
         inputDir,
         signal: abortController.signal
       });
+      emitRhStatus("submit", "Đang gửi workflow lên RunningHub...");
       submitData = await submitWorkflowTask(apiKey, {
         nodeInfoList,
         ...taskOptions,
@@ -1109,6 +1183,11 @@ async function handleRunningHubWfRun(req, res) {
     }
     const taskId = submitData.taskId;
     if (!taskId) throw new Error("RunningHub không trả về taskId");
+    run.taskId = taskId;
+    broadcastRunEvent(run, {
+      type: "rh_task_submitted",
+      data: { taskId: String(taskId) }
+    });
 
     const promptTips = parsePromptTips(submitData.promptTips);
     if (promptTips?.node_errors && Object.keys(promptTips.node_errors).length > 0) {
@@ -1116,8 +1195,15 @@ async function handleRunningHubWfRun(req, res) {
       throw new Error(`Node ${firstError[0]} lỗi: ${JSON.stringify(firstError[1])}`);
     }
 
-    const outputs = await waitForTaskOutputs(apiKey, taskId, {
+    const { outputs, rhCoins } = await waitForTaskOutputs(apiKey, taskId, {
       timeoutMs: runningHubTimeoutMs,
+      signal: abortController.signal,
+      onStatus: ({ type, label }) => emitRhStatus(type || "waiting", label || "Đang chờ RunningHub...", taskId)
+    });
+    const resolvedRhCoins = await resolveRhTaskCoins(apiKey, {
+      outputs,
+      rhCoins,
+      coinsBefore,
       signal: abortController.signal
     });
     const historyItem = await archiveRunningHubOutputs({
@@ -1127,6 +1213,7 @@ async function handleRunningHubWfRun(req, res) {
       rhWfTemplateId: templateId,
       taskId,
       outputs,
+      rhCoins: resolvedRhCoins,
       nodes: [],
       values: body.values || {},
       submittedAt
@@ -1141,11 +1228,12 @@ async function handleRunningHubWfRun(req, res) {
       submittedAt: historyItem.submittedAt,
       completedAt: historyItem.completedAt,
       durationMs: historyItem.durationMs,
+      rhCoins: historyItem.rhCoins,
       outputs: historyItem.outputs,
       historyItem
     });
   } finally {
-    activeRhRuns.delete(runId);
+    closeRhRun(run, runId);
   }
 }
 
@@ -1159,6 +1247,32 @@ async function handleRunningHubCancel(req, res) {
   run.cancelled = true;
   run.abortController.abort();
   send(res, 200, { cancelled: true, message: "Đã hủy task RunningHub đang chờ" });
+}
+
+function handleRunLogSessions(_req, res) {
+  send(res, 200, { sessions: getRunLogSessions() });
+}
+
+async function handleRunLogMutate(req, res, mutate) {
+  const body = JSON.parse(await readBody(req) || "{}");
+  const sessions = mutate(body);
+  send(res, 200, { sessions });
+}
+
+async function handleRunningHubTaskCheck(req, res) {
+  const body = JSON.parse(await readBody(req) || "{}");
+  const apiKey = String(body.apiKey || "").trim();
+  const taskId = String(body.taskId || "").trim();
+  if (!apiKey) {
+    send(res, 400, { error: "Missing RunningHub API key" });
+    return;
+  }
+  if (!taskId) {
+    send(res, 400, { error: "Missing taskId" });
+    return;
+  }
+  const detail = await inspectRhTask(apiKey, taskId);
+  send(res, 200, { detail });
 }
 
 async function cleanupUploads(maxAgeMs = 24 * 60 * 60 * 1000) {
@@ -1277,6 +1391,22 @@ const server = http.createServer(async (req, res) => {
       await handleRunningHubWfRun(req, res);
     } else if (req.method === "POST" && url.pathname === "/api/runninghub/cancel") {
       await handleRunningHubCancel(req, res);
+    } else if (req.method === "POST" && url.pathname === "/api/runninghub/task-check") {
+      await handleRunningHubTaskCheck(req, res);
+    } else if (req.method === "GET" && url.pathname === "/api/run-log/sessions") {
+      handleRunLogSessions(req, res);
+    } else if (req.method === "POST" && url.pathname === "/api/run-log/session/start") {
+      await handleRunLogMutate(req, res, body => startRunLogSession(body.job, body.meta || {}));
+    } else if (req.method === "POST" && url.pathname === "/api/run-log/session/update") {
+      await handleRunLogMutate(req, res, body => updateRunLogSession(body.runId, body.patch || {}));
+    } else if (req.method === "POST" && url.pathname === "/api/run-log/append") {
+      await handleRunLogMutate(req, res, body => appendRunLog(body.runId, body.level, body.message, body.meta || {}));
+    } else if (req.method === "POST" && url.pathname === "/api/run-log/session/end") {
+      await handleRunLogMutate(req, res, body => endRunLogSession(body.runId, body.status, body.meta || {}));
+    } else if (req.method === "POST" && url.pathname === "/api/run-log/session/delete") {
+      await handleRunLogMutate(req, res, body => deleteRunLogSession(body.sessionId));
+    } else if (req.method === "POST" && url.pathname === "/api/run-log/clear") {
+      await handleRunLogMutate(req, res, () => clearRunLogSessions());
     } else {
       send(res, 404, { error: "Not found" });
     }

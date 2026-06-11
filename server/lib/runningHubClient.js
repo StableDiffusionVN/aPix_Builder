@@ -211,6 +211,135 @@ export function parsePromptTips(promptTips) {
   }
 }
 
+export function isRhTaskSuccessCode(code) {
+  return code === 0 || code === "0";
+}
+
+export function parseRhCoinNumber(raw) {
+  if (raw == null || raw === "") return null;
+  if (typeof raw === "number" && Number.isFinite(raw)) return raw;
+  const text = String(raw).trim();
+  const direct = Number(text);
+  if (Number.isFinite(direct)) return direct;
+  const match = text.match(/-?\d+(?:\.\d+)?/);
+  if (!match) return null;
+  const parsed = Number(match[0]);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+export function normalizeRhOutputList(data) {
+  if (!data) return [];
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data.list)) return data.list;
+  if (Array.isArray(data.outputs)) return data.outputs;
+  if (data.fileUrl || data.url) return [data];
+  return [];
+}
+
+export function extractRhConsumeCoins(outputs, envelope = null) {
+  const sources = [...normalizeRhOutputList(outputs)];
+  if (envelope && typeof envelope === "object") {
+    if (!Array.isArray(envelope.data) && envelope.data && typeof envelope.data === "object") {
+      sources.push(envelope.data);
+    }
+    sources.push(envelope);
+  }
+
+  let best = null;
+  for (const item of sources) {
+    if (!item || typeof item !== "object") continue;
+    const raw = item.consumeCoins
+      ?? item.consumeMoney
+      ?? item.thirdPartyConsumeMoney
+      ?? item.rhCoins
+      ?? item.coins;
+    const value = parseRhCoinNumber(raw);
+    if (value == null) continue;
+    if (best == null || value > best) best = value;
+  }
+  return best;
+}
+
+export async function fetchAccountRemainCoins(apiKey, signal) {
+  try {
+    const response = await fetch(`${RUNNINGHUB_BASE}/uc/openapi/accountStatus`, {
+      method: "POST",
+      signal,
+      headers: rhHeaders(apiKey, { "content-type": "application/json" }),
+      body: JSON.stringify({ apikey: apiKey })
+    });
+    const data = await readRunningHubEnvelope(response);
+    return parseRhCoinNumber(data.data?.remainCoins);
+  } catch {
+    return null;
+  }
+}
+
+export function interpretRhTaskResponse(result, taskId) {
+  const code = result?.code;
+  const data = result?.data;
+  const outputs = normalizeRhOutputList(data);
+  const hasFiles = outputs.some(item => item?.fileUrl || item?.url);
+
+  let status = "unknown";
+  let statusLabel = String(result?.msg || "UNKNOWN").toUpperCase();
+  if (isRhTaskSuccessCode(code) && hasFiles) {
+    status = "success";
+    statusLabel = "SUCCESS";
+  } else if (code === 805 || code === "805") {
+    status = "failed";
+    statusLabel = "FAILED";
+  } else if (code === 804 || code === "804") {
+    status = "running";
+    statusLabel = "RUNNING";
+  } else if (code === 813 || code === "813") {
+    status = "queued";
+    statusLabel = "QUEUED";
+  } else if (!isRhTaskSuccessCode(code)) {
+    status = "waiting";
+  }
+
+  const failedReason = (code === 805 || code === "805") && data?.failedReason
+    ? data.failedReason
+    : null;
+
+  return {
+    taskId: String(taskId),
+    code,
+    msg: result?.msg || "",
+    status,
+    statusLabel,
+    rhCoins: extractRhConsumeCoins(outputs, result),
+    outputs: outputs.map((item, index) => ({
+      index,
+      fileUrl: item.fileUrl || item.url || "",
+      fileType: item.fileType || "",
+      nodeId: item.nodeId || "",
+      taskCostTime: item.taskCostTime ?? null,
+      consumeCoins: parseRhCoinNumber(item.consumeCoins ?? item.consumeMoney ?? item.thirdPartyConsumeMoney)
+    })),
+    failedReason,
+    netWssUrl: data?.netWssUrl || null,
+    queriedAt: new Date().toISOString()
+  };
+}
+
+export async function inspectRhTask(apiKey, taskId, signal) {
+  const result = await queryTaskOutputs(apiKey, taskId, signal);
+  return interpretRhTaskResponse(result, taskId);
+}
+
+export async function resolveRhTaskCoins(apiKey, { outputs, rhCoins, coinsBefore, signal } = {}) {
+  if (rhCoins != null) return rhCoins;
+  const fromOutputs = extractRhConsumeCoins(outputs);
+  if (fromOutputs != null) return fromOutputs;
+  if (coinsBefore == null) return null;
+  const coinsAfter = await fetchAccountRemainCoins(apiKey, signal);
+  if (coinsAfter == null || coinsBefore < coinsAfter) return null;
+  const diff = coinsBefore - coinsAfter;
+  return diff > 0 ? diff : null;
+}
+
 export async function waitForTaskOutputs(apiKey, taskId, options = {}) {
   const {
     timeoutMs = DEFAULT_TIMEOUT_MS,
@@ -226,9 +355,16 @@ export async function waitForTaskOutputs(apiKey, taskId, options = {}) {
     const code = result.code;
     const data = result.data;
 
-    if (code === 0 && data) {
-      onStatus?.({ type: "success", label: "Đã nhận kết quả từ RunningHub" });
-      return Array.isArray(data) ? data : [data];
+    if (isRhTaskSuccessCode(code) && data) {
+      const outputs = normalizeRhOutputList(data);
+      const hasFiles = outputs.some(item => item?.fileUrl || item?.url);
+      if (hasFiles) {
+        onStatus?.({ type: "success", label: "Đã nhận kết quả từ RunningHub" });
+        return {
+          outputs,
+          rhCoins: extractRhConsumeCoins(outputs, result)
+        };
+      }
     }
     if (code === 805) {
       const reason = data?.failedReason;

@@ -80,6 +80,7 @@ export function useImageViewer(heroImage, canCompare) {
 
   function handlePreviewWheel(event) {
     if (!heroImage) return;
+    if (event.target instanceof Element && event.target.closest(".outputLogDock")) return;
     event.preventDefault();
 
     const area = previewAreaRef.current;

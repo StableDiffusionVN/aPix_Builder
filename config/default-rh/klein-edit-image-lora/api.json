@@ -1,0 +1,189 @@
+{
+  "21": {
+    "class_type": "SDVN CLIP Text Encode Simple",
+    "inputs": {
+      "seed": 0,
+      "style": "None",
+      "positive": [
+        "49",
+        0
+      ],
+      "translate": "None",
+      "clip": [
+        "46",
+        1
+      ]
+    },
+    "_meta": {
+      "title": "🔡 CLIP Text Encode Simple"
+    }
+  },
+  "23": {
+    "class_type": "SDVN KSampler",
+    "inputs": {
+      "seed": [
+        "50",
+        0
+      ],
+      "cfg": 1,
+      "tile_height": [
+        "43",
+        1
+      ],
+      "Tiled": false,
+      "StepsType": "Denoise",
+      "positive": [
+        "32",
+        0
+      ],
+      "steps": 4,
+      "scheduler": "sgm_uniform",
+      "tile_width": [
+        "43",
+        0
+      ],
+      "denoise": 1,
+      "sampler_name": "euler_ancestral_cfg_pp",
+      "ModelType": "None",
+      "FluxGuidance": 3.5,
+      "model": [
+        "47",
+        0
+      ],
+      "vae": [
+        "46",
+        2
+      ]
+    },
+    "_meta": {
+      "title": "⌛️ KSampler"
+    }
+  },
+  "32": {
+    "class_type": "SDVN Apply Kontext Reference",
+    "inputs": {
+      "image": [
+        "48",
+        0
+      ],
+      "conditioning": [
+        "21",
+        0
+      ],
+      "img_size": [
+        "51",
+        0
+      ],
+      "vae": [
+        "46",
+        2
+      ]
+    },
+    "_meta": {
+      "title": "🌈 Apply Reference"
+    }
+  },
+  "42": {
+    "class_type": "SDVN Crop By Ratio",
+    "inputs": {
+      "image": [
+        "48",
+        0
+      ],
+      "position": "center-right",
+      "ratio": "None"
+    },
+    "_meta": {
+      "title": "✂️ Crop By Ratio"
+    }
+  },
+  "43": {
+    "class_type": "SDVN Image Size",
+    "inputs": {
+      "image": [
+        "42",
+        0
+      ],
+      "maxsize": [
+        "51",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "📐 Image Size"
+    }
+  },
+  "46": {
+    "class_type": "CheckpointLoaderSimple",
+    "inputs": {
+      "ckpt_name": "Flux2-klein-9b-fp8.safetensors"
+    },
+    "_meta": {
+      "title": "Load Checkpoint"
+    }
+  },
+  "47": {
+    "class_type": "LoraLoaderModelOnly",
+    "inputs": {
+      "lora_name": "SDVN_Make_cosplay_klein_9b_v1.safetensors",
+      "strength_model": 1,
+      "model": [
+        "46",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "Load LoRA"
+    }
+  },
+  "48": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "025ab87719a788e91c858ae643144b55b7cde6fd4ab6dc00ca2c29c97ccf83df.jpeg"
+    },
+    "_meta": {
+      "title": "Load Image"
+    }
+  },
+  "49": {
+    "class_type": "PrimitiveString",
+    "inputs": {
+      "value": ""
+    },
+    "_meta": {
+      "title": "Custom Prompt"
+    }
+  },
+  "50": {
+    "class_type": "SDVN Seed",
+    "inputs": {
+      "random": true,
+      "seed": 371697593925130
+    },
+    "_meta": {
+      "title": "🔢 Seed"
+    }
+  },
+  "51": {
+    "class_type": "PrimitiveInt",
+    "inputs": {
+      "value": 2048
+    },
+    "_meta": {
+      "title": "Image Size"
+    }
+  },
+  "52": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "filename_prefix": "ComfyUI",
+      "images": [
+        "23",
+        1
+      ]
+    },
+    "_meta": {
+      "title": "Save Image"
+    }
+  }
+}

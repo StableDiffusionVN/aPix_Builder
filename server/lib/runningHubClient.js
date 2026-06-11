@@ -4,15 +4,34 @@ import { parseDataUrl } from "./comfyClient.js";
 
 export const RUNNINGHUB_HOST = "www.runninghub.ai";
 export const RUNNINGHUB_BASE = `https://${RUNNINGHUB_HOST}`;
+export const RUNNINGHUB_DEFAULT_FULL_WF_ID = "2064644362323189762";
 
 const DEFAULT_POLL_MS = 5000;
 const DEFAULT_TIMEOUT_MS = 10 * 60 * 1000;
 
-function rhHeaders(extra = {}) {
-  return { Host: RUNNINGHUB_HOST, ...extra };
+function rhHeaders(apiKey, extra = {}) {
+  const headers = { Host: RUNNINGHUB_HOST, ...extra };
+  if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
+  return headers;
 }
 
-async function readJsonResponse(response) {
+function parseWorkflowPrompt(prompt) {
+  if (!prompt) throw new Error("RunningHub không trả về workflow prompt");
+  if (typeof prompt === "object") return prompt;
+  if (typeof prompt !== "string") throw new Error("Workflow JSON từ RunningHub không hợp lệ");
+
+  try {
+    return JSON.parse(prompt);
+  } catch {
+    try {
+      return JSON.parse(JSON.parse(prompt));
+    } catch {
+      throw new Error("Workflow JSON từ RunningHub không hợp lệ");
+    }
+  }
+}
+
+async function readRunningHubEnvelope(response) {
   const text = await response.text();
   let data = {};
   try {
@@ -20,22 +39,31 @@ async function readJsonResponse(response) {
   } catch {
     throw new Error(text || `RunningHub HTTP ${response.status}`);
   }
-  if (!response.ok) {
-    throw new Error(data.msg || data.message || text || `RunningHub HTTP ${response.status}`);
+  const code = data.code;
+  if (code !== 0 && code !== "0") {
+    throw new Error(data.msg || data.message || text || `RunningHub error ${code}`);
   }
   return data;
+}
+
+export async function getWorkflowJson(apiKey, workflowId, signal) {
+  const response = await fetch(`${RUNNINGHUB_BASE}/api/openapi/getJsonApiFormat`, {
+    method: "POST",
+    signal,
+    headers: rhHeaders(apiKey, { "content-type": "application/json" }),
+    body: JSON.stringify({ apiKey, workflowId })
+  });
+  const data = await readRunningHubEnvelope(response);
+  return parseWorkflowPrompt(data.data?.prompt);
 }
 
 export async function getWebappNodes(apiKey, webappId, signal) {
   const query = new URLSearchParams({ apiKey, webappId });
   const response = await fetch(`${RUNNINGHUB_BASE}/api/webapp/apiCallDemo?${query}`, {
     signal,
-    headers: rhHeaders()
+    headers: rhHeaders(apiKey)
   });
-  const data = await readJsonResponse(response);
-  if (data.code !== 0) {
-    throw new Error(data.msg || "Không lấy được nodeInfoList từ RunningHub");
-  }
+  const data = await readRunningHubEnvelope(response);
   return data.data?.nodeInfoList || [];
 }
 
@@ -46,12 +74,12 @@ export async function uploadToRunningHub(apiKey, buffer, filename, mimeType = "i
   formData.append("file", new Blob([buffer], { type: mimeType }), filename);
   const response = await fetch(`${RUNNINGHUB_BASE}/task/openapi/upload`, {
     method: "POST",
-    headers: rhHeaders(),
+    headers: rhHeaders(apiKey),
     body: formData,
     signal
   });
-  const data = await readJsonResponse(response);
-  if (data.code !== 0 || !data.data?.fileName) {
+  const data = await readRunningHubEnvelope(response);
+  if (!data.data?.fileName) {
     throw new Error(data.msg || "Upload file lên RunningHub thất bại");
   }
   return data.data.fileName;
@@ -111,17 +139,46 @@ export async function prepareNodeInfoList(apiKey, nodes, { inputDir, signal, onP
   return prepared;
 }
 
+function applyWorkflowTaskOptions(body, options = {}) {
+  const { addMetadata, accessPassword, usePersonalQueue } = options;
+  if (addMetadata) body.addMetadata = true;
+  if (accessPassword) body.accessPassword = accessPassword;
+  if (usePersonalQueue) body.usePersonalQueue = true;
+}
+
+export async function submitWorkflowTask(apiKey, options, signal) {
+  const { workflowId, nodeInfoList, workflow, addMetadata, accessPassword, usePersonalQueue } = options || {};
+  const taskOptions = { addMetadata, accessPassword, usePersonalQueue };
+  const body = { apiKey };
+
+  if (workflow != null) {
+    body.workflowId = String(workflowId || "").trim() || RUNNINGHUB_DEFAULT_FULL_WF_ID;
+    body.workflow = typeof workflow === "string" ? workflow : JSON.stringify(workflow);
+    applyWorkflowTaskOptions(body, taskOptions);
+  } else {
+    body.workflowId = workflowId;
+    body.nodeInfoList = nodeInfoList || [];
+    applyWorkflowTaskOptions(body, taskOptions);
+  }
+
+  const response = await fetch(`${RUNNINGHUB_BASE}/task/openapi/create`, {
+    method: "POST",
+    signal,
+    headers: rhHeaders(apiKey, { "content-type": "application/json" }),
+    body: JSON.stringify(body)
+  });
+  const data = await readRunningHubEnvelope(response);
+  return data.data || {};
+}
+
 export async function submitAiAppTask(apiKey, webappId, nodeInfoList, signal) {
   const response = await fetch(`${RUNNINGHUB_BASE}/task/openapi/ai-app/run`, {
     method: "POST",
     signal,
-    headers: rhHeaders({ "content-type": "application/json" }),
+    headers: rhHeaders(apiKey, { "content-type": "application/json" }),
     body: JSON.stringify({ apiKey, webappId, nodeInfoList })
   });
-  const data = await readJsonResponse(response);
-  if (data.code !== 0) {
-    throw new Error(data.msg || "Gửi task RunningHub thất bại");
-  }
+  const data = await readRunningHubEnvelope(response);
   return data.data || {};
 }
 
@@ -129,10 +186,20 @@ export async function queryTaskOutputs(apiKey, taskId, signal) {
   const response = await fetch(`${RUNNINGHUB_BASE}/task/openapi/outputs`, {
     method: "POST",
     signal,
-    headers: rhHeaders({ "content-type": "application/json" }),
+    headers: rhHeaders(apiKey, { "content-type": "application/json" }),
     body: JSON.stringify({ apiKey, taskId })
   });
-  return readJsonResponse(response);
+  const text = await response.text();
+  let data = {};
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch {
+    throw new Error(text || `RunningHub HTTP ${response.status}`);
+  }
+  if (!response.ok) {
+    throw new Error(data.msg || data.message || text || `RunningHub HTTP ${response.status}`);
+  }
+  return data;
 }
 
 export function parsePromptTips(promptTips) {

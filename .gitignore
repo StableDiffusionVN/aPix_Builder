@@ -5,6 +5,7 @@ uploads/
 input/
 output/
 config/templates/
+config/templates-rh/
 .DS_Store
 *.log
 .env

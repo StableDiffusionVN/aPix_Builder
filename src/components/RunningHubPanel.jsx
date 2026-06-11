@@ -3,27 +3,51 @@ import { RunningHubField } from "./RunningHubField";
 import { RUNNINGHUB_APP_OPTIONS } from "../hooks/useRunningHub";
 
 export function ExecutionModeToggle({ mode, onChange }) {
+  const isRunningHub = mode === "runninghub-wf" || mode === "runninghub-app";
+
   return (
     <div className="executionModeToggle" role="tablist" aria-label="Chế độ thực thi">
       <button
         type="button"
         role="tab"
         aria-selected={mode === "local"}
-        className={mode === "local" ? "active" : ""}
+        className={`executionModeComfyBtn ${mode === "local" ? "active" : ""}`}
         onClick={() => onChange("local")}
       >
         ComfyUI
       </button>
-      <button
-        type="button"
-        role="tab"
-        aria-selected={mode === "runninghub"}
-        className={`rhModeBtn ${mode === "runninghub" ? "active" : ""}`}
-        onClick={() => onChange("runninghub")}
+      <div
+        className={`executionModeRhGroup ${isRunningHub ? "is-active" : ""}`}
+        role="group"
+        aria-label="RunningHub"
       >
-        <Cloud size={14} />
-        RunningHub
-      </button>
+        <span className="executionModeRhLabel">
+          <Cloud size={12} aria-hidden />
+          RunningHub
+        </span>
+        <div className="executionModeRhTabs">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mode === "runninghub-wf"}
+            className={mode === "runninghub-wf" ? "active" : ""}
+            onClick={() => onChange("runninghub-wf")}
+            title="RunningHub Workflow"
+          >
+            Workflow
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mode === "runninghub-app"}
+            className={mode === "runninghub-app" ? "active" : ""}
+            onClick={() => onChange("runninghub-app")}
+            title="RunningHub App"
+          >
+            App
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -51,7 +75,7 @@ export function RunningHubPanel({
     <section className="settingsGroup runningHubPanel">
       <div className="settingsHeader">
         <Cloud size={16} />
-        <h2>RunningHub Cloud</h2>
+        <h2>RunningHub App</h2>
         <span className={`healthDot health-${healthStatus}`} title={
           healthStatus === "online" ? "Đã kết nối RunningHub API" :
           healthStatus === "loading" ? "Đang tải node..." : "Chưa kết nối RunningHub"

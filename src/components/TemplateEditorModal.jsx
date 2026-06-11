@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   Box,
+  Cloud,
   Dices,
+  FileJson,
   FileText,
   GripVertical,
   Hash,
@@ -10,6 +12,7 @@ import {
   List,
   Plus,
   Save,
+  SlidersHorizontal,
   ToggleLeft,
   Trash2,
   Type,
@@ -18,8 +21,34 @@ import {
 } from "lucide-react";
 import YAML from "yaml";
 import { DYNAMIC_FIELD_TYPES, canonicalDynamicType, inferDynamicTypeFromField } from "../lib/dynamicTypes";
+import { DEFAULT_RH_WF_ID } from "../hooks/useRunningHub";
+import { menuChoiceOptions, menuChoiceValue, parseMenuChoices, resolveMenuStoredValue } from "../lib/menuChoices";
 
-const FIELD_TYPES = ["image", ...DYNAMIC_FIELD_TYPES, "seed", "int", "float", "string", "menu", "checkbox", "boolean"];
+function menuOptsFromRow(row) {
+  return menuChoiceOptions(row);
+}
+
+const LOCAL_FIELD_TYPES = ["image", ...DYNAMIC_FIELD_TYPES, "seed", "int", "float", "string", "menu", "checkbox", "boolean"];
+const RH_WF_FIELD_TYPES = ["image", "seed", "int", "float", "string", "text", "menu", "checkbox", "boolean"];
+
+function editorFieldTypes(mode) {
+  return mode === "runninghub-wf" ? RH_WF_FIELD_TYPES : LOCAL_FIELD_TYPES;
+}
+
+function RhWfSwitch({ checked, onChange, title, hint, compact = false }) {
+  return (
+    <label className={`rhWfSwitchRow ${compact ? "rhWfSwitchRow--compact" : ""}`}>
+      <span className="rhWfSwitchCopy">
+        <span className="rhWfSwitchTitle">{title}</span>
+        {hint ? <span className="rhWfSwitchHint">{hint}</span> : null}
+      </span>
+      <span className="rhWfSwitch">
+        <input type="checkbox" checked={checked} onChange={onChange} />
+        <span className="rhWfSwitchTrack" aria-hidden="true" />
+      </span>
+    </label>
+  );
+}
 const DISPLAY_TYPES = ["input", "slider"];
 const STRING_DISPLAY_TYPES = ["input", "multiline"];
 
@@ -64,7 +93,7 @@ function inputRowMeta(row, nodes) {
   return `${nodeLabel} · ${row.field || "—"}`;
 }
 
-function InputDetailPanel({ row, nodes, onUpdate, onDelete }) {
+function InputDetailPanel({ row, nodes, fieldTypes, onUpdate, onDelete }) {
   if (!row) {
     return (
       <div className="inputDetailEmpty">
@@ -134,7 +163,7 @@ function InputDetailPanel({ row, nodes, onUpdate, onDelete }) {
         <label className="field">
           <span>Kiểu dữ liệu</span>
           <select value={row.type} onChange={event => onUpdate({ type: event.target.value })}>
-            {FIELD_TYPES.map(type => <option key={type} value={type}>{type}</option>)}
+            {fieldTypes.map(type => <option key={type} value={type}>{type}</option>)}
           </select>
         </label>
         <label className="field">
@@ -170,10 +199,44 @@ function InputDetailPanel({ row, nodes, onUpdate, onDelete }) {
           </div>
         ) : null}
         {row.type === "menu" ? (
-          <label className="field inputDetailFieldWide">
-            <span>Menu choices, mỗi dòng một lựa chọn</span>
-            <textarea rows={4} value={row.choicesText} onChange={event => onUpdate({ choicesText: event.target.value })} />
-          </label>
+          <>
+            <RhWfSwitch
+              compact
+              title="Cú pháp Nhãn:giá trị"
+              hint="Bật để hiển thị nhãn khác giá trị gửi API"
+              checked={Boolean(row.menuLabelSyntax)}
+              onChange={event => {
+                const menuLabelSyntax = event.target.checked;
+                const choices = parseChoicesText(row.choicesText);
+                const menuOpts = { labelSyntax: menuLabelSyntax };
+                const parsed = parseMenuChoices(choices, menuOpts);
+                onUpdate({
+                  menuLabelSyntax,
+                  value: resolveMenuStoredValue(row.value, choices, menuOpts) || parsed[0]?.value || ""
+                });
+              }}
+            />
+            <label className="field inputDetailFieldWide">
+              <span>Menu choices, mỗi dòng một lựa chọn</span>
+              <textarea
+                rows={4}
+                value={row.choicesText}
+                onChange={event => {
+                  const choicesText = event.target.value;
+                  const parsed = parseMenuChoices(parseChoicesText(choicesText), menuOptsFromRow(row));
+                  onUpdate({
+                    choicesText,
+                    value: parsed.some(choice => choice.value === row.value)
+                      ? row.value
+                      : (parsed[0]?.value || "")
+                  });
+                }}
+              />
+              {row.menuLabelSyntax ? (
+                <small>Dùng <b>Nhãn:giá trị API</b>. Ví dụ: <b>Chất lượng cao:high</b></small>
+              ) : null}
+            </label>
+          </>
         ) : null}
         {row.type !== "image" ? (
           <label className="field">
@@ -182,6 +245,12 @@ function InputDetailPanel({ row, nodes, onUpdate, onDelete }) {
               <select value={String(booleanValue(row.value))} onChange={event => onUpdate({ value: event.target.value === "true" })}>
                 <option value="true">True</option>
                 <option value="false">False</option>
+              </select>
+            ) : row.type === "menu" ? (
+              <select value={resolveMenuStoredValue(row.value, parseChoicesText(row.choicesText), menuOptsFromRow(row))} onChange={event => onUpdate({ value: event.target.value })}>
+                {parseMenuChoices(parseChoicesText(row.choicesText), menuOptsFromRow(row)).map(choice => (
+                  <option key={choice.value} value={choice.value}>{choice.label}</option>
+                ))}
               </select>
             ) : (
               <input value={row.value} onChange={event => onUpdate({ value: event.target.value })} placeholder={row.type === "seed" ? "random_seed" : ""} />
@@ -193,7 +262,7 @@ function InputDetailPanel({ row, nodes, onUpdate, onDelete }) {
   );
 }
 
-function SubInputEditor({ subRow, nodes, workflow, onUpdate, onDelete }) {
+function SubInputEditor({ subRow, nodes, workflow, fieldTypes, onUpdate, onDelete }) {
   const selectedNode = nodes.find(node => node.id === subRow.nodeId);
   return (
     <div className="subInputEditorCard">
@@ -223,7 +292,7 @@ function SubInputEditor({ subRow, nodes, workflow, onUpdate, onDelete }) {
         <label className="field">
           <span>Kiểu dữ liệu</span>
           <select value={subRow.type} onChange={event => onUpdate({ type: event.target.value })}>
-            {FIELD_TYPES.map(type => <option key={type} value={type}>{type}</option>)}
+            {fieldTypes.map(type => <option key={type} value={type}>{type}</option>)}
           </select>
         </label>
         <label className="field">
@@ -259,10 +328,41 @@ function SubInputEditor({ subRow, nodes, workflow, onUpdate, onDelete }) {
           </div>
         ) : null}
         {subRow.type === "menu" ? (
-          <label className="field inputDetailFieldWide">
-            <span>Menu choices</span>
-            <textarea rows={3} value={subRow.choicesText} onChange={event => onUpdate({ choicesText: event.target.value })} />
-          </label>
+          <>
+            <RhWfSwitch
+              compact
+              title="Cú pháp Nhãn:giá trị"
+              checked={Boolean(subRow.menuLabelSyntax)}
+              onChange={event => {
+                const menuLabelSyntax = event.target.checked;
+                const choices = parseChoicesText(subRow.choicesText);
+                const menuOpts = { labelSyntax: menuLabelSyntax };
+                const parsed = parseMenuChoices(choices, menuOpts);
+                onUpdate({
+                  menuLabelSyntax,
+                  value: resolveMenuStoredValue(subRow.value, choices, menuOpts) || parsed[0]?.value || ""
+                });
+              }}
+            />
+            <label className="field inputDetailFieldWide">
+              <span>Menu choices</span>
+              <textarea
+                rows={3}
+                value={subRow.choicesText}
+                onChange={event => {
+                  const choicesText = event.target.value;
+                  const parsed = parseMenuChoices(parseChoicesText(choicesText), menuOptsFromRow(subRow));
+                  onUpdate({
+                    choicesText,
+                    value: parsed.some(choice => choice.value === subRow.value)
+                      ? subRow.value
+                      : (parsed[0]?.value || "")
+                  });
+                }}
+              />
+              {subRow.menuLabelSyntax ? <small>Dùng <b>Nhãn:giá trị API</b></small> : null}
+            </label>
+          </>
         ) : null}
         {subRow.type !== "image" ? (
           <label className="field">
@@ -271,6 +371,12 @@ function SubInputEditor({ subRow, nodes, workflow, onUpdate, onDelete }) {
               <select value={String(booleanValue(subRow.value))} onChange={event => onUpdate({ value: event.target.value === "true" })}>
                 <option value="true">True</option>
                 <option value="false">False</option>
+              </select>
+            ) : subRow.type === "menu" ? (
+              <select value={resolveMenuStoredValue(subRow.value, parseChoicesText(subRow.choicesText), menuOptsFromRow(subRow))} onChange={event => onUpdate({ value: event.target.value })}>
+                {parseMenuChoices(parseChoicesText(subRow.choicesText), menuOptsFromRow(subRow)).map(choice => (
+                  <option key={choice.value} value={choice.value}>{choice.label}</option>
+                ))}
               </select>
             ) : (
               <input value={subRow.value} onChange={event => onUpdate({ value: event.target.value })} placeholder={subRow.type === "seed" ? "random_seed" : ""} />
@@ -282,20 +388,24 @@ function SubInputEditor({ subRow, nodes, workflow, onUpdate, onDelete }) {
   );
 }
 
-function MenuSubDetailPanel({ row, nodes, workflow, onUpdate, onDelete, onUpdateSubInput, onAddSubInput, onDeleteSubInput }) {
-  const choices = parseChoicesText(row.choicesText);
-  const [activeChoice, setActiveChoice] = useState(choices[0] || "");
+function MenuSubDetailPanel({ row, nodes, workflow, fieldTypes, onUpdate, onDelete, onUpdateSubInput, onAddSubInput, onDeleteSubInput }) {
+  const menuOpts = menuOptsFromRow(row);
+  const parsedChoices = parseMenuChoices(parseChoicesText(row.choicesText), menuOpts);
+  const [activeChoice, setActiveChoice] = useState(parsedChoices[0]?.value || "");
 
   useEffect(() => {
-    if (!choices.length) {
+    if (!parsedChoices.length) {
       setActiveChoice("");
       return;
     }
-    if (!choices.includes(activeChoice)) setActiveChoice(choices[0]);
-  }, [row.choicesText, choices, activeChoice]);
+    if (!parsedChoices.some(choice => choice.value === activeChoice)) {
+      setActiveChoice(parsedChoices[0].value);
+    }
+  }, [row.choicesText, parsedChoices, activeChoice]);
 
   const selectedNode = nodes.find(node => node.id === row.nodeId);
   const subRows = row.sub?.[activeChoice] || [];
+  const activeChoiceLabel = parsedChoices.find(choice => choice.value === activeChoice)?.label || activeChoice;
 
   return (
     <div className="inputDetailPanel menuSubDetailPanel">
@@ -350,6 +460,28 @@ function MenuSubDetailPanel({ row, nodes, workflow, onUpdate, onDelete, onUpdate
           <span>Tên hiển thị menu</span>
           <input value={row.label} onChange={event => onUpdate({ label: event.target.value })} />
         </label>
+        <RhWfSwitch
+          compact
+          title="Cú pháp Nhãn:giá trị"
+          hint="Bật để hiển thị nhãn khác giá trị gửi API"
+          checked={Boolean(row.menuLabelSyntax)}
+          onChange={event => {
+            const menuLabelSyntax = event.target.checked;
+            const choices = parseChoicesText(row.choicesText);
+            const nextOpts = { labelSyntax: menuLabelSyntax };
+            const nextParsed = parseMenuChoices(choices, nextOpts);
+            const sub = { ...(row.sub || {}) };
+            const nextSub = Object.fromEntries(nextParsed.map(choice => [
+              choice.value,
+              sub[choice.value] || sub[choice.raw] || []
+            ]));
+            onUpdate({
+              menuLabelSyntax,
+              sub: nextSub,
+              value: resolveMenuStoredValue(row.value, choices, nextOpts) || nextParsed[0]?.value || ""
+            });
+          }}
+        />
         <label className="field inputDetailFieldWide">
           <span>Lựa chọn menu, mỗi dòng một giá trị</span>
           <textarea
@@ -357,37 +489,51 @@ function MenuSubDetailPanel({ row, nodes, workflow, onUpdate, onDelete, onUpdate
             value={row.choicesText}
             onChange={event => {
               const choicesText = event.target.value;
-              const nextChoices = parseChoicesText(choicesText);
+              const nextParsed = parseMenuChoices(parseChoicesText(choicesText), menuOpts);
               const sub = { ...(row.sub || {}) };
-              const nextSub = Object.fromEntries(nextChoices.map(choice => [choice, sub[choice] || []]));
-              onUpdate({ choicesText, sub: nextSub, value: nextChoices.includes(row.value) ? row.value : (nextChoices[0] || "") });
+              const nextSub = Object.fromEntries(nextParsed.map(choice => [
+                choice.value,
+                sub[choice.value] || sub[choice.raw] || []
+              ]));
+              onUpdate({
+                choicesText,
+                sub: nextSub,
+                value: nextParsed.some(choice => choice.value === row.value)
+                  ? row.value
+                  : (nextParsed[0]?.value || "")
+              });
             }}
           />
+          {row.menuLabelSyntax ? (
+            <small>Dùng <b>Nhãn:giá trị API</b>. Ví dụ: <b>Upscale nhanh:fast</b></small>
+          ) : null}
         </label>
         <label className="field">
           <span>Mặc định</span>
-          <select value={choices.includes(row.value) ? row.value : (choices[0] || "")} onChange={event => onUpdate({ value: event.target.value })}>
-            {choices.map(choice => <option key={choice} value={choice}>{choice}</option>)}
+          <select value={row.value} onChange={event => onUpdate({ value: event.target.value })}>
+            {parsedChoices.map(choice => (
+              <option key={choice.value} value={choice.value}>{choice.label}</option>
+            ))}
           </select>
         </label>
       </div>
       <div className="menuSubChoiceTabs">
-        {choices.map(choice => (
+        {parsedChoices.map(choice => (
           <button
-            key={choice}
+            key={choice.value}
             type="button"
-            className={`menuSubChoiceTab ${activeChoice === choice ? "active" : ""}`}
-            onClick={() => setActiveChoice(choice)}
+            className={`menuSubChoiceTab ${activeChoice === choice.value ? "active" : ""}`}
+            onClick={() => setActiveChoice(choice.value)}
           >
-            {choice}
-            <span>{row.sub?.[choice]?.length || 0}</span>
+            {choice.label}
+            <span>{row.sub?.[choice.value]?.length || 0}</span>
           </button>
         ))}
-        {choices.length === 0 ? <span className="menuSubChoiceEmpty">Thêm lựa chọn menu ở trên.</span> : null}
+        {parsedChoices.length === 0 ? <span className="menuSubChoiceEmpty">Thêm lựa chọn menu ở trên.</span> : null}
       </div>
       <div className="menuSubSubInputs">
         <div className="menuSubSubInputsHeader">
-          <h5>Sub-input cho <b>{activeChoice || "—"}</b></h5>
+          <h5>Sub-input cho <b>{activeChoiceLabel || "—"}</b></h5>
           <button type="button" className="smallActionButton" onClick={() => activeChoice && onAddSubInput(activeChoice)} disabled={!activeChoice}>
             <Plus size={14} />
             <span>Thêm sub-input</span>
@@ -399,6 +545,7 @@ function MenuSubDetailPanel({ row, nodes, workflow, onUpdate, onDelete, onUpdate
             subRow={subRow}
             nodes={nodes}
             workflow={workflow}
+            fieldTypes={fieldTypes}
             onUpdate={patch => onUpdateSubInput(activeChoice, subRow.rowId, patch)}
             onDelete={() => onDeleteSubInput(activeChoice, subRow.rowId)}
           />
@@ -440,6 +587,41 @@ function workflowNodes(workflow) {
   }));
 }
 
+function workflowFieldExists(workflow, nodeId, field) {
+  if (!nodeId || !field) return false;
+  const inputs = workflow?.[nodeId]?.inputs;
+  return inputs != null && Object.prototype.hasOwnProperty.call(inputs, field);
+}
+
+function pruneSubInputRow(subRow, workflow) {
+  if (!workflowFieldExists(workflow, subRow.nodeId, subRow.field)) return null;
+  return subRow;
+}
+
+function pruneInputRow(row, workflow) {
+  if (row.kind === "note") return row;
+  if (row.kind === "menu-sub") {
+    if (row.hasTargetId && row.nodeId && row.field && !workflowFieldExists(workflow, row.nodeId, row.field)) {
+      return null;
+    }
+    const sub = {};
+    for (const [choice, subRows] of Object.entries(row.sub || {})) {
+      sub[choice] = (subRows || [])
+        .map(subRow => pruneSubInputRow(subRow, workflow))
+        .filter(Boolean);
+    }
+    return { ...row, sub };
+  }
+  if (!workflowFieldExists(workflow, row.nodeId, row.field)) return null;
+  return row;
+}
+
+function pruneInputRows(rows, workflow) {
+  return (Array.isArray(rows) ? rows : [])
+    .map(row => pruneInputRow(row, workflow))
+    .filter(Boolean);
+}
+
 function defaultValueForType(type, fieldValue) {
   if (type === "image") return "";
   if (type === "seed") return "random_seed";
@@ -457,7 +639,8 @@ function defaultsForType(type, fieldValue) {
     maximum: type === "float" ? 1 : "",
     step: type === "float" ? 0.1 : 1,
     value: type === "menu" && Array.isArray(fieldValue) ? fieldValue[0] || "" : defaultValueForType(type, fieldValue),
-    choicesText: type === "menu" && Array.isArray(fieldValue) ? fieldValue.join("\n") : ""
+    choicesText: type === "menu" && Array.isArray(fieldValue) ? fieldValue.join("\n") : "",
+    menuLabelSyntax: false
   };
 }
 
@@ -478,7 +661,12 @@ function inferType(value) {
   return "string";
 }
 
-function inferRowType({ field, nodeClass, value }) {
+function inferRowType({ field, nodeClass, value }, mode = "local") {
+  if (mode === "runninghub-wf") {
+    if (String(field || "").toLowerCase().includes("image")) return "image";
+    if (Array.isArray(value)) return "menu";
+    return inferType(value);
+  }
   const dynamicType = inferDynamicTypeFromField(field, nodeClass);
   if (dynamicType) return dynamicType;
   if (Array.isArray(value)) return "menu";
@@ -501,8 +689,13 @@ function subRowFromConfig(item, workflow, fallbackKey) {
     minimum: item.ui?.minimum ?? (type === "float" ? 0 : 0),
     maximum: item.ui?.maximum ?? (type === "float" ? 1 : ""),
     step: item.ui?.step ?? (type === "float" ? 0.1 : 1),
-    value: type === "image" ? "" : item.ui?.value ?? defaultValueForType(item.ui?.type, value),
-    choicesText: (item.ui?.choices || []).join("\n")
+    value: type === "image"
+      ? ""
+      : type === "menu"
+        ? resolveMenuStoredValue(item.ui?.value, item.ui?.choices, menuChoiceOptions(item.ui))
+        : item.ui?.value ?? defaultValueForType(item.ui?.type, value),
+    choicesText: (item.ui?.choices || []).join("\n"),
+    menuLabelSyntax: item.ui?.menuLabelSyntax === true
   };
 }
 
@@ -518,9 +711,13 @@ function rowFromConfig(item, workflow, fallbackKey) {
   if (ui.type === "menu-sub") {
     const [nodeId, ...fieldParts] = String(item.id || "").split("-");
     const field = fieldParts[fieldParts[0] === "inputs" ? 1 : 0] || "";
+    const choiceLines = ui.choices || [];
+    const menuOpts = menuChoiceOptions(ui);
     const sub = {};
-    for (const [choice, fields] of Object.entries(ui.sub || {})) {
-      sub[choice] = Object.entries(fields || {}).map(([key, child]) => subRowFromConfig(child, workflow, key));
+    for (const choiceLine of choiceLines) {
+      const apiValue = menuChoiceValue(choiceLine, menuOpts);
+      const legacyFields = ui.sub?.[apiValue] || ui.sub?.[choiceLine] || {};
+      sub[apiValue] = Object.entries(legacyFields).map(([key, child]) => subRowFromConfig(child, workflow, key));
     }
     return {
       rowId: crypto.randomUUID(),
@@ -529,8 +726,9 @@ function rowFromConfig(item, workflow, fallbackKey) {
       nodeId: item.id ? nodeId : "",
       field: item.id ? field : "",
       label: ui.label || fallbackKey,
-      choicesText: (ui.choices || []).join("\n"),
-      value: ui.value ?? ui.choices?.[0] ?? "",
+      choicesText: choiceLines.join("\n"),
+      menuLabelSyntax: ui.menuLabelSyntax === true,
+      value: resolveMenuStoredValue(ui.value, choiceLines, menuOpts),
       sub
     };
   }
@@ -549,8 +747,13 @@ function rowFromConfig(item, workflow, fallbackKey) {
     minimum: ui.minimum ?? (type === "float" ? 0 : 0),
     maximum: ui.maximum ?? (type === "float" ? 1 : ""),
     step: ui.step ?? (type === "float" ? 0.1 : 1),
-    value: type === "image" ? "" : ui.value ?? defaultValueForType(ui.type, value),
-    choicesText: (ui.choices || []).join("\n")
+    value: type === "image"
+      ? ""
+      : type === "menu"
+        ? resolveMenuStoredValue(ui.value, ui.choices, menuChoiceOptions(ui))
+        : ui.value ?? defaultValueForType(ui.type, value),
+    choicesText: (ui.choices || []).join("\n"),
+    menuLabelSyntax: ui.menuLabelSyntax === true
   };
 }
 
@@ -602,7 +805,9 @@ function buildInputUiFromRow(row) {
   }
   if (row.type === "menu") {
     ui.choices = row.choicesText.split("\n").map(item => item.trim()).filter(Boolean);
-    ui.value = ui.choices.includes(row.value) ? row.value : ui.choices[0] || "";
+    if (row.menuLabelSyntax) ui.menuLabelSyntax = true;
+    const parsed = parseMenuChoices(ui.choices, menuOptsFromRow(row));
+    ui.value = parsed.some(choice => choice.value === row.value) ? row.value : (parsed[0]?.value || "");
   } else if (row.type === "seed") {
     ui.value = row.value === "" ? "random_seed" : row.value;
   } else if (row.type === "checkbox" || row.type === "boolean") {
@@ -613,7 +818,17 @@ function buildInputUiFromRow(row) {
   return ui;
 }
 
-function buildConfig({ appName, inputRows, outputRows }) {
+function buildConfig({
+  appName,
+  inputRows,
+  outputRows,
+  workflowId,
+  mode = "local",
+  saveWorkflowJson = true,
+  addMetadata = false,
+  accessPassword = "",
+  usePersonalQueue = false
+}) {
   const usedInputKeys = new Set();
   const input = {};
   for (const row of inputRows) {
@@ -630,20 +845,22 @@ function buildConfig({ appName, inputRows, outputRows }) {
     if (row.kind === "menu-sub") {
       const key = uniqueKey(row.label || "menu_sub", usedInputKeys);
       const choices = parseChoicesText(row.choicesText);
+      const parsedChoices = parseMenuChoices(choices, menuOptsFromRow(row));
       const ui = {
         type: "menu-sub",
         label: row.label || "Menu",
         choices,
-        value: choices.includes(row.value) ? row.value : choices[0] || "",
+        value: parsedChoices.some(choice => choice.value === row.value) ? row.value : (parsedChoices[0]?.value || ""),
         sub: {}
       };
-      for (const choice of choices) {
+      if (row.menuLabelSyntax) ui.menuLabelSyntax = true;
+      for (const choice of parsedChoices) {
         const usedSubKeys = new Set();
-        ui.sub[choice] = {};
-        for (const subRow of row.sub?.[choice] || []) {
+        ui.sub[choice.value] = {};
+        for (const subRow of row.sub?.[choice.value] || []) {
           if (!subRow.nodeId || !subRow.field || !subRow.type) continue;
           const subKey = uniqueKey(subRow.label || `${subRow.nodeId}_${subRow.field}`, usedSubKeys);
-          ui.sub[choice][subKey] = {
+          ui.sub[choice.value][subKey] = {
             id: `${subRow.nodeId}-${subRow.field}`,
             ui: buildInputUiFromRow(subRow)
           };
@@ -678,6 +895,22 @@ function buildConfig({ appName, inputRows, outputRows }) {
     };
   }
 
+  if (mode === "runninghub-wf") {
+    const runninghub = {
+      workflowId: String(workflowId || "").trim(),
+      saveWorkflowJson: Boolean(saveWorkflowJson)
+    };
+    if (!saveWorkflowJson) runninghub.saveWorkflowJson = false;
+    if (addMetadata) runninghub.addMetadata = true;
+    if (usePersonalQueue) runninghub.usePersonalQueue = true;
+    const password = String(accessPassword || "").trim();
+    if (password) runninghub.accessPassword = password;
+    return {
+      app: { name: appName || "Untitled Template" },
+      runninghub,
+      input
+    };
+  }
   return {
     app: { name: appName || "Untitled Template" },
     input,
@@ -718,17 +951,34 @@ function templateIdFromFile(file) {
   return baseName;
 }
 
-export function TemplateEditorModal({ selectedTemplate, discovery, onClose, onSaved }) {
+export function TemplateEditorModal({
+  mode = "local",
+  selectedTemplate,
+  discovery,
+  apiKey = "",
+  onClose,
+  onSaved
+}) {
+  const isRhWf = mode === "runninghub-wf";
+  const fieldTypes = editorFieldTypes(mode);
+  const apiScope = isRhWf ? "runninghub-wf" : "local";
   const [templateId, setTemplateId] = useState("");
   const [appName, setAppName] = useState("");
+  const [workflowId, setWorkflowId] = useState("");
+  const [saveWorkflowJson, setSaveWorkflowJson] = useState(false);
+  const [addMetadata, setAddMetadata] = useState(false);
+  const [accessPassword, setAccessPassword] = useState("");
+  const [usePersonalQueue, setUsePersonalQueue] = useState(false);
   const [workflow, setWorkflow] = useState(null);
   const [inputRows, setInputRows] = useState([]);
   const [outputRows, setOutputRows] = useState([]);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [loadingWorkflow, setLoadingWorkflow] = useState(false);
   const [draggingInputId, setDraggingInputId] = useState("");
   const [draggingOutputId, setDraggingOutputId] = useState("");
   const [selectedInputId, setSelectedInputId] = useState("");
+  const [editingDefaultTemplate, setEditingDefaultTemplate] = useState(false);
 
   const nodes = useMemo(() => workflowNodes(workflow), [workflow]);
   const saveNodes = useMemo(() => nodes.filter(node => node.classType.toLowerCase().includes("save")), [nodes]);
@@ -753,15 +1003,22 @@ export function TemplateEditorModal({ selectedTemplate, discovery, onClose, onSa
       if (!selectedTemplate) return;
       setError("");
       try {
-        const response = await fetch(`/api/template-editor?template=${encodeURIComponent(selectedTemplate)}`);
+        const response = await fetch(`/api/template-editor?template=${encodeURIComponent(selectedTemplate)}&scope=${apiScope}`);
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || "Không đọc được template");
         if (cancelled) return;
         setTemplateId(data.template?.id || selectedTemplate);
+        setEditingDefaultTemplate(Boolean(data.template?.isDefault));
         setAppName(data.config?.app?.name || data.template?.name || "");
+        const rh = data.config?.runninghub || {};
+        setWorkflowId(rh.workflowId || "");
+        setSaveWorkflowJson(rh.saveWorkflowJson !== false && Boolean(data.workflow));
+        setAddMetadata(Boolean(rh.addMetadata));
+        setAccessPassword(rh.accessPassword || "");
+        setUsePersonalQueue(Boolean(rh.usePersonalQueue));
         setWorkflow(data.workflow || null);
         setInputRows(Object.entries(data.config?.input || {}).map(([key, item]) => rowFromConfig(item, data.workflow, key)));
-        setOutputRows(Object.values(data.config?.output || {}).map(outputFromConfig));
+        setOutputRows(isRhWf ? [] : Object.values(data.config?.output || {}).map(outputFromConfig));
       } catch (err) {
         if (!cancelled) setError(err.message);
       }
@@ -770,6 +1027,10 @@ export function TemplateEditorModal({ selectedTemplate, discovery, onClose, onSa
     return () => {
       cancelled = true;
     };
+  }, [selectedTemplate, apiScope, isRhWf]);
+
+  useEffect(() => {
+    if (!selectedTemplate) setEditingDefaultTemplate(false);
   }, [selectedTemplate]);
 
   async function applyWorkflow(nextWorkflow, sourceName, nextConfig = null) {
@@ -777,15 +1038,52 @@ export function TemplateEditorModal({ selectedTemplate, discovery, onClose, onSa
     const name = sourceName.replace(/\.(json|ya?ml)$/i, "");
     setTemplateId(slugify(nextConfig?.template?.id || nextConfig?.app?.id || name));
     setAppName(nextConfig?.app?.name || nextConfig?.name || name);
-    const nextNodes = workflowNodes(nextWorkflow);
+    if (nextConfig?.runninghub?.workflowId) setWorkflowId(nextConfig.runninghub.workflowId);
     if (nextConfig) {
       setInputRows(Object.entries(nextConfig.input || {}).map(([key, item]) => rowFromConfig(item, nextWorkflow, key)));
-      setOutputRows(Object.values(nextConfig.output || {}).map(outputFromConfig));
+      setOutputRows(isRhWf ? [] : Object.values(nextConfig.output || {}).map(outputFromConfig));
       return;
     }
-    setInputRows([]);
-    const firstSave = nextNodes.find(node => node.classType.toLowerCase().includes("save"));
-    setOutputRows(firstSave ? [{ rowId: crypto.randomUUID(), nodeId: firstSave.id, label: "Ảnh kết quả" }] : []);
+    setInputRows(current => pruneInputRows(current, nextWorkflow));
+    if (!isRhWf) {
+      const nextNodes = workflowNodes(nextWorkflow);
+      const firstSave = nextNodes.find(node => node.classType.toLowerCase().includes("save"));
+      setOutputRows(firstSave ? [{ rowId: crypto.randomUUID(), nodeId: firstSave.id, label: "Ảnh kết quả" }] : []);
+    } else {
+      setOutputRows([]);
+    }
+  }
+
+  async function handleLoadWorkflowById() {
+    if (!workflowId.trim()) {
+      setError("Cần nhập Workflow ID");
+      return;
+    }
+    if (!apiKey.trim()) {
+      setError("Cần nhập RunningHub API Key trong Settings trước");
+      return;
+    }
+    setLoadingWorkflow(true);
+    setError("");
+    try {
+      const response = await fetch("/api/runninghub-wf/workflow-json", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ apiKey: apiKey.trim(), workflowId: workflowId.trim() })
+      });
+      const text = await response.text();
+      let data = {};
+      try { data = text ? JSON.parse(text) : {}; } catch {
+        throw new Error(text || "Backend không trả về JSON khi load workflow");
+      }
+      if (!response.ok) throw new Error(data.error || "Không tải được workflow từ RunningHub");
+      if (!data.workflow) throw new Error("RunningHub không trả về workflow JSON");
+      await applyWorkflow(data.workflow, `workflow-${workflowId}`);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoadingWorkflow(false);
+    }
   }
 
   async function handleTemplateUpload(fileList) {
@@ -798,8 +1096,14 @@ export function TemplateEditorModal({ selectedTemplate, discovery, onClose, onSa
       if (!jsonFile) throw new Error("Không tìm thấy workflow JSON hợp lệ");
       const nextWorkflow = JSON.parse(await readTextFile(jsonFile));
       const nextConfig = yamlFile ? YAML.parse(await readTextFile(yamlFile)) : null;
-      if (nextConfig && (!nextConfig.input || !nextConfig.output)) {
-        throw new Error("YAML thiếu input hoặc output");
+      if (nextConfig && !nextConfig.input) {
+        throw new Error("YAML thiếu input");
+      }
+      if (!isRhWf && nextConfig && !nextConfig.output) {
+        throw new Error("YAML thiếu output");
+      }
+      if (isRhWf && nextConfig && !nextConfig.runninghub?.workflowId) {
+        throw new Error("YAML thiếu runninghub.workflowId");
       }
       setTemplateId(slugify(nextConfig?.template?.id || nextConfig?.app?.id || templateIdFromFile(yamlFile || jsonFile)));
       await applyWorkflow(nextWorkflow, jsonFile.name, nextConfig);
@@ -823,7 +1127,7 @@ export function TemplateEditorModal({ selectedTemplate, discovery, onClose, onSa
     const firstNode = nodes.find(node => node.fields.length > 0);
     const field = firstNode?.fields?.[0] || "";
     const value = firstNode ? workflow?.[firstNode.id]?.inputs?.[field] : "";
-    const typeDefaults = defaultsForType(inferRowType({ field, nodeClass: firstNode?.classType, value }), value);
+    const typeDefaults = defaultsForType(inferRowType({ field, nodeClass: firstNode?.classType, value }, mode), value);
     const rowId = crypto.randomUUID();
     setInputRows(current => [...current, {
       rowId,
@@ -855,6 +1159,7 @@ export function TemplateEditorModal({ selectedTemplate, discovery, onClose, onSa
       field: "",
       label: "Menu",
       choicesText: "option_a\noption_b",
+      menuLabelSyntax: false,
       value: "option_a",
       sub: {
         option_a: [],
@@ -881,13 +1186,13 @@ export function TemplateEditorModal({ selectedTemplate, discovery, onClose, onSa
           const value = workflow?.[patch.nodeId]?.inputs?.[field];
           next.field = field;
           next.label = field || next.label;
-          Object.assign(next, defaultsForType(inferRowType({ field, nodeClass: node?.classType, value }), value));
+          Object.assign(next, defaultsForType(inferRowType({ field, nodeClass: node?.classType, value }, mode), value));
         }
         if (patch.field) {
           const node = nodes.find(node => node.id === next.nodeId);
           const value = workflow?.[next.nodeId]?.inputs?.[patch.field];
           next.label = next.label || patch.field;
-          Object.assign(next, defaultsForType(inferRowType({ field: patch.field, nodeClass: node?.classType, value }), value));
+          Object.assign(next, defaultsForType(inferRowType({ field: patch.field, nodeClass: node?.classType, value }, mode), value));
         }
         if (patch.type) {
           const value = workflow?.[next.nodeId]?.inputs?.[next.field];
@@ -903,7 +1208,7 @@ export function TemplateEditorModal({ selectedTemplate, discovery, onClose, onSa
     const firstNode = nodes.find(node => node.fields.length > 0);
     const field = firstNode?.fields?.[0] || "";
     const value = firstNode ? workflow?.[firstNode.id]?.inputs?.[field] : "";
-    const typeDefaults = defaultsForType(inferRowType({ field, nodeClass: firstNode?.classType, value }), value);
+    const typeDefaults = defaultsForType(inferRowType({ field, nodeClass: firstNode?.classType, value }, mode), value);
     setInputRows(current => current.map(row => {
       if (row.rowId !== menuRowId || row.kind !== "menu-sub") return row;
       const sub = { ...(row.sub || {}) };
@@ -939,13 +1244,13 @@ export function TemplateEditorModal({ selectedTemplate, discovery, onClose, onSa
         const value = workflow?.[patch.nodeId]?.inputs?.[field];
         next.field = field;
         next.label = field || next.label;
-        Object.assign(next, defaultsForType(inferRowType({ field, nodeClass: node?.classType, value }), value));
+        Object.assign(next, defaultsForType(inferRowType({ field, nodeClass: node?.classType, value }, mode), value));
       }
       if (patch.field) {
         const node = nodes.find(node => node.id === next.nodeId);
         const value = workflow?.[next.nodeId]?.inputs?.[patch.field];
         next.label = next.label || patch.field;
-        Object.assign(next, defaultsForType(inferRowType({ field: patch.field, nodeClass: node?.classType, value }), value));
+        Object.assign(next, defaultsForType(inferRowType({ field: patch.field, nodeClass: node?.classType, value }, mode), value));
       }
       if (patch.type) {
         const value = workflow?.[next.nodeId]?.inputs?.[next.field];
@@ -977,22 +1282,44 @@ export function TemplateEditorModal({ selectedTemplate, discovery, onClose, onSa
   }
 
   async function saveTemplate() {
-    if (!workflow) {
+    if (!isRhWf && !workflow) {
       setError("Cần upload hoặc load workflow JSON trước khi Save");
+      return;
+    }
+    if (isRhWf && saveWorkflowJson && !workflow) {
+      setError("Cần load hoặc import workflow JSON trước khi lưu (hoặc bỏ chọn Lưu JSON workflow)");
       return;
     }
     setSaving(true);
     setError("");
     try {
-      const config = buildConfig({ appName, inputRows, outputRows });
-      const response = await fetch("/api/templates/save", {
+      if (isRhWf && !workflowId.trim()) {
+        throw new Error("Cần nhập Workflow ID trước khi lưu template RunningHub");
+      }
+      const config = buildConfig({
+        appName,
+        inputRows,
+        outputRows,
+        workflowId,
+        mode,
+        saveWorkflowJson,
+        addMetadata,
+        accessPassword,
+        usePersonalQueue
+      });
+      const response = await fetch(`/api/templates/save?scope=${apiScope}`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ templateId, workflow, config })
+        body: JSON.stringify({
+          templateId,
+          workflow: !isRhWf || saveWorkflowJson ? workflow : null,
+          config,
+          scope: apiScope
+        })
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Không lưu được template");
-      await onSaved(data.template.id);
+      await onSaved(data.template.id, { savedAsCopy: data.savedAsCopy });
       onClose();
     } catch (err) {
       setError(err.message);
@@ -1006,37 +1333,147 @@ export function TemplateEditorModal({ selectedTemplate, discovery, onClose, onSa
       <section className="settingsModal templateEditorModal" role="dialog" aria-modal="true" aria-label="Tạo hoặc sửa template" onMouseDown={event => event.stopPropagation()}>
         <div className="modalHeader">
           <div>
-            <h2>Tạo / sửa YAML, JSON</h2>
-            <p>Upload workflow JSON hoặc chỉnh template đang chọn, sau đó lưu thành API template.</p>
+            <h2>{isRhWf ? "Tạo / sửa template RunningHub Wf" : "Tạo / sửa YAML, JSON"}</h2>
+            <p>{isRhWf
+              ? "Map input từ workflow, cấu hình template và tùy chọn API."
+              : "Upload workflow JSON hoặc chỉnh template đang chọn, sau đó lưu thành API template."}</p>
           </div>
           <button className="modalClose" onClick={onClose} title="Đóng">
             <X size={18} />
           </button>
         </div>
 
-        <div className="templateEditorToolbar">
-          <div className="templateEditorUploadZone">
-            <label className="uploadJsonButton uploadJsonButton--primary">
-              <Upload size={18} />
-              <span>Upload JSON/YAML</span>
-              <input type="file" accept=".json,.yaml,.yml,application/json" multiple onChange={event => handleTemplateUpload(event.target.files)} />
-            </label>
-            <label className="uploadJsonButton">
-              <Upload size={16} />
-              <span>Upload thư mục</span>
-              <input type="file" multiple webkitdirectory="" directory="" onChange={event => handleTemplateUpload(event.target.files)} />
-            </label>
-          </div>
-          <div className="templateEditorMetaCard">
-            <label className="field">
-              <span>Template ID</span>
-              <input value={templateId} onChange={event => setTemplateId(event.target.value)} placeholder="fashion-flatlay" />
-            </label>
-            <label className="field">
-              <span>Tên ứng dụng</span>
-              <input value={appName} onChange={event => setAppName(event.target.value)} placeholder="Fashion Flatlay" />
-            </label>
-          </div>
+        <div className={`templateEditorToolbar ${isRhWf ? "templateEditorToolbar--rhWf" : ""}`}>
+          {isRhWf ? (
+            <div className="rhWfEditorConfig">
+              <section className="rhWfConfigPanel rhWfConfigPanel--source">
+                <header className="rhWfConfigPanelHead rhWfConfigPanelHead--compact">
+                  <span className="rhWfConfigPanelIcon rhWfConfigPanelIcon--sm"><Cloud size={13} /></span>
+                  <strong>Nguồn workflow</strong>
+                </header>
+                <div className="rhWfSourceActions">
+                  <button
+                    type="button"
+                    className="rhWfSourceBtn rhWfSourceBtn--primary"
+                    onClick={handleLoadWorkflowById}
+                    disabled={loadingWorkflow}
+                    title="Load workflow từ RunningHub theo ID"
+                  >
+                    <Cloud size={13} />
+                    <span>{loadingWorkflow ? "Đang tải..." : "Load ID"}</span>
+                  </button>
+                  <label className="rhWfSourceBtn" title="Import file JSON api_format">
+                    <FileJson size={13} />
+                    <span>Import</span>
+                    <input
+                      type="file"
+                      accept=".json,application/json"
+                      onChange={event => {
+                        setSaveWorkflowJson(true);
+                        handleJsonUpload(event.target.files?.[0]);
+                      }}
+                    />
+                  </label>
+                </div>
+                <RhWfSwitch
+                  checked={saveWorkflowJson}
+                  onChange={event => setSaveWorkflowJson(event.target.checked)}
+                  title="Lưu JSON"
+                  hint={saveWorkflowJson ? "Patch khi chạy" : "Chỉ nodeInfoList"}
+                  compact
+                />
+              </section>
+
+              <section className="rhWfConfigPanel rhWfConfigPanel--meta">
+                <header className="rhWfConfigPanelHead rhWfConfigPanelHead--compact">
+                  <span className="rhWfConfigPanelIcon rhWfConfigPanelIcon--sm"><SlidersHorizontal size={13} /></span>
+                  <strong>Setting Template</strong>
+                </header>
+                <div className="rhWfMetaGrid rhWfMetaGrid--settings">
+                  <label className="rhWfField">
+                    <span>Workflow ID</span>
+                    <input
+                      value={workflowId}
+                      onChange={event => setWorkflowId(event.target.value)}
+                      placeholder={DEFAULT_RH_WF_ID}
+                      spellCheck={false}
+                    />
+                  </label>
+                  <label className="rhWfField">
+                    <span>Template ID</span>
+                    <input
+                      value={templateId}
+                      onChange={event => setTemplateId(event.target.value)}
+                      placeholder="rh-upscale-demo"
+                      spellCheck={false}
+                    />
+                  </label>
+                  <label className="rhWfField">
+                    <span>Tên ứng dụng</span>
+                    <input
+                      value={appName}
+                      onChange={event => setAppName(event.target.value)}
+                      placeholder="SDVN Upscale"
+                    />
+                  </label>
+                </div>
+                <div className="rhWfApiOptions rhWfApiOptions--inline">
+                  <span className="rhWfApiOptionsLabel">API</span>
+                  <div className="rhWfApiOptionsBody rhWfApiOptionsBody--inline">
+                    <div className="rhWfApiToggles rhWfApiToggles--inline">
+                      <RhWfSwitch
+                        checked={addMetadata}
+                        onChange={event => setAddMetadata(event.target.checked)}
+                        title="addMetadata"
+                        compact
+                      />
+                      <RhWfSwitch
+                        checked={usePersonalQueue}
+                        onChange={event => setUsePersonalQueue(event.target.checked)}
+                        title="usePersonalQueue"
+                        compact
+                      />
+                    </div>
+                    <label className="rhWfField rhWfField--password rhWfField--placeholderOnly">
+                      <input
+                        type="password"
+                        value={accessPassword}
+                        onChange={event => setAccessPassword(event.target.value)}
+                        placeholder="accessPassword"
+                        autoComplete="off"
+                        aria-label="accessPassword"
+                      />
+                    </label>
+                  </div>
+                </div>
+              </section>
+            </div>
+          ) : (
+            <>
+              <div className="templateEditorUploadZone">
+                <label className="uploadJsonButton uploadJsonButton--primary">
+                  <Upload size={18} />
+                  <span>Upload JSON/YAML</span>
+                  <input type="file" accept=".json,.yaml,.yml,application/json" multiple onChange={event => handleTemplateUpload(event.target.files)} />
+                </label>
+                <label className="uploadJsonButton">
+                  <Upload size={16} />
+                  <span>Upload thư mục</span>
+                  <input type="file" multiple webkitdirectory="" directory="" onChange={event => handleTemplateUpload(event.target.files)} />
+                </label>
+              </div>
+              <div className="templateEditorMetaCard">
+                <label className="field">
+                  <span>Template ID</span>
+                  <input value={templateId} onChange={event => setTemplateId(event.target.value)} placeholder="fashion-flatlay" />
+                </label>
+                <label className="field">
+                  <span>Tên ứng dụng</span>
+                  <input value={appName} onChange={event => setAppName(event.target.value)} placeholder="Fashion Flatlay" />
+                </label>
+              </div>
+            </>
+          )}
         </div>
 
         <div className="templateEditorContent">
@@ -1143,6 +1580,7 @@ export function TemplateEditorModal({ selectedTemplate, discovery, onClose, onSa
                     row={selectedInputRow}
                     nodes={nodes}
                     workflow={workflow}
+                    fieldTypes={fieldTypes}
                     onUpdate={patch => updateInputRow(selectedInputRow.rowId, patch)}
                     onDelete={() => deleteInputRow(selectedInputRow.rowId)}
                     onUpdateSubInput={(choice, subRowId, patch) => updateMenuSubInput(selectedInputRow.rowId, choice, subRowId, patch)}
@@ -1153,6 +1591,7 @@ export function TemplateEditorModal({ selectedTemplate, discovery, onClose, onSa
                   <InputDetailPanel
                     row={selectedInputRow}
                     nodes={nodes}
+                    fieldTypes={fieldTypes}
                     onUpdate={patch => selectedInputRow && updateInputRow(selectedInputRow.rowId, patch)}
                     onDelete={() => selectedInputRow && deleteInputRow(selectedInputRow.rowId)}
                   />
@@ -1161,7 +1600,7 @@ export function TemplateEditorModal({ selectedTemplate, discovery, onClose, onSa
             </div>
           </section>
 
-          <section className="editorSection outputSectionCompact">
+          {!isRhWf ? <section className="editorSection outputSectionCompact">
             <div className="editorSectionHeader">
               <h3>Output <span className="editorSectionCount">{outputRows.length}</span></h3>
               <div className="editorHeaderActions">
@@ -1232,21 +1671,35 @@ export function TemplateEditorModal({ selectedTemplate, discovery, onClose, onSa
               ))}
               {outputRows.length === 0 ? <div className="editorEmpty">Chưa có output. Chọn node có class_type chứa "Save".</div> : null}
             </div>
-          </section>
+          </section> : null}
         </div>
 
         {error ? <div className="editorError">{error}</div> : null}
+        {editingDefaultTemplate ? (
+          <p className="templateEditorDefaultHint">
+            Đang sửa template mặc định — <b>Lưu</b> sẽ tạo bản copy trong thư mục templates, không ghi đè bản gốc.
+          </p>
+        ) : null}
         <div className="templateEditorFooter">
           <span className="templateEditorStatus">
             {workflow
-              ? `${nodes.length} nodes · ${inputRows.length} input · ${outputRows.length} output`
-              : "Chưa có workflow — upload JSON để bắt đầu"}
+              ? isRhWf
+                ? `${nodes.length} nodes · ${inputRows.length} input · WF ${workflowId || "—"} · ${saveWorkflowJson ? "lưu JSON" : "chỉ workflowId"}`
+                : `${nodes.length} nodes · ${inputRows.length} input · ${outputRows.length} output`
+              : isRhWf
+                ? "Chưa có workflow — load theo ID hoặc import JSON"
+                : "Chưa có workflow — upload JSON để bắt đầu"}
           </span>
           <div className="templateEditorFooterActions">
             <button type="button" className="smallActionButton secondary" onClick={onClose}>Hủy</button>
-            <button type="button" className="saveTemplateButton" onClick={saveTemplate} disabled={saving || !workflow}>
+            <button
+              type="button"
+              className="saveTemplateButton"
+              onClick={saveTemplate}
+              disabled={saving || (!isRhWf ? !workflow : (saveWorkflowJson && !workflow))}
+            >
               <Save size={16} />
-              <span>{saving ? "Đang lưu..." : "Lưu template"}</span>
+              <span>{saving ? "Đang lưu..." : editingDefaultTemplate ? "Lưu bản copy" : "Lưu template"}</span>
             </button>
           </div>
         </div>

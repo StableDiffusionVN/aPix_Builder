@@ -1,4 +1,5 @@
 import { isDynamicFieldType } from "./dynamicTypes";
+import { lookupMenuSubFields, menuChoiceOptions, resolveMenuStoredValue } from "./menuChoices";
 
 export function isMenuSub(item) {
   return item?.ui?.type === "menu-sub";
@@ -24,10 +25,14 @@ export function flattenSubInputs(sub = {}) {
 }
 
 export function getActiveSubInputs(item, menuValue) {
-  const sub = item?.ui?.sub || {};
   const choices = item?.ui?.choices || [];
-  const selected = menuValue ?? item?.ui?.value ?? choices[0] ?? "";
-  const fields = sub[selected] || {};
+  const menuOpts = menuChoiceOptions(item?.ui);
+  const selected = resolveMenuStoredValue(
+    menuValue ?? item?.ui?.value,
+    choices,
+    menuOpts
+  );
+  const fields = lookupMenuSubFields(item?.ui?.sub || {}, selected, choices, menuOpts);
   return Object.entries(fields).map(([key, child]) => ({
     key: `${item.key}.${selected}.${key}`,
     parentKey: item.key,
@@ -53,11 +58,13 @@ export function flattenInputs(input = {}) {
 export function defaultValue(item) {
   const ui = item.ui || {};
   const type = String(ui.type || "").toLowerCase();
-  if (ui.type === "menu-sub") return ui.value ?? ui.choices?.[0] ?? "";
+  if (ui.type === "menu-sub") return resolveMenuStoredValue(ui.value, ui.choices, menuChoiceOptions(ui));
   if (ui.type === "seed") return "random_seed";
   if (ui.type === "checkbox" || ui.type === "boolean") return Boolean(ui.value);
   if (ui.type === "number" || ui.type === "int" || ui.type === "float" || ui.type === "slider") return ui.value ?? ui.minimum ?? 0;
-  if (ui.type === "dropdown" || ui.type === "menu" || ui.type === "radio") return ui.value ?? ui.choices?.[0] ?? "";
+  if (ui.type === "dropdown" || ui.type === "menu" || ui.type === "radio") {
+    return resolveMenuStoredValue(ui.value, ui.choices, menuChoiceOptions(ui));
+  }
   if (isDynamicFieldType(type)) return ui.value ?? "";
   if (ui.type === "json") return "{}";
   return ui.value ?? "";

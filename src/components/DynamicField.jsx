@@ -4,6 +4,7 @@ import { Check, Eye, Filter, Folder, Images, Link, Loader2, Pencil, RefreshCcw, 
 import { ImageEditorModal } from "./ImageEditorModal";
 import { MaskEditorModal } from "./MaskEditorModal";
 import { defaultValue, getActiveSubInputs, isMenuSub, normalizeId } from "../lib/template";
+import { menuChoiceOptions, parseMenuChoices, resolveMenuStoredValue } from "../lib/menuChoices";
 import { DYNAMIC_FIELD_TYPES, canonicalDynamicType, dynamicFieldChoices, isDynamicFieldType } from "../lib/dynamicTypes";
 
 const INPUT_FAVORITES_KEY = "comfyui-build:input-image-favorites:v1";
@@ -530,18 +531,23 @@ export function DynamicField({
 
   if (isMenuSub(item)) {
     const choices = ui.choices || [];
-    const menuValue = value ?? defaultValue(item);
+    const menuOpts = menuChoiceOptions(ui);
+    const parsedChoices = parseMenuChoices(choices, menuOpts);
+    const menuValue = resolveMenuStoredValue(value ?? defaultValue(item), choices, menuOpts);
     const activeSubs = getActiveSubInputs(item, menuValue);
     const valuesMap = allValues || {};
     const patchValue = onValueChange || ((key, next) => onChange(next));
+    const selectedChoice = parsedChoices.find(choice => choice.value === menuValue);
 
     return (
       <section className="menuSubField">
         <label className="field">
           <span>{label}</span>
-          <select value={choices.includes(menuValue) ? menuValue : (choices[0] || "")} onChange={event => onChange(event.target.value)}>
-            {choices.length === 0 ? <option value="">Chưa có lựa chọn</option> : null}
-            {choices.map(choice => <option key={choice} value={choice}>{choice}</option>)}
+          <select value={menuValue} onChange={event => onChange(event.target.value)}>
+            {parsedChoices.length === 0 ? <option value="">Chưa có lựa chọn</option> : null}
+            {parsedChoices.map(choice => (
+              <option key={choice.value} value={choice.value}>{choice.label}</option>
+            ))}
           </select>
           {description ? <small className="fieldDescription">{description}</small> : null}
         </label>
@@ -564,7 +570,7 @@ export function DynamicField({
             ))}
           </div>
         ) : (
-          <div className="menuSubEmpty">Không có input cho lựa chọn <b>{menuValue}</b>.</div>
+          <div className="menuSubEmpty">Không có input cho lựa chọn <b>{selectedChoice?.label || menuValue}</b>.</div>
         )}
       </section>
     );
@@ -1002,28 +1008,40 @@ export function DynamicField({
     );
   }
   if (isDropdown) {
-    const choices = isDynamicList ? dynamicFieldChoices(discovery, dynamicKind) : ui.choices || [];
+    const rawChoices = isDynamicList ? dynamicFieldChoices(discovery, dynamicKind) : ui.choices || [];
+    const menuOpts = menuChoiceOptions(ui);
+    const parsedChoices = isDynamicList
+      ? rawChoices.map(choice => ({ label: choice, value: choice, raw: choice }))
+      : parseMenuChoices(rawChoices, menuOpts);
+    const selectValue = isDynamicList
+      ? (rawChoices.includes(value) ? value : "")
+      : resolveMenuStoredValue(value, rawChoices, menuOpts);
     return (
       <label className="field">
         <span>{label}</span>
-        <select value={isDynamicList ? (choices.includes(value) ? value : "") : value} onChange={event => onChange(event.target.value)} disabled={isDynamicList && discoveryLoading}>
-          {isDynamicList && choices.length === 0 ? (
+        <select value={selectValue} onChange={event => onChange(event.target.value)} disabled={isDynamicList && discoveryLoading}>
+          {isDynamicList && rawChoices.length === 0 ? (
             <option value="">{discoveryLoading ? "Đang quét server..." : "Không tìm thấy dữ liệu"}</option>
           ) : null}
-          {choices.map(choice => <option key={choice} value={choice}>{choice}</option>)}
+          {parsedChoices.map(choice => (
+            <option key={choice.value} value={choice.value}>{choice.label}</option>
+          ))}
         </select>
         {description ? <small className="fieldDescription">{description}</small> : null}
       </label>
     );
   }
   if (ui.type === "radio") {
+    const menuOpts = menuChoiceOptions(ui);
+    const parsedChoices = parseMenuChoices(ui.choices || [], menuOpts);
+    const radioValue = resolveMenuStoredValue(value, ui.choices, menuOpts);
     return (
       <fieldset className="field radioGroup">
         <legend>{label}</legend>
-        {(ui.choices || []).map(choice => (
-          <label key={choice}>
-            <input type="radio" checked={value === choice} onChange={() => onChange(choice)} />
-            {choice}
+        {parsedChoices.map(choice => (
+          <label key={choice.value}>
+            <input type="radio" checked={radioValue === choice.value} onChange={() => onChange(choice.value)} />
+            {choice.label}
           </label>
         ))}
         {description ? <small className="fieldDescription">{description}</small> : null}

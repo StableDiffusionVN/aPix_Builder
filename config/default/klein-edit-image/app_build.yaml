@@ -1,5 +1,5 @@
 app:
-  name: Klein_Edit_Image
+  name: Klein Edit Image
 input:
   checkpoint_klein:
     id: 1-ckpt_name

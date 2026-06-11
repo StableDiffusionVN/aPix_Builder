@@ -38,12 +38,14 @@ import { useImageViewer } from "./hooks/useImageViewer";
 import { useExecution } from "./hooks/useExecution";
 import {
   buildNodeDefaults,
+  isRunningHubMode,
   loadExecutionMode,
   nodeFieldKey,
   RUNNINGHUB_APP_OPTIONS,
   useRunningHub
 } from "./hooks/useRunningHub";
-import { buildRunningHubJob, useRunningHubExecution } from "./hooks/useRunningHubExecution";
+import { rhWfWorkspaceKey } from "./lib/runningHubTemplate";
+import { buildRunningHubJob, buildRunningHubWfJob, useRunningHubExecution } from "./hooks/useRunningHubExecution";
 import { ExecutionModeToggle, RunningHubPanel } from "./components/RunningHubPanel";
 import { RunningHubRunningState } from "./components/RunningHubRunningState";
 import { RunningHubSettings } from "./components/RunningHubSettings";
@@ -52,6 +54,7 @@ const SERVER_STORAGE_KEY = "comfyui-build:server:v2";
 const THEME_STORAGE_KEY = "comfyui-build:theme";
 const MAIN_FONT_STORAGE_KEY = "comfyui-build:main-font";
 const NOTIFY_STORAGE_KEY = "comfyui-build:notify:v1";
+const RH_WF_TEMPLATE_STORAGE_KEY = "comfyui-build:rh-wf-template:v1";
 const DEFAULT_COMFY_SERVER = "http://127.0.0.1:8188";
 const THEME_OPTIONS = [
   { id: "dark", label: "Dark", swatch: "#121212" },
@@ -96,6 +99,10 @@ function loadNotifyEnabled() {
   try { return JSON.parse(localStorage.getItem(NOTIFY_STORAGE_KEY)) === true; } catch { return false; }
 }
 
+function loadRhWfLastTemplate() {
+  return localStorage.getItem(RH_WF_TEMPLATE_STORAGE_KEY) || "";
+}
+
 function formatDuration(ms) {
   if (!Number.isFinite(ms)) return "";
   const seconds = Math.max(0, Math.round(ms / 1000));
@@ -132,6 +139,10 @@ export default function App() {
   const [themeMenuOpen, setThemeMenuOpen] = useState(false);
   const [mainFont, setMainFont] = useState(loadMainFont);
   const [templateEditorOpen, setTemplateEditorOpen] = useState(false);
+  const [rhWfTemplateEditorOpen, setRhWfTemplateEditorOpen] = useState(false);
+  const [rhWfConfig, setRhWfConfig] = useState(null);
+  const [rhWfTemplates, setRhWfTemplates] = useState([]);
+  const [rhWfSelectedTemplate, setRhWfSelectedTemplate] = useState("");
   const [outputEditorOpen, setOutputEditorOpen] = useState(false);
   const [theme, setTheme] = useState(loadTheme);
   const [selectedOutputIndex, setSelectedOutputIndex] = useState(0);
@@ -140,6 +151,7 @@ export default function App() {
   const [addServerOpen, setAddServerOpen] = useState(false);
   const [executionMode, setExecutionMode] = useState(loadExecutionMode);
   const [rhValues, setRhValues] = useState({});
+  const [rhWfValues, setRhWfValues] = useState({});
   const [rhTestResult, setRhTestResult] = useState(null);
   const [rhTesting, setRhTesting] = useState(false);
 
@@ -163,7 +175,7 @@ export default function App() {
     if (historyItem) setHistory(current => [historyItem, ...current]);
     setSelectedOutputIndex(0);
     if (notifyEnabled && typeof Notification !== "undefined" && Notification.permission === "granted") {
-      const body = executionMode === "runninghub" ? "RunningHub đã hoàn thành!" : "Workflow đã hoàn thành!";
+      const body = isRunningHubMode(executionMode) ? "RunningHub đã hoàn thành!" : "Workflow đã hoàn thành!";
       new Notification("aPix Builder", { body, icon: "/sdvn-icon.png" });
     }
   };
@@ -175,19 +187,31 @@ export default function App() {
     status, setStatus, error, setError,
     result, setResult, progress,
     runWorkflow, cancelWorkflow
-  } = executionMode === "runninghub" ? rhExecution : localExecution;
+  } = isRunningHubMode(executionMode) ? rhExecution : localExecution;
 
-  const isRunningHub = executionMode === "runninghub";
+  const isRunningHub = isRunningHubMode(executionMode);
+  const isRunningHubApp = executionMode === "runninghub-app";
+  const isRunningHubWf = executionMode === "runninghub-wf";
 
   const inputs = useMemo(() => flattenInputs(config?.input), [config]);
+  const rhWfInputs = useMemo(() => flattenInputs(rhWfConfig?.input), [rhWfConfig]);
   const outputs = useMemo(() => Object.values(config?.output || {}), [config]);
   const currentPresets = useMemo(() => getPresets(selectedTemplate), [getPresets, selectedTemplate, presetsVersion]);
+  const rhWfPresets = useMemo(
+    () => getPresets(rhWfWorkspaceKey(rhWfSelectedTemplate)),
+    [getPresets, rhWfSelectedTemplate, presetsVersion]
+  );
   const app = config?.app || {};
   const serverAddress = config?.server?.address || config?.sever?.address || "";
   const selectedTemplateName = templates.find(item => item.id === selectedTemplate)?.name || selectedTemplate || "Default";
   const selectedRunningHubApp = RUNNINGHUB_APP_OPTIONS.find(app => app.id === rhSettings.webappId);
-  const selectedRunningHubName = selectedRunningHubApp?.name || (rhSettings.webappId ? `RunningHub ${rhSettings.webappId}` : "RunningHub");
-  const brandSubtitle = isRunningHub ? selectedRunningHubName : selectedTemplateName;
+  const selectedRunningHubName = selectedRunningHubApp?.name || (rhSettings.webappId ? `RunningHub ${rhSettings.webappId}` : "RunningHub App");
+  const rhWfTemplateName = rhWfTemplates.find(item => item.id === rhWfSelectedTemplate)?.name || rhWfSelectedTemplate || "RunningHub Workflow";
+  const brandSubtitle = isRunningHubWf
+    ? rhWfTemplateName
+    : isRunningHubApp
+      ? selectedRunningHubName
+      : selectedTemplateName;
   const resultOutputs = result?.outputs || [];
   const selectedOutput = resultOutputs[selectedOutputIndex] || resultOutputs[0];
   const outputLabel = selectedOutput?.label || (isRunningHub ? "Ảnh kết quả RunningHub" : outputs[0]?.ui?.label || "Ảnh kết quả");
@@ -196,7 +220,7 @@ export default function App() {
   const showStatus = Boolean(error || result || running || activeRunId || runQueue.length);
 
   const compareInputImage = useMemo(() => {
-    if (isRunningHub) {
+    if (isRunningHubApp) {
       for (const node of rhNodes) {
         if (String(node.fieldType).toUpperCase() !== "IMAGE") continue;
         const value = rhValues[`${node.nodeId}|${node.fieldName}`];
@@ -205,15 +229,17 @@ export default function App() {
       }
       return "";
     }
-    for (const item of inputs) {
+    const compareInputs = isRunningHubWf ? rhWfInputs : inputs;
+    const compareValues = isRunningHubWf ? rhWfValues : values;
+    for (const item of compareInputs) {
       const type = item.ui?.type;
       if (type !== "image" && type !== "image_mask") continue;
-      const value = values[normalizeId(item.id)];
+      const value = compareValues[normalizeId(item.id)];
       if (typeof value === "string" && value.startsWith("data:image")) return value;
       if (value?.kind === "input-image" && value.url) return value.url;
     }
     return "";
-  }, [isRunningHub, rhNodes, rhValues, inputs, values]);
+  }, [isRunningHubApp, isRunningHubWf, rhNodes, rhValues, rhWfInputs, rhWfValues, inputs, values]);
 
   const canCompare = Boolean(heroImage && compareInputImage);
   const discoverySystem = discovery?.system?.system || discovery?.system || null;
@@ -288,7 +314,7 @@ export default function App() {
   }, [executionMode]);
 
   useEffect(() => {
-    if (executionMode !== "runninghub" || !rhSettings.apiKey) return;
+    if (executionMode !== "runninghub-app" || !rhSettings.apiKey) return;
     if (!String(rhSettings.webappId || "").trim()) return;
     const timer = window.setTimeout(() => {
       fetchRhNodes().then(nextNodes => {
@@ -298,11 +324,33 @@ export default function App() {
     return () => window.clearTimeout(timer);
   }, [executionMode, rhSettings.apiKey, rhSettings.webappId, fetchRhNodes]);
 
+  useEffect(() => {
+    if (!isRunningHubWf || rhWfTemplates.length) return;
+    loadRhWfTemplateRegistry()
+      .then(data => {
+        setRhWfTemplates(data.templates || []);
+        const stored = loadRhWfLastTemplate();
+        const hasStored = (data.templates || []).some(item => item.id === stored);
+        const nextId = hasStored ? stored : data.default;
+        if (nextId) return loadRhWfConfig(nextId);
+        setRhWfConfig(null);
+        setRhWfValues({});
+        setStatus("Chưa có template RunningHub Workflow — bấm sửa template để tạo mới");
+      })
+      .catch(err => setError(err.message));
+  }, [isRunningHubWf, rhWfTemplates.length]);
+
   // Persist workspace on every change
   useEffect(() => {
     if (!selectedTemplate || !config) return;
     saveValues(selectedTemplate, values);
   }, [config, selectedTemplate, values]);
+
+  useEffect(() => {
+    if (!rhWfSelectedTemplate || !rhWfConfig) return;
+    saveValues(rhWfWorkspaceKey(rhWfSelectedTemplate), rhWfValues);
+    localStorage.setItem(RH_WF_TEMPLATE_STORAGE_KEY, rhWfSelectedTemplate);
+  }, [rhWfConfig, rhWfSelectedTemplate, rhWfValues]);
 
   // Close theme menu on outside click
   useEffect(() => {
@@ -435,6 +483,58 @@ export default function App() {
     return response.json();
   }
 
+  async function loadRhWfTemplateRegistry() {
+    const response = await fetch("/api/templates?scope=runninghub-wf");
+    if (!response.ok) throw new Error("Không đọc được danh sách template RunningHub Workflow");
+    return response.json();
+  }
+
+  async function loadRhWfTemplateConfig(templateId) {
+    const suffix = templateId
+      ? `?template=${encodeURIComponent(templateId)}&scope=runninghub-wf`
+      : "?scope=runninghub-wf";
+    const response = await fetch(`/api/config${suffix}`);
+    if (!response.ok) throw new Error("Không đọc được cấu hình template RunningHub Workflow");
+    const data = await response.json();
+    if (data.error) throw new Error(data.error);
+    return data;
+  }
+
+  async function loadRhWfConfig(templateId, options = {}) {
+    setStatus("Đang tải template RunningHub Workflow...");
+    setError("");
+    if (!options.keepResult) {
+      setResult(null);
+      setSelectedOutputIndex(0);
+      resetImageView();
+    }
+    return loadRhWfTemplateConfig(templateId)
+      .then(data => {
+        const nextTemplateId = data.template?.id || templateId || "";
+        const defaults = buildDefaults(flattenInputs(data.config?.input));
+        const storedValues = nextTemplateId ? getStoredValues(rhWfWorkspaceKey(nextTemplateId)) : null;
+        setRhWfConfig(data.config);
+        setRhWfValues(options.values || { ...defaults, ...(storedValues || {}) });
+        setRhWfSelectedTemplate(nextTemplateId);
+        setStatus(`Template RH Wf sẵn sàng: ${data.template?.name || data.template?.id || "Default"}`);
+      })
+      .catch(err => {
+        setError(err.message);
+        setStatus("Không đọc được template RunningHub Workflow");
+      });
+  }
+
+  async function reloadRhWfTemplates(nextTemplateId, options = {}) {
+    const registry = await loadRhWfTemplateRegistry();
+    setRhWfTemplates(registry.templates || []);
+    if (nextTemplateId || registry.default) {
+      await loadRhWfConfig(nextTemplateId || registry.default);
+    }
+    if (options.savedAsCopy) {
+      setStatus("Đã lưu bản copy vào templates-rh — template mặc định giữ nguyên");
+    }
+  }
+
   async function loadConfig(templateId, options = {}) {
     setStatus("Đang tải cấu hình YAML...");
     setError("");
@@ -462,10 +562,41 @@ export default function App() {
       });
   }
 
-  async function reloadTemplates(nextTemplateId) {
+  async function reloadTemplates(nextTemplateId, options = {}) {
     const registry = await loadTemplateRegistry();
     setTemplates(registry.templates || []);
     await loadConfig(nextTemplateId || registry.default);
+    if (options.savedAsCopy) {
+      setStatus("Đã lưu bản copy vào templates — template mặc định giữ nguyên");
+    }
+  }
+
+  async function deleteTemplate(templateId, scope = "local") {
+    const response = await fetch("/api/templates/delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ templateId, scope })
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "Không xóa được template");
+    if (scope === "runninghub-wf") {
+      setRhWfTemplates(data.registry?.templates || []);
+      if (data.registry?.default) {
+        await loadRhWfConfig(data.registry.default);
+        setStatus("Đã xóa template RunningHub Workflow");
+      } else {
+        setRhWfConfig(null);
+        setRhWfValues({});
+        setRhWfSelectedTemplate("");
+        setStatus("Đã xóa template. Chưa có template RunningHub Workflow nào.");
+      }
+      setError("");
+      return;
+    }
+    setTemplates(data.registry?.templates || []);
+    await loadConfig(data.registry?.default || "");
+    setError("");
+    setStatus("Đã xóa template");
   }
 
   // Initial load
@@ -506,9 +637,22 @@ export default function App() {
   }
 
   function isRunningHubHistoryItem(item) {
+    const templateId = String(item?.templateId || item?.result?.template || "");
     return item?.provider === "runninghub"
       || item?.result?.provider === "runninghub"
-      || String(item?.templateId || item?.result?.template || "").startsWith("runninghub:");
+      || templateId.startsWith("runninghub:")
+      || templateId.startsWith("runninghub-app:")
+      || templateId.startsWith("runninghub-wf:")
+      || templateId.startsWith("runninghub-wf-template:");
+  }
+
+  function runningHubHistoryMode(item) {
+    if (item?.rhMode === "wf" || item?.result?.rhMode === "wf") return "runninghub-wf";
+    const templateId = String(item?.templateId || item?.result?.template || "");
+    if (templateId.startsWith("runninghub-wf:") || templateId.startsWith("runninghub-wf-template:")) {
+      return "runninghub-wf";
+    }
+    return "runninghub-app";
   }
 
   function runningHubValuesFromHistory(item) {
@@ -523,7 +667,7 @@ export default function App() {
 
   function handleRunClick() {
     setShowWaitScreen(true);
-    if (executionMode === "runninghub") {
+    if (isRunningHubApp) {
       if (!rhSettings.apiKey?.trim()) {
         setError("Chưa nhập RunningHub API Key trong Settings");
         setStatus("Thiếu cấu hình RunningHub");
@@ -531,8 +675,8 @@ export default function App() {
         return;
       }
       if (!rhNodes.length) {
-        setError("Chưa tải được node từ RunningHub");
-        setStatus("Thiếu node RunningHub");
+        setError("Chưa tải được node từ RunningHub App");
+        setStatus("Thiếu node RunningHub App");
         setShowWaitScreen(false);
         return;
       }
@@ -541,6 +685,33 @@ export default function App() {
         webappId: rhSettings.webappId.trim(),
         nodes: rhNodes,
         values: rhValues
+      }));
+      return;
+    }
+    if (isRunningHubWf) {
+      const workflowId = String(rhWfConfig?.runninghub?.workflowId || "").trim();
+      if (!rhSettings.apiKey?.trim()) {
+        setError("Chưa nhập RunningHub API Key trong Settings");
+        setStatus("Thiếu cấu hình RunningHub");
+        setShowWaitScreen(false);
+        return;
+      }
+      if (!rhWfConfig || !rhWfInputs.length) {
+        setError("Chưa chọn template RunningHub Workflow hoặc template chưa có input");
+        setStatus("Thiếu template RunningHub Workflow");
+        setShowWaitScreen(false);
+        return;
+      }
+      if (!workflowId) {
+        setError("Template chưa có runninghub.workflowId");
+        setStatus("Thiếu Workflow ID trong template");
+        setShowWaitScreen(false);
+        return;
+      }
+      runWorkflow(buildRunningHubWfJob({
+        apiKey: rhSettings.apiKey.trim(),
+        templateId: rhWfSelectedTemplate,
+        values: rhWfValues
       }));
       return;
     }
@@ -597,10 +768,27 @@ export default function App() {
       outputs: item.outputs || []
     };
     if (isRunningHubHistoryItem(item)) {
-      const webappId = item.webappId || item.result?.webappId || String(item.templateId || "").replace(/^runninghub:/, "");
-      setExecutionMode("runninghub");
+      const historyMode = runningHubHistoryMode(item);
+      const templateId = String(item.templateId || item.result?.template || "");
+      const webappId = item.webappId || item.result?.webappId || templateId.replace(/^runninghub(-app)?:/, "");
+      const workflowId = item.workflowId || item.result?.workflowId || templateId.replace(/^runninghub-wf:/, "");
+      setExecutionMode(historyMode);
       rhExecution.setResult(restoredResult);
       rhExecution.setStatus("Đã mở lại lịch sử RunningHub");
+      if (historyMode === "runninghub-wf") {
+        const rhWfTemplateId = item.rhWfTemplateId || item.result?.rhWfTemplateId
+          || String(item.templateId || "").replace(/^runninghub-wf-template:/, "");
+        if (rhWfTemplateId) {
+          await loadRhWfConfig(rhWfTemplateId, {
+            values: item.values,
+            keepResult: true
+          });
+        } else if (workflowId) {
+          setRhWfValues(item.values || {});
+          rhExecution.setStatus("Đã mở lại lịch sử RunningHub Wf, nhưng bản ghi cũ chưa gắn template");
+        }
+        return;
+      }
       if (webappId) updateRhSettings({ webappId });
       if (Array.isArray(item.nodes) && item.nodes.length) {
         restoreRhNodes(item.nodes);
@@ -608,16 +796,16 @@ export default function App() {
       } else {
         setRhValues({});
         if (rhSettings.apiKey?.trim() && webappId) {
-          rhExecution.setStatus("Đang tải lại node RunningHub cho bản ghi cũ...");
+          rhExecution.setStatus("Đang tải lại node RunningHub App cho bản ghi cũ...");
           const nextNodes = await fetchRhNodes({ apiKey: rhSettings.apiKey, webappId });
           if (nextNodes.length) {
             setRhValues(buildNodeDefaults(nextNodes));
-            rhExecution.setStatus("Đã mở lại lịch sử RunningHub, bản ghi cũ không có value input đã lưu");
+            rhExecution.setStatus("Đã mở lại lịch sử RunningHub App, bản ghi cũ không có value input đã lưu");
           } else {
-            rhExecution.setStatus("Đã mở lại lịch sử RunningHub, nhưng bản ghi cũ chưa có metadata node");
+            rhExecution.setStatus("Đã mở lại lịch sử RunningHub App, nhưng bản ghi cũ chưa có metadata node");
           }
         } else {
-          rhExecution.setStatus("Đã mở lại lịch sử RunningHub, nhưng bản ghi cũ chưa có metadata node");
+          rhExecution.setStatus("Đã mở lại lịch sử RunningHub App, nhưng bản ghi cũ chưa có metadata node");
         }
       }
       return;
@@ -671,7 +859,11 @@ export default function App() {
   // Màn hình chờ chỉ chiếm preview khi đang chạy VÀ người dùng đang xem nó
   const showRunningScreen = running && showWaitScreen;
 
-  const canRun = isRunningHub ? Boolean(rhNodes.length && rhSettings.apiKey) : Boolean(config);
+  const canRun = isRunningHubApp
+    ? Boolean(rhNodes.length && rhSettings.apiKey)
+    : isRunningHubWf
+      ? Boolean(rhWfConfig && rhWfInputs.length && rhSettings.apiKey && String(rhWfConfig?.runninghub?.workflowId || "").trim())
+      : Boolean(config);
 
   return (
     <main className={`appShell ${isRunningHub ? "is-runninghub" : ""}`}>
@@ -694,7 +886,7 @@ export default function App() {
 
         <ExecutionModeToggle mode={executionMode} onChange={setExecutionMode} />
 
-        {isRunningHub ? (
+        {isRunningHubApp ? (
           <RunningHubPanel
             settings={rhSettings}
             onSettingsChange={patch => {
@@ -711,6 +903,69 @@ export default function App() {
             onRefreshInputImages={refreshInputImages}
             onUpdateInputImages={setInputImages}
           />
+        ) : isRunningHubWf ? (
+          <>
+            <section className="settingsGroup">
+              <div className="settingsHeader">
+                <Settings2 size={16} />
+                <h2>RunningHub Workflow</h2>
+                <span className={`healthDot health-${rhWfConfig ? "online" : "offline"}`} title={
+                  rhWfConfig ? "Template RunningHub Workflow đã sẵn sàng" : "Chưa chọn template"
+                }>
+                  {rhWfConfig ? <Wifi size={10} /> : <WifiOff size={10} />}
+                </span>
+              </div>
+              <TemplateSelector
+                templates={rhWfTemplates}
+                selectedTemplate={rhWfSelectedTemplate}
+                onChange={loadRhWfConfig}
+                onEdit={() => setRhWfTemplateEditorOpen(true)}
+                onDelete={deleteTemplate}
+                deleteScope="runninghub-wf"
+              />
+              <PresetBar
+                templateId={rhWfWorkspaceKey(rhWfSelectedTemplate)}
+                presets={rhWfPresets}
+                onLoad={nextValues => setRhWfValues(current => ({ ...current, ...nextValues }))}
+                onSave={name => savePreset(rhWfWorkspaceKey(rhWfSelectedTemplate), name, rhWfValues)}
+                onUpdate={id => updatePreset(rhWfWorkspaceKey(rhWfSelectedTemplate), id, rhWfValues)}
+                onDelete={id => deletePreset(rhWfWorkspaceKey(rhWfSelectedTemplate), id)}
+              />
+            </section>
+
+            <section className="settingsGroup workflowSettings">
+              <div className="settingsHeader">
+                <Settings2 size={16} />
+                <h2>Workflow settings</h2>
+              </div>
+              <div className="formStack">
+                {rhWfInputs.map(item => {
+                  const valueKey = itemValueKey(item);
+                  return (
+                    <DynamicField
+                      key={item.key}
+                      item={item}
+                      value={valueKey ? rhWfValues[valueKey] : rhWfValues[normalizeId(item.id)]}
+                      onChange={next => {
+                        const key = valueKey || normalizeId(item.id);
+                        setRhWfValues(current => ({ ...current, [key]: next }));
+                      }}
+                      allValues={rhWfValues}
+                      onValueChange={(key, next) => setRhWfValues(current => ({ ...current, [key]: next }))}
+                      inputImages={inputImages}
+                      onRefreshInputImages={refreshInputImages}
+                      onUpdateInputImages={setInputImages}
+                    />
+                  );
+                })}
+                {!rhWfInputs.length ? (
+                  <div className="rhPanelEmpty">
+                    <p>Chưa có template hoặc input. Bấm biểu tượng sửa template để tạo mới.</p>
+                  </div>
+                ) : null}
+              </div>
+            </section>
+          </>
         ) : (
           <>
             <section className="settingsGroup">
@@ -730,6 +985,7 @@ export default function App() {
                 selectedTemplate={selectedTemplate}
                 onChange={loadConfig}
                 onEdit={() => setTemplateEditorOpen(true)}
+                onDelete={deleteTemplate}
               />
               <PresetBar
                 templateId={selectedTemplate}
@@ -1064,8 +1320,8 @@ export default function App() {
 
             <div className="infoIntro">
               <div><span>Template hiện tại</span><b>{selectedTemplateName}</b></div>
-              <div><span>Chế độ</span><b>{isRunningHub ? "RunningHub Cloud" : "ComfyUI Local"}</b></div>
-              <div><span>{isRunningHub ? "WebApp ID" : "Comfy Server"}</span><b>{isRunningHub ? rhSettings.webappId : (comfyAddress || serverAddress || "Chưa cấu hình")}</b></div>
+              <div><span>Chế độ</span><b>{isRunningHubWf ? "RunningHub Workflow" : isRunningHubApp ? "RunningHub App" : "ComfyUI Local"}</b></div>
+              <div><span>{isRunningHubWf ? "Template / Workflow ID" : isRunningHubApp ? "WebApp ID" : "Comfy Server"}</span><b>{isRunningHubWf ? `${rhWfTemplateName}${rhWfConfig?.runninghub?.workflowId ? ` · ${rhWfConfig.runninghub.workflowId}` : ""}` : isRunningHubApp ? rhSettings.webappId : (comfyAddress || serverAddress || "Chưa cấu hình")}</b></div>
               <div><span>Phiên bản</span><b>beta v1.0</b></div>
             </div>
 
@@ -1165,10 +1421,19 @@ export default function App() {
       {templateEditorOpen ? (
         <TemplateEditorModal
           selectedTemplate={selectedTemplate}
-          comfyAddress={comfyAddress}
           discovery={discovery}
           onClose={() => setTemplateEditorOpen(false)}
           onSaved={reloadTemplates}
+        />
+      ) : null}
+
+      {rhWfTemplateEditorOpen ? (
+        <TemplateEditorModal
+          mode="runninghub-wf"
+          selectedTemplate={rhWfSelectedTemplate}
+          apiKey={rhSettings.apiKey}
+          onClose={() => setRhWfTemplateEditorOpen(false)}
+          onSaved={reloadRhWfTemplates}
         />
       ) : null}
 

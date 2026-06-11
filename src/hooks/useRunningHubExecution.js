@@ -36,7 +36,8 @@ export function useRunningHubExecution({ onComplete } = {}) {
       : "Đang gửi task lên RunningHub...");
 
     try {
-      const response = await fetch("/api/runninghub/run", {
+      const endpoint = job.templateId ? "/api/runninghub-wf/run" : "/api/runninghub/run";
+      const response = await fetch(endpoint, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(job)
@@ -130,6 +131,16 @@ export function buildRunningHubJob({ runId, apiKey, webappId, nodes, values }) {
     apiKey,
     webappId,
     nodes: nodePayload,
+    queuedAt: new Date().toISOString()
+  };
+}
+
+export function buildRunningHubWfJob({ runId, apiKey, templateId, values }) {
+  return {
+    runId: runId || crypto.randomUUID(),
+    apiKey,
+    templateId,
+    values,
     queuedAt: new Date().toISOString()
   };
 }

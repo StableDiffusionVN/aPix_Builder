@@ -1,5 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { lookupMenuSubFields, menuChoiceOptions, menuChoiceValue, resolveMenuStoredValue } from "./menuChoices.js";
 
 function menuSubSelectionStorageKey(yamlKey) {
   return `__menu__${yamlKey}`;
@@ -17,12 +18,18 @@ function flattenMenuSubInputIds(item) {
 }
 
 function collectMenuSubRequest(item, yamlKey, values, request) {
+  const choices = item.ui?.choices || [];
+  const menuOpts = menuChoiceOptions(item.ui);
   const menuValue = item.id
     ? values[item.id]
     : values[menuSubSelectionStorageKey(yamlKey)];
-  const selected = menuValue ?? item.ui?.value ?? item.ui?.choices?.[0] ?? "";
+  const selected = resolveMenuStoredValue(
+    menuValue ?? item.ui?.value ?? menuChoiceValue(choices[0], menuOpts),
+    choices,
+    menuOpts
+  );
   if (item.id && item.id in values) request[item.id] = values[item.id];
-  const subs = item.ui?.sub?.[selected] || {};
+  const subs = lookupMenuSubFields(item.ui?.sub || {}, selected, choices, menuOpts);
   for (const subItem of Object.values(subs)) {
     if (!subItem?.id) continue;
     if (Array.isArray(subItem.id)) {
@@ -108,7 +115,41 @@ export function resolveWorkflowInput(workflow, id) {
   return { nodeInputs, section, field };
 }
 
-export function validateWorkflowMappings(config, workflow) {
+export function parseWorkflowFieldId(id) {
+  const parts = String(id || "").split("-");
+  if (parts.length >= 3 && parts[1] === "inputs") {
+    return { nodeId: parts[0], fieldName: parts.slice(2).join("-") };
+  }
+  return { nodeId: parts[0] || "", fieldName: parts.slice(1).join("-") };
+}
+
+export function inferRunningHubFieldType(fieldName, value) {
+  const lower = String(fieldName || "").toLowerCase();
+  if (lower.includes("image")) return "IMAGE";
+  if (lower.includes("audio")) return "AUDIO";
+  if (lower.includes("video")) return "VIDEO";
+  if (typeof value === "number") return Number.isInteger(value) ? "INT" : "FLOAT";
+  if (value && typeof value === "object") {
+    if (value.kind === "input-image" || value.url) return "IMAGE";
+    return "STRING";
+  }
+  return "STRING";
+}
+
+export function payloadToRunningHubNodes(payload = {}) {
+  return Object.entries(payload).map(([id, fieldValue]) => {
+    const { nodeId, fieldName } = parseWorkflowFieldId(id);
+    return {
+      nodeId,
+      fieldName,
+      fieldType: inferRunningHubFieldType(fieldName, fieldValue),
+      fieldValue
+    };
+  });
+}
+
+export function validateWorkflowMappings(config, workflow, options = {}) {
+  const requireOutput = options.requireOutput !== false;
   for (const id of flattenInputIds(config)) {
     if (Array.isArray(id)) {
       id.forEach(childId => resolveWorkflowInput(workflow, childId));
@@ -116,6 +157,7 @@ export function validateWorkflowMappings(config, workflow) {
       resolveWorkflowInput(workflow, id);
     }
   }
+  if (!requireOutput) return;
   for (const item of Object.values(config.output || {})) {
     const nodeId = String(item.id || "");
     if (!nodeId) {

@@ -3,13 +3,20 @@ import { useCallback, useEffect, useState } from "react";
 export const EXECUTION_MODE_KEY = "comfyui-build:execution-mode";
 export const RUNNINGHUB_STORAGE_KEY = "comfyui-build:runninghub:v1";
 export const DEFAULT_RH_WEBAPP_ID = "2039924771751731201";
+export const DEFAULT_RH_WF_ID = "2064644362323189762";
 export const RUNNINGHUB_APP_OPTIONS = [
   { id: DEFAULT_RH_WEBAPP_ID, name: "SDVN Upscale" }
 ];
 
 export function loadExecutionMode() {
   const stored = localStorage.getItem(EXECUTION_MODE_KEY);
-  return stored === "runninghub" ? "runninghub" : "local";
+  if (stored === "runninghub") return "runninghub-app";
+  if (stored === "runninghub-app" || stored === "runninghub-wf") return stored;
+  return "local";
+}
+
+export function isRunningHubMode(mode) {
+  return mode === "runninghub-app" || mode === "runninghub-wf";
 }
 
 export function loadRunningHubSettings() {
@@ -17,10 +24,11 @@ export function loadRunningHubSettings() {
     const parsed = JSON.parse(localStorage.getItem(RUNNINGHUB_STORAGE_KEY) || "{}");
     return {
       apiKey: parsed.apiKey || "",
-      webappId: parsed.webappId || DEFAULT_RH_WEBAPP_ID
+      webappId: parsed.webappId || DEFAULT_RH_WEBAPP_ID,
+      workflowId: parsed.workflowId || ""
     };
   } catch {
-    return { apiKey: "", webappId: DEFAULT_RH_WEBAPP_ID };
+    return { apiKey: "", webappId: DEFAULT_RH_WEBAPP_ID, workflowId: "" };
   }
 }
 

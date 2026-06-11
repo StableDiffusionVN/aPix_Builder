@@ -30,11 +30,15 @@ import {
   setWorkflowValue,
   validateWorkflowMappings
 } from "./lib/workflowPatcher.js";
+import { buildPatchedRunningHubWorkflow, buildRunningHubNodeInfoList } from "./lib/runningHubWorkflow.js";
+import { TEMPLATE_SCOPES } from "./lib/templateService.js";
 import {
   getWebappNodes,
+  getWorkflowJson,
   parsePromptTips,
   prepareNodeInfoList,
   submitAiAppTask,
+  submitWorkflowTask,
   waitForTaskOutputs
 } from "./lib/runningHubClient.js";
 
@@ -43,6 +47,8 @@ const root = path.resolve(__dirname, "..");
 const configDir = path.join(root, "config");
 const defaultTemplateDir = path.join(configDir, "default");
 const userTemplatesDir = path.join(configDir, "templates");
+const defaultRhDir = path.join(configDir, "default-rh");
+const templatesRhDir = path.join(configDir, "templates-rh");
 const uploadDir = path.join(root, "uploads");
 const inputDir = path.join(root, "input");
 const outputDir = path.join(root, "output");
@@ -95,7 +101,17 @@ async function handleRunEvents(req, res, url) {
     pendingSseClients.get(runId)?.delete(client);
   });
 }
-const templates = createTemplateService({ configDir, defaultDir: defaultTemplateDir, templatesDir: userTemplatesDir });
+const templates = createTemplateService({
+  configDir,
+  defaultDir: defaultTemplateDir,
+  templatesDir: userTemplatesDir,
+  defaultRhDir,
+  templatesRhDir
+});
+
+function templateScopeFromUrl(url) {
+  return templates.normalizeScope(url.searchParams.get("scope"));
+}
 
 async function readCustomPresets() {
   try {
@@ -113,9 +129,9 @@ async function writeCustomPresets(presets) {
   await writeFile(presetsFilePath, JSON.stringify(presets, null, 2), "utf8");
 }
 
-async function assertTemplateWorkflow(config, template) {
+async function assertTemplateWorkflow(config, template, options = {}) {
   const workflow = JSON.parse(await readFile(template.workflowPath, "utf8"));
-  validateWorkflowMappings(config, workflow);
+  validateWorkflowMappings(config, workflow, options);
   return workflow;
 }
 
@@ -730,68 +746,148 @@ function assertWritableTemplatePath(baseDir, targetDir) {
   }
 }
 
+async function readTemplateWorkflow(config, template) {
+  if (!template.workflowPath) return null;
+  if (templates.usesSavedWorkflowJson(config, template) === false) return null;
+  return JSON.parse(await readFile(template.workflowPath, "utf8"));
+}
+
 async function handleTemplateEditor(req, res, url) {
-  const { config, raw, template } = await templates.loadConfig(url.searchParams.get("template"));
-  const workflow = JSON.parse(await readFile(template.workflowPath, "utf8"));
+  const scope = templateScopeFromUrl(url);
+  const { config, raw, template } = await templates.loadConfig(url.searchParams.get("template"), scope);
+  const workflow = await readTemplateWorkflow(config, template);
   send(res, 200, {
     config,
     raw,
     workflow,
+    scope,
     template: {
       id: template.id,
       name: template.name,
       isDefault: template.isDefault,
       yaml: template.yaml,
-      workflow: template.workflow
+      workflow: template.workflow,
+      scope
     }
   });
 }
 
-async function handleTemplateSave(req, res) {
+async function handleTemplateDelete(req, res, url) {
   const body = JSON.parse(await readBody(req) || "{}");
+  const scope = templates.normalizeScope(body.scope || url?.searchParams?.get("scope"));
+  const templateId = String(body.templateId || "").trim();
+  if (!templateId) {
+    send(res, 400, { error: "Missing template id" });
+    return;
+  }
+  try {
+    const registry = await templates.deleteTemplate(templateId, scope);
+    send(res, 200, { scope, registry });
+  } catch (error) {
+    send(res, 400, { error: error.message || "Không xóa được template" });
+  }
+}
+
+function buildRunningHubConfigSection(config = {}) {
+  const rh = config.runninghub || {};
+  const next = {
+    workflowId: String(rh.workflowId || "").trim(),
+    saveWorkflowJson: rh.saveWorkflowJson !== false
+  };
+  if (rh.saveWorkflowJson === false) next.saveWorkflowJson = false;
+  if (rh.addMetadata) next.addMetadata = true;
+  if (rh.usePersonalQueue) next.usePersonalQueue = true;
+  const accessPassword = String(rh.accessPassword || "").trim();
+  if (accessPassword) next.accessPassword = accessPassword;
+  return next;
+}
+
+async function handleTemplateSave(req, res, url) {
+  const body = JSON.parse(await readBody(req) || "{}");
+  const scope = templates.normalizeScope(body.scope || url?.searchParams?.get("scope"));
+  const isRhWf = scope === TEMPLATE_SCOPES.runninghubWf;
   const workflow = body.workflow;
   const config = body.config;
-  if (!workflow || typeof workflow !== "object" || Array.isArray(workflow)) {
-    send(res, 400, { error: "Missing workflow JSON object" });
-    return;
+  const saveWorkflowJson = isRhWf ? config?.runninghub?.saveWorkflowJson !== false : true;
+  if (!isRhWf || saveWorkflowJson) {
+    if (!workflow || typeof workflow !== "object" || Array.isArray(workflow)) {
+      send(res, 400, { error: "Missing workflow JSON object" });
+      return;
+    }
   }
   if (!config || typeof config !== "object" || Array.isArray(config)) {
     send(res, 400, { error: "Missing YAML config object" });
     return;
   }
+  if (isRhWf && !String(config.runninghub?.workflowId || "").trim()) {
+    send(res, 400, { error: "YAML thiếu runninghub.workflowId" });
+    return;
+  }
   const templateId = slugifyTemplateId(body.templateId || config?.template?.id || config?.app?.name);
-  const existing = (await templates.loadTemplateRegistry()).templates.find(item => item.id === templateId);
-  const targetRoot = existing
-    ? (await templates.loadConfig(templateId)).template.baseDir
-    : path.join(userTemplatesDir, templateId);
+  const { targetRoot, savedAsCopy } = await templates.resolveSaveTargetRoot(templateId, scope);
   assertWritableTemplatePath(configDir, targetRoot);
 
   const nextConfig = {
     app: {
       name: config.app?.name || templateId
     },
-    input: config.input || {},
-    output: config.output || {}
+    input: config.input || {}
   };
+  if (isRhWf) {
+    nextConfig.runninghub = buildRunningHubConfigSection(config);
+  } else {
+    nextConfig.output = config.output || {};
+  }
   if (config.server && Object.keys(config.server).length > 0) {
     nextConfig.server = config.server;
   }
 
-  validateWorkflowMappings(nextConfig, workflow);
+  if (!isRhWf || saveWorkflowJson) {
+    validateWorkflowMappings(nextConfig, workflow, { requireOutput: !isRhWf });
+  }
   await mkdir(targetRoot, { recursive: true });
-  await writeFile(path.join(targetRoot, "api.json"), `${JSON.stringify(workflow, null, 2)}\n`);
+  const workflowPath = path.join(targetRoot, "api.json");
+  if (!isRhWf || saveWorkflowJson) {
+    await writeFile(workflowPath, `${JSON.stringify(workflow, null, 2)}\n`);
+  } else {
+    await rm(workflowPath, { force: true });
+  }
   await writeFile(path.join(targetRoot, "app_build.yaml"), YAML.stringify(nextConfig));
 
-  const registry = await templates.loadTemplateRegistry();
+  const nextRegistry = await templates.loadTemplateRegistry(scope);
   send(res, 200, {
+    scope,
+    savedAsCopy,
     template: {
       id: templateId,
       name: nextConfig.app.name,
       yaml: "app_build.yaml",
-      workflow: "api.json"
+      workflow: "api.json",
+      scope,
+      isDefault: false
     },
-    registry
+    registry: nextRegistry
   });
+}
+
+async function handleRunningHubWfWorkflowJson(req, res) {
+  try {
+    const body = JSON.parse(await readBody(req) || "{}");
+    const apiKey = String(body.apiKey || "").trim();
+    const workflowId = String(body.workflowId || "").trim();
+    if (!apiKey) {
+      send(res, 400, { error: "Missing RunningHub API key" });
+      return;
+    }
+    if (!workflowId) {
+      send(res, 400, { error: "Missing RunningHub workflowId" });
+      return;
+    }
+    const workflow = await getWorkflowJson(apiKey, workflowId);
+    send(res, 200, { workflow, workflowId });
+  } catch (error) {
+    send(res, 500, { error: error.message || "Không load được workflow từ RunningHub" });
+  }
 }
 async function handleRunningHubNodes(req, res) {
   const body = JSON.parse(await readBody(req) || "{}");
@@ -809,7 +905,18 @@ async function handleRunningHubNodes(req, res) {
   send(res, 200, { nodes, webappId });
 }
 
-async function archiveRunningHubOutputs({ runId, webappId, taskId, outputs, nodes, submittedAt }) {
+async function archiveRunningHubOutputs({
+  runId,
+  webappId,
+  workflowId,
+  rhMode = "app",
+  rhWfTemplateId = "",
+  taskId,
+  outputs,
+  nodes,
+  values: savedValues,
+  submittedAt
+}) {
   await mkdir(outputDir, { recursive: true });
   const completedAt = new Date().toISOString();
   const durationMs = Math.max(0, new Date(completedAt).getTime() - new Date(submittedAt || completedAt).getTime());
@@ -838,10 +945,18 @@ async function archiveRunningHubOutputs({ runId, webappId, taskId, outputs, node
     throw new Error("RunningHub hoàn tất nhưng không tải được file kết quả");
   }
 
+  const isWf = rhMode === "wf";
+  const resourceId = isWf ? workflowId : webappId;
+  const templatePrefix = isWf ? "runninghub-wf" : "runninghub-app";
+  const templateId = `${templatePrefix}:${resourceId}`;
+  const templateName = isWf
+    ? (rhWfTemplateId ? `RH Wf · ${rhWfTemplateId}` : `RunningHub Wf ${workflowId}`)
+    : `RunningHub App ${webappId}`;
+
   const item = {
     id: runId,
-    templateId: `runninghub:${webappId}`,
-    templateName: `RunningHub ${webappId}`,
+    templateId: isWf && rhWfTemplateId ? `runninghub-wf-template:${rhWfTemplateId}` : templateId,
+    templateName,
     address: "RunningHub Cloud",
     promptId: String(taskId),
     createdAt: completedAt,
@@ -851,16 +966,24 @@ async function archiveRunningHubOutputs({ runId, webappId, taskId, outputs, node
     outputs: archivedOutputs,
     status: "success",
     provider: "runninghub",
-    webappId,
+    rhMode,
+    rhWfTemplateId: isWf ? (rhWfTemplateId || undefined) : undefined,
+    webappId: isWf ? undefined : webappId,
+    workflowId: isWf ? workflowId : undefined,
     nodes: trimHistoryValue(Array.isArray(nodes) ? nodes : []),
-    values: runningHubHistoryValues(nodes),
+    values: savedValues && Object.keys(savedValues).length
+      ? trimHistoryValues(savedValues)
+      : runningHubHistoryValues(nodes),
     result: {
       runId,
       taskId: String(taskId),
-      template: `runninghub:${webappId}`,
+      template: templateId,
       address: "RunningHub Cloud",
       provider: "runninghub",
-      webappId,
+      rhMode,
+      rhWfTemplateId: isWf ? (rhWfTemplateId || undefined) : undefined,
+      webappId: isWf ? undefined : webappId,
+      workflowId: isWf ? workflowId : undefined,
       submittedAt: submittedAt || completedAt,
       completedAt,
       durationMs,
@@ -909,6 +1032,7 @@ async function handleRunningHubRun(req, res) {
     const historyItem = await archiveRunningHubOutputs({
       runId,
       webappId,
+      rhMode: "app",
       taskId,
       outputs,
       nodes: body.nodes,
@@ -918,7 +1042,102 @@ async function handleRunningHubRun(req, res) {
       runId,
       taskId: String(taskId),
       provider: "runninghub",
+      rhMode: "app",
       webappId,
+      submittedAt: historyItem.submittedAt,
+      completedAt: historyItem.completedAt,
+      durationMs: historyItem.durationMs,
+      outputs: historyItem.outputs,
+      historyItem
+    });
+  } finally {
+    activeRhRuns.delete(runId);
+  }
+}
+
+async function handleRunningHubWfRun(req, res) {
+  const body = JSON.parse(await readBody(req) || "{}");
+  const runId = body.runId || randomUUID();
+  const submittedAt = new Date().toISOString();
+  const apiKey = String(body.apiKey || "").trim();
+  const templateId = String(body.templateId || "").trim();
+  const abortController = new AbortController();
+  activeRhRuns.set(runId, { abortController, cancelled: false });
+
+  try {
+    if (!apiKey) throw new Error("Missing RunningHub API key");
+    if (!templateId) throw new Error("Missing RunningHub Workflow template");
+
+    const { config, template } = await templates.loadConfig(templateId, TEMPLATE_SCOPES.runninghubWf);
+    const sourceWorkflowId = String(config.runninghub?.workflowId || "").trim();
+    const taskOptions = templates.runningHubTaskOptions(config);
+    const useSavedWorkflowJson = templates.usesSavedWorkflowJson(config, template);
+    if (!sourceWorkflowId && !useSavedWorkflowJson) {
+      throw new Error("Template thiếu runninghub.workflowId");
+    }
+
+    const normalized = await normalizeValues(body.values || {});
+    const request = mapValuesToRequest(config, normalized);
+    if (!Object.keys(request).length) {
+      throw new Error("Template chưa có input nào để gửi");
+    }
+    let submitData;
+    if (useSavedWorkflowJson) {
+      if (!template.workflowPath) {
+        throw new Error("Template bật lưu JSON nhưng thiếu file api.json");
+      }
+      const workflow = structuredClone(JSON.parse(await readFile(template.workflowPath, "utf8")));
+      const patchedWorkflow = await buildPatchedRunningHubWorkflow(workflow, request, apiKey, {
+        inputDir,
+        signal: abortController.signal
+      });
+      submitData = await submitWorkflowTask(apiKey, {
+        workflow: patchedWorkflow,
+        ...taskOptions,
+        workflowId: sourceWorkflowId
+      }, abortController.signal);
+    } else {
+      const nodeInfoList = await buildRunningHubNodeInfoList(request, apiKey, {
+        inputDir,
+        signal: abortController.signal
+      });
+      submitData = await submitWorkflowTask(apiKey, {
+        nodeInfoList,
+        ...taskOptions,
+        workflowId: sourceWorkflowId
+      }, abortController.signal);
+    }
+    const taskId = submitData.taskId;
+    if (!taskId) throw new Error("RunningHub không trả về taskId");
+
+    const promptTips = parsePromptTips(submitData.promptTips);
+    if (promptTips?.node_errors && Object.keys(promptTips.node_errors).length > 0) {
+      const firstError = Object.entries(promptTips.node_errors)[0];
+      throw new Error(`Node ${firstError[0]} lỗi: ${JSON.stringify(firstError[1])}`);
+    }
+
+    const outputs = await waitForTaskOutputs(apiKey, taskId, {
+      timeoutMs: runningHubTimeoutMs,
+      signal: abortController.signal
+    });
+    const historyItem = await archiveRunningHubOutputs({
+      runId,
+      workflowId: sourceWorkflowId,
+      rhMode: "wf",
+      rhWfTemplateId: templateId,
+      taskId,
+      outputs,
+      nodes: [],
+      values: body.values || {},
+      submittedAt
+    });
+    send(res, 200, {
+      runId,
+      taskId: String(taskId),
+      provider: "runninghub",
+      rhMode: "wf",
+      workflowId: sourceWorkflowId,
+      templateId,
       submittedAt: historyItem.submittedAt,
       completedAt: historyItem.completedAt,
       durationMs: historyItem.durationMs,
@@ -971,26 +1190,37 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(302, { location: process.env.FRONTEND_URL || "http://localhost:5173/" });
       res.end();
     } else if (req.method === "GET" && url.pathname === "/api/templates") {
-      const registry = await templates.loadTemplateRegistry();
+      const registry = await templates.loadTemplateRegistry(templateScopeFromUrl(url));
       send(res, 200, registry);
     } else if (req.method === "GET" && url.pathname === "/api/config") {
-      const { config, raw, server: serverConfig, template } = await templates.loadConfig(url.searchParams.get("template"));
-      await assertTemplateWorkflow(config, template);
+      const scope = templateScopeFromUrl(url);
+      const { config, raw, server: serverConfig, template } = await templates.loadConfig(url.searchParams.get("template"), scope);
+      if (scope !== TEMPLATE_SCOPES.runninghubWf || templates.usesSavedWorkflowJson(config, template)) {
+        await assertTemplateWorkflow(config, template, {
+          requireOutput: scope !== TEMPLATE_SCOPES.runninghubWf
+        });
+      }
       send(res, 200, {
         config,
         raw,
         server: serverConfig,
+        scope,
         template: {
           id: template.id,
           name: template.name,
           yaml: template.yaml,
-          workflow: template.workflow
+          workflow: template.workflow,
+          scope
         }
       });
     } else if (req.method === "GET" && url.pathname === "/api/template-editor") {
       await handleTemplateEditor(req, res, url);
     } else if (req.method === "POST" && url.pathname === "/api/templates/save") {
-      await handleTemplateSave(req, res);
+      await handleTemplateSave(req, res, url);
+    } else if (req.method === "POST" && url.pathname === "/api/templates/delete") {
+      await handleTemplateDelete(req, res, url);
+    } else if (req.method === "POST" && url.pathname === "/api/runninghub-wf/workflow-json") {
+      await handleRunningHubWfWorkflowJson(req, res);
     } else if (req.method === "POST" && url.pathname === "/api/run") {
       await handleRun(req, res);
     } else if (req.method === "POST" && url.pathname === "/api/cancel") {
@@ -1043,6 +1273,8 @@ const server = http.createServer(async (req, res) => {
       await handleRunningHubNodes(req, res);
     } else if (req.method === "POST" && url.pathname === "/api/runninghub/run") {
       await handleRunningHubRun(req, res);
+    } else if (req.method === "POST" && url.pathname === "/api/runninghub-wf/run") {
+      await handleRunningHubWfRun(req, res);
     } else if (req.method === "POST" && url.pathname === "/api/runninghub/cancel") {
       await handleRunningHubCancel(req, res);
     } else {

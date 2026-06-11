@@ -23,7 +23,7 @@ export function RunningHubSettings({
       </div>
 
       <p className="rhSettingsIntro">
-        Kết nối AI App trên RunningHub. Lấy API Key tại trang tài khoản RunningHub; chọn WebApp ở panel RunningHub bên trái.
+        Kết nối RunningHub Cloud. Lấy API Key tại trang tài khoản RunningHub; chọn WebApp ở tab RH App hoặc Workflow ID ở tab RH Wf.
       </p>
 
       <label className="field">

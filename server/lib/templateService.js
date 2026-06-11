@@ -1,12 +1,35 @@
-import { readdir, readFile } from "node:fs/promises";
+import { readdir, readFile, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import YAML from "yaml";
 
-export function createTemplateService({ configDir, defaultDir, templatesDir }) {
-  const roots = [
-    { dir: defaultDir || path.join(configDir, "default"), isDefault: true },
-    { dir: templatesDir || path.join(configDir, "templates"), isDefault: false }
-  ];
+export const TEMPLATE_SCOPES = {
+  local: "local",
+  runninghubWf: "runninghub-wf"
+};
+
+export function createTemplateService({
+  configDir,
+  defaultDir,
+  templatesDir,
+  defaultRhDir,
+  templatesRhDir
+}) {
+  const rhDefaultDir = defaultRhDir || path.join(configDir, "default-rh");
+  const rhTemplatesDir = templatesRhDir || path.join(configDir, "templates-rh");
+  const scopeRoots = {
+    [TEMPLATE_SCOPES.local]: [
+      { dir: defaultDir || path.join(configDir, "default"), isDefault: true },
+      { dir: templatesDir || path.join(configDir, "templates"), isDefault: false }
+    ],
+    [TEMPLATE_SCOPES.runninghubWf]: [
+      { dir: rhDefaultDir, isDefault: true },
+      { dir: rhTemplatesDir, isDefault: false }
+    ]
+  };
+
+  function normalizeScope(scope) {
+    return scope === TEMPLATE_SCOPES.runninghubWf ? TEMPLATE_SCOPES.runninghubWf : TEMPLATE_SCOPES.local;
+  }
 
   async function findTemplateConfigs(rootDir) {
     try {
@@ -35,7 +58,7 @@ export function createTemplateService({ configDir, defaultDir, templatesDir }) {
     return resolved;
   }
 
-  async function loadTemplateDefinition(yamlPath, isDefault) {
+  async function loadTemplateDefinition(yamlPath, isDefault, scope) {
     const baseDir = path.dirname(yamlPath);
     const raw = await readFile(yamlPath, "utf8");
     const config = YAML.parse(raw);
@@ -48,61 +71,97 @@ export function createTemplateService({ configDir, defaultDir, templatesDir }) {
       yaml: "app_build.yaml",
       workflow: templateConfig.workflow || app.workflow || config.workflow || "api.json",
       baseDir,
-      isDefault
+      isDefault,
+      scope
     };
+    let workflowPath = null;
+    try {
+      const resolved = resolveTemplatePath(template, template.workflow, "workflow");
+      await stat(resolved);
+      workflowPath = resolved;
+    } catch {
+      workflowPath = null;
+    }
     return {
       ...template,
       yamlPath,
-      workflowPath: resolveTemplatePath(template, template.workflow, "workflow")
+      workflowPath
     };
   }
 
-  async function discoverTemplates() {
+  function usesSavedWorkflowJson(config, template) {
+    if (config?.runninghub?.saveWorkflowJson === false) return false;
+    if (config?.runninghub?.saveWorkflowJson === true) return true;
+    return Boolean(template?.workflowPath);
+  }
+
+  function runningHubTaskOptions(config = {}) {
+    const rh = config.runninghub || {};
+    return {
+      addMetadata: Boolean(rh.addMetadata),
+      accessPassword: String(rh.accessPassword || "").trim() || undefined,
+      usePersonalQueue: Boolean(rh.usePersonalQueue)
+    };
+  }
+
+  async function discoverTemplates(scope = TEMPLATE_SCOPES.local) {
+    const normalizedScope = normalizeScope(scope);
     const discovered = [];
-    for (const root of roots) {
+    for (const root of scopeRoots[normalizedScope] || []) {
       const yamlPaths = await findTemplateConfigs(root.dir);
       for (const yamlPath of yamlPaths) {
         try {
-          discovered.push(await loadTemplateDefinition(yamlPath, root.isDefault));
+          discovered.push(await loadTemplateDefinition(yamlPath, root.isDefault, normalizedScope));
         } catch (error) {
           console.warn(`Skipping invalid template config ${yamlPath}: ${error.message}`);
         }
       }
     }
-    const seen = new Set();
-    return discovered.filter(template => {
-      if (seen.has(template.id)) return false;
-      seen.add(template.id);
-      return true;
-    });
+    const byId = new Map();
+    for (const template of discovered) {
+      const prev = byId.get(template.id);
+      if (!prev || (prev.isDefault && !template.isDefault)) {
+        byId.set(template.id, template);
+      }
+    }
+    return Array.from(byId.values());
   }
 
-  async function loadTemplateRegistry() {
-    const templates = await discoverTemplates();
-    if (templates.length === 0) {
+  async function loadTemplateRegistry(scope = TEMPLATE_SCOPES.local) {
+    const normalizedScope = normalizeScope(scope);
+    const templates = await discoverTemplates(normalizedScope);
+    if (templates.length === 0 && normalizedScope === TEMPLATE_SCOPES.local) {
       throw new Error("No templates configured. Add app_build.yaml and api.json inside config/default/<id> or config/templates/<id>.");
     }
-    const defaultTemplate = templates.find(template => template.isDefault) || templates[0];
+    const defaultTemplate = templates.find(template => template.isDefault) || templates[0] || null;
     return {
-      default: defaultTemplate.id,
-      templates: templates.map(({ yamlPath, workflowPath, baseDir, isDefault, ...template }) => template)
+      scope: normalizedScope,
+      default: defaultTemplate?.id || "",
+      templates: templates.map(({ yamlPath, workflowPath, baseDir, scope: templateScope, ...template }) => template)
     };
   }
 
-  async function resolveTemplate(templateId) {
-    const registry = await loadTemplateRegistry();
+  async function resolveTemplate(templateId, scope = TEMPLATE_SCOPES.local) {
+    const registry = await loadTemplateRegistry(scope);
     const id = templateId || registry.default;
-    const allTemplates = await discoverTemplates();
-    const template = allTemplates.find(item => item.id === id) || allTemplates.find(item => item.id === registry.default) || allTemplates[0];
-    if (!template) throw new Error("No templates configured");
+    const allTemplates = await discoverTemplates(scope);
+    const template = allTemplates.find(item => item.id === id)
+      || allTemplates.find(item => item.id === registry.default)
+      || allTemplates[0];
+    if (!template) {
+      throw new Error(normalizeScope(scope) === TEMPLATE_SCOPES.runninghubWf
+        ? "Chưa có template RunningHub Workflow nào"
+        : "No templates configured");
+    }
     return {
       ...template,
       registry
     };
   }
 
-  function validateConfig(config, template) {
+  function validateConfig(config, template, scope = TEMPLATE_SCOPES.local) {
     const errors = [];
+    const isRhWf = normalizeScope(scope) === TEMPLATE_SCOPES.runninghubWf;
     if (!config || typeof config !== "object") {
       errors.push("YAML must parse to an object");
     }
@@ -112,29 +171,105 @@ export function createTemplateService({ configDir, defaultDir, templatesDir }) {
     if (!config?.input || typeof config.input !== "object") {
       errors.push("YAML is missing required object: input");
     }
-    if (!config?.output || typeof config.output !== "object") {
+    if (!isRhWf && (!config?.output || typeof config.output !== "object")) {
       errors.push("YAML is missing required object: output");
+    }
+    if (isRhWf && !String(config?.runninghub?.workflowId || "").trim()) {
+      errors.push("YAML is missing required runninghub.workflowId");
     }
     if (errors.length > 0) {
       throw new Error(`Invalid template "${template.id}": ${errors.join("; ")}`);
     }
   }
 
-  async function loadConfig(templateId) {
-    const template = await resolveTemplate(templateId);
+  function extractRunningHubWorkflowId(raw, config) {
+    const match = String(raw || "").match(/workflowId:\s*["']?(\d+)["']?/);
+    if (match?.[1]) return match[1];
+    const value = config?.runninghub?.workflowId;
+    if (value == null || value === "") return "";
+    return String(value).trim();
+  }
+
+  async function loadConfig(templateId, scope = TEMPLATE_SCOPES.local) {
+    const template = await resolveTemplate(templateId, scope);
     const raw = await readFile(template.yamlPath, "utf8");
     const config = YAML.parse(raw);
-    validateConfig(config, template);
+    if (normalizeScope(scope) === TEMPLATE_SCOPES.runninghubWf && config?.runninghub) {
+      config.runninghub.workflowId = extractRunningHubWorkflowId(raw, config);
+    }
+    validateConfig(config, template, scope);
     return {
       raw,
       config,
       server: config.server || config.sever || {},
-      template
+      template,
+      scope: normalizeScope(scope)
     };
+  }
+
+  function assertDeletableTemplateDir(targetDir) {
+    const resolved = path.resolve(targetDir);
+    const allowedRoots = [
+      path.resolve(templatesDir || path.join(configDir, "templates")),
+      path.resolve(rhTemplatesDir)
+    ];
+    const allowed = allowedRoots.some(root => {
+      const relative = path.relative(root, resolved);
+      return relative && !relative.startsWith("..") && !path.isAbsolute(relative);
+    });
+    if (!allowed) {
+      throw new Error("Không thể xóa template mặc định hoặc template ngoài thư mục người dùng");
+    }
+  }
+
+  async function deleteTemplate(templateId, scope = TEMPLATE_SCOPES.local) {
+    const normalizedScope = normalizeScope(scope);
+    const id = String(templateId || "").trim();
+    if (!id) throw new Error("Missing template id");
+    const allTemplates = await discoverTemplates(normalizedScope);
+    const template = allTemplates.find(item => item.id === id);
+    if (!template) {
+      throw new Error(`Template not found: ${id}`);
+    }
+    if (template.isDefault) {
+      throw new Error("Không thể xóa template mặc định");
+    }
+    assertDeletableTemplateDir(template.baseDir);
+    await rm(template.baseDir, { recursive: true, force: true });
+    return loadTemplateRegistry(normalizedScope);
+  }
+
+  function getScopeRoot(scope = TEMPLATE_SCOPES.local) {
+    const normalizedScope = normalizeScope(scope);
+    if (normalizedScope === TEMPLATE_SCOPES.runninghubWf) {
+      return rhTemplatesDir;
+    }
+    return templatesDir || path.join(configDir, "templates");
+  }
+
+  async function resolveSaveTargetRoot(templateId, scope = TEMPLATE_SCOPES.local) {
+    const id = String(templateId || "").trim();
+    if (!id) throw new Error("Missing template id");
+    const allTemplates = await discoverTemplates(scope);
+    const existing = allTemplates.find(item => item.id === id);
+    if (existing?.isDefault) {
+      return { targetRoot: path.join(getScopeRoot(scope), id), savedAsCopy: true };
+    }
+    if (existing) {
+      return { targetRoot: existing.baseDir, savedAsCopy: false };
+    }
+    return { targetRoot: path.join(getScopeRoot(scope), id), savedAsCopy: false };
   }
 
   return {
     loadTemplateRegistry,
-    loadConfig
+    loadConfig,
+    discoverTemplates,
+    deleteTemplate,
+    getScopeRoot,
+    resolveSaveTargetRoot,
+    normalizeScope,
+    usesSavedWorkflowJson,
+    runningHubTaskOptions
   };
 }

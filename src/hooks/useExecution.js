@@ -209,7 +209,7 @@ export function useExecution({ onComplete, runLog } = {}) {
   }
 
   function runWorkflow(job) {
-    if (running) {
+    if (activeRunIdRef.current) {
       setQueue([...runQueueRef.current, job]);
       const queueSize = runQueueRef.current.length;
       setStatus(t("exec.addedToQueue", { count: queueSize }));

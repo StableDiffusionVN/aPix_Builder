@@ -1,11 +1,12 @@
 import { Suspense, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Check, Eye, Filter, Folder, Images, Link, Loader2, Pencil, RefreshCcw, Scissors, Star, Trash2, Upload, X } from "lucide-react";
+import { Check, Eye, Filter, Folder, Images, Link, ListChecks, Loader2, Pencil, RefreshCcw, Scissors, Star, Trash2, Upload, X } from "lucide-react";
 import { ImageEditorModal } from "./lazyModals";
 import { MaskEditorModal } from "./MaskEditorModal";
 import { defaultValue, getActiveSubInputs, isMenuSub, normalizeId } from "../lib/template";
 import { menuChoiceOptions, parseMenuChoices, resolveMenuStoredValue } from "../lib/menuChoices";
 import { DYNAMIC_FIELD_TYPES, canonicalDynamicType, dynamicFieldChoices, isDynamicFieldType } from "../lib/dynamicTypes";
+import { EditorRange } from "./ImageAdjustmentControls";
 import { localizeRuntimeMessage, useI18n } from "../i18n/I18nContext";
 
 const INPUT_FAVORITES_KEY = "comfyui-build:input-image-favorites:v1";
@@ -222,22 +223,29 @@ export function DynamicField({
   const [libraryFavoritesOnly, setLibraryFavoritesOnly] = useState(false);
   const [favoriteInputImages, setFavoriteInputImages] = useState(() => readStoredSet(INPUT_FAVORITES_KEY));
   const [libraryOpen, setLibraryOpen] = useState(false);
+  const [libraryMultiSelect, setLibraryMultiSelect] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
   const [maskEditorOpen, setMaskEditorOpen] = useState(false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxImage, setLightboxImage] = useState(null);
-  const [uploadImageSize, setUploadImageSize] = useState({ width: 0, height: 0 });
   const [imageUrlInput, setImageUrlInput] = useState("");
   const [imageUrlLoading, setImageUrlLoading] = useState(false);
   const [imageUrlError, setImageUrlError] = useState("");
   const [lightboxScale, setLightboxScale] = useState(1);
   const [lightboxPan, setLightboxPan] = useState({ x: 0, y: 0 });
   const [isPanningLightbox, setIsPanningLightbox] = useState(false);
+  const [activeImageIndex, setActiveImageIndex] = useState(0);
   const lightboxDragRef = useRef(null);
-  const selectedInputName = value?.kind === "input-image" ? value.name : "";
-  const selectedImageUrl = value?.startsWith?.("data:image") ? value : value?.kind === "input-image" ? value.url : "";
-  const maskDataUrl = value?.kind === "input-image" ? (value.maskDataUrl || "") : "";
-  const canMask = value?.kind === "input-image" && Boolean(selectedImageUrl);
+  const reorderDragRef = useRef(null);
+  const supportsMultipleImages = ui.type === "image" || ui.type === "image_mask";
+  const selectedImages = (Array.isArray(value) ? value : value ? [value] : [])
+    .filter(image => image?.startsWith?.("data:image") || image?.kind === "input-image");
+  const activeImage = selectedImages[Math.min(activeImageIndex, Math.max(0, selectedImages.length - 1))] || null;
+  const selectedInputName = activeImage?.kind === "input-image" ? activeImage.name : "";
+  const selectedImageUrl = activeImage?.startsWith?.("data:image")
+    ? activeImage
+    : activeImage?.kind === "input-image" ? activeImage.url : "";
+  const maskDataUrl = activeImage?.kind === "input-image" ? (activeImage.maskDataUrl || "") : "";
   const isNumberType = ui.type === "number" || ui.type === "int" || ui.type === "float";
   const isSlider = ui.type === "slider" || (isNumberType && display === "slider");
   const canResetNumber = isNumberType || ui.type === "slider";
@@ -280,8 +288,10 @@ export function DynamicField({
   }, [isDynamicList, dynamicKind, discovery, ui.value, value]);
 
   useEffect(() => {
-    setUploadImageSize({ width: 0, height: 0 });
-  }, [selectedImageUrl]);
+    if (activeImageIndex >= selectedImages.length) {
+      setActiveImageIndex(Math.max(0, selectedImages.length - 1));
+    }
+  }, [activeImageIndex, selectedImages.length]);
 
   useEffect(() => {
     if (!lightboxOpen) return undefined;
@@ -303,14 +313,20 @@ export function DynamicField({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [libraryOpen]);
 
-  async function handlePickedFile(file) {
-    if (!file) {
+  function commitSelectedImages(images) {
+    const next = images.filter(Boolean);
+    if (!next.length) {
       onChange("");
-      return;
+    } else if (supportsMultipleImages && next.length > 1) {
+      onChange(next);
+    } else {
+      onChange(next[0]);
     }
-    if (ui.type !== "file" && !file.type.startsWith("image/")) return;
+  }
+
+  async function uploadPickedFile(file) {
+    if (!file || (ui.type !== "file" && !file.type.startsWith("image/"))) return null;
     const dataUrl = await fileToDataUrl(file);
-    onChange(dataUrl);
     try {
       const response = await fetch("/api/input-images", {
         method: "POST",
@@ -320,13 +336,27 @@ export function DynamicField({
       if (response.ok) {
         const data = await response.json();
         setInputImages(data.images || []);
-        if (data.image) {
-          onChange({ kind: "input-image", ...data.image });
-        }
+        if (data.image) return { kind: "input-image", ...data.image };
       }
     } catch {
       // Direct upload still works even if the local input library is unavailable.
     }
+    return dataUrl;
+  }
+
+  async function handlePickedFiles(files) {
+    const pickedFiles = [...(files || [])];
+    if (!pickedFiles.length) return;
+    const acceptedFiles = supportsMultipleImages ? pickedFiles : pickedFiles.slice(0, 1);
+    const uploaded = [];
+    for (const file of acceptedFiles) {
+      const image = await uploadPickedFile(file);
+      if (image) uploaded.push(image);
+    }
+    if (!uploaded.length) return;
+    const next = supportsMultipleImages ? [...selectedImages, ...uploaded] : uploaded;
+    commitSelectedImages(next);
+    setActiveImageIndex(Math.max(0, next.length - uploaded.length));
   }
 
   async function handlePickedImageUrl(url, filename = "output.png") {
@@ -344,10 +374,13 @@ export function DynamicField({
       if (uploadResponse.ok) {
         const data = await uploadResponse.json();
         setInputImages(data.images || []);
-        if (data.image) onChange({ kind: "input-image", ...data.image });
+        if (data.image) {
+          const nextImage = { kind: "input-image", ...data.image };
+          commitSelectedImages(supportsMultipleImages ? [...selectedImages, nextImage] : [nextImage]);
+        }
       }
     } catch {
-      onChange(dataUrl);
+      commitSelectedImages(supportsMultipleImages ? [...selectedImages, dataUrl] : [dataUrl]);
     }
   }
 
@@ -365,7 +398,8 @@ export function DynamicField({
       if (!response.ok) throw new Error(localizeRuntimeMessage(data.error, locale) || t("field.urlError"));
       setInputImages(data.images || []);
       if (data.image) {
-        onChange({ kind: "input-image", ...data.image });
+        const nextImage = { kind: "input-image", ...data.image };
+        commitSelectedImages(supportsMultipleImages ? [...selectedImages, nextImage] : [nextImage]);
         if (clearInput) setImageUrlInput("");
       }
     } catch (error) {
@@ -408,16 +442,46 @@ export function DynamicField({
       await loadImageFromUrl(uri.split("\n")[0]);
       return;
     }
-    await handlePickedFile(event.dataTransfer.files?.[0]);
+    await handlePickedFiles(event.dataTransfer.files);
+  }
+
+  function openInputLibrary() {
+    refreshInputImages();
+    setLibraryMultiSelect(false);
+    setLibraryOpen(true);
   }
 
   function handleInputImageSelect(name) {
     if (!name) return;
     const image = inputImages.find(item => item.name === name);
     if (image) {
-      onChange({ kind: "input-image", ...image });
-      setLibraryOpen(false);
+      const nextImage = { kind: "input-image", ...image };
+      const alreadySelected = selectedImages.some(item => item?.kind === "input-image" && item.name === name);
+      if (supportsMultipleImages && libraryMultiSelect) {
+        const next = alreadySelected
+          ? selectedImages.filter(item => !(item?.kind === "input-image" && item.name === name))
+          : [...selectedImages, nextImage];
+        commitSelectedImages(next);
+      } else {
+        commitSelectedImages([nextImage]);
+        setLibraryOpen(false);
+      }
     }
+  }
+
+  function removeSelectedImage(index) {
+    const next = selectedImages.filter((_, imageIndex) => imageIndex !== index);
+    commitSelectedImages(next);
+    setActiveImageIndex(current => Math.min(current, Math.max(0, next.length - 1)));
+  }
+
+  function moveSelectedImage(fromIndex, toIndex) {
+    if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0) return;
+    const next = [...selectedImages];
+    const [moved] = next.splice(fromIndex, 1);
+    next.splice(toIndex, 0, moved);
+    commitSelectedImages(next);
+    setActiveImageIndex(toIndex);
   }
 
   function openLightbox(image) {
@@ -454,24 +518,30 @@ export function DynamicField({
         const data = await response.json();
         setInputImages(data.images || []);
         if (data.image) {
-          onChange({ kind: "input-image", ...data.image });
+          const next = [...selectedImages];
+          next[activeImageIndex] = { kind: "input-image", ...data.image };
+          commitSelectedImages(next);
           return;
         }
       }
     } catch {
       // Server unavailable — fall back to raw dataUrl
     }
-    onChange(dataUrl);
+    const next = [...selectedImages];
+    next[activeImageIndex] = dataUrl;
+    commitSelectedImages(next);
   }
 
   function handleSaveMask(nextMaskDataUrl) {
-    if (value?.kind !== "input-image") return;
+    if (activeImage?.kind !== "input-image") return;
+    const next = [...selectedImages];
     if (nextMaskDataUrl) {
-      onChange({ ...value, maskDataUrl: nextMaskDataUrl });
+      next[activeImageIndex] = { ...activeImage, maskDataUrl: nextMaskDataUrl };
     } else {
-      const { maskDataUrl: _omit, ...rest } = value;
-      onChange(rest);
+      const { maskDataUrl: _omit, ...rest } = activeImage;
+      next[activeImageIndex] = rest;
     }
+    commitSelectedImages(next);
   }
 
   async function handleDeleteInputImage(image) {
@@ -484,7 +554,8 @@ export function DynamicField({
     if (!response.ok) return;
     const data = await response.json();
     setInputImages(data.images || []);
-    if (selectedInputName === image.name) onChange("");
+    const next = selectedImages.filter(item => !(item?.kind === "input-image" && item.name === image.name));
+    if (next.length !== selectedImages.length) commitSelectedImages(next);
   }
 
   function handleLightboxWheel(event) {
@@ -661,144 +732,161 @@ export function DynamicField({
       <>
         <label className="field">
           <span>{label}</span>
-          {selectedImageUrl ? (
-            <div
-              className={`uploadFrame ${isDraggingFile ? "isDragging" : ""}`}
-              onDragEnter={event => {
-                event.preventDefault();
-                setIsDraggingFile(true);
-              }}
-              onDragOver={event => {
-                event.preventDefault();
-                event.dataTransfer.dropEffect = "copy";
-                setIsDraggingFile(true);
-              }}
-              onDragLeave={event => {
-                event.preventDefault();
-                if (!event.currentTarget.contains(event.relatedTarget)) setIsDraggingFile(false);
-              }}
-              onDrop={handleImageDrop}
-            >
-              <img
-                className="uploadPreview"
-                src={selectedImageUrl}
-                alt=""
-                onLoad={event => setUploadImageSize({
-                  width: event.currentTarget.naturalWidth,
-                  height: event.currentTarget.naturalHeight
+          <div
+            className={`multiImageDropzone ${isDraggingFile ? "isDragging" : ""}`}
+            onDragEnter={event => {
+              event.preventDefault();
+              if (!reorderDragRef.current) setIsDraggingFile(true);
+            }}
+            onDragOver={event => {
+              event.preventDefault();
+              event.dataTransfer.dropEffect = reorderDragRef.current ? "move" : "copy";
+            }}
+            onDragLeave={event => {
+              event.preventDefault();
+              if (!event.currentTarget.contains(event.relatedTarget)) setIsDraggingFile(false);
+            }}
+            onDrop={event => {
+              if (event.dataTransfer.types.includes("application/x-apix-image-index")) return;
+              handleImageDrop(event);
+            }}
+          >
+            {selectedImages.length ? (
+              <div className="multiImageGrid">
+                {selectedImages.map((image, index) => {
+                  const imageUrl = image?.startsWith?.("data:image")
+                    ? image
+                    : image?.kind === "input-image" ? image.url : "";
+                  const imageName = image?.kind === "input-image" ? image.name : `${label} ${index + 1}`;
+                  const imageHasMask = Boolean(image?.kind === "input-image" && image.maskDataUrl);
+                  return (
+                    <article
+                      key={`${imageName}-${index}`}
+                      className={`multiImageItem ${index === activeImageIndex ? "isActive" : ""}`}
+                      draggable={supportsMultipleImages && selectedImages.length > 1}
+                      onDragStart={event => {
+                        reorderDragRef.current = index;
+                        event.dataTransfer.effectAllowed = "move";
+                        event.dataTransfer.setData("application/x-apix-image-index", String(index));
+                      }}
+                      onDragEnd={() => {
+                        reorderDragRef.current = null;
+                        setIsDraggingFile(false);
+                      }}
+                      onDragOver={event => {
+                        if (!event.dataTransfer.types.includes("application/x-apix-image-index")) return;
+                        event.preventDefault();
+                        event.dataTransfer.dropEffect = "move";
+                      }}
+                      onDrop={event => {
+                        const transferredIndex = Number(event.dataTransfer.getData("application/x-apix-image-index"));
+                        const fromIndex = Number.isInteger(transferredIndex)
+                          ? transferredIndex
+                          : reorderDragRef.current;
+                        if (fromIndex == null) return;
+                        event.preventDefault();
+                        event.stopPropagation();
+                        moveSelectedImage(fromIndex, index);
+                        reorderDragRef.current = null;
+                      }}
+                      onClick={() => setActiveImageIndex(index)}
+                    >
+                      <img src={imageUrl} alt={imageName} />
+                      <span className="multiImageOrder">{index + 1}</span>
+                      {imageHasMask ? (
+                        <span className="multiImageMask" title={t("field.hasMask")}><Scissors size={11} /></span>
+                      ) : null}
+                      <div className="multiImageActions">
+                        <button
+                          type="button"
+                          onClick={event => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            setActiveImageIndex(index);
+                            openLightbox({ name: imageName, url: imageUrl });
+                          }}
+                          title={t("field.openFull")}
+                        >
+                          <Eye size={13} />
+                        </button>
+                        {image?.kind === "input-image" ? (
+                          <button
+                            type="button"
+                            onClick={event => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                              setActiveImageIndex(index);
+                              setMaskEditorOpen(true);
+                            }}
+                            title={imageHasMask ? t("field.editMask") : t("field.paintMask")}
+                          >
+                            <Scissors size={13} />
+                          </button>
+                        ) : null}
+                        <button
+                          type="button"
+                          onClick={event => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            setActiveImageIndex(index);
+                            setEditorOpen(true);
+                          }}
+                          title="Image Editor"
+                        >
+                          <Pencil size={13} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={event => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            removeSelectedImage(index);
+                          }}
+                          title={t("field.removeUpload")}
+                        >
+                          <X size={13} />
+                        </button>
+                      </div>
+                    </article>
+                  );
                 })}
-              />
-              <div className="uploadActions">
-                <button
-                  type="button"
-                  className="uploadView"
-                  onClick={event => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    openLightbox({ name: selectedInputName || label, url: selectedImageUrl });
-                  }}
-                  title={t("field.openFull")}
-                >
-                  <Eye size={14} />
-                </button>
-                {canMask ? (
-                  <button
-                    type="button"
-                    className="uploadView"
-                    onClick={event => {
-                      event.preventDefault();
-                      event.stopPropagation();
-                      setMaskEditorOpen(true);
-                    }}
-                    title={maskDataUrl ? t("field.editMask") : t("field.paintMask")}
-                  >
-                    <Scissors size={14} />
-                  </button>
+                {supportsMultipleImages ? (
+                  <div className="multiImageAdd">
+                    <Upload size={18} />
+                    <strong>{t("field.addImages")}</strong>
+                    <small>{t("field.multiUploadHint")}</small>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      onChange={event => {
+                        handlePickedFiles(event.target.files);
+                        event.target.value = "";
+                      }}
+                    />
+                  </div>
                 ) : null}
-                <button
-                  type="button"
-                  className="uploadView"
-                  onClick={event => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    setEditorOpen(true);
-                  }}
-                  title="Image Editor"
-                >
-                  <Pencil size={14} />
-                </button>
-                <button
-                  type="button"
-                  className="uploadClear"
-                  onClick={event => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    onChange("");
-                  }}
-                  title={t("field.removeUpload")}
-                >
-                  <X size={14} />
-                </button>
               </div>
-              {uploadImageSize.width && uploadImageSize.height ? (
-                <div className="imageSizeBadge">
-                  {uploadImageSize.width} x {uploadImageSize.height}
-                </div>
-              ) : null}
-              {maskDataUrl ? (
-                <div className="maskBadge" title={t("field.hasMask")}>
-                  <Scissors size={11} /> Mask
-                </div>
-              ) : null}
-            </div>
-          ) : (
-            <div
-              className={`dropzone ${isDraggingFile ? "isDragging" : ""}`}
-              onDragEnter={event => {
-                event.preventDefault();
-                setIsDraggingFile(true);
-              }}
-              onDragOver={event => {
-                event.preventDefault();
-                event.dataTransfer.dropEffect = "copy";
-                setIsDraggingFile(true);
-              }}
-              onDragLeave={event => {
-                event.preventDefault();
-                if (!event.currentTarget.contains(event.relatedTarget)) {
-                  setIsDraggingFile(false);
-                }
-              }}
-              onDrop={async event => {
-                await handleImageDrop(event);
-              }}
-            >
-              <Upload size={18} />
-              <strong>{isDraggingFile ? t("field.drop") : t("field.upload")}</strong>
-              <small>{ui.type === "image_mask" ? t("field.maskHint") : t("field.uploadHint")}</small>
-              <input
-                type="file"
-                accept={ui.type === "file" ? undefined : "image/*"}
-                onDragEnter={event => {
-                  event.preventDefault();
-                  setIsDraggingFile(true);
-                }}
-                onDragOver={event => {
-                  event.preventDefault();
-                  event.dataTransfer.dropEffect = "copy";
-                  setIsDraggingFile(true);
-                }}
-                onDragLeave={event => {
-                  event.preventDefault();
-                  if (!event.currentTarget.parentElement?.contains(event.relatedTarget)) {
-                    setIsDraggingFile(false);
-                  }
-                }}
-                onDrop={handleImageDrop}
-                onChange={event => handlePickedFile(event.target.files?.[0])}
-              />
-            </div>
-          )}
+            ) : (
+              <div className="multiImageEmpty">
+                <Upload size={18} />
+                <strong>{isDraggingFile ? t("field.drop") : t("field.upload")}</strong>
+                <small>{supportsMultipleImages ? t("field.multiUploadHint") : t("field.uploadHint")}</small>
+                <input
+                  type="file"
+                  accept={ui.type === "file" ? undefined : "image/*"}
+                  multiple={supportsMultipleImages}
+                  onChange={event => {
+                    handlePickedFiles(event.target.files);
+                    event.target.value = "";
+                  }}
+                />
+              </div>
+            )}
+          </div>
+          {supportsMultipleImages && selectedImages.length > 1 ? (
+            <small className="multiImageCount">{t("field.selectedImages", { count: selectedImages.length })}</small>
+          ) : null}
           {acceptsImageUrl ? (
             <form className="imageUrlLoader" onSubmit={handleLoadImageFromUrl}>
               <div className="imageUrlInputRow">
@@ -822,8 +910,7 @@ export function DynamicField({
                   onClick={event => {
                     event.preventDefault();
                     event.stopPropagation();
-                    refreshInputImages();
-                    setLibraryOpen(true);
+                    openInputLibrary();
                   }}
                   title={t("field.chooseInput")}
                 >
@@ -841,8 +928,7 @@ export function DynamicField({
               onClick={event => {
                 event.preventDefault();
                 event.stopPropagation();
-                refreshInputImages();
-                setLibraryOpen(true);
+                openInputLibrary();
               }}
             >
               <Images size={14} />
@@ -877,6 +963,17 @@ export function DynamicField({
                   >
                     <Star size={14} />
                   </button>
+                  {supportsMultipleImages ? (
+                    <button
+                      type="button"
+                      className={`historyIconButton ${libraryMultiSelect ? "active" : ""}`}
+                      onClick={() => setLibraryMultiSelect(current => !current)}
+                      title={libraryMultiSelect ? t("field.multiSelectOff") : t("field.multiSelectOn")}
+                      aria-pressed={libraryMultiSelect}
+                    >
+                      <ListChecks size={14} />
+                    </button>
+                  ) : null}
                   <button type="button" className="imageLightboxClose inPanel" onClick={() => setLibraryOpen(false)} title={t("common.close")}>
                     <X size={18} />
                   </button>
@@ -884,11 +981,30 @@ export function DynamicField({
               </div>
               {visibleInputImages.length > 0 ? (
                 <div className="inputLibraryGrid">
-                  {visibleInputImages.map(image => (
-                    <article key={image.name} className={`inputLibraryItem ${selectedInputName === image.name ? "isSelected" : ""}`}>
-                      <button type="button" className="inputLibraryThumb" onClick={() => handleInputImageSelect(image.name)} title={t("field.chooseImage")}>
+                  {visibleInputImages.map(image => {
+                    const isLibrarySelected = selectedImages.some(
+                      item => item?.kind === "input-image" && item.name === image.name
+                    );
+                    return (
+                    <article
+                      key={image.name}
+                      className={`inputLibraryItem${
+                        isLibrarySelected ? " isSelected" : ""
+                      }${libraryMultiSelect ? " isMultiSelectMode" : ""}`}
+                    >
+                      <button
+                        type="button"
+                        className="inputLibraryThumb"
+                        onClick={() => handleInputImageSelect(image.name)}
+                        title={libraryMultiSelect ? t("field.toggleImage") : t("field.chooseImage")}
+                      >
                         <img src={image.url} alt={image.name} />
                       </button>
+                      {libraryMultiSelect && isLibrarySelected ? (
+                        <span className="inputLibrarySelectedBadge" aria-hidden="true">
+                          <Check size={14} strokeWidth={2.8} />
+                        </span>
+                      ) : null}
                       <div className="inputLibraryActions">
                         <button
                           type="button"
@@ -909,7 +1025,8 @@ export function DynamicField({
                         </button>
                       </div>
                     </article>
-                  ))}
+                    );
+                  })}
                 </div>
               ) : (
                 <div className="inputLibraryEmpty">
@@ -982,35 +1099,18 @@ export function DynamicField({
   }
   if (isSlider) {
     return (
-      <label className="field">
-        <span className="fieldValueHeader">
-          <span>{label}</span>
-          <span className="fieldValueTools">
-            <b>{value}</b>
-            <button
-              type="button"
-              className="fieldResetButton"
-              onClick={event => {
-                event.preventDefault();
-                onChange(resetValue);
-              }}
-              disabled={isAtResetValue}
-              title={t("field.reset")}
-            >
-              <RefreshCcw size={13} />
-            </button>
-          </span>
-        </span>
-        <input
-          type="range"
+      <div className="field">
+        <EditorRange
+          label={label}
+          value={value}
           min={ui.minimum}
           max={ui.maximum}
           step={ui.step || 1}
-          value={value}
-          onChange={event => onChange(parseNumber(event.target.value))}
+          resetValue={resetValue}
+          onChange={next => onChange(parseNumber(next))}
         />
         {description ? <small className="fieldDescription">{description}</small> : null}
-      </label>
+      </div>
     );
   }
   if (isDropdown) {

@@ -36,6 +36,7 @@ export function PreviewPanel({
   progress,
   progressPct,
   heroImage,
+  displayImage,
   compareInputImage,
   imageScale,
   imagePan,
@@ -66,9 +67,17 @@ export function PreviewPanel({
   rhApiKey,
   updateRunLogSession,
   runQueue,
-  activeRunId
+  activeRunId,
+  colorPanelOpen,
+  onColorPanelToggle,
+  colorUpdating,
+  colorPanelAlign = "right"
 }) {
   const { t } = useI18n();
+
+  const previewImage = displayImage || heroImage;
+  const panelOnLeft = colorPanelAlign === "left";
+  const colorPanelToggleTitle = `${colorPanelOpen ? t("colorPanel.close") : t("colorPanel.open")} (Tab)`;
 
   return (
     <section className="previewPanel">
@@ -95,6 +104,23 @@ export function PreviewPanel({
               <button className="downloadButton" onClick={resetImageView} title={t("preview.reset")}><RotateCcw size={14} /></button>
               <button className="downloadButton" onClick={onOpenEditor} title={t("preview.editor")}><Pencil size={14} /></button>
               <button className="downloadButton" onClick={() => onDownload(selectedOutput)} title={t("preview.download")}><Download size={14} /></button>
+              <button
+                type="button"
+                className={`downloadButton colorPanelActionButton${colorPanelOpen ? " active" : ""}`}
+                onClick={onColorPanelToggle}
+                title={colorPanelToggleTitle}
+                aria-label={colorPanelToggleTitle}
+                aria-expanded={colorPanelOpen}
+                disabled={!colorPanelOpen && (!heroImage || showRunningScreen)}
+              >
+                {colorUpdating ? (
+                  <Loader2 size={14} className="spin" />
+                ) : panelOnLeft ? (
+                  colorPanelOpen ? <ChevronLeft size={14} /> : <ChevronRight size={14} />
+                ) : (
+                  colorPanelOpen ? <ChevronRight size={14} /> : <ChevronLeft size={14} />
+                )}
+              </button>
             </>
           ) : null}
         </div>
@@ -134,10 +160,10 @@ export function PreviewPanel({
               {compareMode && canCompare ? (
                 <>
                   <img className="resultImage compareInputImage" src={compareInputImage} alt={t("preview.inputImage")} draggable="false" />
-                  <img ref={imageElementRef} className="resultImage compareOutputImage" src={heroImage} alt={outputLabel} draggable="false" onLoad={handleResultImageLoad} />
+                  <img ref={imageElementRef} className="resultImage compareOutputImage" src={previewImage} alt={outputLabel} draggable="false" onLoad={handleResultImageLoad} />
                 </>
               ) : (
-                <img ref={imageElementRef} className="resultImage" src={heroImage} alt={outputLabel} draggable="false" onLoad={handleResultImageLoad} />
+                <img ref={imageElementRef} className="resultImage" src={previewImage} alt={outputLabel} draggable="false" onLoad={handleResultImageLoad} />
               )}
             </div>
           ) : (

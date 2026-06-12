@@ -75,9 +75,9 @@ export function ExecutionModeToggle({ mode, onChange }) {
           >
             {Icon ? (
               <Icon
-                size={option.id === "local" ? 14 : 12}
                 className="executionModeIcon"
                 title={option.iconTitle}
+                {...(Icon === RunningHubLogomark ? { sizedByCss: true } : { size: 12 })}
               />
             ) : null}
             {option.label}

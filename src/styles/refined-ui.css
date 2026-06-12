@@ -74,6 +74,76 @@ html[data-theme="light"] .imageEditorModal {
   backdrop-filter: none;
 }
 
+html[data-theme="dark"] .colorAdjustPanel,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .colorAdjustPanel,
+html[data-theme="light"] .colorAdjustPanel {
+  background: var(--surface-1);
+  border-color: var(--border-subtle);
+  backdrop-filter: none;
+}
+
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .colorAdjustPanel {
+  --color-panel-surface: var(--panel);
+  --color-panel-surface-raised: color-mix(in srgb, var(--panel) 88%, white 12%);
+  --color-panel-surface-strong: color-mix(in srgb, var(--panel) 86%, black 14%);
+  --color-panel-border: var(--border);
+  background: var(--color-panel-surface);
+}
+
+html[data-theme="dark"] .colorAdjustPanel {
+  --color-panel-surface: var(--surface-1);
+  --color-panel-surface-raised: var(--surface-2);
+  --color-panel-surface-strong: var(--panel-strong);
+  --color-panel-border: var(--border-default);
+}
+
+html[data-theme="light"] .colorAdjustPanel {
+  --color-panel-surface: var(--surface-1);
+  --color-panel-surface-raised: var(--surface-2);
+  --color-panel-surface-strong: var(--panel-strong);
+  --color-panel-border: var(--border-default);
+}
+
+html[data-theme] main.appShell .colorAdjustPanel .editorHistogramWrap,
+html[data-theme] main.appShell .colorAdjustPanel .imageEditorAccordion,
+html[data-theme] main.appShell .colorAdjustPanel .customPresetItem,
+html[data-theme] main.appShell .colorAdjustPanel .newPresetForm,
+html[data-theme] main.appShell .colorAdjustPanel .curvesTabs {
+  border-color: var(--color-panel-border);
+}
+
+html[data-theme] main.appShell .colorAdjustPanel .editorHistogramWrap,
+html[data-theme] main.appShell .colorAdjustPanel .customPresetItem,
+html[data-theme] main.appShell .colorAdjustPanel .newPresetForm,
+html[data-theme] main.appShell .colorAdjustPanel .curvesTabs {
+  background: var(--color-panel-surface-strong);
+}
+
+html[data-theme] main.appShell .colorAdjustPanel .imageEditorAccordion {
+  background: var(--color-panel-surface-raised);
+}
+
+html[data-theme] main.appShell .colorAdjustPanel .imageEditorAccordion.isOpen .imageEditorAccordionHeader {
+  background: rgba(255, 255, 255, 0.025);
+  border-bottom-color: var(--color-panel-border);
+}
+
+html[data-theme] main.appShell .colorAdjustPanel .presetButton,
+html[data-theme] main.appShell .colorAdjustPanel .presetRenameInput,
+html[data-theme] main.appShell .colorAdjustPanel .newPresetInput {
+  border-color: var(--color-panel-border);
+  background: transparent;
+}
+
+html[data-theme] main.appShell .colorAdjustPanel .customPresetItem:hover {
+  background: rgba(255, 255, 255, 0.035);
+}
+
+html[data-theme="light"] .colorAdjustPanel .imageEditorAccordion.isOpen .imageEditorAccordionHeader,
+html[data-theme="light"] .colorAdjustPanel .customPresetItem:hover {
+  background: rgba(15, 15, 18, 0.035);
+}
+
 html[data-theme="dark"] .appShell.is-runninghub .sidebar,
 html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .appShell.is-runninghub .sidebar,
 html[data-theme="light"] .appShell.is-runninghub .sidebar {
@@ -94,7 +164,7 @@ html[data-theme="light"] .modalBackdrop {
 }
 
 html[data-theme="dark"] .modalBackdrop {
-  background: rgba(9, 11, 15, 0.78);
+  background: rgba(10, 10, 10, 0.78);
 }
 
 html[data-theme="light"] .modalBackdrop {
@@ -295,14 +365,40 @@ html[data-theme="light"] .thumbAction:hover:not(:disabled) {
 
 html[data-theme="dark"] .assetFavoriteToggle.active,
 html[data-theme="dark"] .thumbAction.isFavorite,
-html[data-theme="dark"] .inputLibraryActions button.isFavorite,
 html[data-theme="dark"] .imageEditorFloatingBar button.active,
 html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .assetFavoriteToggle.active,
-html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .thumbAction.isFavorite,
-html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .inputLibraryActions button.isFavorite {
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .thumbAction.isFavorite {
   background: var(--accent);
   color: #ffffff;
   box-shadow: none;
+}
+
+html[data-theme="dark"] .inputLibraryActions,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .inputLibraryActions,
+html[data-theme="light"] .inputLibraryActions {
+  border-color: var(--border-subtle);
+  background: var(--surface-1);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.24);
+}
+
+html[data-theme="light"] .inputLibraryActions {
+  box-shadow: 0 4px 14px rgba(15, 15, 18, 0.12);
+}
+
+html[data-theme="dark"] .inputLibraryActions button,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .inputLibraryActions button,
+html[data-theme="light"] .inputLibraryActions button {
+  border-color: var(--border-subtle);
+  background: var(--surface-2);
+  color: var(--text-secondary);
+}
+
+html[data-theme="dark"] .inputLibraryActions button:hover,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .inputLibraryActions button:hover,
+html[data-theme="light"] .inputLibraryActions button:hover {
+  border-color: var(--border-default);
+  background: var(--surface-3);
+  color: var(--text-primary);
 }
 
 html[data-theme="light"] .saveTemplateButton,
@@ -406,6 +502,72 @@ html[data-theme="light"] .executionModeToggle button.active {
 html[data-theme="dark"] .executionModeToggle button:hover:not(.active),
 html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .executionModeToggle button:hover:not(.active),
 html[data-theme="light"] .executionModeToggle button:hover:not(.active) {
+  color: var(--text-secondary);
+}
+
+html[data-theme="dark"] .sidebar .field > .editorRange,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .sidebar .field > .editorRange,
+html[data-theme="light"] .sidebar .field > .editorRange {
+  color: var(--text-secondary);
+}
+
+html[data-theme="dark"] .sidebar .field > .editorRange b,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .sidebar .field > .editorRange b,
+html[data-theme="light"] .sidebar .field > .editorRange b {
+  color: var(--text-tertiary);
+}
+
+html[data-theme="dark"] .executionModeToggle .executionModeIcon,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .executionModeToggle .executionModeIcon,
+html[data-theme="light"] .executionModeToggle .executionModeIcon {
+  opacity: 0.95;
+}
+
+html[data-theme="dark"] .executionModeToggle button:not(.active) .executionModeIcon,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .executionModeToggle button:not(.active) .executionModeIcon,
+html[data-theme="light"] .executionModeToggle button:not(.active) .executionModeIcon {
+  color: var(--text-secondary);
+}
+
+/* ── Top bar execution mode toggle ─────────────────────── */
+
+html[data-theme="dark"] .appTopBar .executionModeTrack,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .appTopBar .executionModeTrack,
+html[data-theme="light"] .appTopBar .executionModeTrack {
+  border-color: var(--border-subtle);
+  background: var(--surface-2);
+}
+
+html[data-theme="dark"] .appTopBar .executionModeIndicator,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .appTopBar .executionModeIndicator,
+html[data-theme="light"] .appTopBar .executionModeIndicator {
+  background: var(--surface-1);
+  box-shadow:
+    inset 0 0 0 1px rgba(var(--execution-brand-rgb), 0.5),
+    0 1px 2px rgba(0, 0, 0, 0.28);
+}
+
+html[data-theme="light"] .appTopBar .executionModeIndicator {
+  box-shadow:
+    inset 0 0 0 1px rgba(var(--execution-brand-rgb), 0.38),
+    0 1px 2px rgba(15, 15, 18, 0.08);
+}
+
+html[data-theme="dark"] .appTopBar .executionModeToggle button,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .appTopBar .executionModeToggle button,
+html[data-theme="light"] .appTopBar .executionModeToggle button {
+  color: var(--text-tertiary);
+}
+
+html[data-theme="dark"] .appTopBar .executionModeToggle button.active,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .appTopBar .executionModeToggle button.active,
+html[data-theme="light"] .appTopBar .executionModeToggle button.active {
+  color: var(--text-primary);
+}
+
+html[data-theme="dark"] .appTopBar .executionModeToggle button:hover:not(.active),
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .appTopBar .executionModeToggle button:hover:not(.active),
+html[data-theme="light"] .appTopBar .executionModeToggle button:hover:not(.active) {
   color: var(--text-secondary);
 }
 
@@ -617,11 +779,6 @@ html[data-theme="light"] .rhActionRow {
   background: transparent;
   backdrop-filter: none;
   box-shadow: none;
-}
-
-html[data-theme="dark"] .rhActionRow .runButton,
-html[data-theme="dark"] .rhActionRow .stopButton {
-  min-height: 40px;
 }
 
 html[data-theme="dark"] .previewArea,

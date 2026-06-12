@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { DynamicField } from "./components/DynamicField";
 import { OutputGallery } from "./components/OutputGallery";
+import { OutputColorPanel } from "./components/OutputColorPanel";
 import { PreviewPanel } from "./components/PreviewPanel";
 import { SettingsModal } from "./components/SettingsModal";
 import { ImageEditorModal, TemplateEditorModal } from "./components/lazyModals";
@@ -21,7 +22,17 @@ import { RunControls } from "./components/RunControls";
 import { TemplateSelector } from "./components/TemplateSelector";
 import { downloadImage } from "./lib/download";
 import { canonicalDynamicType, dynamicFieldChoices } from "./lib/dynamicTypes";
-import { buildDefaults, extractImageValueUrl, findCompareInputImage, flattenInputs, itemValueKey, normalizeId, requestPayload } from "./lib/template";
+import {
+  buildDefaults,
+  expandImageBatchByKeys,
+  expandImageBatchValues,
+  extractImageValueUrl,
+  findCompareInputImage,
+  flattenInputs,
+  itemValueKey,
+  normalizeId,
+  requestPayload
+} from "./lib/template";
 import { useDiscovery } from "./hooks/useDiscovery";
 import { useHistory } from "./hooks/useHistory";
 import { useInputImages } from "./hooks/useInputImages";
@@ -45,6 +56,7 @@ import { ExecutionModeToggle, RunningHubPanel } from "./components/RunningHubPan
 import { SidebarLayoutHandles } from "./components/SidebarLayoutHandles";
 import { SdvnWaterLogo } from "./components/SdvnWaterLogo";
 import { ComfyUiLogomark } from "./components/icons/ComfyUiIcon";
+import { RunningHubLogomark } from "./components/icons/RunningHubIcon";
 import { localizeRuntimeMessage, useI18n } from "./i18n/I18nContext";
 import {
   loadMainFont,
@@ -90,6 +102,16 @@ function formatBytes(bytes) {
   return `${value >= 10 || unit === 0 ? value.toFixed(0) : value.toFixed(1)} ${units[unit]}`;
 }
 
+function formatServerName(address) {
+  if (!address) return "ComfyUI";
+  try {
+    const url = new URL(address);
+    return url.port ? `${url.hostname}:${url.port}` : url.hostname;
+  } catch {
+    return address;
+  }
+}
+
 function isTextEntryTarget(target) {
   return target instanceof HTMLElement && (
     target.isContentEditable ||
@@ -126,6 +148,10 @@ export default function App() {
   const [selectedOutputIndex, setSelectedOutputIndex] = useState(0);
   const [showWaitScreen, setShowWaitScreen] = useState(false);
   const [runLogOpen, setRunLogOpen] = useState(false);
+  const [colorPanelOpen, setColorPanelOpen] = useState(false);
+  const [colorPreviewUrl, setColorPreviewUrl] = useState(null);
+  const [colorUpdating, setColorUpdating] = useState(false);
+  const [colorPanelWidth, setColorPanelWidth] = useState(0);
   const [notifyEnabled, setNotifyEnabled] = useState(loadNotifyEnabled);
   const [addServerOpen, setAddServerOpen] = useState(false);
   const [executionMode, setExecutionMode] = useState(loadExecutionMode);
@@ -198,6 +224,7 @@ export default function App() {
   const isRunningHub = isRunningHubMode(executionMode);
   const isRunningHubApp = executionMode === "runninghub-app";
   const isRunningHubWf = executionMode === "runninghub-wf";
+  const healthStatus = discoveryLoading ? "loading" : discovery ? "online" : "offline";
 
   const inputs = useMemo(() => flattenInputs(config?.input), [config]);
   const rhWfInputs = useMemo(() => flattenInputs(rhWfConfig?.input), [rhWfConfig]);
@@ -209,21 +236,27 @@ export default function App() {
   );
   const app = config?.app || {};
   const serverAddress = config?.server?.address || config?.sever?.address || "";
-  const selectedTemplateName = templates.find(item => item.id === selectedTemplate)?.name || selectedTemplate || "Default";
   const selectedRunningHubApp = RUNNINGHUB_APP_OPTIONS.find(app => app.id === rhSettings.webappId);
   const selectedRunningHubName = selectedRunningHubApp?.name || (rhSettings.webappId ? `RunningHub ${rhSettings.webappId}` : "RunningHub App");
-  const rhWfTemplateName = rhWfTemplates.find(item => item.id === rhWfSelectedTemplate)?.name || rhWfSelectedTemplate || "RunningHub Workflow";
-  const brandSubtitle = isRunningHubWf
-    ? rhWfTemplateName
+  const activeServer = getServers().find(server => server.address === comfyAddress);
+  const topBarServerLabel = isRunningHubWf
+    ? "RunningHub Workflow"
     : isRunningHubApp
       ? selectedRunningHubName
-      : selectedTemplateName;
+      : activeServer?.label || formatServerName(comfyAddress);
+  const topBarServerStatus = isRunningHub
+    ? (rhSettings.apiKey?.trim() ? "online" : "offline")
+    : healthStatus;
   const resultOutputs = result?.outputs || [];
   const selectedOutput = resultOutputs[selectedOutputIndex] || resultOutputs[0];
   const outputLabel = selectedOutput?.label || (isRunningHub
     ? t("preview.rhResult")
     : outputs[0]?.ui?.label || t("preview.result"));
   const heroImage = selectedOutput?.url;
+  const lastColorPanelSourceRef = useRef(null);
+  if (heroImage) lastColorPanelSourceRef.current = heroImage;
+  const colorPanelSource = heroImage || lastColorPanelSourceRef.current;
+  const displayImage = colorPreviewUrl || heroImage;
   const resultTiming = useMemo(() => {
     const base = result?.historyItem || result || {};
     return {
@@ -261,9 +294,6 @@ export default function App() {
   const selectedMainFont = MAIN_FONT_OPTIONS.find(option => option.id === mainFont)
     || MAIN_FONT_OPTIONS.find(option => option.id === "system");
 
-  // Health indicator: online/loading/offline
-  const healthStatus = discoveryLoading ? "loading" : discovery ? "online" : "offline";
-
   const serverDetailRows = useMemo(() => discovery ? [
     [t("serverDetail.address"), discovery.address || comfyAddress],
     [t("serverDetail.fetchedAt"), discovery.fetchedAt || ""],
@@ -289,7 +319,11 @@ export default function App() {
     resetImageView, handleResultImageLoad,
     handlePreviewWheel, handlePreviewPointerDown,
     handlePreviewPointerMove, handlePreviewPointerUp
-  } = useImageViewer(heroImage, canCompare);
+  } = useImageViewer(displayImage, canCompare);
+
+  useEffect(() => {
+    setColorPreviewUrl(null);
+  }, [heroImage, selectedOutputIndex]);
 
   // Persist theme
   useEffect(() => {
@@ -697,12 +731,17 @@ export default function App() {
         setShowWaitScreen(false);
         return;
       }
-      runStep({
-        apiKey: rhSettings.apiKey.trim(),
-        webappId: rhSettings.webappId.trim(),
-        nodes: rhNodes,
-        values: rhValues
-      });
+      const imageKeys = rhNodes
+        .filter(node => String(node.fieldType || "").toUpperCase() === "IMAGE")
+        .map(nodeFieldKey);
+      for (const batchValues of expandImageBatchByKeys(rhValues, imageKeys)) {
+        runStep({
+          apiKey: rhSettings.apiKey.trim(),
+          webappId: rhSettings.webappId.trim(),
+          nodes: rhNodes,
+          values: batchValues
+        });
+      }
       return;
     }
     if (isRunningHubWf) {
@@ -725,18 +764,22 @@ export default function App() {
         setShowWaitScreen(false);
         return;
       }
-      runStep({
-        apiKey: rhSettings.apiKey.trim(),
-        templateId: rhWfSelectedTemplate,
-        values: rhWfValues
-      });
+      for (const batchValues of expandImageBatchValues(rhWfInputs, rhWfValues)) {
+        runStep({
+          apiKey: rhSettings.apiKey.trim(),
+          templateId: rhWfSelectedTemplate,
+          values: batchValues
+        });
+      }
       return;
     }
-    runStep({
-      template: selectedTemplate,
-      address: comfyAddress,
-      values: requestPayload(inputs, values)
-    });
+    for (const batchValues of expandImageBatchValues(inputs, values)) {
+      runStep({
+        template: selectedTemplate,
+        address: comfyAddress,
+        values: requestPayload(inputs, batchValues)
+      });
+    }
   }
 
   async function handleRhAccountRefresh() {
@@ -896,7 +939,43 @@ export default function App() {
     catch (err) { setError(localizeRuntimeMessage(err.message, locale)); setStatus(t("error.downloadFailed")); }
   }
 
-  async function handleSaveEditedOutput(dataUrl) {
+  async function handleReplaceOutputImage(dataUrl, statusKey = "colorPanel.updated") {
+    const historyId = result?.runId || result?.historyItem?.id;
+    const outputFilename = selectedOutput?.filename;
+    if (!historyId && !outputFilename) throw new Error(t("error.saveNoHistoryItem"));
+
+    const response = await fetch("/api/output-history/edit", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        dataUrl,
+        replace: true,
+        historyId,
+        outputIndex: selectedOutputIndex,
+        outputFilename
+      })
+    });
+    const text = await response.text();
+    let data = {};
+    try { data = text ? JSON.parse(text) : {}; } catch { throw new Error(text || t("error.saveNoJson")); }
+    if (!response.ok) {
+      const serverError = localizeRuntimeMessage(data.error, locale);
+      if (serverError === "Not found") throw new Error(t("error.replaceOutputBackendStale"));
+      throw new Error(serverError || t("error.saveEditedFailed"));
+    }
+    if (!data.historyItem) throw new Error(t("error.saveNoHistoryItem"));
+    const historyItem = data.historyItem;
+    setResult(current => ({
+      ...(historyItem.result || historyItem),
+      provider: current?.provider ?? historyItem.provider,
+      rhCoins: current?.rhCoins ?? historyItem.rhCoins
+    }));
+    setHistory(data.history || []);
+    resetImageView();
+    setStatus(t(statusKey));
+  }
+
+  async function handleSaveEditedOutput(dataUrl, statusKey = "status.editorSaved") {
     const response = await fetch("/api/output-history/edit", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -912,7 +991,28 @@ export default function App() {
     setSelectedOutputIndex(0);
     setHistory(current => data.history || (historyItem ? [historyItem, ...current] : current));
     resetImageView();
-    setStatus(t("status.editorSaved"));
+    setStatus(t(statusKey));
+  }
+
+  async function handleColorPanelUpdate(dataUrl) {
+    setColorUpdating(true);
+    try {
+      await handleReplaceOutputImage(dataUrl);
+      setColorPreviewUrl(null);
+    } catch (err) {
+      setError(localizeRuntimeMessage(err.message, locale));
+      setStatus(t("error.saveEditedFailed"));
+      throw err;
+    } finally {
+      setColorUpdating(false);
+    }
+  }
+
+  function handleColorPanelToggle() {
+    setColorPanelOpen(current => {
+      if (current) setColorPreviewUrl(null);
+      return !current;
+    });
   }
 
   // Compute progress percentage
@@ -928,6 +1028,29 @@ export default function App() {
 
   const handleRunClickRef = useRef(handleRunClick);
   handleRunClickRef.current = handleRunClick;
+
+  const handleColorPanelToggleRef = useRef(handleColorPanelToggle);
+  handleColorPanelToggleRef.current = handleColorPanelToggle;
+
+  useEffect(() => {
+    function hasBlockingOverlay() {
+      return Boolean(document.querySelector(
+        ".imageEditorModal, .maskEditorModal, .templateEditorModal, .modalBackdrop"
+      ));
+    }
+    function handleColorPanelShortcut(event) {
+      if (event.key !== "Tab") return;
+      if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
+      if (isTextEntryTarget(event.target)) return;
+      if (hasBlockingOverlay()) return;
+      if (!colorPanelOpen && (!heroImage || showRunningScreen)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      handleColorPanelToggleRef.current();
+    }
+    window.addEventListener("keydown", handleColorPanelShortcut, true);
+    return () => window.removeEventListener("keydown", handleColorPanelShortcut, true);
+  }, [heroImage, showRunningScreen, colorPanelOpen]);
 
   useEffect(() => {
     function hasBlockingOverlay() {
@@ -954,25 +1077,45 @@ export default function App() {
       className={`appShell ${isRunningHub ? "is-runninghub" : ""}${sidebarSide === "right" ? " sidebar-right" : ""}`}
       style={{ "--sidebar-width": `${sidebarWidth}px` }}
     >
-      <aside className="sidebar">
-        <SidebarLayoutHandles onMoveStart={startSidebarMove} onResizeStart={startSidebarResize} />
-        <div className="brand">
-          <div className="mark" role="img" aria-label="SDVN" />
-          <div>
+      <header className="appTopBar">
+        <div className="appTopBarIdentity">
+          <div className="appTopBarBrand">
+            <div className="appTopBarMark" role="img" aria-label="SDVN" />
             <h1 className="title-font">aPix Builder</h1>
-            <p>{brandSubtitle}</p>
           </div>
-          <div className="brandActions">
-            <button className="settingsButton" onClick={() => { setInfoOpen(false); setSettingsOpen(true); }} title={t("settings.open")} aria-label={t("settings.open")}>
-              <Settings2 size={18} />
-            </button>
-            <button className="settingsButton" onClick={() => { setSettingsOpen(false); setInfoOpen(true); }} title={`${t("info.open")} (Cmd/Ctrl + /)`} aria-label={t("info.open")}>
-              <Info size={18} />
-            </button>
-          </div>
+
+          <ExecutionModeToggle mode={executionMode} onChange={setExecutionMode} />
         </div>
 
-        <ExecutionModeToggle mode={executionMode} onChange={setExecutionMode} />
+        <div className="appTopBarActions">
+          <button
+            type="button"
+            className="appTopBarServer"
+            onClick={() => {
+              setInfoOpen(false);
+              setSettingsTab(isRunningHub ? "runninghub" : "comfy");
+              setSettingsOpen(true);
+            }}
+            title={topBarServerLabel}
+          >
+            {isRunningHub
+              ? <RunningHubLogomark size={11} aria-hidden="true" />
+              : <ComfyUiLogomark size={14} aria-hidden="true" />}
+            <span className={`appTopBarStatus health-${topBarServerStatus}`} aria-hidden="true" />
+            <span className="appTopBarServerLabel">{topBarServerLabel}</span>
+          </button>
+
+          <button className="appTopBarButton" onClick={() => { setInfoOpen(false); setSettingsOpen(true); }} title={t("settings.open")} aria-label={t("settings.open")}>
+            <Settings2 size={15} />
+          </button>
+          <button className="appTopBarButton" onClick={() => { setSettingsOpen(false); setInfoOpen(true); }} title={`${t("info.open")} (Cmd/Ctrl + /)`} aria-label={t("info.open")}>
+            <Info size={15} />
+          </button>
+        </div>
+      </header>
+
+      <aside className="sidebar">
+        <SidebarLayoutHandles onMoveStart={startSidebarMove} onResizeStart={startSidebarResize} />
 
         {isRunningHubApp ? (
           <RunningHubPanel
@@ -1130,7 +1273,10 @@ export default function App() {
         />
       </aside>
 
-      <section className="workspace">
+      <section
+        className={`workspace color-panel-${sidebarSide === "right" ? "left" : "right"}${colorPanelOpen ? " hasColorPanel" : ""}`}
+        style={colorPanelOpen ? { "--output-color-panel-width": `${colorPanelWidth}px` } : undefined}
+      >
         <PreviewPanel
           outputLabel={outputLabel}
           resultOutputs={resultOutputs}
@@ -1152,6 +1298,7 @@ export default function App() {
           progress={progress}
           progressPct={progressPct}
           heroImage={heroImage}
+          displayImage={displayImage}
           compareInputImage={compareInputImage}
           imageScale={imageScale}
           imagePan={imagePan}
@@ -1183,6 +1330,21 @@ export default function App() {
           updateRunLogSession={updateRunLogSession}
           runQueue={runQueue}
           activeRunId={activeRunId}
+          colorPanelOpen={colorPanelOpen}
+          onColorPanelToggle={handleColorPanelToggle}
+          colorUpdating={colorUpdating}
+          colorPanelAlign={sidebarSide === "right" ? "left" : "right"}
+        />
+
+        <OutputColorPanel
+          open={colorPanelOpen}
+          source={colorPanelSource}
+          onPreviewChange={setColorPreviewUrl}
+          onUpdate={handleColorPanelUpdate}
+          onWidthChange={setColorPanelWidth}
+          updating={colorUpdating}
+          disabled={!heroImage || showRunningScreen}
+          align={sidebarSide === "right" ? "left" : "right"}
         />
 
         <OutputGallery

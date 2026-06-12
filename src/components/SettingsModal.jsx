@@ -11,9 +11,8 @@ import { RunningHubSettings } from "./RunningHubSettings";
 import { ComfyUiLogomark } from "./icons/ComfyUiIcon";
 import { RunningHubLogomark } from "./icons/RunningHubIcon";
 import {
-  COLORFUL_THEME_OPTIONS,
   MAIN_FONT_OPTIONS,
-  PRO_THEME_OPTIONS
+  THEME_OPTIONS
 } from "../constants/appearance";
 import { useI18n } from "../i18n/I18nContext";
 
@@ -94,7 +93,7 @@ export function SettingsModal({
               </span>
             </button>
             <button type="button" role="tab" aria-selected={settingsTab === "comfy"} className={`settingsTabComfy ${settingsTab === "comfy" ? "active" : ""}`} onClick={() => setSettingsTab("comfy")}>
-              <ComfyUiLogomark size={22} title="ComfyUI" />
+              <ComfyUiLogomark title="ComfyUI" />
               <span>
                 <b>ComfyUI Server</b>
                 <small>{healthLabel}</small>
@@ -102,7 +101,7 @@ export function SettingsModal({
               <i className={`settingsTabStatus health-${healthStatus}`} aria-hidden="true" />
             </button>
             <button type="button" role="tab" aria-selected={settingsTab === "runninghub"} className={settingsTab === "runninghub" ? "active" : ""} onClick={() => setSettingsTab("runninghub")}>
-              <RunningHubLogomark size={22} title="RunningHub" compact />
+              <RunningHubLogomark sizedByCss title="RunningHub" />
               <span>
                 <b>RunningHub</b>
                 <small>{t("settings.rhDesc")}</small>
@@ -128,17 +127,7 @@ export function SettingsModal({
                       </button>
                       {themeMenuOpen ? (
                         <div className="themeMenu" role="listbox" aria-label="Theme">
-                          {PRO_THEME_OPTIONS.map(option => (
-                            <button key={option.id} type="button" role="option" aria-selected={theme === option.id}
-                              className={`themeMenuItem ${theme === option.id ? "active" : ""}`}
-                              style={{ "--theme-swatch": option.swatch }}
-                              onClick={() => { setTheme(option.id); setThemeMenuOpen(false); }}>
-                              <span className="themeSwatch" aria-hidden="true" />
-                              <span>{option.label}</span>
-                            </button>
-                          ))}
-                          <div className="themeMenuDivider" role="presentation">{t("settings.colorful")}</div>
-                          {COLORFUL_THEME_OPTIONS.map(option => (
+                          {THEME_OPTIONS.map(option => (
                             <button key={option.id} type="button" role="option" aria-selected={theme === option.id}
                               className={`themeMenuItem ${theme === option.id ? "active" : ""}`}
                               style={{ "--theme-swatch": option.swatch }}

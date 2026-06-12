@@ -40,6 +40,10 @@ function sanitizePresetValues(values) {
   const result = {};
   for (const [key, value] of Object.entries(values || {})) {
     if (typeof value === "string" && (value.startsWith("data:") || value.length > 200000)) continue;
+    if (Array.isArray(value) && value.some(item => (
+      typeof item === "string" && item.startsWith("data:")
+      || item && typeof item === "object" && (item.kind === "upload" || item.kind === "input-image")
+    ))) continue;
     if (value && typeof value === "object" && (value.kind === "upload" || value.kind === "input-image")) continue;
     result[key] = value;
   }

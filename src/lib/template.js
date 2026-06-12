@@ -142,6 +142,51 @@ function isImageFieldType(type) {
   return normalized === "image" || normalized === "image_mask" || normalized === "file";
 }
 
+function collectActiveImageValueKeys(items, values) {
+  const keys = [];
+  for (const item of items || []) {
+    if (isMenuSub(item)) {
+      const menuValue = values[menuSubValueKey(item)];
+      keys.push(...collectActiveImageValueKeys(getActiveSubInputs(item, menuValue), values));
+      continue;
+    }
+    if (!isImageFieldType(item?.ui?.type) || !item.id) continue;
+    keys.push(normalizeId(item.id));
+  }
+  return keys;
+}
+
+export function expandImageBatchValues(items, values) {
+  const imageKeys = collectActiveImageValueKeys(items, values);
+  const batchKeys = imageKeys.filter(key => Array.isArray(values[key]) && values[key].length > 0);
+  const batchSize = Math.max(1, ...batchKeys.map(key => values[key].length));
+  if (!batchKeys.length) return [values];
+
+  return Array.from({ length: batchSize }, (_, index) => {
+    const next = { ...values };
+    for (const key of batchKeys) {
+      const images = values[key];
+      next[key] = images[Math.min(index, images.length - 1)];
+    }
+    return next;
+  });
+}
+
+export function expandImageBatchByKeys(values, imageKeys) {
+  const batchKeys = imageKeys.filter(key => Array.isArray(values[key]) && values[key].length > 0);
+  const batchSize = Math.max(1, ...batchKeys.map(key => values[key].length));
+  if (!batchKeys.length) return [values];
+
+  return Array.from({ length: batchSize }, (_, index) => {
+    const next = { ...values };
+    for (const key of batchKeys) {
+      const images = values[key];
+      next[key] = images[Math.min(index, images.length - 1)];
+    }
+    return next;
+  });
+}
+
 export function findCompareInputImage(items, values) {
   for (const item of items || []) {
     const uiType = item?.ui?.type;
@@ -159,7 +204,8 @@ export function findCompareInputImage(items, values) {
       continue;
     }
     if (!isImageFieldType(uiType) || !item.id) continue;
-    const url = extractImageValueUrl(values[normalizeId(item.id)]);
+    const storedValue = values[normalizeId(item.id)];
+    const url = extractImageValueUrl(Array.isArray(storedValue) ? storedValue[0] : storedValue);
     if (url) return url;
   }
   return "";

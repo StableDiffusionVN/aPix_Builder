@@ -732,11 +732,76 @@ async function handleDeleteOutputHistory(req, res) {
   send(res, 200, { history: next });
 }
 
+async function replaceOutputInHistory(body, parsed, res) {
+  const historyId = body.historyId;
+  const outputFilename = body.outputFilename ? safeOutputName(body.outputFilename) : "";
+  const outputIndex = Number.isFinite(body.outputIndex) ? body.outputIndex : 0;
+  if (!historyId && !outputFilename) {
+    send(res, 400, { error: "Missing history id" });
+    return;
+  }
+
+  const current = await readOutputHistory();
+  let itemIndex = historyId ? current.findIndex(item => item.id === historyId) : -1;
+  let resolvedOutputIndex = outputIndex;
+
+  if (itemIndex === -1 && outputFilename) {
+    itemIndex = current.findIndex(item => {
+      const outputs = item.outputs || item.result?.outputs || [];
+      const matchIndex = outputs.findIndex(output => safeOutputName(output.filename) === outputFilename);
+      if (matchIndex !== -1) {
+        resolvedOutputIndex = matchIndex;
+        return true;
+      }
+      return false;
+    });
+  }
+
+  if (itemIndex === -1) {
+    send(res, 404, { error: "History item not found" });
+    return;
+  }
+
+  const item = current[itemIndex];
+  const outputs = [...(item.outputs || item.result?.outputs || [])];
+  const targetOutput = outputs[resolvedOutputIndex];
+  if (!targetOutput?.filename) {
+    send(res, 404, { error: "Output not found" });
+    return;
+  }
+
+  const filename = safeOutputName(targetOutput.filename);
+  await mkdir(outputDir, { recursive: true });
+  await writeFile(path.join(outputDir, filename), parsed.buffer);
+
+  const updatedOutput = {
+    ...targetOutput,
+    url: `${outputImageUrl(filename)}&v=${Date.now()}`
+  };
+  outputs[resolvedOutputIndex] = updatedOutput;
+
+  const updatedItem = {
+    ...item,
+    outputs,
+    result: item.result ? { ...item.result, outputs } : item.result
+  };
+
+  const history = [...current];
+  history[itemIndex] = updatedItem;
+  await writeOutputHistory(history);
+  send(res, 200, { historyItem: updatedItem, history: history.slice(0, maxOutputHistoryItems) });
+}
+
 async function handleSaveEditedOutput(req, res) {
   const body = JSON.parse(await readBody(req, maxImageBodyBytes) || "{}");
   const parsed = parseDataUrl(body.dataUrl);
   if (!parsed) {
     send(res, 400, { error: "Invalid image data" });
+    return;
+  }
+
+  if (body.replace) {
+    await replaceOutputInHistory(body, parsed, res);
     return;
   }
 
@@ -784,6 +849,16 @@ async function handleSaveEditedOutput(req, res) {
   const history = [item, ...current];
   await writeOutputHistory(history);
   send(res, 200, { historyItem: item, history: history.slice(0, maxOutputHistoryItems) });
+}
+
+async function handleReplaceOutputImage(req, res) {
+  const body = JSON.parse(await readBody(req, maxImageBodyBytes) || "{}");
+  const parsed = parseDataUrl(body.dataUrl);
+  if (!parsed) {
+    send(res, 400, { error: "Invalid image data" });
+    return;
+  }
+  await replaceOutputInHistory(body, parsed, res);
 }
 
 function slugifyTemplateId(value = "") {
@@ -1458,6 +1533,8 @@ const server = http.createServer(async (req, res) => {
       await handleDeleteOutputHistory(req, res);
     } else if (req.method === "POST" && url.pathname === "/api/output-history/edit") {
       await handleSaveEditedOutput(req, res);
+    } else if (req.method === "POST" && url.pathname === "/api/output-history/replace-output") {
+      await handleReplaceOutputImage(req, res);
     } else if (req.method === "GET" && url.pathname === "/api/output-image") {
       await handleOutputImage(req, res, url);
     } else if (req.method === "GET" && url.pathname === "/api/presets") {

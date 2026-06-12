@@ -246,7 +246,7 @@ export function useRunningHubExecution({ onComplete, runLog } = {}) {
   }
 
   function runWorkflow(job) {
-    if (running) {
+    if (activeRunIdRef.current) {
       setQueue([...runQueueRef.current, job]);
       const queueSize = runQueueRef.current.length;
       setStatus(t("execRh.addedToQueue", { count: queueSize }));

@@ -2,26 +2,26 @@
 
 html[data-theme="dark"] {
   color-scheme: dark;
-  --surface-base: #090b0f;
-  --surface-1: #0b0d12;
-  --surface-2: #10141b;
-  --surface-3: #161b26;
-  --text-primary: #e6edf3;
-  --text-secondary: #8b949e;
-  --text-tertiary: #6e7681;
+  --surface-base: #0a0a0a;
+  --surface-1: #111111;
+  --surface-2: #1a1a1a;
+  --surface-3: #242424;
+  --text-primary: #f5f5f5;
+  --text-secondary: #a3a3a3;
+  --text-tertiary: #737373;
   --border-subtle: rgba(255, 255, 255, 0.06);
   --border-default: rgba(255, 255, 255, 0.1);
   --accent-muted: rgba(88, 166, 255, 0.12);
   --accent-muted-hover: rgba(88, 166, 255, 0.18);
-  --danger-text: #f85149;
-  --danger-muted: rgba(248, 81, 73, 0.12);
-  --warning: #d29922;
+  --danger-text: #f87171;
+  --danger-muted: rgba(248, 113, 113, 0.12);
+  --warning: #fbbf24;
   --link: #79c0ff;
 
   --bg: var(--surface-base);
   --panel: var(--surface-1);
   --panel-soft: var(--surface-2);
-  --panel-strong: #07090d;
+  --panel-strong: #050505;
   --border: var(--border-default);
   --border-strong: rgba(255, 255, 255, 0.14);
   --text: var(--text-primary);
@@ -54,7 +54,7 @@ html[data-theme="dark"] {
   --font-title: 20px;
 
   --log-bg: var(--surface-1);
-  --log-text: #c9d1d9;
+  --log-text: #d4d4d4;
   --log-text-bright: var(--text-primary);
   --log-muted: var(--text-tertiary);
   --log-border: var(--border-subtle);
@@ -70,7 +70,7 @@ html[data-theme="dark"] {
   --log-coin: #ffa657;
 
   --transition-fast: 120ms ease;
-  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%238b949e' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23a3a3a3' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
   --sdvn-mark-url: url("/sdvn-mark.png");
 }
 

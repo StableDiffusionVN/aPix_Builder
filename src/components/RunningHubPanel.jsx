@@ -1,10 +1,77 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Loader2, RefreshCcw, Settings2, Wifi, WifiOff } from "lucide-react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Loader2, Lock, RefreshCcw, Settings2, Wifi, WifiOff } from "lucide-react";
 import { RunningHubField } from "./RunningHubField";
 import { ComfyUiLogomark } from "./icons/ComfyUiIcon";
 import { RunningHubLogomark } from "./icons/RunningHubIcon";
 import { RUNNINGHUB_APP_OPTIONS } from "../hooks/useRunningHub";
 import { useI18n } from "../i18n/I18nContext";
+
+function formatRhStatValue(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return String(value ?? "");
+  return numeric.toLocaleString();
+}
+
+function RunningHubAppInfo({ info, t }) {
+  const cover = info?.covers?.[0];
+  const coverUrl = cover?.thumbnailUri || cover?.url || "";
+  const stats = useMemo(() => {
+    const source = info?.statisticsInfo;
+    if (!source) return [];
+    return [
+      { key: "useCount", label: t("rh.statUses"), value: source.useCount },
+      { key: "collectCount", label: t("rh.statCollects"), value: source.collectCount },
+      { key: "likeCount", label: t("rh.statLikes"), value: source.likeCount },
+      { key: "downloadCount", label: t("rh.statDownloads"), value: source.downloadCount }
+    ].filter(item => item.value != null && String(item.value).trim() !== "");
+  }, [info?.statisticsInfo, t]);
+
+  const tags = useMemo(
+    () => (info?.tags || []).map(tag => tag.nameEn || tag.name).filter(Boolean),
+    [info?.tags]
+  );
+
+  if (!info?.webappName && !coverUrl && !stats.length && !tags.length) return null;
+
+  return (
+    <div className="rhAppInfo">
+      {coverUrl ? (
+        <div className="rhAppInfoCover">
+          <img src={coverUrl} alt={info.webappName || "RunningHub App"} draggable="false" />
+        </div>
+      ) : null}
+      <div className="rhAppInfoBody">
+        <div className="rhAppInfoTitleRow">
+          <strong className="rhAppInfoTitle">{info.webappName || t("rh.unnamedApp")}</strong>
+          {info.accessEncrypted ? (
+            <span className="rhAppInfoEncrypted" title={t("rh.accessEncrypted")}>
+              <Lock size={12} />
+              <span>{t("rh.accessEncryptedShort")}</span>
+            </span>
+          ) : null}
+        </div>
+        {info.webappId ? <small className="rhAppInfoId">ID {info.webappId}</small> : null}
+        {stats.length ? (
+          <div className="rhAppInfoStats">
+            {stats.map(item => (
+              <span key={item.key} className="rhAppInfoStat">
+                <b>{formatRhStatValue(item.value)}</b>
+                <span>{item.label}</span>
+              </span>
+            ))}
+          </div>
+        ) : null}
+        {tags.length ? (
+          <div className="rhAppInfoTags">
+            {tags.map(tag => (
+              <span key={tag} className="rhAppInfoTag">{tag}</span>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
 
 const EXECUTION_MODE_OPTIONS = [
   { id: "local", label: "ComfyUI", icon: ComfyUiLogomark, iconTitle: "ComfyUI" },
@@ -93,6 +160,7 @@ export function RunningHubPanel({
   settings,
   onSettingsChange,
   nodes,
+  webappInfo = null,
   values,
   onValuesChange,
   nodesLoading,
@@ -102,7 +170,7 @@ export function RunningHubPanel({
   onRefreshInputImages,
   onUpdateInputImages
 }) {
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
   const connected = Boolean(nodes.length && !nodesError);
   const healthStatus = nodesLoading ? "loading" : connected ? "online" : "offline";
   const selectedPresetId = RUNNINGHUB_APP_OPTIONS.some(app => app.id === settings.webappId)
@@ -113,7 +181,7 @@ export function RunningHubPanel({
     <section className="settingsGroup runningHubPanel">
       <div className="settingsHeader">
         <Settings2 size={16} />
-        <h2>RunningHub App</h2>
+        <h2>{webappInfo?.webappName || "RunningHub App"}</h2>
         <span className={`healthDot health-${healthStatus}`} title={
           healthStatus === "online" ? t("rh.connected") :
           healthStatus === "loading" ? t("rh.loadingNodes") : t("rh.disconnected")
@@ -157,6 +225,7 @@ export function RunningHubPanel({
       </div>
 
       {nodesError ? <div className="rhPanelError">{nodesError}</div> : null}
+      {webappInfo ? <RunningHubAppInfo info={webappInfo} t={t} /> : null}
 
       <div className="formStack rhFormStack">
         {nodesLoading && !nodes.length ? (

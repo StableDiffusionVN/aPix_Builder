@@ -68,10 +68,18 @@ export function useRunningHubExecution({ onComplete, runLog } = {}) {
         }
         setTaskStatus({ status: nextStatus, label });
         setProgress({ type: nextStatus, label });
-        if (nextStatus === "queued" || nextStatus === "running" || nextStatus === "waiting" || nextStatus === "token_wait" || nextStatus === "upload" || nextStatus === "submit") {
+        if (nextStatus === "queued" || nextStatus === "running" || nextStatus === "waiting" || nextStatus === "token_wait" || nextStatus === "upload" || nextStatus === "submit" || nextStatus === "download") {
           setStatus(label);
         }
-        appendLog("info", label, { runId, taskId: taskId || undefined });
+        appendLog(nextStatus === "download" ? "warn" : "info", label, { runId, taskId: taskId || undefined });
+        break;
+      }
+      case "output_download_retry": {
+        const label = data.label || t("exec.downloadRetry");
+        setTaskStatus({ status: "download", label });
+        setProgress({ type: "download", label });
+        setStatus(label);
+        appendLog("warn", label, { runId, taskId: data.taskId || undefined, attempt: data.attempt });
         break;
       }
       default:

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronRight, Copy, Download, GripHorizontal, ImageIcon, Loader2, ScrollText, Trash2, X } from "lucide-react";
 import {
   copyToClipboard,
@@ -24,8 +24,24 @@ const LOG_HEIGHT_KEY = "comfyui-build:run-log-height";
 const DEFAULT_LOG_HEIGHT = 520;
 const MIN_LOG_HEIGHT = 320;
 const MAX_LOG_HEIGHT = 760;
+const LOG_DOCK_BOTTOM = 12;
+const LOG_BUTTON_HEIGHT = 34;
+const LOG_DOCK_GAP = 8;
+const LOG_DOCK_TOP_MARGIN = 8;
+const LOG_DOCK_CHROME = LOG_DOCK_BOTTOM + LOG_BUTTON_HEIGHT + LOG_DOCK_GAP + LOG_DOCK_TOP_MARGIN;
 const LOG_ROW_HEIGHT = 22;
 const LOG_OVERSCAN = 8;
+
+function clampLogHeight(height, maxHeight = MAX_LOG_HEIGHT) {
+  return Math.min(maxHeight, Math.max(MIN_LOG_HEIGHT, height));
+}
+
+function measureMaxLogHeight(dockEl) {
+  const container = dockEl?.closest(".previewArea");
+  if (!container) return MAX_LOG_HEIGHT;
+  const available = container.clientHeight - LOG_DOCK_CHROME;
+  return Math.max(MIN_LOG_HEIGHT, Math.min(MAX_LOG_HEIGHT, available));
+}
 
 function loadLogHeight() {
   try {
@@ -353,8 +369,11 @@ export function RunLogPanel({
 }) {
   const { t } = useI18n();
   const panelRef = useRef(null);
+  const dockRef = useRef(null);
+  const maxLogHeightRef = useRef(MAX_LOG_HEIGHT);
   const resizeRef = useRef({ dragging: false, startY: 0, startHeight: DEFAULT_LOG_HEIGHT });
   const [popupHeight, setPopupHeight] = useState(loadLogHeight);
+  const [maxLogHeight, setMaxLogHeight] = useState(MAX_LOG_HEIGHT);
   const [expandedIds, setExpandedIds] = useState(() => new Set());
   const [focusedSessionId, setFocusedSessionId] = useState("");
   const [taskInspectMap, setTaskInspectMap] = useState({});
@@ -421,6 +440,29 @@ export function RunLogPanel({
     });
   }, [expandedIds]);
 
+  const syncMaxLogHeight = useCallback(() => {
+    const nextMax = measureMaxLogHeight(dockRef.current);
+    maxLogHeightRef.current = nextMax;
+    setMaxLogHeight(nextMax);
+    setPopupHeight(current => clampLogHeight(current, nextMax));
+  }, []);
+
+  useEffect(() => {
+    const dock = dockRef.current;
+    if (!dock) return undefined;
+    const container = dock.closest(".previewArea");
+    if (!container) return undefined;
+
+    syncMaxLogHeight();
+    const observer = new ResizeObserver(() => syncMaxLogHeight());
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [syncMaxLogHeight]);
+
+  useEffect(() => {
+    if (open) syncMaxLogHeight();
+  }, [open, syncMaxLogHeight]);
+
   useEffect(() => {
     try {
       localStorage.setItem(LOG_HEIGHT_KEY, String(popupHeight));
@@ -428,14 +470,19 @@ export function RunLogPanel({
   }, [popupHeight]);
 
   function handleResizePointerDown(event) {
-    resizeRef.current = { dragging: true, startY: event.clientY, startHeight: popupHeight };
+    syncMaxLogHeight();
+    resizeRef.current = {
+      dragging: true,
+      startY: event.clientY,
+      startHeight: clampLogHeight(popupHeight, maxLogHeightRef.current)
+    };
     event.currentTarget.setPointerCapture(event.pointerId);
   }
 
   function handleResizePointerMove(event) {
     if (!resizeRef.current.dragging) return;
     const delta = resizeRef.current.startY - event.clientY;
-    setPopupHeight(Math.min(MAX_LOG_HEIGHT, Math.max(MIN_LOG_HEIGHT, resizeRef.current.startHeight + delta)));
+    setPopupHeight(clampLogHeight(resizeRef.current.startHeight + delta, maxLogHeightRef.current));
   }
 
   function handleResizePointerUp(event) {
@@ -569,8 +616,11 @@ export function RunLogPanel({
   const liveTag = running ? "RUN" : queueCount ? "QUE" : "IDL";
   const focusedSession = filteredSessions.find(session => session.id === focusedSessionId) || null;
 
+  const clampedPopupHeight = clampLogHeight(popupHeight, maxLogHeight);
+
   return (
     <div
+      ref={dockRef}
       className="outputLogDock"
       onWheel={(event) => event.stopPropagation()}
       onPointerDown={(event) => event.stopPropagation()}
@@ -579,7 +629,10 @@ export function RunLogPanel({
         <section
           ref={panelRef}
           className="outputLogPopup logTerminal"
-          style={{ height: `${popupHeight}px` }}
+          style={{
+            height: `${clampedPopupHeight}px`,
+            "--log-max-height": `${maxLogHeight}px`
+          }}
           tabIndex={-1}
           onKeyDown={handlePanelKeyDown}
           aria-label="Run log panel"

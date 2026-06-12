@@ -208,14 +208,32 @@ export async function getWorkflowJson(apiKey, workflowId, signal) {
   return parseWorkflowPrompt(data.data?.prompt);
 }
 
-export async function getWebappNodes(apiKey, webappId, signal) {
+export function normalizeWebappCallDemo(payload = {}) {
+  return {
+    webappName: String(payload.webappName || "").trim(),
+    accessEncrypted: Boolean(payload.accessEncrypted),
+    statisticsInfo: payload.statisticsInfo && typeof payload.statisticsInfo === "object"
+      ? payload.statisticsInfo
+      : null,
+    covers: Array.isArray(payload.covers) ? payload.covers : [],
+    tags: Array.isArray(payload.tags) ? payload.tags : [],
+    nodeInfoList: Array.isArray(payload.nodeInfoList) ? payload.nodeInfoList : []
+  };
+}
+
+export async function getWebappCallDemo(apiKey, webappId, signal) {
   const query = new URLSearchParams({ apiKey, webappId });
   const response = await fetch(`${RUNNINGHUB_BASE}/api/webapp/apiCallDemo?${query}`, {
     signal,
     headers: rhHeaders(apiKey)
   });
   const data = await readRunningHubEnvelope(response);
-  return data.data?.nodeInfoList || [];
+  return normalizeWebappCallDemo(data.data);
+}
+
+export async function getWebappNodes(apiKey, webappId, signal) {
+  const demo = await getWebappCallDemo(apiKey, webappId, signal);
+  return demo.nodeInfoList;
 }
 
 export async function uploadToRunningHub(apiKey, buffer, filename, mimeType = "image/png", signal) {

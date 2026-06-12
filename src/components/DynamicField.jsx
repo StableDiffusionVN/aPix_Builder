@@ -297,6 +297,7 @@ export function DynamicField({
   const [lightboxPan, setLightboxPan] = useState({ x: 0, y: 0 });
   const [isPanningLightbox, setIsPanningLightbox] = useState(false);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const [imageSizes, setImageSizes] = useState({});
   const [inputLibraryReady, setInputLibraryReady] = useState(false);
   const lightboxDragRef = useRef(null);
   const reorderDragRef = useRef(null);
@@ -929,6 +930,8 @@ export function DynamicField({
                     : image?.kind === "input-image" ? image.url : "";
                   const imageName = image?.kind === "input-image" ? image.name : `${label} ${index + 1}`;
                   const imageHasMask = Boolean(image?.kind === "input-image" && image.maskDataUrl);
+                  const imageSizeKey = imageUrl || imageName;
+                  const imageSize = imageSizes[imageSizeKey];
                   return (
                     <article
                       key={`${imageName}-${index}`}
@@ -964,11 +967,24 @@ export function DynamicField({
                       <img
                         src={imageUrl}
                         alt={imageName}
+                        onLoad={event => {
+                          const { naturalWidth, naturalHeight } = event.currentTarget;
+                          if (!naturalWidth || !naturalHeight) return;
+                          setImageSizes(prev => ({
+                            ...prev,
+                            [imageSizeKey]: { width: naturalWidth, height: naturalHeight }
+                          }));
+                        }}
                         onError={() => removeSelectedImage(index)}
                       />
                       <span className="multiImageOrder">{index + 1}</span>
                       {imageHasMask ? (
                         <span className="multiImageMask" title={t("field.hasMask")}><Scissors size={11} /></span>
+                      ) : null}
+                      {imageSize?.width && imageSize?.height ? (
+                        <div className="imageSizeBadge">
+                          {imageSize.width} x {imageSize.height}
+                        </div>
                       ) : null}
                       <div className="multiImageActions">
                         <button

@@ -70,6 +70,11 @@ html[data-theme="dark"] {
   --log-coin: #ffa657;
 
   --transition-fast: 120ms ease;
+  --select-menu-bg: var(--surface-2);
+  --select-menu-text: var(--text-primary);
+  --select-menu-active-bg: var(--surface-3);
+  --select-menu-active-text: var(--text-primary);
+  --select-accent: #737373;
   --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23a3a3a3' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
   --sdvn-mark-url: url("/sdvn-mark.png");
 }
@@ -143,6 +148,11 @@ html[data-theme="light"] {
   --log-row-hover: rgba(27, 31, 36, 0.04);
   --log-row-active: rgba(9, 105, 218, 0.08);
   --log-coin: #bc4c00;
+  --select-menu-bg: var(--surface-1);
+  --select-menu-text: var(--text-primary);
+  --select-menu-active-bg: var(--surface-3);
+  --select-menu-active-text: var(--text-primary);
+  --select-accent: #a1a1aa;
   --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2352525b' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
   --sdvn-mark-url: url("/sdvn-mark-light.png");
 }

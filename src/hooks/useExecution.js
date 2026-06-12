@@ -73,6 +73,13 @@ export function useExecution({ onComplete, runLog } = {}) {
           appendLog("info", t("exec.queueWaitingLog", { count: queueRemaining }));
         }
         break;
+      case "output_download_retry": {
+        const label = data.label || t("exec.downloadRetry");
+        setProgress({ type: "download", label });
+        setStatus(label);
+        appendLog("warn", label, { runId: activeRunIdRef.current, attempt: data.attempt });
+        break;
+      }
       default:
         break;
     }

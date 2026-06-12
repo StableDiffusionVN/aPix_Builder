@@ -22,6 +22,7 @@ import {
   uploadedImageUrl,
   waitForPrompt
 } from "./lib/comfyClient.js";
+import { fetchWithRetry } from "./lib/fetchRetry.js";
 import { readBody, send } from "./lib/http.js";
 import { createTemplateService } from "./lib/templateService.js";
 import {
@@ -33,6 +34,7 @@ import {
 import { buildPatchedRunningHubWorkflow, buildRunningHubNodeInfoList } from "./lib/runningHubWorkflow.js";
 import { TEMPLATE_SCOPES } from "./lib/templateService.js";
 import {
+  getWebappCallDemo,
   getWebappNodes,
   getWorkflowJson,
   parsePromptTips,
@@ -256,7 +258,14 @@ async function handleRun(req, res) {
       config,
       history,
       values: body.values || {},
-      submittedAt
+      submittedAt,
+      signal: abortController.signal,
+      onDownloadRetry: ({ label, attempt }) => {
+        broadcastRunEvent(run, {
+          type: "output_download_retry",
+          data: { label, attempt }
+        });
+      }
     });
     send(res, 200, {
       runId,
@@ -651,7 +660,19 @@ function runningHubHistoryValues(nodes = []) {
   return values;
 }
 
-async function archiveOutputRun({ runId, promptId, template, address, target, config, history, values, submittedAt }) {
+async function archiveOutputRun({
+  runId,
+  promptId,
+  template,
+  address,
+  target,
+  config,
+  history,
+  values,
+  submittedAt,
+  signal,
+  onDownloadRetry
+}) {
   await mkdir(outputDir, { recursive: true });
   const completedAt = new Date().toISOString();
   const durationMs = Math.max(0, new Date(completedAt).getTime() - new Date(submittedAt || completedAt).getTime());
@@ -667,23 +688,39 @@ async function archiveOutputRun({ runId, promptId, template, address, target, co
         subfolder: image.subfolder || "",
         type: image.type || "output"
       });
-      const response = await fetch(`${target.httpBase}/view?${query.toString()}`, {
-        headers: target.headers
-      });
-      if (!response.ok) continue;
-      const originalName = safeOutputName(image.filename || `output_${index}.png`);
-      const ext = path.extname(originalName) || ".png";
-      const base = originalName.replace(/\.[^.]+$/, "") || "output";
-      const filename = `${Date.now()}_${runId}_${index}_${base}${ext}`;
-      await writeFile(path.join(outputDir, filename), Buffer.from(await response.arrayBuffer()));
-      archivedOutputs.push({
-        nodeId,
-        filename,
-        originalFilename: image.filename,
-        url: outputImageUrl(filename)
-      });
-      index += 1;
+      try {
+        const response = await fetchWithRetry(`${target.httpBase}/view?${query.toString()}`, {
+          headers: target.headers,
+          signal,
+          onRetry: ({ attempt, waitMs }) => {
+            onDownloadRetry?.({
+              attempt,
+              waitMs,
+              filename: image.filename,
+              label: `Đang thử tải lại ảnh kết quả (${attempt})...`
+            });
+          }
+        });
+        const originalName = safeOutputName(image.filename || `output_${index}.png`);
+        const ext = path.extname(originalName) || ".png";
+        const base = originalName.replace(/\.[^.]+$/, "") || "output";
+        const filename = `${Date.now()}_${runId}_${index}_${base}${ext}`;
+        await writeFile(path.join(outputDir, filename), Buffer.from(await response.arrayBuffer()));
+        archivedOutputs.push({
+          nodeId,
+          filename,
+          originalFilename: image.filename,
+          url: outputImageUrl(filename)
+        });
+        index += 1;
+      } catch {
+        // Try remaining outputs; fail only if nothing could be archived.
+      }
     }
+  }
+
+  if (!archivedOutputs.length) {
+    throw new Error("ComfyUI hoàn tất nhưng không tải được ảnh kết quả sau nhiều lần thử");
   }
 
   const item = {
@@ -1136,8 +1173,16 @@ async function handleRunningHubNodes(req, res) {
     send(res, 400, { error: "Missing RunningHub webappId" });
     return;
   }
-  const nodes = await getWebappNodes(apiKey, webappId);
-  send(res, 200, { nodes, webappId });
+  const webapp = await getWebappCallDemo(apiKey, webappId);
+  send(res, 200, {
+    nodes: webapp.nodeInfoList,
+    webappId,
+    webappName: webapp.webappName,
+    accessEncrypted: webapp.accessEncrypted,
+    statisticsInfo: webapp.statisticsInfo,
+    covers: webapp.covers,
+    tags: webapp.tags
+  });
 }
 
 async function handleRunningHubAccountStatus(req, res) {
@@ -1173,7 +1218,9 @@ async function archiveRunningHubOutputs({
   rhCoins = null,
   nodes,
   values: savedValues,
-  submittedAt
+  submittedAt,
+  signal,
+  onDownloadRetry
 }) {
   await mkdir(outputDir, { recursive: true });
   const completedAt = new Date().toISOString();
@@ -1184,23 +1231,36 @@ async function archiveRunningHubOutputs({
   for (const output of outputs) {
     const fileUrl = output.fileUrl || output.url;
     if (!fileUrl) continue;
-    const response = await fetch(fileUrl);
-    if (!response.ok) continue;
-    const ext = String(output.fileType || path.extname(fileUrl).slice(1) || "png").replace(/^\./, "");
-    const filename = `${Date.now()}_${runId}_${index}_rh.${ext}`;
-    await writeFile(path.join(outputDir, filename), Buffer.from(await response.arrayBuffer()));
-    archivedOutputs.push({
-      nodeId: output.nodeId || "runninghub",
-      filename,
-      originalFilename: path.basename(fileUrl.split("?")[0]),
-      url: outputImageUrl(filename),
-      remoteUrl: fileUrl
-    });
-    index += 1;
+    try {
+      const response = await fetchWithRetry(fileUrl, {
+        signal,
+        onRetry: ({ attempt, waitMs }) => {
+          onDownloadRetry?.({
+            attempt,
+            waitMs,
+            fileUrl,
+            label: `Đang thử tải lại ảnh kết quả RunningHub (${attempt})...`
+          });
+        }
+      });
+      const ext = String(output.fileType || path.extname(fileUrl).slice(1) || "png").replace(/^\./, "");
+      const filename = `${Date.now()}_${runId}_${index}_rh.${ext}`;
+      await writeFile(path.join(outputDir, filename), Buffer.from(await response.arrayBuffer()));
+      archivedOutputs.push({
+        nodeId: output.nodeId || "runninghub",
+        filename,
+        originalFilename: path.basename(fileUrl.split("?")[0]),
+        url: outputImageUrl(filename),
+        remoteUrl: fileUrl
+      });
+      index += 1;
+    } catch {
+      // Try remaining outputs; fail only if nothing could be archived.
+    }
   }
 
   if (!archivedOutputs.length) {
-    throw new Error("RunningHub hoàn tất nhưng không tải được file kết quả");
+    throw new Error("RunningHub hoàn tất nhưng không tải được file kết quả sau nhiều lần thử");
   }
 
   const resolvedRhCoins = rhCoins ?? extractRhConsumeCoins(outputs, { data: outputs });
@@ -1350,7 +1410,15 @@ async function handleRunningHubRun(req, res) {
         outputs,
         rhCoins: resolvedRhCoins,
         nodes: body.nodes,
-        submittedAt
+        submittedAt,
+        signal: abortController.signal,
+        onDownloadRetry: ({ label, attempt }) => {
+          emitRhStatus("download", label, taskId);
+          broadcastRunEvent(run, {
+            type: "output_download_retry",
+            data: { label, attempt, taskId: String(taskId) }
+          });
+        }
       });
       send(res, 200, {
         runId,
@@ -1502,7 +1570,15 @@ async function handleRunningHubWfRun(req, res) {
         rhCoins: resolvedRhCoins,
         nodes: [],
         values: body.values || {},
-        submittedAt
+        submittedAt,
+        signal: abortController.signal,
+        onDownloadRetry: ({ label, attempt }) => {
+          emitRhStatus("download", label, taskId);
+          broadcastRunEvent(run, {
+            type: "output_download_retry",
+            data: { label, attempt, taskId: String(taskId) }
+          });
+        }
       });
       send(res, 200, {
         runId,

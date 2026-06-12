@@ -56,10 +56,24 @@ export function buildNodeDefaults(nodes = []) {
   return values;
 }
 
+export function buildWebappInfo(data = {}, webappId = "") {
+  return {
+    webappId: String(webappId || data.webappId || "").trim(),
+    webappName: String(data.webappName || "").trim(),
+    accessEncrypted: Boolean(data.accessEncrypted),
+    statisticsInfo: data.statisticsInfo && typeof data.statisticsInfo === "object"
+      ? data.statisticsInfo
+      : null,
+    covers: Array.isArray(data.covers) ? data.covers : [],
+    tags: Array.isArray(data.tags) ? data.tags : []
+  };
+}
+
 export function useRunningHub() {
   const { locale, t } = useI18n();
   const [settings, setSettings] = useState(loadRunningHubSettings);
   const [nodes, setNodes] = useState([]);
+  const [webappInfo, setWebappInfo] = useState(null);
   const [nodesLoading, setNodesLoading] = useState(false);
   const [nodesError, setNodesError] = useState("");
 
@@ -76,6 +90,14 @@ export function useRunningHub() {
     setNodesError("");
   }, []);
 
+  const restoreWebappInfo = useCallback((nextInfo = null) => {
+    if (!nextInfo) {
+      setWebappInfo(null);
+      return;
+    }
+    setWebappInfo(buildWebappInfo(nextInfo, nextInfo.webappId));
+  }, []);
+
   const fetchNodes = useCallback(async (override = {}) => {
     const apiKey = override.apiKey ?? getPrimaryRhApiKey(settings);
     const webappId = override.webappId ?? settings.webappId;
@@ -84,6 +106,7 @@ export function useRunningHub() {
       const message = t("rh.noApiKey");
       setNodesError(message);
       setNodes([]);
+      setWebappInfo(null);
       if (shouldThrow) throw new Error(message);
       return [];
     }
@@ -91,6 +114,7 @@ export function useRunningHub() {
       const message = t("rh.noWebappId");
       setNodesError(message);
       setNodes([]);
+      setWebappInfo(null);
       if (shouldThrow) throw new Error(message);
       return [];
     }
@@ -111,11 +135,13 @@ export function useRunningHub() {
       if (!response.ok) throw new Error(localizeRuntimeMessage(data.error || data.msg, locale) || t("rh.loadNodesFailed"));
       const nextNodes = data.nodes || [];
       setNodes(nextNodes);
+      setWebappInfo(buildWebappInfo(data, webappId.trim()));
       return nextNodes;
     } catch (error) {
       const message = localizeRuntimeMessage(error.message, locale);
       setNodesError(message);
       setNodes([]);
+      setWebappInfo(null);
       if (shouldThrow) throw new Error(message);
       return [];
     } finally {
@@ -127,7 +153,9 @@ export function useRunningHub() {
     settings,
     updateSettings,
     nodes,
+    webappInfo,
     restoreNodes,
+    restoreWebappInfo,
     nodesLoading,
     nodesError,
     fetchNodes

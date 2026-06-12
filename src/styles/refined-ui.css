@@ -616,6 +616,7 @@ html[data-theme="light"] select {
   background-repeat: no-repeat;
   background-position: right 8px center;
   background-size: 14px 14px;
+  accent-color: var(--select-accent);
   cursor: pointer;
 }
 

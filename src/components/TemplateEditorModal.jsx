@@ -236,7 +236,7 @@ function InputDetailPanel({ row, nodes, fieldTypes, onUpdate, onDelete }) {
                 }}
               />
               {row.menuLabelSyntax ? (
-                <small>{<>{t("templateEditor.menuLabelHint")}</>}</small>
+                <small className="fieldDescription">{t("templateEditor.menuLabelHint")}</small>
               ) : null}
             </label>
           </>
@@ -363,7 +363,9 @@ function SubInputEditor({ subRow, nodes, workflow, fieldTypes, onUpdate, onDelet
                   });
                 }}
               />
-              {subRow.menuLabelSyntax ? <small>{<>{t("templateEditor.menuLabelSyntaxShort")}</>}</small> : null}
+              {subRow.menuLabelSyntax ? (
+                <small className="fieldDescription">{t("templateEditor.menuLabelSyntaxShort")}</small>
+              ) : null}
             </label>
           </>
         ) : null}
@@ -508,7 +510,7 @@ function MenuSubDetailPanel({ row, nodes, workflow, fieldTypes, onUpdate, onDele
             }}
           />
           {row.menuLabelSyntax ? (
-            <small>{<>{t("templateEditor.menuLabelExample")}</>}</small>
+            <small className="fieldDescription">{t("templateEditor.menuLabelExample")}</small>
           ) : null}
         </label>
         <label className="field">
@@ -1039,11 +1041,13 @@ export function TemplateEditorModal({
     if (!selectedTemplate) setEditingDefaultTemplate(false);
   }, [selectedTemplate]);
 
-  async function applyWorkflow(nextWorkflow, sourceName, nextConfig = null) {
+  async function applyWorkflow(nextWorkflow, sourceName, nextConfig = null, options = {}) {
     setWorkflow(nextWorkflow);
-    const name = sourceName.replace(/\.(json|ya?ml)$/i, "");
-    setTemplateId(slugify(nextConfig?.template?.id || nextConfig?.app?.id || name));
-    setAppName(nextConfig?.app?.name || nextConfig?.name || name);
+    if (!options.preserveMeta) {
+      const name = sourceName.replace(/\.(json|ya?ml)$/i, "");
+      setTemplateId(slugify(nextConfig?.template?.id || nextConfig?.app?.id || name));
+      setAppName(nextConfig?.app?.name || nextConfig?.name || name);
+    }
     if (nextConfig?.runninghub?.workflowId) setWorkflowId(nextConfig.runninghub.workflowId);
     if (nextConfig) {
       setInputRows(Object.entries(nextConfig.input || {}).map(([key, item]) => rowFromConfig(item, nextWorkflow, key)));
@@ -1084,7 +1088,7 @@ export function TemplateEditorModal({
       }
       if (!response.ok) throw new Error(localizeRuntimeMessage(data.error, locale) || l("Không tải được workflow từ RunningHub", "Could not load the workflow from RunningHub"));
       if (!data.workflow) throw new Error(l("RunningHub không trả về workflow JSON", "RunningHub did not return workflow JSON"));
-      await applyWorkflow(data.workflow, `workflow-${workflowId}`);
+      await applyWorkflow(data.workflow, `workflow-${workflowId}`, null, { preserveMeta: true });
     } catch (err) {
       setError(localizeRuntimeMessage(err.message, locale));
     } finally {

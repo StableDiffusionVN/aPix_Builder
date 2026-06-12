@@ -194,7 +194,9 @@ export default function App() {
     settings: rhSettings,
     updateSettings: updateRhSettings,
     nodes: rhNodes,
+    webappInfo: rhWebappInfo,
     restoreNodes: restoreRhNodes,
+    restoreWebappInfo: restoreRhWebappInfo,
     nodesLoading: rhNodesLoading,
     nodesError: rhNodesError,
     fetchNodes: fetchRhNodes
@@ -282,7 +284,9 @@ export default function App() {
     ? rhTotalCoins
     : rhAccount?.remainCoins ?? rhTotalCoins;
   const selectedRunningHubApp = RUNNINGHUB_APP_OPTIONS.find(app => app.id === rhSettings.webappId);
-  const selectedRunningHubName = selectedRunningHubApp?.name || (rhSettings.webappId ? `RunningHub ${rhSettings.webappId}` : "RunningHub App");
+  const selectedRunningHubName = rhWebappInfo?.webappName
+    || selectedRunningHubApp?.name
+    || (rhSettings.webappId ? `RunningHub ${rhSettings.webappId}` : "RunningHub App");
   const activeServer = getServers().find(server => server.address === comfyAddress);
   const topBarServerLabel = isRunningHubWf
     ? "RunningHub Workflow"
@@ -1505,8 +1509,10 @@ export default function App() {
             onSettingsChange={patch => {
               updateRhSettings(patch);
               setRhTestResult(null);
+              restoreRhWebappInfo(null);
             }}
             nodes={rhNodes}
+            webappInfo={rhWebappInfo}
             values={rhValues}
             onValuesChange={setRhValues}
             nodesLoading={rhNodesLoading}

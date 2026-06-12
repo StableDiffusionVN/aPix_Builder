@@ -2,7 +2,7 @@
 	path = aPix_builder_pts
 	url = https://github.com/StableDiffusionVN/aPix_builder_pts.git
 	branch = main
-[submodule "runninghub_shortcut"]
-	path = runninghub_shortcut
-	url = https://github.com/phamhungd/runninghub_shortcut.git
+[submodule "aPix_builder_shortcut"]
+	path = aPix_builder_shortcut
+	url = https://github.com/StableDiffusionVN/aPix_builder_shortcut.git
 	branch = main

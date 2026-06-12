@@ -234,7 +234,7 @@ Repo tổng gồm app web chính và hai dự án con (git submodule):
 | --- | --- | --- | --- |
 | aPix Builder (web) | `.` | repo hiện tại | Ứng dụng web React/Vite + backend Node.js. |
 | aPix Builder (Photoshop) | `aPix_builder_pts/` | [aPix_builder_pts](https://github.com/StableDiffusionVN/aPix_builder_pts) | Plugin UXP cho Adobe Photoshop. |
-| RunningHub Shortcut | `runninghub_shortcut/` | [runninghub_shortcut](https://github.com/phamhungd/runninghub_shortcut) | Apple Shortcuts và workflow JSON cho RunningHub. |
+| aPix Builder (Shortcut) | `aPix_builder_shortcut/` | [aPix_builder_shortcut](https://github.com/StableDiffusionVN/aPix_builder_shortcut) | Apple Shortcuts và workflow JSON cho RunningHub. |
 
 | Đường dẫn | Nội dung |
 | --- | --- |
@@ -248,7 +248,7 @@ Repo tổng gồm app web chính và hai dự án con (git submodule):
 | `presets/` | Preset chỉnh ảnh của Image Editor. |
 | `scripts/start-app.mjs` | Script khởi động app một lệnh. |
 | `aPix_builder_pts/` | Submodule — plugin Photoshop; xem README trong thư mục. |
-| `runninghub_shortcut/` | Submodule — Apple Shortcuts; xem README trong thư mục. |
+| `aPix_builder_shortcut/` | Submodule — Apple Shortcuts cho RunningHub; xem README trong thư mục. |
 
 ### Làm việc với submodule
 

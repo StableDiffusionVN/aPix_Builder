@@ -58,6 +58,8 @@ export function SettingsModal({
   rhAccountLoading,
   rhAccountError,
   handleRhAccountRefresh,
+  rhTokenAccounts,
+  rhTotalCoins,
   setRhTestResult,
   setRhAccount,
   setRhAccountError
@@ -264,6 +266,8 @@ export function SettingsModal({
                   accountLoading={rhAccountLoading}
                   accountError={rhAccountError}
                   onRefreshAccount={handleRhAccountRefresh}
+                  tokenAccounts={rhTokenAccounts}
+                  totalCoins={rhTotalCoins}
                 />
               </section>
             ) : null}

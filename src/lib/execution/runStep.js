@@ -30,6 +30,9 @@ export function buildStepJob(mode, params) {
       return buildRunningHubJob({
         runId,
         apiKey: params.apiKey,
+        apiKeys: params.apiKeys,
+        tokenPolicy: params.tokenPolicy,
+        rotateIndex: params.rotateIndex,
         webappId: params.webappId,
         nodes: params.nodes,
         values: params.values,
@@ -39,6 +42,9 @@ export function buildStepJob(mode, params) {
       return buildRunningHubWfJob({
         runId,
         apiKey: params.apiKey,
+        apiKeys: params.apiKeys,
+        tokenPolicy: params.tokenPolicy,
+        rotateIndex: params.rotateIndex,
         templateId: params.templateId,
         values: params.values,
         queuedAt

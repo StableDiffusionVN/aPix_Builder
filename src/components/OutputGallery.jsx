@@ -58,7 +58,10 @@ export function OutputGallery({
   history = [],
   onDownload,
   onRestore,
+  onItemClick,
   onDelete,
+  selectedIds = null,
+  activeId = null,
   pending = false,
   pendingActive = false,
   pendingLabel = "",
@@ -103,7 +106,10 @@ export function OutputGallery({
   return (
     <section className="historyPanel">
       <div className="panelTitle">
-        <h3>{t("history.title")}</h3>
+        <div className="historyPanelTitleCopy">
+          <h3>{t("history.title")}</h3>
+          <small className="historyMultiSelectHint">{t("history.multiSelectHint")}</small>
+        </div>
         <div className="historyHeaderTools">
           <label className={`historyIconFilter ${timeFilter !== "all" ? "active" : ""}`} title={t("history.filterTime")}>
             <Filter size={14} />
@@ -160,9 +166,11 @@ export function OutputGallery({
         ) : null}
         {visibleHistory.map(item => {
           const primaryOutput = item.outputs?.[0];
+          const isSelected = selectedIds?.has?.(item.id);
+          const isActive = activeId && item.id === activeId;
           return (
             <article
-              className="historyItem"
+              className={`historyItem${isSelected ? " isSelected" : ""}${isActive ? " active" : ""}`}
               key={item.id}
               role="button"
               tabIndex={0}
@@ -176,16 +184,21 @@ export function OutputGallery({
                 }));
                 event.dataTransfer.setData("text/uri-list", primaryOutput.url);
               }}
-              onClick={() => onRestore(item)}
+              onClick={event => {
+                if (onItemClick) onItemClick(item, event);
+                else onRestore?.(item);
+              }}
               onKeyDown={event => {
                 if (event.key === "Enter" || event.key === " ") {
                   event.preventDefault();
-                  onRestore(item);
+                  if (onItemClick) onItemClick(item, event);
+                  else onRestore?.(item);
                 }
               }}
             >
               <span className="historyThumb">
                 {primaryOutput ? <img src={primaryOutput.url} alt={primaryOutput.filename || item.templateName} draggable="false" /> : null}
+                {isSelected ? <span className="historySelectBadge" aria-hidden="true">✓</span> : null}
               </span>
               <div className="historyMeta">
                 <strong>{item.templateName || item.templateId || "Workflow"}</strong>

@@ -266,26 +266,57 @@ export function useRunningHubExecution({ onComplete, runLog } = {}) {
   };
 }
 
-export function buildRunningHubJob({ runId, apiKey, webappId, nodes, values, queuedAt }) {
+export function buildRunningHubJob({
+  runId,
+  apiKey,
+  apiKeys,
+  tokenPolicy,
+  rotateIndex,
+  webappId,
+  nodes,
+  values,
+  queuedAt
+}) {
   const nodePayload = nodes.map(node => ({
     nodeId: node.nodeId,
     fieldName: node.fieldName,
     fieldType: node.fieldType,
     fieldValue: values[nodeFieldKey(node)] ?? node.fieldValue ?? ""
   }));
+  const keys = Array.isArray(apiKeys) && apiKeys.length
+    ? apiKeys
+    : [apiKey].filter(Boolean);
   return {
     runId: runId || crypto.randomUUID(),
-    apiKey,
+    apiKey: keys[0] || apiKey,
+    apiKeys: keys,
+    tokenPolicy,
+    rotateIndex,
     webappId,
     nodes: nodePayload,
     queuedAt: queuedAt || new Date().toISOString()
   };
 }
 
-export function buildRunningHubWfJob({ runId, apiKey, templateId, values, queuedAt }) {
+export function buildRunningHubWfJob({
+  runId,
+  apiKey,
+  apiKeys,
+  tokenPolicy,
+  rotateIndex,
+  templateId,
+  values,
+  queuedAt
+}) {
+  const keys = Array.isArray(apiKeys) && apiKeys.length
+    ? apiKeys
+    : [apiKey].filter(Boolean);
   return {
     runId: runId || crypto.randomUUID(),
-    apiKey,
+    apiKey: keys[0] || apiKey,
+    apiKeys: keys,
+    tokenPolicy,
+    rotateIndex,
     templateId,
     values,
     queuedAt: queuedAt || new Date().toISOString()

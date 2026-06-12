@@ -12,6 +12,10 @@ import {
   loadImage
 } from "../lib/imageAdjustments";
 import {
+  buildPersistedColorState,
+  normalizePersistedColorState
+} from "../lib/colorAdjustPersistence";
+import {
   applyHealingStrokes,
   DEFAULT_HEALING_BRUSH_SIZE,
   drawHealingOverlay,
@@ -20,9 +24,23 @@ import {
 
 const CUSTOM_PRESETS_KEY = "image-editor-custom-presets";
 
-export function useColorAdjustments({ source, onPreviewChange }) {
+export function useColorAdjustments({
+  source,
+  onPreviewChange,
+  persistKey = null,
+  persistedState = null,
+  onPersist = null
+}) {
   const { t } = useI18n();
   const onPreviewChangeRef = useRef(onPreviewChange);
+  const onPersistRef = useRef(onPersist);
+  const persistedStateRef = useRef(persistedState);
+  const persistTimerRef = useRef(null);
+  const skipPersistRef = useRef(true);
+
+  useEffect(() => {
+    persistedStateRef.current = persistedState;
+  }, [persistedState]);
   const imageRef = useRef(null);
   const adjustmentsRef = useRef(cloneDefaultAdjustments());
   const previewCanvasRef = useRef(null);
@@ -64,6 +82,10 @@ export function useColorAdjustments({ source, onPreviewChange }) {
   useEffect(() => {
     onPreviewChangeRef.current = onPreviewChange;
   }, [onPreviewChange]);
+
+  useEffect(() => {
+    onPersistRef.current = onPersist;
+  }, [onPersist]);
 
   useEffect(() => {
     healingActiveRef.current = healingActive;
@@ -193,23 +215,49 @@ export function useColorAdjustments({ source, onPreviewChange }) {
       });
   }, []);
 
+  const schedulePersist = useCallback(() => {
+    if (!onPersistRef.current || !persistKey) return;
+    if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
+    persistTimerRef.current = setTimeout(() => {
+      onPersistRef.current?.(buildPersistedColorState(
+        adjustmentsRef.current,
+        healingStrokesRef.current,
+        healingBrushSizeRef.current
+      ));
+    }, 450);
+  }, [persistKey]);
+
+  const flushPersist = useCallback(() => {
+    if (!onPersistRef.current || !persistKey) return;
+    if (persistTimerRef.current) {
+      clearTimeout(persistTimerRef.current);
+      persistTimerRef.current = null;
+    }
+    onPersistRef.current(buildPersistedColorState(
+      adjustmentsRef.current,
+      healingStrokesRef.current,
+      healingBrushSizeRef.current
+    ));
+  }, [persistKey]);
+
   useEffect(() => {
     let cancelled = false;
     setIsReady(false);
     setError("");
-    const defaults = cloneDefaultAdjustments();
-    setAdjustments(defaults);
+    skipPersistRef.current = true;
+
+    const loaded = normalizePersistedColorState(persistedStateRef.current);
+    setAdjustments(loaded.adjustments);
+    setHealingStrokesSync(loaded.healingStrokes);
+    setHealingBrushSize(loaded.healingBrushSize);
     setHistory([]);
     setHistoryIndex(-1);
     setHealingActive(false);
-    setHealingStrokes([]);
-    setHealingBrushSize(DEFAULT_HEALING_BRUSH_SIZE);
     setHealingCursor(null);
-    setHealingBrushDiameter(DEFAULT_HEALING_BRUSH_SIZE);
-    healingStrokesRef.current = [];
+    setHealingBrushDiameter(loaded.healingBrushSize);
     activeHealingStrokeRef.current = null;
     healingPointerIdRef.current = null;
-    healingBrushSizeRef.current = DEFAULT_HEALING_BRUSH_SIZE;
+    healingBrushSizeRef.current = loaded.healingBrushSize;
     previewMetaRef.current = { width: 0, height: 0, scale: 1 };
     imageRef.current = null;
     onPreviewChangeRef.current?.(null);
@@ -224,7 +272,7 @@ export function useColorAdjustments({ source, onPreviewChange }) {
       .then(image => {
         if (cancelled) return;
         imageRef.current = image;
-        const initial = snapshotColorAdjustState(defaults, []);
+        const initial = snapshotColorAdjustState(loaded.adjustments, loaded.healingStrokes);
         setHistory([initial]);
         setHistoryIndex(0);
         setIsReady(true);
@@ -235,8 +283,21 @@ export function useColorAdjustments({ source, onPreviewChange }) {
 
     return () => {
       cancelled = true;
+      flushPersist();
     };
-  }, [source, t]);
+  }, [source, persistKey, flushPersist, setAdjustments, setHealingStrokesSync, t]);
+
+  useEffect(() => {
+    if (!isReady || !persistKey) return undefined;
+    if (skipPersistRef.current) {
+      skipPersistRef.current = false;
+      return undefined;
+    }
+    schedulePersist();
+    return () => {
+      if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
+    };
+  }, [adjustments, healingStrokes, healingBrushSize, isReady, persistKey, schedulePersist]);
 
   const renderPreview = useCallback(() => {
     const image = imageRef.current;
@@ -352,7 +413,9 @@ export function useColorAdjustments({ source, onPreviewChange }) {
     const initial = snapshotColorAdjustState(nextAdjustments, []);
     setHistory([initial]);
     setHistoryIndex(0);
-  }, [setAdjustments, setHealingStrokesSync]);
+    skipPersistRef.current = false;
+    flushPersist();
+  }, [flushPersist, setAdjustments, setHealingStrokesSync]);
 
   const toggleHealingActive = useCallback(() => {
     setHealingActive(current => !current);
@@ -779,6 +842,12 @@ export function useColorAdjustments({ source, onPreviewChange }) {
     canUndo,
     canRedo,
     handleUndo,
-    handleRedo
+    handleRedo,
+    getPersistedState: () => buildPersistedColorState(
+      adjustmentsRef.current,
+      healingStrokesRef.current,
+      healingBrushSizeRef.current
+    ),
+    flushPersist
   };
 }

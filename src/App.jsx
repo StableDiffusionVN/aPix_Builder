@@ -2,9 +2,12 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import {
   AlertCircle,
   CheckCircle2,
+  Coins,
   Image as ImageIcon,
   Info,
   Loader2,
+  Maximize2,
+  Minimize2,
   Settings2,
   Wifi,
   WifiOff,
@@ -12,11 +15,21 @@ import {
 } from "lucide-react";
 import { DynamicField } from "./components/DynamicField";
 import { OutputGallery } from "./components/OutputGallery";
+import { ColorSyncModal } from "./components/ColorSyncModal";
 import { OutputColorPanel } from "./components/OutputColorPanel";
+import {
+  buildPersistedColorState,
+  getOutputColorAdjust,
+  makeColorAdjustKey,
+  mergeColorAdjustGroups,
+  patchHistoryItemOutput
+} from "./lib/colorAdjustPersistence";
+import { cloneDefaultAdjustments } from "./lib/imageAdjustments";
+import { DEFAULT_HEALING_BRUSH_SIZE } from "./lib/healingBrush";
 import { PreviewPanel } from "./components/PreviewPanel";
 import { SettingsModal } from "./components/SettingsModal";
 import { ImageEditorModal, TemplateEditorModal } from "./components/lazyModals";
-import { formatOutputTimingLabel } from "./lib/runLog";
+import { formatOutputTimingLabel, formatRhCoins } from "./lib/runLog";
 import { PresetBar } from "./components/PresetBar";
 import { RunControls } from "./components/RunControls";
 import { TemplateSelector } from "./components/TemplateSelector";
@@ -51,6 +64,14 @@ import {
   RUNNINGHUB_APP_OPTIONS,
   useRunningHub
 } from "./hooks/useRunningHub";
+import {
+  advanceRhRotateIndex,
+  buildRhRunAuth,
+  getEnabledRhTokens,
+  getPrimaryRhApiKey,
+  hasRhApiKey,
+  RH_TOKEN_POLICY
+} from "./lib/rhTokenPool.js";
 import { rhWfWorkspaceKey } from "./lib/runningHubTemplate";
 import { ExecutionModeToggle, RunningHubPanel } from "./components/RunningHubPanel";
 import { SidebarLayoutHandles } from "./components/SidebarLayoutHandles";
@@ -135,6 +156,7 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState("appearance");
   const [infoOpen, setInfoOpen] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const [showServerDetails, setShowServerDetails] = useState(false);
   const [themeMenuOpen, setThemeMenuOpen] = useState(false);
   const [mainFont, setMainFont] = useState(loadMainFont);
@@ -153,6 +175,13 @@ export default function App() {
   const [colorUpdating, setColorUpdating] = useState(false);
   const [colorPanelWidth, setColorPanelWidth] = useState(0);
   const [healingBridge, setHealingBridge] = useState(null);
+  const [selectedHistoryIds, setSelectedHistoryIds] = useState(() => new Set());
+  const [historySelectionAnchor, setHistorySelectionAnchor] = useState(null);
+  const [colorSyncOpen, setColorSyncOpen] = useState(false);
+  const [colorSyncing, setColorSyncing] = useState(false);
+  const colorAdjustCacheRef = useRef({});
+  const pendingColorSyncSourceRef = useRef(null);
+  const [colorAdjustReloadToken, setColorAdjustReloadToken] = useState(0);
   const [notifyEnabled, setNotifyEnabled] = useState(loadNotifyEnabled);
   const [addServerOpen, setAddServerOpen] = useState(false);
   const [executionMode, setExecutionMode] = useState(loadExecutionMode);
@@ -163,6 +192,7 @@ export default function App() {
   const [rhAccount, setRhAccount] = useState(null);
   const [rhAccountLoading, setRhAccountLoading] = useState(false);
   const [rhAccountError, setRhAccountError] = useState("");
+  const [rhTokenAccounts, setRhTokenAccounts] = useState([]);
 
   const { discovery, discoveryLoading } = useDiscovery(executionMode === "local" ? comfyAddress : "");
   const {
@@ -183,7 +213,14 @@ export default function App() {
   const runLogHistory = useRunLogHistory();
 
   const onRunComplete = (historyItem) => {
-    if (historyItem) setHistory(current => [historyItem, ...current]);
+    if (historyItem) {
+      setHistory(current => [historyItem, ...current]);
+      setSelectedHistoryIds(new Set([historyItem.id]));
+      setHistorySelectionAnchor(historyItem.id);
+    }
+    if (isRunningHubMode(executionMode) && rhSettings.tokenPolicy === RH_TOKEN_POLICY.ROTATE) {
+      updateRhSettings({ rotateIndex: advanceRhRotateIndex(rhSettings) });
+    }
     setSelectedOutputIndex(0);
     if (notifyEnabled && typeof Notification !== "undefined" && Notification.permission === "granted") {
       const body = isRunningHubMode(executionMode)
@@ -237,6 +274,18 @@ export default function App() {
   );
   const app = config?.app || {};
   const serverAddress = config?.server?.address || config?.sever?.address || "";
+  const rhPrimaryApiKey = getPrimaryRhApiKey(rhSettings);
+  const rhEnabledTokenCount = getEnabledRhTokens(rhSettings).length;
+  const rhTotalCoins = useMemo(() => {
+    const values = rhTokenAccounts
+      .map(entry => entry.account?.remainCoins)
+      .filter(value => value != null && Number.isFinite(Number(value)));
+    if (!values.length) return null;
+    return values.reduce((sum, value) => sum + Number(value), 0);
+  }, [rhTokenAccounts]);
+  const rhDisplayCoins = rhEnabledTokenCount > 1
+    ? rhTotalCoins
+    : rhAccount?.remainCoins ?? rhTotalCoins;
   const selectedRunningHubApp = RUNNINGHUB_APP_OPTIONS.find(app => app.id === rhSettings.webappId);
   const selectedRunningHubName = selectedRunningHubApp?.name || (rhSettings.webappId ? `RunningHub ${rhSettings.webappId}` : "RunningHub App");
   const activeServer = getServers().find(server => server.address === comfyAddress);
@@ -246,18 +295,84 @@ export default function App() {
       ? selectedRunningHubName
       : activeServer?.label || formatServerName(comfyAddress);
   const topBarServerStatus = isRunningHub
-    ? (rhSettings.apiKey?.trim() ? "online" : "offline")
+    ? !hasRhApiKey(rhSettings)
+      ? "offline"
+      : rhAccountLoading
+        ? "loading"
+        : rhAccountError
+          ? "offline"
+          : rhAccount
+            ? "online"
+            : "loading"
     : healthStatus;
+  const topBarServerTitle = useMemo(() => {
+    if (!isRunningHub) return topBarServerLabel;
+    const parts = [topBarServerLabel];
+    if (rhDisplayCoins != null) {
+      const coinLabel = rhEnabledTokenCount > 1 ? t("rh.totalCoinBalance") : t("rh.coinBalance");
+      parts.push(`${coinLabel}: ${formatRhCoins(rhDisplayCoins)}`);
+    }
+    if (rhEnabledTokenCount > 1) {
+      parts.push(t("rh.tokenCount", { count: rhEnabledTokenCount }));
+    }
+    if (rhAccountError) parts.push(rhAccountError);
+    else if (rhAccount) parts.push(t("rh.keyValid"));
+    else if (!hasRhApiKey(rhSettings)) parts.push(t("rh.noKey"));
+    else if (rhAccountLoading) parts.push(t("rh.loadingAccount"));
+    return parts.join(" · ");
+  }, [
+    isRunningHub,
+    rhAccount,
+    rhAccountError,
+    rhAccountLoading,
+    rhDisplayCoins,
+    rhEnabledTokenCount,
+    rhSettings,
+    t,
+    topBarServerLabel
+  ]);
   const resultOutputs = result?.outputs || [];
   const selectedOutput = resultOutputs[selectedOutputIndex] || resultOutputs[0];
   const outputLabel = selectedOutput?.label || (isRunningHub
     ? t("preview.rhResult")
     : outputs[0]?.ui?.label || t("preview.result"));
   const heroImage = selectedOutput?.url;
+  const activeHistoryId = result?.runId || result?.historyItem?.id || null;
   const lastColorPanelSourceRef = useRef(null);
   if (heroImage) lastColorPanelSourceRef.current = heroImage;
   const colorPanelSource = heroImage || lastColorPanelSourceRef.current;
   const displayImage = colorPreviewUrl || heroImage;
+  const colorAdjustTarget = useMemo(() => {
+    const historyId = activeHistoryId;
+    const outputIndex = selectedOutputIndex;
+    const filename = selectedOutput?.filename || null;
+    const baseKey = makeColorAdjustKey(historyId, outputIndex, filename);
+    return {
+      historyId,
+      outputIndex,
+      filename,
+      key: baseKey ? `${baseKey}:${colorAdjustReloadToken}` : null
+    };
+  }, [activeHistoryId, selectedOutputIndex, selectedOutput?.filename, colorAdjustReloadToken]);
+  const persistedColorState = useMemo(() => {
+    const { historyId, outputIndex, filename, key } = colorAdjustTarget;
+    if (!key) return null;
+    if (colorAdjustCacheRef.current[key]) {
+      return colorAdjustCacheRef.current[key];
+    }
+    if (historyId) {
+      const item = history.find(entry => entry.id === historyId);
+      const output = item?.outputs?.[outputIndex];
+      if (output?.filename === filename) {
+        return getOutputColorAdjust(output);
+      }
+    }
+    return getOutputColorAdjust(selectedOutput);
+  }, [colorAdjustTarget, history, selectedOutput]);
+  const colorSyncTargetCount = useMemo(() => {
+    if (!activeHistoryId) return selectedHistoryIds.size;
+    return [...selectedHistoryIds].filter(id => id !== activeHistoryId).length;
+  }, [selectedHistoryIds, activeHistoryId]);
   const resultTiming = useMemo(() => {
     const base = result?.historyItem || result || {};
     return {
@@ -349,9 +464,102 @@ export default function App() {
     healingBridge?.clearHealingCursor?.();
   }, [healingBridge]);
 
-  useEffect(() => {
-    setColorPreviewUrl(null);
-  }, [heroImage, selectedOutputIndex]);
+  const applyColorAdjustState = useCallback((historyId, outputIndex, colorAdjust) => {
+    const filename = historyId
+      ? history.find(item => item.id === historyId)?.outputs?.[outputIndex]?.filename
+      : null;
+    const key = makeColorAdjustKey(historyId, outputIndex, filename);
+    if (key) colorAdjustCacheRef.current[key] = colorAdjust;
+    setHistory(current => patchHistoryItemOutput(current, historyId, outputIndex, colorAdjust));
+    if (result?.runId === historyId) {
+      setResult(current => {
+        if (!current?.outputs?.[outputIndex]) return current;
+        const outputs = [...current.outputs];
+        outputs[outputIndex] = { ...outputs[outputIndex], colorAdjust };
+        return { ...current, outputs };
+      });
+    }
+  }, [history, result?.runId]);
+
+  const handleColorAdjustPersist = useCallback((colorAdjust) => {
+    const { historyId, outputIndex } = colorAdjustTarget;
+    if (!colorAdjustTarget.key) return;
+    applyColorAdjustState(historyId, outputIndex, colorAdjust);
+    if (!historyId) return;
+    fetch("/api/output-history/color-adjust", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        historyId,
+        outputIndex,
+        outputFilename: colorAdjustTarget.filename,
+        colorAdjust
+      })
+    })
+      .then(async (response) => {
+        if (!response.ok) return;
+        const data = await response.json();
+        if (Array.isArray(data.history)) setHistory(data.history);
+      })
+      .catch(() => {});
+  }, [applyColorAdjustState, colorAdjustTarget]);
+
+  const handleOpenColorSync = useCallback((sourceState) => {
+    pendingColorSyncSourceRef.current = sourceState;
+    setColorSyncOpen(true);
+  }, []);
+
+  const handleConfirmColorSync = useCallback(async (groups) => {
+    const sourceState = pendingColorSyncSourceRef.current;
+    if (!sourceState || !groups?.length) return;
+    const targets = [...selectedHistoryIds].filter(id => id !== activeHistoryId);
+    if (!targets.length) return;
+
+    setColorSyncing(true);
+    try {
+      for (const historyId of targets) {
+        const item = history.find(entry => entry.id === historyId);
+        const outputIndex = 0;
+        const output = item?.outputs?.[outputIndex];
+        if (!output?.filename) continue;
+        const currentState = getOutputColorAdjust(output) || colorAdjustCacheRef.current[
+          makeColorAdjustKey(historyId, outputIndex, output.filename)
+        ];
+        const merged = mergeColorAdjustGroups(currentState, sourceState, groups);
+        applyColorAdjustState(historyId, outputIndex, merged);
+        const response = await fetch("/api/output-history/color-adjust", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            historyId,
+            outputIndex,
+            outputFilename: output.filename,
+            colorAdjust: merged
+          })
+        });
+        if (response.ok) {
+          const data = await response.json();
+          if (Array.isArray(data.history)) setHistory(data.history);
+        }
+      }
+      setStatus(t("colorPanel.synced"));
+      setColorAdjustReloadToken(token => token + 1);
+      setColorSyncOpen(false);
+    } catch (err) {
+      setError(localizeRuntimeMessage(err.message, locale));
+    } finally {
+      setColorSyncing(false);
+    }
+  }, [
+    activeHistoryId,
+    applyColorAdjustState,
+    history,
+    locale,
+    selectedHistoryIds,
+    setError,
+    setStatus,
+    t
+  ]);
 
   // Persist theme
   useEffect(() => {
@@ -380,7 +588,7 @@ export default function App() {
   }, [executionMode]);
 
   useEffect(() => {
-    if (executionMode !== "runninghub-app" || !rhSettings.apiKey) return;
+    if (executionMode !== "runninghub-app" || !hasRhApiKey(rhSettings)) return;
     if (!String(rhSettings.webappId || "").trim()) return;
     const timer = window.setTimeout(() => {
       fetchRhNodes().then(nextNodes => {
@@ -388,13 +596,13 @@ export default function App() {
       });
     }, 500);
     return () => window.clearTimeout(timer);
-  }, [executionMode, rhSettings.apiKey, rhSettings.webappId, fetchRhNodes]);
+  }, [executionMode, rhSettings, rhSettings.webappId, fetchRhNodes]);
 
   useEffect(() => {
-    if (!settingsOpen || settingsTab !== "runninghub" || !rhSettings.apiKey?.trim()) return;
+    if (!settingsOpen || settingsTab !== "runninghub" || !hasRhApiKey(rhSettings)) return;
     if (rhAccount || rhAccountLoading || rhAccountError) return;
     handleRhAccountRefresh();
-  }, [settingsOpen, settingsTab, rhSettings.apiKey, rhAccount, rhAccountLoading, rhAccountError]);
+  }, [settingsOpen, settingsTab, rhSettings, rhAccount, rhAccountLoading, rhAccountError]);
 
   useEffect(() => {
     if (!isRunningHubWf || rhWfTemplates.length) return;
@@ -457,6 +665,24 @@ export default function App() {
     window.addEventListener("keydown", handleInfoShortcut, true);
     return () => window.removeEventListener("keydown", handleInfoShortcut, true);
   }, [infoOpen]);
+
+  useEffect(() => {
+    function handleFullscreenChange() {
+      setIsFullscreen(Boolean(document.fullscreenElement));
+    }
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    return () => document.removeEventListener("fullscreenchange", handleFullscreenChange);
+  }, []);
+
+  const toggleFullscreen = useCallback(async () => {
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen();
+      } else {
+        await document.documentElement.requestFullscreen();
+      }
+    } catch {}
+  }, []);
 
   // Log panel shortcut (` or Ctrl+`; Cmd+` is reserved by macOS window switching)
   useEffect(() => {
@@ -747,7 +973,7 @@ export default function App() {
   function handleRunClick() {
     setShowWaitScreen(true);
     if (isRunningHubApp) {
-      if (!rhSettings.apiKey?.trim()) {
+      if (!hasRhApiKey(rhSettings)) {
         setError(t("error.rhMissingApiKey"));
         setStatus(t("error.rhMissingConfig"));
         setShowWaitScreen(false);
@@ -759,12 +985,13 @@ export default function App() {
         setShowWaitScreen(false);
         return;
       }
+      const rhAuth = buildRhRunAuth(rhSettings);
       const imageKeys = rhNodes
         .filter(node => String(node.fieldType || "").toUpperCase() === "IMAGE")
         .map(nodeFieldKey);
       for (const batchValues of expandImageBatchByKeys(rhValues, imageKeys)) {
         runStep({
-          apiKey: rhSettings.apiKey.trim(),
+          ...rhAuth,
           webappId: rhSettings.webappId.trim(),
           nodes: rhNodes,
           values: batchValues
@@ -774,7 +1001,7 @@ export default function App() {
     }
     if (isRunningHubWf) {
       const workflowId = String(rhWfConfig?.runninghub?.workflowId || "").trim();
-      if (!rhSettings.apiKey?.trim()) {
+      if (!hasRhApiKey(rhSettings)) {
         setError(t("error.rhMissingApiKey"));
         setStatus(t("error.rhMissingConfig"));
         setShowWaitScreen(false);
@@ -792,9 +1019,10 @@ export default function App() {
         setShowWaitScreen(false);
         return;
       }
+      const rhAuth = buildRhRunAuth(rhSettings);
       for (const batchValues of expandImageBatchValues(rhWfInputs, rhWfValues)) {
         runStep({
-          apiKey: rhSettings.apiKey.trim(),
+          ...rhAuth,
           templateId: rhWfSelectedTemplate,
           values: batchValues
         });
@@ -811,10 +1039,11 @@ export default function App() {
   }
 
   async function handleRhAccountRefresh() {
-    const apiKey = rhSettings.apiKey?.trim();
-    if (!apiKey) {
+    const tokens = getEnabledRhTokens(rhSettings);
+    if (!tokens.length) {
       const message = t("error.rhNoApiKey");
       setRhAccount(null);
+      setRhTokenAccounts([]);
       setRhAccountError(message);
       return null;
     }
@@ -822,31 +1051,70 @@ export default function App() {
     setRhAccountLoading(true);
     setRhAccountError("");
     try {
-      const response = await fetch("/api/runninghub/account-status", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ apiKey })
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || data.msg || t("error.rhAccountInfo"));
-      setRhAccount(data.account || null);
-      return data.account || null;
-    } catch (err) {
-      const message = localizeRuntimeMessage(err.message, locale);
-      setRhAccount(null);
-      setRhAccountError(message);
-      return null;
+      const results = await Promise.all(tokens.map(async token => {
+        try {
+          const response = await fetch("/api/runninghub/account-status", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ apiKey: token.apiKey.trim() })
+          });
+          const data = await response.json();
+          if (!response.ok) {
+            throw new Error(data.error || data.msg || t("error.rhAccountInfo"));
+          }
+          return {
+            tokenId: token.id,
+            account: data.account || null,
+            error: ""
+          };
+        } catch (err) {
+          return {
+            tokenId: token.id,
+            account: null,
+            error: localizeRuntimeMessage(err.message, locale)
+          };
+        }
+      }));
+      setRhTokenAccounts(results);
+      const primary = results[0];
+      setRhAccount(primary?.account || null);
+      if (primary?.error) {
+        setRhAccountError(primary.error);
+        return null;
+      }
+      if (!primary?.account) {
+        const message = t("error.rhAccountInfo");
+        setRhAccountError(message);
+        return null;
+      }
+      setRhAccountError("");
+      return primary.account;
     } finally {
       setRhAccountLoading(false);
     }
   }
+
+  useEffect(() => {
+    if (!isRunningHub || !hasRhApiKey(rhSettings)) {
+      setRhAccount(null);
+      setRhTokenAccounts([]);
+      setRhAccountError("");
+      setRhAccountLoading(false);
+      return undefined;
+    }
+    handleRhAccountRefresh();
+    const timer = window.setInterval(() => {
+      handleRhAccountRefresh();
+    }, 5 * 60 * 1000);
+    return () => window.clearInterval(timer);
+  }, [isRunningHub, rhSettings]);
 
   async function handleRhTestConnection() {
     setRhTesting(true);
     setRhTestResult(null);
     try {
       const nextNodes = await fetchRhNodes({
-        apiKey: rhSettings.apiKey,
+        apiKey: rhPrimaryApiKey,
         webappId: rhSettings.webappId,
         throwOnError: true
       });
@@ -864,7 +1132,7 @@ export default function App() {
   async function handleRefreshRhNodes() {
     try {
       const nextNodes = await fetchRhNodes({
-        apiKey: rhSettings.apiKey,
+        apiKey: rhPrimaryApiKey,
         webappId: rhSettings.webappId,
         throwOnError: true
       });
@@ -872,6 +1140,36 @@ export default function App() {
     } catch (err) {
       setRhTestResult({ ok: false, message: localizeRuntimeMessage(err.message, locale) });
     }
+  }
+
+  function handleHistoryItemClick(item, event) {
+    if (!item?.id) return;
+    const id = item.id;
+    if (event.shiftKey && historySelectionAnchor) {
+      const ids = history.map(entry => entry.id);
+      const anchorIndex = ids.indexOf(historySelectionAnchor);
+      const targetIndex = ids.indexOf(id);
+      if (anchorIndex !== -1 && targetIndex !== -1) {
+        const [start, end] = anchorIndex < targetIndex
+          ? [anchorIndex, targetIndex]
+          : [targetIndex, anchorIndex];
+        setSelectedHistoryIds(new Set(ids.slice(start, end + 1)));
+      }
+      return;
+    }
+    if (event.metaKey || event.ctrlKey) {
+      setSelectedHistoryIds(current => {
+        const next = new Set(current);
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+        return next;
+      });
+      setHistorySelectionAnchor(id);
+      return;
+    }
+    setSelectedHistoryIds(new Set([id]));
+    setHistorySelectionAnchor(id);
+    restoreHistory(item);
   }
 
   async function restoreHistory(item) {
@@ -927,9 +1225,9 @@ export default function App() {
         setRhValues({ ...buildNodeDefaults(item.nodes), ...runningHubValuesFromHistory(item) });
       } else {
         setRhValues({});
-        if (rhSettings.apiKey?.trim() && webappId) {
+        if (rhPrimaryApiKey && webappId) {
           rhExecution.setStatus(t("status.rhAppReloadNodes"));
-          const nextNodes = await fetchRhNodes({ apiKey: rhSettings.apiKey, webappId });
+          const nextNodes = await fetchRhNodes({ apiKey: rhPrimaryApiKey, webappId });
           if (nextNodes.length) {
             setRhValues(buildNodeDefaults(nextNodes));
             rhExecution.setStatus(t("status.rhAppHistoryNoValues"));
@@ -1026,6 +1324,13 @@ export default function App() {
     setColorUpdating(true);
     try {
       await handleReplaceOutputImage(dataUrl);
+      const clearedState = buildPersistedColorState(
+        cloneDefaultAdjustments(),
+        [],
+        DEFAULT_HEALING_BRUSH_SIZE
+      );
+      handleColorAdjustPersist(clearedState);
+      setColorAdjustReloadToken(token => token + 1);
       setColorPreviewUrl(null);
     } catch (err) {
       setError(localizeRuntimeMessage(err.message, locale));
@@ -1049,9 +1354,9 @@ export default function App() {
   const showRunningScreen = running && showWaitScreen;
 
   const canRun = isRunningHubApp
-    ? Boolean(rhNodes.length && rhSettings.apiKey)
+    ? Boolean(rhNodes.length && hasRhApiKey(rhSettings))
     : isRunningHubWf
-      ? Boolean(rhWfConfig && rhWfInputs.length && rhSettings.apiKey && String(rhWfConfig?.runninghub?.workflowId || "").trim())
+      ? Boolean(rhWfConfig && rhWfInputs.length && hasRhApiKey(rhSettings) && String(rhWfConfig?.runninghub?.workflowId || "").trim())
       : Boolean(config);
 
   const handleRunClickRef = useRef(handleRunClick);
@@ -1118,23 +1423,61 @@ export default function App() {
         <div className="appTopBarActions">
           <button
             type="button"
-            className="appTopBarServer"
+            className={`appTopBarServer${isRunningHub ? " is-runninghub" : ""}`}
             onClick={() => {
               setInfoOpen(false);
               setSettingsTab(isRunningHub ? "runninghub" : "comfy");
               setSettingsOpen(true);
             }}
-            title={topBarServerLabel}
+            title={topBarServerTitle}
+            aria-label={topBarServerTitle}
           >
             {isRunningHub
               ? <RunningHubLogomark size={11} aria-hidden="true" />
               : <ComfyUiLogomark size={14} aria-hidden="true" />}
-            <span className={`appTopBarStatus health-${topBarServerStatus}`} aria-hidden="true" />
+            <span
+              className={`appTopBarStatus health-${topBarServerStatus}`}
+              title={
+                topBarServerStatus === "online"
+                  ? t("rh.keyValid")
+                  : topBarServerStatus === "loading"
+                    ? t("rh.loadingAccount")
+                    : isRunningHub && rhAccountError
+                      ? rhAccountError
+                      : t("rh.disconnected")
+              }
+              aria-hidden="true"
+            />
             <span className="appTopBarServerLabel">{topBarServerLabel}</span>
+            {isRunningHub ? (
+              rhAccountLoading && hasRhApiKey(rhSettings) ? (
+                <span className="appTopBarCoinBadge isLoading" aria-hidden="true">
+                  <Loader2 size={10} className="spin" />
+                </span>
+              ) : rhDisplayCoins != null ? (
+                <span
+                  className="appTopBarCoinBadge"
+                  title={rhEnabledTokenCount > 1 ? t("rh.totalCoinBalance") : t("rh.coinBalance")}
+                >
+                  <Coins size={10} aria-hidden="true" />
+                  <span>{formatRhCoins(rhDisplayCoins)}</span>
+                </span>
+              ) : null
+            ) : null}
           </button>
 
           <button className="appTopBarButton" onClick={() => { setInfoOpen(false); setSettingsOpen(true); }} title={t("settings.open")} aria-label={t("settings.open")}>
             <Settings2 size={15} />
+          </button>
+          <button
+            type="button"
+            className="appTopBarButton"
+            onClick={toggleFullscreen}
+            title={isFullscreen ? t("fullscreen.exit") : t("fullscreen.enter")}
+            aria-label={isFullscreen ? t("fullscreen.exit") : t("fullscreen.enter")}
+            aria-pressed={isFullscreen}
+          >
+            {isFullscreen ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
           </button>
           <button className="appTopBarButton" onClick={() => { setSettingsOpen(false); setInfoOpen(true); }} title={`${t("info.open")} (Cmd/Ctrl + /)`} aria-label={t("info.open")}>
             <Info size={15} />
@@ -1358,7 +1701,7 @@ export default function App() {
           deleteRunLogSession={deleteRunLogSession}
           clearRunLogHistory={clearRunLogHistory}
           restoreHistory={restoreHistory}
-          rhApiKey={rhSettings.apiKey}
+          rhApiKey={rhPrimaryApiKey}
           updateRunLogSession={updateRunLogSession}
           runQueue={runQueue}
           activeRunId={activeRunId}
@@ -1371,19 +1714,35 @@ export default function App() {
         <OutputColorPanel
           open={colorPanelOpen}
           source={colorPanelSource}
+          persistKey={colorAdjustTarget.key}
+          persistedState={persistedColorState}
+          onPersist={handleColorAdjustPersist}
           onPreviewChange={setColorPreviewUrl}
           onUpdate={handleColorPanelUpdate}
           onWidthChange={setColorPanelWidth}
           onHealingBridgeChange={handleHealingBridgeChange}
+          onSyncClick={handleOpenColorSync}
+          syncDisabled={colorSyncTargetCount === 0}
+          syncing={colorSyncing}
           updating={colorUpdating}
           disabled={!heroImage || showRunningScreen}
           align={sidebarSide === "right" ? "left" : "right"}
         />
 
+        <ColorSyncModal
+          open={colorSyncOpen}
+          targetCount={colorSyncTargetCount}
+          onClose={() => setColorSyncOpen(false)}
+          onConfirm={handleConfirmColorSync}
+        />
+
         <OutputGallery
           history={history}
           onDownload={handleDownload}
+          onItemClick={handleHistoryItemClick}
           onRestore={restoreHistory}
+          selectedIds={selectedHistoryIds}
+          activeId={activeHistoryId}
           onDelete={handleDeleteHistoryItem}
           pending={running || runQueue.length > 0}
           pendingActive={showRunningScreen}
@@ -1436,6 +1795,8 @@ export default function App() {
         rhAccountLoading={rhAccountLoading}
         rhAccountError={rhAccountError}
         handleRhAccountRefresh={handleRhAccountRefresh}
+        rhTokenAccounts={rhTokenAccounts}
+        rhTotalCoins={rhTotalCoins}
         setRhTestResult={setRhTestResult}
         setRhAccount={setRhAccount}
         setRhAccountError={setRhAccountError}
@@ -1567,7 +1928,7 @@ export default function App() {
           <TemplateEditorModal
             mode="runninghub-wf"
             selectedTemplate={rhWfSelectedTemplate}
-            apiKey={rhSettings.apiKey}
+            apiKey={rhPrimaryApiKey}
             onClose={() => setRhWfTemplateEditorOpen(false)}
             onSaved={reloadRhWfTemplates}
           />

@@ -113,7 +113,10 @@ export function ImageAdjustmentControls({
   onPrimaryAction,
   primaryDisabled = false,
   primaryLoading = false,
-  showHealingTool = false
+  showHealingTool = false,
+  onSyncClick,
+  syncDisabled = true,
+  syncLoading = false
 }) {
   const { t } = useI18n();
 
@@ -556,6 +559,17 @@ export function ImageAdjustmentControls({
         <button type="button" className="colorAdjustFooterButton" onClick={onReset}>
           <span>{resetLabel}</span>
         </button>
+        {onSyncClick ? (
+          <button
+            type="button"
+            className="colorAdjustFooterButton"
+            onClick={onSyncClick}
+            disabled={syncDisabled || syncLoading}
+            title={t("colorPanel.sync")}
+          >
+            <span>{syncLoading ? t("colorPanel.syncing") : t("colorPanel.sync")}</span>
+          </button>
+        ) : null}
         <button
           type="button"
           className="colorAdjustFooterButton primary"

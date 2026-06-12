@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Check, Eye, Filter, Folder, Images, Link, ListChecks, Loader2, Pencil, RefreshCcw, Scissors, Star, Trash2, Upload, X } from "lucide-react";
 import { ImageEditorModal } from "./lazyModals";
@@ -10,6 +10,57 @@ import { EditorRange } from "./ImageAdjustmentControls";
 import { localizeRuntimeMessage, useI18n } from "../i18n/I18nContext";
 
 const INPUT_FAVORITES_KEY = "comfyui-build:input-image-favorites:v1";
+
+function readImageFieldValue(value) {
+  return Array.isArray(value) ? value : value ? [value] : [];
+}
+
+function buildInputImageValue(item, libraryImage) {
+  return {
+    kind: "input-image",
+    ...libraryImage,
+    ...(item.maskDataUrl ? { maskDataUrl: item.maskDataUrl } : {})
+  };
+}
+
+function resolveSelectedImages(rawValue, libraryReady, libraryImages) {
+  const availableByName = new Map(libraryImages.map(image => [image.name, image]));
+  return readImageFieldValue(rawValue).flatMap(item => {
+    if (item?.startsWith?.("data:image")) return [item];
+    if (item?.kind !== "input-image") return [];
+    if (!libraryReady) return [];
+    const libraryImage = availableByName.get(item.name);
+    if (!libraryImage) return [];
+    return [buildInputImageValue(item, libraryImage)];
+  });
+}
+
+function pruneInvalidImageValue(rawValue, libraryImages) {
+  const availableByName = new Map(libraryImages.map(image => [image.name, image]));
+  const next = [];
+  let changed = false;
+
+  for (const item of readImageFieldValue(rawValue)) {
+    if (item?.startsWith?.("data:image")) {
+      next.push(item);
+      continue;
+    }
+    if (item?.kind === "input-image") {
+      const libraryImage = availableByName.get(item.name);
+      if (!libraryImage) {
+        changed = true;
+        continue;
+      }
+      const refreshed = buildInputImageValue(item, libraryImage);
+      if (JSON.stringify(refreshed) !== JSON.stringify(item)) changed = true;
+      next.push(refreshed);
+      continue;
+    }
+    changed = true;
+  }
+
+  return { next, changed };
+}
 
 const inputTypes = new Set([
   "string",
@@ -235,11 +286,15 @@ export function DynamicField({
   const [lightboxPan, setLightboxPan] = useState({ x: 0, y: 0 });
   const [isPanningLightbox, setIsPanningLightbox] = useState(false);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const [inputLibraryReady, setInputLibraryReady] = useState(false);
   const lightboxDragRef = useRef(null);
   const reorderDragRef = useRef(null);
   const supportsMultipleImages = ui.type === "image" || ui.type === "image_mask";
-  const selectedImages = (Array.isArray(value) ? value : value ? [value] : [])
-    .filter(image => image?.startsWith?.("data:image") || image?.kind === "input-image");
+  const isImageField = ui.type === "image" || ui.type === "image_mask" || ui.type === "file";
+  const selectedImages = useMemo(
+    () => resolveSelectedImages(value, inputLibraryReady, inputImages),
+    [value, inputLibraryReady, inputImages]
+  );
   const activeImage = selectedImages[Math.min(activeImageIndex, Math.max(0, selectedImages.length - 1))] || null;
   const selectedInputName = activeImage?.kind === "input-image" ? activeImage.name : "";
   const selectedImageUrl = activeImage?.startsWith?.("data:image")
@@ -274,10 +329,33 @@ export function DynamicField({
   };
 
   useEffect(() => {
-    if (ui.type === "image" || ui.type === "image_mask" || ui.type === "file") {
-      refreshInputImages();
+    if (!isImageField) return undefined;
+    let cancelled = false;
+    setInputLibraryReady(false);
+    (async () => {
+      await refreshInputImages();
+      if (!cancelled) setInputLibraryReady(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isImageField]);
+
+  useEffect(() => {
+    if (!inputLibraryReady || !isImageField) return;
+    const { next, changed } = pruneInvalidImageValue(value, inputImages);
+    if (!changed) return;
+    const sanitized = next.filter(Boolean);
+    if (!sanitized.length) {
+      onChange("");
+      return;
     }
-  }, [ui.type]);
+    if (supportsMultipleImages && sanitized.length > 1) {
+      onChange(sanitized);
+      return;
+    }
+    onChange(sanitized[0]);
+  }, [inputLibraryReady, inputImages, value, isImageField, supportsMultipleImages, onChange]);
 
   useEffect(() => {
     if (!isDynamicList) return;
@@ -791,7 +869,11 @@ export function DynamicField({
                       }}
                       onClick={() => setActiveImageIndex(index)}
                     >
-                      <img src={imageUrl} alt={imageName} />
+                      <img
+                        src={imageUrl}
+                        alt={imageName}
+                        onError={() => removeSelectedImage(index)}
+                      />
                       <span className="multiImageOrder">{index + 1}</span>
                       {imageHasMask ? (
                         <span className="multiImageMask" title={t("field.hasMask")}><Scissors size={11} /></span>

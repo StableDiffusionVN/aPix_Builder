@@ -48,7 +48,7 @@ import {
   submitRhTaskWhenReady,
   waitForRhApiKeyIdle
 } from "./lib/runningHubClient.js";
-import { withRhApiKeyLock } from "./lib/rhTokenLock.js";
+import { withRhTokenFailover, resolveRhApiKeys, RH_TOKEN_POLICY } from "./lib/rhTokenFailover.js";
 import {
   appendRunLog,
   clearRunLogSessions,
@@ -861,6 +861,87 @@ async function handleReplaceOutputImage(req, res) {
   await replaceOutputInHistory(body, parsed, res);
 }
 
+function normalizeStoredColorAdjust(value) {
+  if (!value || typeof value !== "object") return null;
+  const adjustments = value.adjustments && typeof value.adjustments === "object"
+    ? trimHistoryValue(value.adjustments)
+    : null;
+  const healingStrokes = Array.isArray(value.healingStrokes)
+    ? trimHistoryValue(value.healingStrokes)
+    : [];
+  const healingBrushSize = Number.isFinite(value.healingBrushSize) ? value.healingBrushSize : undefined;
+  return {
+    ...(adjustments ? { adjustments } : {}),
+    healingStrokes,
+    ...(healingBrushSize !== undefined ? { healingBrushSize } : {}),
+    updatedAt: typeof value.updatedAt === "string" ? value.updatedAt : new Date().toISOString()
+  };
+}
+
+async function resolveHistoryOutputTarget(current, body) {
+  const historyId = body.historyId;
+  const outputFilename = body.outputFilename ? safeOutputName(body.outputFilename) : "";
+  const outputIndex = Number.isFinite(body.outputIndex) ? body.outputIndex : 0;
+  let itemIndex = historyId ? current.findIndex(item => item.id === historyId) : -1;
+  let resolvedOutputIndex = outputIndex;
+
+  if (itemIndex === -1 && outputFilename) {
+    itemIndex = current.findIndex(item => {
+      const outputs = item.outputs || item.result?.outputs || [];
+      const matchIndex = outputs.findIndex(output => safeOutputName(output.filename) === outputFilename);
+      if (matchIndex !== -1) {
+        resolvedOutputIndex = matchIndex;
+        return true;
+      }
+      return false;
+    });
+  }
+
+  if (itemIndex === -1) return null;
+  const item = current[itemIndex];
+  const outputs = [...(item.outputs || item.result?.outputs || [])];
+  const targetOutput = outputs[resolvedOutputIndex];
+  if (!targetOutput) return null;
+
+  return { itemIndex, item, outputs, resolvedOutputIndex, targetOutput };
+}
+
+async function handleSaveColorAdjust(req, res) {
+  const body = JSON.parse(await readBody(req, maxImageBodyBytes) || "{}");
+  const colorAdjust = normalizeStoredColorAdjust(body.colorAdjust);
+  if (!colorAdjust) {
+    send(res, 400, { error: "Invalid color adjust data" });
+    return;
+  }
+
+  const current = await readOutputHistory();
+  const target = await resolveHistoryOutputTarget(current, body);
+  if (!target) {
+    send(res, 404, { error: "History item not found" });
+    return;
+  }
+
+  const { itemIndex, item, outputs, resolvedOutputIndex } = target;
+  outputs[resolvedOutputIndex] = {
+    ...outputs[resolvedOutputIndex],
+    colorAdjust
+  };
+
+  const updatedItem = {
+    ...item,
+    outputs,
+    result: item.result ? { ...item.result, outputs } : item.result
+  };
+
+  const history = [...current];
+  history[itemIndex] = updatedItem;
+  await writeOutputHistory(history);
+  send(res, 200, {
+    historyItem: updatedItem,
+    history: history.slice(0, maxOutputHistoryItems)
+  });
+}
+
 function slugifyTemplateId(value = "") {
   return String(value)
     .normalize("NFD")
@@ -1157,7 +1238,11 @@ async function handleRunningHubRun(req, res) {
   const body = JSON.parse(await readBody(req) || "{}");
   const runId = body.runId || randomUUID();
   const submittedAt = new Date().toISOString();
-  const apiKey = String(body.apiKey || "").trim();
+  const apiKeys = resolveRhApiKeys(body);
+  const tokenPolicy = body.tokenPolicy === RH_TOKEN_POLICY.ROTATE
+    ? RH_TOKEN_POLICY.ROTATE
+    : RH_TOKEN_POLICY.PRIORITY;
+  const rotateIndex = Number(body.rotateIndex) || 0;
   const webappId = String(body.webappId || "").trim();
   const abortController = new AbortController();
   const run = attachRhRun(runId, abortController);
@@ -1171,15 +1256,26 @@ async function handleRunningHubRun(req, res) {
   const onTokenWait = ({ label, status }) => {
     emitRhStatus(status || "waiting", label || "Đang chờ API key RunningHub rảnh...");
   };
+  const onTokenSwitch = ({ label }) => {
+    emitRhStatus("waiting", label || "Đang chuyển sang token RunningHub kế tiếp...");
+  };
 
   try {
-    if (!apiKey) throw new Error("Missing RunningHub API key");
+    if (!apiKeys.length) throw new Error("Missing RunningHub API key");
     if (!webappId) throw new Error("Missing RunningHub webappId");
     if (!Array.isArray(body.nodes) || body.nodes.length === 0) {
       throw new Error("Missing RunningHub node list");
     }
 
-    await withRhApiKeyLock(apiKey, runId, async () => {
+    await withRhTokenFailover({
+      apiKeys,
+      tokenPolicy,
+      rotateIndex,
+      runId,
+      signal: abortController.signal,
+      onWait: onTokenWait,
+      onSwitch: onTokenSwitch
+    }, async (apiKey) => {
       await waitForRhApiKeyIdle(apiKey, {
         signal: abortController.signal,
         onWait: onTokenWait
@@ -1246,9 +1342,6 @@ async function handleRunningHubRun(req, res) {
         outputs: historyItem.outputs,
         historyItem
       });
-    }, {
-      signal: abortController.signal,
-      onWait: onTokenWait
     });
   } finally {
     closeRhRun(run, runId);
@@ -1259,7 +1352,11 @@ async function handleRunningHubWfRun(req, res) {
   const body = JSON.parse(await readBody(req) || "{}");
   const runId = body.runId || randomUUID();
   const submittedAt = new Date().toISOString();
-  const apiKey = String(body.apiKey || "").trim();
+  const apiKeys = resolveRhApiKeys(body);
+  const tokenPolicy = body.tokenPolicy === RH_TOKEN_POLICY.ROTATE
+    ? RH_TOKEN_POLICY.ROTATE
+    : RH_TOKEN_POLICY.PRIORITY;
+  const rotateIndex = Number(body.rotateIndex) || 0;
   const templateId = String(body.templateId || "").trim();
   const abortController = new AbortController();
   const run = attachRhRun(runId, abortController);
@@ -1273,9 +1370,12 @@ async function handleRunningHubWfRun(req, res) {
   const onTokenWait = ({ label, status }) => {
     emitRhStatus(status || "waiting", label || "Đang chờ API key RunningHub rảnh...");
   };
+  const onTokenSwitch = ({ label }) => {
+    emitRhStatus("waiting", label || "Đang chuyển sang token RunningHub kế tiếp...");
+  };
 
   try {
-    if (!apiKey) throw new Error("Missing RunningHub API key");
+    if (!apiKeys.length) throw new Error("Missing RunningHub API key");
     if (!templateId) throw new Error("Missing RunningHub Workflow template");
 
     const { config, template } = await templates.loadConfig(templateId, TEMPLATE_SCOPES.runninghubWf);
@@ -1292,7 +1392,15 @@ async function handleRunningHubWfRun(req, res) {
       throw new Error("Template chưa có input nào để gửi");
     }
 
-    await withRhApiKeyLock(apiKey, runId, async () => {
+    await withRhTokenFailover({
+      apiKeys,
+      tokenPolicy,
+      rotateIndex,
+      runId,
+      signal: abortController.signal,
+      onWait: onTokenWait,
+      onSwitch: onTokenSwitch
+    }, async (apiKey) => {
       await waitForRhApiKeyIdle(apiKey, {
         signal: abortController.signal,
         onWait: onTokenWait
@@ -1387,9 +1495,6 @@ async function handleRunningHubWfRun(req, res) {
         outputs: historyItem.outputs,
         historyItem
       });
-    }, {
-      signal: abortController.signal,
-      onWait: onTokenWait
     });
   } finally {
     closeRhRun(run, runId);
@@ -1535,6 +1640,8 @@ const server = http.createServer(async (req, res) => {
       await handleSaveEditedOutput(req, res);
     } else if (req.method === "POST" && url.pathname === "/api/output-history/replace-output") {
       await handleReplaceOutputImage(req, res);
+    } else if (req.method === "POST" && url.pathname === "/api/output-history/color-adjust") {
+      await handleSaveColorAdjust(req, res);
     } else if (req.method === "GET" && url.pathname === "/api/output-image") {
       await handleOutputImage(req, res, url);
     } else if (req.method === "GET" && url.pathname === "/api/presets") {

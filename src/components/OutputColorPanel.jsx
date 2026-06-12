@@ -21,10 +21,16 @@ function loadPanelWidth() {
 export function OutputColorPanel({
   open,
   source,
+  persistKey = null,
+  persistedState = null,
+  onPersist,
   onUpdate,
   onPreviewChange,
   onWidthChange,
   onHealingBridgeChange,
+  onSyncClick,
+  syncDisabled = true,
+  syncing = false,
   updating = false,
   disabled = false,
   align = "right"
@@ -42,7 +48,10 @@ export function OutputColorPanel({
 
   const engine = useColorAdjustments({
     source: open ? source : null,
-    onPreviewChange: open ? handlePreviewChange : null
+    onPreviewChange: open ? handlePreviewChange : null,
+    persistKey: open ? persistKey : null,
+    persistedState: open ? persistedState : null,
+    onPersist: open ? onPersist : null
   });
 
   useEffect(() => {
@@ -159,6 +168,9 @@ export function OutputColorPanel({
         primaryDisabled={disabled || !engine.isReady}
         primaryLoading={updating}
         showHealingTool={!disabled && engine.isReady}
+        onSyncClick={() => onSyncClick?.(engine.getPersistedState())}
+        syncDisabled={syncDisabled || syncing || disabled || !engine.isReady}
+        syncLoading={syncing}
       />
 
       {displayError ? <div className="editorError colorAdjustPanelError">{displayError}</div> : null}

@@ -50,17 +50,20 @@ html[data-theme="dark"] .settingsModal,
 html[data-theme="dark"] .infoModal,
 html[data-theme="dark"] .templateEditorModal,
 html[data-theme="dark"] .templateDeleteModal,
+html[data-theme="dark"] .colorSyncModal,
 html[data-theme="dark"] .maskEditorModal,
 html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .settingsModal,
 html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .infoModal,
 html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .templateEditorModal,
 html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .templateDeleteModal,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .colorSyncModal,
 html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .maskEditorModal,
 html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .maskEditorModal,
 html[data-theme="light"] .settingsModal,
 html[data-theme="light"] .infoModal,
 html[data-theme="light"] .templateEditorModal,
 html[data-theme="light"] .templateDeleteModal,
+html[data-theme="light"] .colorSyncModal,
 html[data-theme="light"] .maskEditorModal {
   gap: var(--space-3);
   padding: var(--space-4);
@@ -273,11 +276,14 @@ html[data-theme="light"] .infoNotice b {
 /* ── Modal actions ──────────────────────────────────────── */
 
 html[data-theme="dark"] .secondaryActionButton,
+html[data-theme="dark"] .primaryActionButton,
 html[data-theme="dark"] .dangerActionButton,
 html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .secondaryActionButton,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .primaryActionButton,
 html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .dangerActionButton,
 html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .dangerActionButton,
 html[data-theme="light"] .secondaryActionButton,
+html[data-theme="light"] .primaryActionButton,
 html[data-theme="light"] .dangerActionButton {
   min-height: 32px;
   padding: 0 12px;
@@ -300,6 +306,23 @@ html[data-theme="light"] .secondaryActionButton:hover:not(:disabled) {
   border-color: var(--border-default);
   background: var(--surface-3);
   color: var(--text-primary);
+}
+
+html[data-theme="dark"] .primaryActionButton,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .primaryActionButton,
+html[data-theme="light"] .primaryActionButton {
+  border-color: rgba(var(--accent-rgb), 0.45);
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+
+html[data-theme="dark"] .primaryActionButton:hover:not(:disabled),
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .primaryActionButton:hover:not(:disabled),
+html[data-theme="light"] .primaryActionButton:hover:not(:disabled) {
+  border-color: var(--accent-hover);
+  background: var(--accent-hover);
+  color: #fff;
 }
 
 html[data-theme="dark"] .serverDetailToggle,
@@ -624,6 +647,8 @@ html[data-theme="light"] .imageEditorFooter .smallActionButton {
 }
 
 .colorAdjustPanel .colorAdjustFooter {
+  display: flex;
+  flex-wrap: wrap;
   gap: 6px;
   padding-top: 7px;
   border-top: 1px solid var(--border-subtle);
@@ -851,4 +876,158 @@ html[data-theme="light"] .settingsModal select {
   border-radius: var(--radius);
   background: var(--surface-2);
   font-size: 12px;
+}
+
+/* ── Color sync modal ───────────────────────────────────── */
+
+.colorSyncModal {
+  width: min(400px, calc(100vw - 32px));
+  gap: var(--space-3);
+}
+
+.colorSyncModalBackdrop {
+  z-index: 120;
+}
+
+.colorSyncModalHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.colorSyncModalHeading {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.colorSyncModalHeading h2 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+}
+
+.colorSyncModalHeading p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--font-caption);
+  line-height: 1.45;
+}
+
+.colorSyncModalSection {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.colorSyncModalSectionHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.colorSyncModalSectionLabel {
+  color: var(--text-tertiary);
+  font-size: var(--font-caption);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.colorSyncModalQuickActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-tertiary);
+  font-size: var(--font-caption);
+}
+
+.colorSyncModalQuickActions button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font-size: var(--font-caption);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.colorSyncModalQuickActions button:hover {
+  color: var(--accent-hover);
+  text-decoration: underline;
+}
+
+.colorSyncGroupList {
+  display: grid;
+  gap: 6px;
+}
+
+.colorSyncGroupOption {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 38px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color var(--transition-fast),
+    background var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.colorSyncGroupOption:hover {
+  border-color: var(--border-default);
+  background: var(--surface-3);
+}
+
+.colorSyncGroupOption.isSelected {
+  border-color: rgba(var(--accent-rgb), 0.38);
+  background: var(--accent-muted);
+}
+
+.colorSyncGroupOption.isSelected:hover {
+  border-color: rgba(var(--accent-rgb), 0.48);
+  background: var(--accent-muted-hover);
+}
+
+.colorSyncGroupCheck {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--surface-1);
+  color: var(--accent);
+}
+
+.colorSyncGroupOption.isSelected .colorSyncGroupCheck {
+  border-color: rgba(var(--accent-rgb), 0.45);
+  background: rgba(var(--accent-rgb), 0.18);
+}
+
+.colorSyncGroupLabel {
+  font-size: var(--font-body);
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.colorSyncModalActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: var(--space-1);
 }

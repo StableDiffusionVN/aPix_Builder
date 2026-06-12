@@ -46,6 +46,7 @@ html[data-theme="dark"] .settingsModal,
 html[data-theme="dark"] .infoModal,
 html[data-theme="dark"] .templateEditorModal,
 html[data-theme="dark"] .templateDeleteModal,
+html[data-theme="dark"] .colorSyncModal,
 html[data-theme="dark"] .maskEditorModal,
 html[data-theme="dark"] .inputLibraryPanel,
 html[data-theme="dark"] .imageEditorModal,
@@ -56,6 +57,7 @@ html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .settingsMod
 html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .infoModal,
 html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .templateEditorModal,
 html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .templateDeleteModal,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .colorSyncModal,
 html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .maskEditorModal,
 html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .inputLibraryPanel,
 html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .imageEditorModal,
@@ -66,6 +68,7 @@ html[data-theme="light"] .settingsModal,
 html[data-theme="light"] .infoModal,
 html[data-theme="light"] .templateEditorModal,
 html[data-theme="light"] .templateDeleteModal,
+html[data-theme="light"] .colorSyncModal,
 html[data-theme="light"] .maskEditorModal,
 html[data-theme="light"] .inputLibraryPanel,
 html[data-theme="light"] .imageEditorModal {
@@ -309,10 +312,12 @@ html[data-theme="light"] .historyIconFilter.active {
 html[data-theme="dark"] .runButton,
 html[data-theme="dark"] .saveTemplateButton,
 html[data-theme="dark"] .addServerSave,
+html[data-theme="dark"] .primaryActionButton,
 html[data-theme="dark"] .rhActionRow .rhRunButton,
 html[data-theme="dark"] .rhRunButton,
 html[data-theme="dark"] .imageEditorFooter .saveTemplateButton,
 html[data-theme="light"] .runButton,
+html[data-theme="light"] .primaryActionButton,
 html[data-theme="light"] .rhRunButton {
   border: 1px solid rgba(var(--accent-rgb), 0.35);
   border-radius: var(--radius);
@@ -327,8 +332,10 @@ html[data-theme="light"] .rhRunButton {
 html[data-theme="dark"] .runButton:hover:not(:disabled),
 html[data-theme="dark"] .saveTemplateButton:hover:not(:disabled),
 html[data-theme="dark"] .addServerSave:hover,
+html[data-theme="dark"] .primaryActionButton:hover:not(:disabled),
 html[data-theme="dark"] .rhActionRow .rhRunButton:hover:not(:disabled),
-html[data-theme="light"] .runButton:hover:not(:disabled) {
+html[data-theme="light"] .runButton:hover:not(:disabled),
+html[data-theme="light"] .primaryActionButton:hover:not(:disabled) {
   background: var(--accent-hover);
   transform: none;
 }

@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { localizeRuntimeMessage, useI18n } from "../i18n/I18nContext";
+import {
+  getPrimaryRhApiKey,
+  hasRhApiKey,
+  normalizeRhSettings,
+  syncPrimaryApiKey
+} from "../lib/rhTokenPool.js";
 
 export const EXECUTION_MODE_KEY = "comfyui-build:execution-mode";
 export const RUNNINGHUB_STORAGE_KEY = "comfyui-build:runninghub:v1";
@@ -23,15 +29,20 @@ export function isRunningHubMode(mode) {
 export function loadRunningHubSettings() {
   try {
     const parsed = JSON.parse(localStorage.getItem(RUNNINGHUB_STORAGE_KEY) || "{}");
+    const normalized = normalizeRhSettings({
+      ...parsed,
+      webappId: parsed.webappId || DEFAULT_RH_WEBAPP_ID
+    });
     return {
-      apiKey: parsed.apiKey || "",
-      webappId: parsed.webappId || DEFAULT_RH_WEBAPP_ID,
-      workflowId: parsed.workflowId || ""
+      ...normalized,
+      webappId: normalized.webappId || DEFAULT_RH_WEBAPP_ID
     };
   } catch {
-    return { apiKey: "", webappId: DEFAULT_RH_WEBAPP_ID, workflowId: "" };
+    return normalizeRhSettings({ webappId: DEFAULT_RH_WEBAPP_ID });
   }
 }
+
+export { hasRhApiKey, getPrimaryRhApiKey };
 
 export function nodeFieldKey(node) {
   return `${node.nodeId}|${node.fieldName}`;
@@ -57,7 +68,7 @@ export function useRunningHub() {
   }, [settings]);
 
   const updateSettings = useCallback((patch) => {
-    setSettings(current => ({ ...current, ...patch }));
+    setSettings(current => syncPrimaryApiKey({ ...current, ...patch }));
   }, []);
 
   const restoreNodes = useCallback((nextNodes = []) => {
@@ -66,7 +77,7 @@ export function useRunningHub() {
   }, []);
 
   const fetchNodes = useCallback(async (override = {}) => {
-    const apiKey = override.apiKey ?? settings.apiKey;
+    const apiKey = override.apiKey ?? getPrimaryRhApiKey(settings);
     const webappId = override.webappId ?? settings.webappId;
     const shouldThrow = override.throwOnError === true;
     if (!apiKey?.trim()) {
@@ -110,7 +121,7 @@ export function useRunningHub() {
     } finally {
       setNodesLoading(false);
     }
-  }, [locale, settings.apiKey, settings.webappId]);
+  }, [locale, settings, settings.webappId]);
 
   return {
     settings,

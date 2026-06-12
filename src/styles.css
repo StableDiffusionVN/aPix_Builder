@@ -177,6 +177,10 @@ p {
   transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
 }
 
+.appTopBarServer.is-runninghub {
+  max-width: min(360px, 42vw);
+}
+
 .appTopBarServer:hover {
   border-color: var(--border);
   background: var(--panel-soft);
@@ -219,6 +223,30 @@ p {
   line-height: 1;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.appTopBarCoinBadge {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 3px;
+  min-height: 18px;
+  padding: 0 6px;
+  border: 1px solid rgba(var(--accent-rgb), 0.18);
+  border-radius: 999px;
+  background: var(--accent-muted);
+  color: var(--accent);
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1;
+  opacity: 0.92;
+}
+
+.appTopBarCoinBadge.isLoading {
+  padding: 0 5px;
+  border-color: var(--border-subtle);
+  background: var(--panel-soft);
+  color: var(--muted);
 }
 
 .appTopBarActions {
@@ -635,6 +663,31 @@ body.sidebar-layout-resizing {
 .secondaryActionButton:hover:not(:disabled) {
   border-color: var(--border-strong);
   background: var(--panel);
+}
+
+.primaryActionButton {
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid rgba(var(--accent-rgb), 0.45);
+  border-radius: 10px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: none;
+  transition: border-color var(--transition-fast), background var(--transition-fast), color var(--transition-fast);
+}
+
+.primaryActionButton:hover:not(:disabled) {
+  border-color: var(--accent-hover);
+  background: var(--accent-hover);
+  color: #fff;
+}
+
+.primaryActionButton:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .addressInput input,
@@ -4349,6 +4402,48 @@ html[data-theme="light"] .logTaskInspectLine {
   border-color: rgba(var(--accent-rgb), 0.36);
   background: rgba(var(--accent-rgb), 0.08);
   outline: none;
+}
+
+.historyItem.isSelected {
+  border-color: rgba(var(--accent-rgb), 0.5);
+  background: rgba(var(--accent-rgb), 0.12);
+}
+
+.historyItem.active {
+  box-shadow: inset 0 0 0 1px rgba(var(--accent-rgb), 0.35);
+}
+
+.historyPanelTitleCopy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.historyMultiSelectHint {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.3;
+}
+
+.historyThumb {
+  position: relative;
+}
+
+.historySelectBadge {
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
 }
 
 .historyThumb,
@@ -8414,9 +8509,209 @@ html:not([data-theme="dark"]):not([data-theme="light"]) .appShell.is-runninghub 
   color: var(--danger);
 }
 
+.rhTokenPool {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+.rhTokenPoolHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.rhTokenPoolHeader h4 {
+  margin: 0;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+}
+.rhTokenPoolHeader p {
+  margin: 2px 0 0;
+  color: var(--muted-2);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.rhTokenAddBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid rgba(var(--rh-brand-rgb), 0.3);
+  border-radius: 9px;
+  background: rgba(var(--rh-brand-rgb), 0.08);
+  color: var(--rh-brand);
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.rhTokenPolicy {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.rhTokenPolicyOption {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel-soft);
+  cursor: pointer;
+}
+.rhTokenPolicyOption.isActive {
+  border-color: rgba(var(--rh-brand-rgb), 0.45);
+  background: rgba(var(--rh-brand-rgb), 0.08);
+}
+.rhTokenPolicyOption input {
+  margin-top: 2px;
+}
+.rhTokenPolicyOption span {
+  display: grid;
+  gap: 2px;
+}
+.rhTokenPolicyOption b {
+  font-size: 12px;
+  color: var(--text);
+}
+.rhTokenPolicyOption small {
+  color: var(--muted-2);
+  font-size: 11px;
+  line-height: 1.4;
+}
+.rhTokenList {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.rhTokenItem {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) 32px;
+  gap: 8px;
+  align-items: start;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.12);
+}
+.rhTokenItem.isPrimary {
+  border-color: rgba(var(--rh-brand-rgb), 0.35);
+  background:
+    radial-gradient(circle at 100% 0%, rgba(var(--rh-brand-rgb), 0.08), transparent 42%),
+    rgba(0, 0, 0, 0.12);
+}
+.rhTokenItem.isDragging {
+  opacity: 0.55;
+}
+.rhTokenDragHandle {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted-2);
+  cursor: grab;
+}
+.rhTokenMain {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+.rhTokenTopRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.rhTokenBadge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+.rhTokenBadge.isPrimary {
+  background: rgba(var(--rh-brand-rgb), 0.16);
+  color: var(--rh-brand);
+}
+.rhTokenEnable {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted-2);
+  font-size: 11px;
+}
+.rhTokenLabelField {
+  display: grid;
+  gap: 4px;
+}
+.rhTokenLabelField > span {
+  color: var(--muted-2);
+  font-size: 11px;
+}
+.rhTokenLabelField input {
+  min-height: 30px;
+}
+.rhTokenMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  color: var(--muted-2);
+  font-size: 11px;
+}
+.rhTokenMetaCoins {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--rh-brand);
+}
+.rhTokenMetaError {
+  color: var(--danger);
+}
+.rhTokenRemoveBtn {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.rhTokenRemoveBtn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.rhTokenEmpty {
+  padding: 12px;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  color: var(--muted-2);
+  font-size: 12px;
+  text-align: center;
+}
+
 @media (max-width: 820px) {
   .rhAccountGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .rhTokenPolicy {
+    grid-template-columns: 1fr;
   }
 }
 

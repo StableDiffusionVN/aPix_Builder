@@ -71,7 +71,11 @@ export function PreviewPanel({
   colorPanelOpen,
   onColorPanelToggle,
   colorUpdating,
-  colorPanelAlign = "right"
+  colorPanelAlign = "right",
+  healingActive = false,
+  healingCursor = null,
+  healingBrushDiameter = 0,
+  handlePreviewPointerLeave
 }) {
   const { t } = useI18n();
 
@@ -128,14 +132,26 @@ export function PreviewPanel({
 
       <div className="outputViewer">
         <div
-          className={`previewArea ${heroImage && !showRunningScreen ? "isInteractive" : ""} ${resultOutputs.length > 1 ? "hasOutputRail" : ""} ${compareMode ? "isCompareMode" : ""} ${draggingImage || isWheeling ? "isDragging" : ""}`}
+          className={`previewArea ${heroImage && !showRunningScreen ? "isInteractive" : ""} ${resultOutputs.length > 1 ? "hasOutputRail" : ""} ${compareMode ? "isCompareMode" : ""} ${healingActive ? "isHealingTool" : ""} ${draggingImage || isWheeling ? "isDragging" : ""}`}
           ref={previewAreaRef}
           onWheel={handlePreviewWheel}
           onPointerDown={handlePreviewPointerDown}
           onPointerMove={handlePreviewPointerMove}
           onPointerUp={handlePreviewPointerUp}
           onPointerCancel={handlePreviewPointerUp}
+          onPointerLeave={handlePreviewPointerLeave}
         >
+          {healingActive && healingCursor ? (
+            <div
+              className="brushCursorCircle healingMode"
+              style={{
+                left: healingCursor.x,
+                top: healingCursor.y,
+                width: Math.max(4, healingBrushDiameter),
+                height: Math.max(4, healingBrushDiameter)
+              }}
+            />
+          ) : null}
           {showRunningScreen ? (
             <div className={`emptyState ${isRunningHub ? "rhEmptyState" : ""}`}>
               {isRunningHub ? (

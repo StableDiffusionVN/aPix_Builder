@@ -11,6 +11,12 @@ import {
   isAdjustmentsDefault,
   loadImage
 } from "../lib/imageAdjustments";
+import {
+  applyHealingStrokes,
+  DEFAULT_HEALING_BRUSH_SIZE,
+  drawHealingOverlay,
+  snapshotColorAdjustState
+} from "../lib/healingBrush";
 
 const CUSTOM_PRESETS_KEY = "image-editor-custom-presets";
 
@@ -20,13 +26,23 @@ export function useColorAdjustments({ source, onPreviewChange }) {
   const imageRef = useRef(null);
   const adjustmentsRef = useRef(cloneDefaultAdjustments());
   const previewCanvasRef = useRef(null);
+  const healingOverlayCanvasRef = useRef(null);
   const histogramCanvasRef = useRef(null);
   const curvesCanvasRef = useRef(null);
   const histogramDragRef = useRef(null);
   const draggingCurvePointRef = useRef(null);
   const rafRef = useRef(null);
+  const healingStrokesRef = useRef([]);
+  const activeHealingStrokeRef = useRef(null);
+  const healingActiveRef = useRef(false);
+  const healingBrushSizeRef = useRef(DEFAULT_HEALING_BRUSH_SIZE);
+  const healingPointerIdRef = useRef(null);
+  const previewMetaRef = useRef({ width: 0, height: 0, scale: 1 });
+  const lastHoverImageRef = useRef(null);
 
-  const [adjustments, setAdjustments] = useState(() => cloneDefaultAdjustments());
+  const [adjustments, setAdjustmentsState] = useState(() => cloneDefaultAdjustments());
+  const [history, setHistory] = useState([]);
+  const [historyIndex, setHistoryIndex] = useState(-1);
   const [isReady, setIsReady] = useState(false);
   const [error, setError] = useState("");
   const [hoveredZone, setHoveredZone] = useState(null);
@@ -39,14 +55,86 @@ export function useColorAdjustments({ source, onPreviewChange }) {
   const [newPresetName, setNewPresetName] = useState("");
   const [editingPresetId, setEditingPresetId] = useState(null);
   const [renameValue, setRenameValue] = useState("");
+  const [healingActive, setHealingActive] = useState(false);
+  const [healingStrokes, setHealingStrokes] = useState([]);
+  const [healingBrushSize, setHealingBrushSize] = useState(DEFAULT_HEALING_BRUSH_SIZE);
+  const [healingCursor, setHealingCursor] = useState(null);
+  const [healingBrushDiameter, setHealingBrushDiameter] = useState(DEFAULT_HEALING_BRUSH_SIZE);
 
   useEffect(() => {
     onPreviewChangeRef.current = onPreviewChange;
   }, [onPreviewChange]);
 
   useEffect(() => {
+    healingActiveRef.current = healingActive;
+  }, [healingActive]);
+
+  useEffect(() => {
+    healingStrokesRef.current = healingStrokes;
+  }, [healingStrokes]);
+
+  useEffect(() => {
+    healingBrushSizeRef.current = healingBrushSize;
+  }, [healingBrushSize]);
+
+  useEffect(() => {
+    if (!healingActive) {
+      setHealingCursor(null);
+    }
+  }, [healingActive]);
+
+  useEffect(() => {
     adjustmentsRef.current = adjustments;
   }, [adjustments]);
+
+  const setAdjustments = useCallback((updater) => {
+    setAdjustmentsState(current => {
+      const next = typeof updater === "function" ? updater(current) : updater;
+      adjustmentsRef.current = next;
+      return next;
+    });
+  }, []);
+
+  const setHealingStrokesSync = useCallback((nextStrokes) => {
+    healingStrokesRef.current = nextStrokes;
+    setHealingStrokes(nextStrokes);
+  }, []);
+
+  const canUndo = historyIndex > 0;
+  const canRedo = historyIndex >= 0 && historyIndex < history.length - 1;
+
+  const commitHistory = useCallback((nextAdjustments, nextHealingStrokes) => {
+    const entry = snapshotColorAdjustState(nextAdjustments, nextHealingStrokes);
+    setHistory(current => {
+      const trimmed = current.slice(0, historyIndex + 1);
+      trimmed.push(entry);
+      return trimmed.slice(-80);
+    });
+    setHistoryIndex(index => Math.min(index + 1, 79));
+  }, [historyIndex]);
+
+  const restoreHistoryEntry = useCallback((entry) => {
+    setAdjustments(entry.adjustments);
+    setHealingStrokesSync(entry.healingStrokes);
+    activeHealingStrokeRef.current = null;
+    healingPointerIdRef.current = null;
+    setSelectedCurvePointIndex(null);
+    setHoveredZone(null);
+  }, [setAdjustments, setHealingStrokesSync]);
+
+  const handleUndo = useCallback(() => {
+    if (!canUndo) return;
+    const nextIndex = historyIndex - 1;
+    setHistoryIndex(nextIndex);
+    restoreHistoryEntry(history[nextIndex]);
+  }, [canUndo, history, historyIndex, restoreHistoryEntry]);
+
+  const handleRedo = useCallback(() => {
+    if (!canRedo) return;
+    const nextIndex = historyIndex + 1;
+    setHistoryIndex(nextIndex);
+    restoreHistoryEntry(history[nextIndex]);
+  }, [canRedo, history, historyIndex, restoreHistoryEntry]);
 
   const savePresets = useCallback((updated) => {
     setCustomPresets(updated);
@@ -109,7 +197,20 @@ export function useColorAdjustments({ source, onPreviewChange }) {
     let cancelled = false;
     setIsReady(false);
     setError("");
-    setAdjustments(cloneDefaultAdjustments());
+    const defaults = cloneDefaultAdjustments();
+    setAdjustments(defaults);
+    setHistory([]);
+    setHistoryIndex(-1);
+    setHealingActive(false);
+    setHealingStrokes([]);
+    setHealingBrushSize(DEFAULT_HEALING_BRUSH_SIZE);
+    setHealingCursor(null);
+    setHealingBrushDiameter(DEFAULT_HEALING_BRUSH_SIZE);
+    healingStrokesRef.current = [];
+    activeHealingStrokeRef.current = null;
+    healingPointerIdRef.current = null;
+    healingBrushSizeRef.current = DEFAULT_HEALING_BRUSH_SIZE;
+    previewMetaRef.current = { width: 0, height: 0, scale: 1 };
     imageRef.current = null;
     onPreviewChangeRef.current?.(null);
 
@@ -123,6 +224,9 @@ export function useColorAdjustments({ source, onPreviewChange }) {
       .then(image => {
         if (cancelled) return;
         imageRef.current = image;
+        const initial = snapshotColorAdjustState(defaults, []);
+        setHistory([initial]);
+        setHistoryIndex(0);
         setIsReady(true);
       })
       .catch(() => {
@@ -142,6 +246,28 @@ export function useColorAdjustments({ source, onPreviewChange }) {
     const canvas = previewCanvasRef.current;
     const meta = applyImageAdjustments(image, adjustmentsRef.current, canvas);
     if (!meta) return;
+    previewMetaRef.current = meta;
+
+    const ctx = canvas.getContext("2d");
+    if (ctx) {
+      applyHealingStrokes(ctx, healingStrokesRef.current, meta.scale);
+    }
+
+    let outputCanvas = canvas;
+    const activeStroke = activeHealingStrokeRef.current;
+    if (activeStroke && ctx) {
+      if (!healingOverlayCanvasRef.current) {
+        healingOverlayCanvasRef.current = document.createElement("canvas");
+      }
+      const overlayCanvas = healingOverlayCanvasRef.current;
+      overlayCanvas.width = canvas.width;
+      overlayCanvas.height = canvas.height;
+      const overlayCtx = overlayCanvas.getContext("2d");
+      overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+      overlayCtx.drawImage(canvas, 0, 0);
+      drawHealingOverlay(overlayCtx, activeStroke, canvas.width, canvas.height, meta.scale);
+      outputCanvas = overlayCanvas;
+    }
 
     const histData = computeHistogram(canvas);
     if (histogramCanvasRef.current && histData) {
@@ -157,8 +283,11 @@ export function useColorAdjustments({ source, onPreviewChange }) {
       );
     }
 
+    const hasPreviewChanges = !isAdjustmentsDefault(adjustmentsRef.current)
+      || healingStrokesRef.current.length > 0
+      || Boolean(activeHealingStrokeRef.current);
     onPreviewChangeRef.current?.(
-      isAdjustmentsDefault(adjustmentsRef.current) ? null : canvas.toDataURL("image/png")
+      hasPreviewChanges ? outputCanvas.toDataURL("image/png") : null
     );
   }, [activeCurveChannel, selectedCurvePointIndex]);
 
@@ -169,7 +298,7 @@ export function useColorAdjustments({ source, onPreviewChange }) {
     return () => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
-  }, [isReady, adjustments, renderPreview]);
+  }, [isReady, adjustments, healingStrokes, renderPreview]);
 
   useEffect(() => {
     if (!openSections.curves || !curvesCanvasRef.current || !previewCanvasRef.current) return;
@@ -202,20 +331,144 @@ export function useColorAdjustments({ source, onPreviewChange }) {
   }, []);
 
   const applyPreset = useCallback((preset) => {
-    setAdjustments(current => ({
-      ...current,
+    const next = {
+      ...adjustmentsRef.current,
       ...preset.adjustments,
       curves: preset.adjustments.curves || DEFAULT_CURVES
-    }));
-  }, []);
+    };
+    setAdjustments(next);
+    commitHistory(next, healingStrokesRef.current);
+  }, [commitHistory, setAdjustments]);
 
   const resetAdjustments = useCallback(() => {
-    setAdjustments(cloneDefaultAdjustments());
+    const nextAdjustments = cloneDefaultAdjustments();
+    setAdjustments(nextAdjustments);
+    setHealingStrokesSync([]);
+    activeHealingStrokeRef.current = null;
     setActiveCurveChannel("rgb");
     setSelectedCurvePointIndex(null);
     setActiveColorTab("reds");
     setHoveredZone(null);
+    const initial = snapshotColorAdjustState(nextAdjustments, []);
+    setHistory([initial]);
+    setHistoryIndex(0);
+  }, [setAdjustments, setHealingStrokesSync]);
+
+  const toggleHealingActive = useCallback(() => {
+    setHealingActive(current => !current);
   }, []);
+
+  const updateHealingBrushSize = useCallback((size) => {
+    const next = clamp(Number(size), 1, 180);
+    healingBrushSizeRef.current = next;
+    setHealingBrushSize(next);
+    if (lastHoverImageRef.current) {
+      const rect = lastHoverImageRef.current.getBoundingClientRect();
+      const meta = previewMetaRef.current;
+      const canvasWidth = meta?.width || lastHoverImageRef.current.naturalWidth || rect.width || 1;
+      const displayScale = rect.width / canvasWidth;
+      setHealingBrushDiameter(next * (meta?.scale ?? 1) * displayScale);
+    }
+  }, []);
+
+  const computeHealingBrushDiameter = useCallback((imageElement) => {
+    if (!imageElement) return healingBrushSizeRef.current;
+    const rect = imageElement.getBoundingClientRect();
+    const meta = previewMetaRef.current;
+    const canvasWidth = meta?.width || imageElement.naturalWidth || rect.width || 1;
+    const displayScale = rect.width / canvasWidth;
+    return healingBrushSizeRef.current * (meta?.scale ?? 1) * displayScale;
+  }, []);
+
+  const updateHealingCursor = useCallback((event, imageElement, previewArea) => {
+    if (!healingActiveRef.current || !previewArea) {
+      setHealingCursor(null);
+      return false;
+    }
+    const areaRect = previewArea.getBoundingClientRect();
+    lastHoverImageRef.current = imageElement;
+    setHealingCursor({
+      x: event.clientX - areaRect.left,
+      y: event.clientY - areaRect.top
+    });
+    setHealingBrushDiameter(computeHealingBrushDiameter(imageElement));
+    return true;
+  }, [computeHealingBrushDiameter]);
+
+  const clearHealingCursor = useCallback(() => {
+    lastHoverImageRef.current = null;
+    setHealingCursor(null);
+  }, []);
+
+  const getHealingImagePoint = useCallback((event, imageElement) => {
+    if (!imageElement) return null;
+    const rect = imageElement.getBoundingClientRect();
+    if (!rect.width || !rect.height) return null;
+    return {
+      x: clamp((event.clientX - rect.left) / rect.width, 0, 1),
+      y: clamp((event.clientY - rect.top) / rect.height, 0, 1)
+    };
+  }, []);
+
+  const handleHealingPointerDown = useCallback((event, imageElement) => {
+    if (!healingActiveRef.current || !isReady || event.button !== 0 || !imageElement) return false;
+    const point = getHealingImagePoint(event, imageElement);
+    if (!point) return false;
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    healingPointerIdRef.current = event.pointerId;
+    activeHealingStrokeRef.current = {
+      tool: "healing",
+      size: healingBrushSizeRef.current,
+      points: [point]
+    };
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    rafRef.current = requestAnimationFrame(renderPreview);
+    return true;
+  }, [getHealingImagePoint, isReady, renderPreview]);
+
+  const handleHealingPointerHover = useCallback((event, imageElement, previewArea) => {
+    if (!healingActiveRef.current || healingPointerIdRef.current) return false;
+    return updateHealingCursor(event, imageElement, previewArea);
+  }, [updateHealingCursor]);
+
+  const handleHealingPointerMove = useCallback((event, imageElement, previewArea) => {
+    if (!healingActiveRef.current || !imageElement) return false;
+    if (healingPointerIdRef.current === event.pointerId) {
+      const point = getHealingImagePoint(event, imageElement);
+      if (!point || !activeHealingStrokeRef.current) return false;
+      event.preventDefault();
+      activeHealingStrokeRef.current.points.push(point);
+      if (previewArea) updateHealingCursor(event, imageElement, previewArea);
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      rafRef.current = requestAnimationFrame(renderPreview);
+      return true;
+    }
+    if (!healingPointerIdRef.current && previewArea) {
+      return updateHealingCursor(event, imageElement, previewArea);
+    }
+    return false;
+  }, [getHealingImagePoint, renderPreview, updateHealingCursor]);
+
+  const handleHealingPointerUp = useCallback((event) => {
+    if (healingPointerIdRef.current !== event.pointerId) return false;
+    const finished = activeHealingStrokeRef.current;
+    activeHealingStrokeRef.current = null;
+    healingPointerIdRef.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    if (finished?.points?.length) {
+      const nextStrokes = healingStrokesRef.current.concat(finished);
+      setHealingStrokesSync(nextStrokes);
+      commitHistory(adjustmentsRef.current, nextStrokes);
+    } else if (finished) {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      rafRef.current = requestAnimationFrame(renderPreview);
+    }
+    return Boolean(finished);
+  }, [commitHistory, renderPreview, setHealingStrokesSync]);
 
   const toggleSection = useCallback((id) => {
     setOpenSections(current => {
@@ -224,7 +477,9 @@ export function useColorAdjustments({ source, onPreviewChange }) {
     });
   }, []);
 
-  const commitCurrent = useCallback(() => {}, []);
+  const commitCurrent = useCallback(() => {
+    commitHistory(adjustmentsRef.current, healingStrokesRef.current);
+  }, [commitHistory]);
 
   const isPresetActive = useCallback((preset) => {
     if (!preset?.adjustments) return false;
@@ -310,8 +565,9 @@ export function useColorAdjustments({ source, onPreviewChange }) {
     if (histogramDragRef.current) {
       event.currentTarget.releasePointerCapture(event.pointerId);
       histogramDragRef.current = null;
+      commitCurrent();
     }
-  }, []);
+  }, [commitCurrent]);
 
   const handleHistogramPointerLeave = useCallback(() => {
     if (!histogramDragRef.current) setHoveredZone(null);
@@ -408,8 +664,9 @@ export function useColorAdjustments({ source, onPreviewChange }) {
         e.currentTarget.releasePointerCapture(e.pointerId);
       } catch {}
       draggingCurvePointRef.current = null;
+      commitCurrent();
     }
-  }, []);
+  }, [commitCurrent]);
 
   const handleCurvesDoubleClick = useCallback((e) => {
     if (!adjustments.curves) return;
@@ -443,8 +700,9 @@ export function useColorAdjustments({ source, onPreviewChange }) {
         }
       }));
       setSelectedCurvePointIndex(null);
+      commitCurrent();
     }
-  }, [adjustments.curves, activeCurveChannel]);
+  }, [activeCurveChannel, adjustments.curves, commitCurrent, setAdjustments]);
 
   const renderFullResolutionDataUrl = useCallback(() => {
     const image = imageRef.current;
@@ -452,6 +710,10 @@ export function useColorAdjustments({ source, onPreviewChange }) {
     const canvas = document.createElement("canvas");
     const meta = applyImageAdjustments(image, adjustmentsRef.current, canvas, { fullResolution: true });
     if (!meta) throw new Error(t("editor.renderError"));
+    const ctx = canvas.getContext("2d");
+    if (ctx) {
+      applyHealingStrokes(ctx, healingStrokesRef.current, meta.scale);
+    }
     return canvas.toDataURL("image/png");
   }, [t]);
 
@@ -501,6 +763,22 @@ export function useColorAdjustments({ source, onPreviewChange }) {
     handleCurvesPointerMove,
     handleCurvesPointerUp,
     handleCurvesDoubleClick,
-    renderFullResolutionDataUrl
+    renderFullResolutionDataUrl,
+    healingActive,
+    healingBrushSize,
+    healingCursor,
+    healingBrushDiameter,
+    toggleHealingActive,
+    setHealingActive,
+    updateHealingBrushSize,
+    handleHealingPointerDown,
+    handleHealingPointerHover,
+    handleHealingPointerMove,
+    handleHealingPointerUp,
+    clearHealingCursor,
+    canUndo,
+    canRedo,
+    handleUndo,
+    handleRedo
   };
 }

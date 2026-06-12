@@ -3153,6 +3153,29 @@ body.color-panel-resizing .colorAdjustPanel.is-left .colorAdjustPanelResizeHandl
   color: var(--accent-hover);
 }
 
+.colorAdjustPanelTitle {
+  flex-shrink: 0;
+}
+
+.colorAdjustHealingButton.active {
+  border-color: rgba(var(--accent-rgb), 0.42);
+  background: var(--accent-muted);
+  color: var(--accent);
+}
+
+.colorAdjustHealingTools {
+  flex-shrink: 0;
+  padding: 0 12px 10px;
+}
+
+.previewArea.isHealingTool.isInteractive {
+  cursor: crosshair;
+}
+
+.previewArea.isHealingTool.isInteractive.isDragging {
+  cursor: crosshair;
+}
+
 .colorAdjustPanelError {
   margin: 0 12px 10px;
 }
@@ -3269,6 +3292,20 @@ body.color-panel-resizing {
   border-color: rgba(var(--accent-rgb), 0.44);
   color: var(--accent-hover);
   background: rgba(var(--accent-rgb), 0.12);
+}
+
+.historyIconButton:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+  border-color: var(--border);
+  color: var(--muted);
+  background: var(--panel-soft);
+}
+
+.historyIconButton:disabled:hover {
+  border-color: var(--border);
+  color: var(--muted);
+  background: var(--panel-soft);
 }
 
 .historyIconFilter select {

@@ -24,6 +24,7 @@ export function OutputColorPanel({
   onUpdate,
   onPreviewChange,
   onWidthChange,
+  onHealingBridgeChange,
   updating = false,
   disabled = false,
   align = "right"
@@ -102,6 +103,36 @@ export function OutputColorPanel({
 
   const displayError = previewError || engine.error;
 
+  useEffect(() => {
+    if (!open || disabled) {
+      onHealingBridgeChange?.(null);
+      return undefined;
+    }
+    onHealingBridgeChange?.({
+      active: engine.healingActive,
+      cursor: engine.healingCursor,
+      brushDiameter: engine.healingBrushDiameter,
+      handlePointerDown: engine.handleHealingPointerDown,
+      handlePointerMove: engine.handleHealingPointerMove,
+      handlePointerUp: engine.handleHealingPointerUp,
+      handlePointerHover: engine.handleHealingPointerHover,
+      clearHealingCursor: engine.clearHealingCursor
+    });
+    return () => onHealingBridgeChange?.(null);
+  }, [
+    open,
+    disabled,
+    onHealingBridgeChange,
+    engine.healingActive,
+    engine.healingCursor,
+    engine.healingBrushDiameter,
+    engine.handleHealingPointerDown,
+    engine.handleHealingPointerMove,
+    engine.handleHealingPointerUp,
+    engine.handleHealingPointerHover,
+    engine.clearHealingCursor
+  ]);
+
   if (!open) return null;
 
   return (
@@ -127,6 +158,7 @@ export function OutputColorPanel({
         onPrimaryAction={handleUpdate}
         primaryDisabled={disabled || !engine.isReady}
         primaryLoading={updating}
+        showHealingTool={!disabled && engine.isReady}
       />
 
       {displayError ? <div className="editorError colorAdjustPanelError">{displayError}</div> : null}

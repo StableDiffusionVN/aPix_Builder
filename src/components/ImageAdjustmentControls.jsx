@@ -1,14 +1,40 @@
 import { useEffect } from "react";
+import { DEFAULT_HEALING_BRUSH_SIZE } from "../lib/healingBrush";
 import {
   ChevronDown,
   Droplet,
+  Redo2,
   RotateCcw,
   SlidersHorizontal,
   Sparkles,
+  Undo2,
   X
 } from "lucide-react";
 import { useI18n } from "../i18n/I18nContext";
 import { COLOR_CHANNELS, PRESETS } from "../lib/imageAdjustments";
+
+export const HealingIcon = ({ size = 14, ...props }) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    {...props}
+  >
+    <rect x="7" y="2" width="10" height="20" rx="5" transform="rotate(-45 12 12)" />
+    <circle cx="12" cy="12" r="0.8" fill="currentColor" stroke="none" />
+    <circle cx="12" cy="8.5" r="0.8" fill="currentColor" stroke="none" />
+    <circle cx="12" cy="15.5" r="0.8" fill="currentColor" stroke="none" />
+    <circle cx="8.5" cy="12" r="0.8" fill="currentColor" stroke="none" />
+    <circle cx="15.5" cy="12" r="0.8" fill="currentColor" stroke="none" />
+    <circle cx="9.5" cy="9.5" r="0.8" fill="currentColor" stroke="none" />
+    <circle cx="14.5" cy="14.5" r="0.8" fill="currentColor" stroke="none" />
+  </svg>
+);
 
 export const CurveIcon = ({ size = 14, ...props }) => (
   <svg
@@ -86,7 +112,8 @@ export function ImageAdjustmentControls({
   primaryUpdateText,
   onPrimaryAction,
   primaryDisabled = false,
-  primaryLoading = false
+  primaryLoading = false,
+  showHealingTool = false
 }) {
   const { t } = useI18n();
 
@@ -131,7 +158,15 @@ export function ImageAdjustmentControls({
     handleCurvesPointerDown,
     handleCurvesPointerMove,
     handleCurvesPointerUp,
-    handleCurvesDoubleClick
+    handleCurvesDoubleClick,
+    healingActive,
+    healingBrushSize,
+    updateHealingBrushSize,
+    toggleHealingActive,
+    canUndo,
+    canRedo,
+    handleUndo,
+    handleRedo
   } = engine;
 
   useEffect(() => {
@@ -143,7 +178,17 @@ export function ImageAdjustmentControls({
 
     function handleKeyDown(event) {
       const editable = isEditableTarget(event.target);
-      const hasModifier = event.metaKey || event.ctrlKey || event.altKey || event.shiftKey;
+      const hasUndoModifier = event.metaKey || event.ctrlKey;
+      const key = event.key.toLowerCase();
+
+      if (showHealingTool && hasUndoModifier && key === "z") {
+        event.preventDefault();
+        if (event.shiftKey) handleRedo();
+        else handleUndo();
+        return;
+      }
+
+      const hasModifier = hasUndoModifier || event.altKey || event.shiftKey;
       if (editable || hasModifier) return;
 
       if (event.key === "1") {
@@ -164,18 +209,70 @@ export function ImageAdjustmentControls({
       if (event.key === "4") {
         event.preventDefault();
         toggleSection("effects");
+        return;
+      }
+      if (showHealingTool && (event.key === "j" || event.key === "J")) {
+        event.preventDefault();
+        toggleHealingActive();
       }
     }
 
     window.addEventListener("keydown", handleKeyDown, true);
     return () => window.removeEventListener("keydown", handleKeyDown, true);
-  }, [toggleSection]);
+  }, [showHealingTool, toggleHealingActive, toggleSection, handleUndo, handleRedo]);
 
   return (
     <aside className="imageEditorControls">
-      <div className="panelTitle">
+      <div className="panelTitle colorAdjustPanelTitle">
         <h3>{title}</h3>
+        {showHealingTool ? (
+          <div className="imageEditorPanelHeaderActions">
+            <button
+              type="button"
+              className="historyIconButton"
+              onClick={handleUndo}
+              disabled={!canUndo}
+              title={`${t("editor.undo")} (⌘Z)`}
+              aria-label={t("editor.undo")}
+            >
+              <Undo2 size={14} />
+            </button>
+            <button
+              type="button"
+              className={`historyIconButton colorAdjustHealingButton${healingActive ? " active" : ""}`}
+              onClick={toggleHealingActive}
+              title={`${t("editor.healing")} (J)`}
+              aria-pressed={healingActive}
+              aria-label={t("editor.healing")}
+            >
+              <HealingIcon size={14} />
+            </button>
+            <button
+              type="button"
+              className="historyIconButton"
+              onClick={handleRedo}
+              disabled={!canRedo}
+              title={`${t("editor.redo")} (⌘⇧Z)`}
+              aria-label={t("editor.redo")}
+            >
+              <Redo2 size={14} />
+            </button>
+          </div>
+        ) : null}
       </div>
+
+      {showHealingTool && healingActive ? (
+        <div className="colorAdjustHealingTools">
+          <EditorRange
+            label="Size"
+            value={healingBrushSize}
+            min={1}
+            max={180}
+            resetValue={DEFAULT_HEALING_BRUSH_SIZE}
+            onChange={updateHealingBrushSize}
+          />
+        </div>
+      ) : null}
 
       <div
         className="editorHistogramWrap"

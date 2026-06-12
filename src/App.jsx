@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
   CheckCircle2,
@@ -152,6 +152,7 @@ export default function App() {
   const [colorPreviewUrl, setColorPreviewUrl] = useState(null);
   const [colorUpdating, setColorUpdating] = useState(false);
   const [colorPanelWidth, setColorPanelWidth] = useState(0);
+  const [healingBridge, setHealingBridge] = useState(null);
   const [notifyEnabled, setNotifyEnabled] = useState(loadNotifyEnabled);
   const [addServerOpen, setAddServerOpen] = useState(false);
   const [executionMode, setExecutionMode] = useState(loadExecutionMode);
@@ -320,6 +321,33 @@ export default function App() {
     handlePreviewWheel, handlePreviewPointerDown,
     handlePreviewPointerMove, handlePreviewPointerUp
   } = useImageViewer(displayImage, canCompare);
+
+  const handleHealingBridgeChange = useCallback((bridge) => {
+    setHealingBridge(bridge);
+  }, []);
+
+  const handlePreviewPointerDownWithHealing = useCallback((event) => {
+    if (healingBridge?.active && imageElementRef.current) {
+      if (healingBridge.handlePointerDown(event, imageElementRef.current, previewAreaRef.current)) return;
+    }
+    handlePreviewPointerDown(event);
+  }, [healingBridge, handlePreviewPointerDown, imageElementRef, previewAreaRef]);
+
+  const handlePreviewPointerMoveWithHealing = useCallback((event) => {
+    if (healingBridge?.active && imageElementRef.current) {
+      if (healingBridge.handlePointerMove(event, imageElementRef.current, previewAreaRef.current)) return;
+    }
+    handlePreviewPointerMove(event);
+  }, [healingBridge, handlePreviewPointerMove, imageElementRef, previewAreaRef]);
+
+  const handlePreviewPointerUpWithHealing = useCallback((event) => {
+    if (healingBridge?.handlePointerUp?.(event)) return;
+    handlePreviewPointerUp(event);
+  }, [healingBridge, handlePreviewPointerUp]);
+
+  const handlePreviewPointerLeaveWithHealing = useCallback(() => {
+    healingBridge?.clearHealingCursor?.();
+  }, [healingBridge]);
 
   useEffect(() => {
     setColorPreviewUrl(null);
@@ -1313,9 +1341,13 @@ export default function App() {
           imageElementRef={imageElementRef}
           handleResultImageLoad={handleResultImageLoad}
           handlePreviewWheel={handlePreviewWheel}
-          handlePreviewPointerDown={handlePreviewPointerDown}
-          handlePreviewPointerMove={handlePreviewPointerMove}
-          handlePreviewPointerUp={handlePreviewPointerUp}
+          handlePreviewPointerDown={handlePreviewPointerDownWithHealing}
+          handlePreviewPointerMove={handlePreviewPointerMoveWithHealing}
+          handlePreviewPointerUp={handlePreviewPointerUpWithHealing}
+          handlePreviewPointerLeave={handlePreviewPointerLeaveWithHealing}
+          healingActive={Boolean(healingBridge?.active)}
+          healingCursor={healingBridge?.cursor ?? null}
+          healingBrushDiameter={healingBridge?.brushDiameter ?? 0}
           stepOutput={stepOutput}
           selectOutput={selectOutput}
           RunningState={RunningState}
@@ -1342,6 +1374,7 @@ export default function App() {
           onPreviewChange={setColorPreviewUrl}
           onUpdate={handleColorPanelUpdate}
           onWidthChange={setColorPanelWidth}
+          onHealingBridgeChange={handleHealingBridgeChange}
           updating={colorUpdating}
           disabled={!heroImage || showRunningScreen}
           align={sidebarSide === "right" ? "left" : "right"}

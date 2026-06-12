@@ -1,0 +1,82 @@
+app:
+  name: SDVN Upscale Klein
+input:
+  checkpoint:
+    id: 267-Ckpt_name
+    ui:
+      type: checkpoints
+      label: Checkpoint
+      value: Flux2-klein-9b.safetensors
+  lora_upscale:
+    id: 268-lora_name
+    ui:
+      type: menu
+      label: Lora upscale
+      choices:
+        - None
+        - "[SDVN]_Upscale_Klein-9b_v1.safetensors"
+        - "[SDVN]_Upscale_Arc_Klein-9b_v1.safetensors"
+        - "[SDVN]_Upscale_Product_Klein-9b_v1.safetensors"
+      value: "[SDVN]_Upscale_Klein-9b_v1.safetensors"
+  anh_upscale:
+    id: 258-image
+    ui:
+      type: image
+      label: Ảnh upscale
+  custom_prompt:
+    id: 279-value
+    ui:
+      type: string
+      label: Custom Prompt
+  upscale_size:
+    id: 273-Menu
+    ui:
+      type: menu
+      label: Upscale size
+      choices:
+        - "1024"
+        - "1536"
+        - "1920"
+        - "2048"
+        - "3800"
+        - "4000"
+        - "5600"
+        - "6000"
+        - "7400"
+        - "8000"
+        - "9200"
+        - "10000"
+      value: "2048"
+  color_match:
+    id: 263-method
+    ui:
+      type: menu
+      label: Color Match
+      choices:
+        - wavelet
+        - mkl
+      value: wavelet
+  blend:
+    id: 263-blend
+    ui:
+      type: float
+      label: Blend
+      minimum: 0
+      maximum: 1
+      step: 0.05
+      display: slider
+      value: 1
+  seed:
+    id: 283-seed
+    ui:
+      type: seed
+      label: Seed
+      minimum: 0
+      step: 1
+      value: random_seed
+output:
+  anh_upscale:
+    id: "34"
+    ui:
+      type: image
+      label: Ảnh upscale

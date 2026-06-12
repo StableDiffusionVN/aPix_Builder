@@ -1298,6 +1298,68 @@ html[data-theme="light"] .workflowNoteContent a:hover {
   line-height: 1.4;
 }
 
+.localFolderSelection {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) 28px;
+  gap: 10px;
+  align-items: start;
+  min-height: 88px;
+  padding: 12px;
+  border: 1px dashed rgba(var(--accent-rgb), 0.28);
+  border-radius: 12px;
+  background: var(--accent-muted);
+}
+.localFolderSelectionIcon {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: rgba(var(--accent-rgb), 0.12);
+  color: var(--accent);
+}
+.localFolderSelectionBody {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.localFolderSelectionBody strong {
+  color: var(--text);
+  font-size: 12px;
+}
+.localFolderSelectionBody small {
+  overflow: hidden;
+  color: var(--muted-2);
+  font-size: 11px;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.localFolderSelectionRemove {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
 .imageUrlLoader {
   display: grid;
   gap: 5px;
@@ -1305,19 +1367,27 @@ html[data-theme="light"] .workflowNoteContent a:hover {
 }
 
 .imageUrlInputRow {
-  display: grid;
-  grid-template-columns: 14px minmax(0, 1fr) auto auto;
+  display: flex;
   align-items: center;
   gap: 6px;
   min-height: 32px;
-  padding: 0 6px 0 8px;
+  padding: 0 4px 0 8px;
   border: 1px solid var(--border);
   border-radius: var(--radius, 6px);
   background: transparent;
   color: var(--muted-2);
 }
 
-.imageUrlInputRow input {
+.imageUrlInputIcon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted-2);
+}
+
+.imageUrlInputRow input[type="text"] {
+  flex: 1 1 auto;
   width: 100%;
   min-width: 0;
   min-height: 30px;
@@ -1329,33 +1399,51 @@ html[data-theme="light"] .workflowNoteContent a:hover {
   font-size: 12px;
 }
 
-.imageUrlInputRow button,
-.imageUrlInputRow .inputFolderButton {
+.imageUrlInputActions {
   display: inline-flex;
+  flex: 0 0 auto;
   align-items: center;
-  justify-content: center;
   gap: 4px;
-  min-height: 26px;
-  padding: 0 8px;
+}
+
+.imageUrlInputRow .imageUrlActionButton,
+.imageUrlInputRow .inputFolderButton,
+.imageUrlInputRow .imageUrlInputLibraryButton {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  min-height: 28px;
+  padding: 0;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm, 4px);
   background: transparent;
   color: var(--muted);
-  font-size: 11px;
-  font-weight: 500;
   cursor: pointer;
   transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
 }
 
-.imageUrlInputRow button:hover:not(:disabled),
-.imageUrlInputRow .inputFolderButton:hover:not(:disabled) {
+.imageUrlInputRow .imageUrlInputLibraryButton {
+  display: inline-flex;
+  gap: 5px;
+  width: auto;
+  padding: 0 10px 0 8px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.imageUrlInputRow .imageUrlActionButton:hover:not(:disabled),
+.imageUrlInputRow .inputFolderButton:hover:not(:disabled),
+.imageUrlInputRow .imageUrlInputLibraryButton:hover:not(:disabled) {
   border-color: var(--border-strong);
   background: rgba(var(--accent-rgb), 0.08);
   color: var(--text);
 }
 
-.imageUrlInputRow button:disabled,
-.imageUrlInputRow .inputFolderButton:disabled {
+.imageUrlInputRow .imageUrlActionButton:disabled,
+.imageUrlInputRow .inputFolderButton:disabled,
+.imageUrlInputRow .imageUrlInputLibraryButton:disabled {
   cursor: not-allowed;
   opacity: 0.55;
 }
@@ -3219,6 +3307,27 @@ body.color-panel-resizing .colorAdjustPanel.is-left .colorAdjustPanelResizeHandl
 .colorAdjustHealingTools {
   flex-shrink: 0;
   padding: 0 12px 10px;
+}
+
+.colorAdjustHealingPanel {
+  margin: 4px 0 12px;
+  padding: 14px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.28);
+  align-self: start;
+}
+
+html[data-theme="light"] .colorAdjustHealingPanel {
+  background: var(--surface-2);
+}
+
+.colorAdjustPanel .editorHistogramWrap {
+  align-self: start;
+}
+
+.editorHistogramWrap.isHidden {
+  display: none;
 }
 
 .previewArea.isHealingTool.isInteractive {
@@ -5801,6 +5910,71 @@ html[data-theme="light"] .themeMenuItem {
 .typeBadge--boolean { background: rgba(251, 191, 36, 0.22); color: #fde68a; }
 .typeBadge--note { background: rgba(244, 114, 182, 0.22); color: #fbcfe8; }
 .typeBadge--menu-sub { background: rgba(56, 189, 248, 0.22); color: #bae6fd; }
+
+html[data-theme="light"] .inputListPane,
+html[data-theme="light"] .inputDetailPane {
+  background: var(--surface-2);
+}
+
+html[data-theme="light"] .inputListItem {
+  background: var(--surface-1);
+}
+
+html[data-theme="light"] .inputListItem:hover {
+  background: var(--surface-3);
+}
+
+html[data-theme="light"] .inputListItem.isSelected {
+  background: var(--accent-muted);
+}
+
+html[data-theme="light"] .typeBadge {
+  background: var(--surface-3);
+  color: var(--text-secondary);
+}
+
+html[data-theme="light"] .typeBadge--image {
+  background: rgba(109, 40, 217, 0.12);
+  color: #6d28d9;
+}
+
+html[data-theme="light"] .typeBadge--int,
+html[data-theme="light"] .typeBadge--float,
+html[data-theme="light"] .typeBadge--seed {
+  background: rgba(29, 78, 216, 0.12);
+  color: #1d4ed8;
+}
+
+html[data-theme="light"] .typeBadge--string {
+  background: rgba(71, 85, 105, 0.12);
+  color: #475569;
+}
+
+html[data-theme="light"] .typeBadge--menu {
+  background: rgba(21, 128, 61, 0.12);
+  color: #15803d;
+}
+
+html[data-theme="light"] .typeBadge--checkbox,
+html[data-theme="light"] .typeBadge--boolean {
+  background: rgba(180, 83, 9, 0.12);
+  color: #b45309;
+}
+
+html[data-theme="light"] .typeBadge--note {
+  background: rgba(190, 24, 93, 0.12);
+  color: #be185d;
+}
+
+html[data-theme="light"] .typeBadge--menu-sub {
+  background: rgba(3, 105, 161, 0.12);
+  color: #0369a1;
+}
+
+html[data-theme="light"] .inputListItemType {
+  background: var(--surface-3);
+  color: var(--text-secondary);
+}
 
 .inputListItemMain {
   display: grid;

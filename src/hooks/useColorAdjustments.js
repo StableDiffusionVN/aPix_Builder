@@ -359,7 +359,7 @@ export function useColorAdjustments({
     return () => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
-  }, [isReady, adjustments, healingStrokes, renderPreview]);
+  }, [isReady, adjustments, healingStrokes, healingActive, renderPreview]);
 
   useEffect(() => {
     if (!openSections.curves || !curvesCanvasRef.current || !previewCanvasRef.current) return;

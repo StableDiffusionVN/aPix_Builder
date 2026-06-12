@@ -8,6 +8,8 @@ import { menuChoiceOptions, parseMenuChoices, resolveMenuStoredValue } from "../
 import { DYNAMIC_FIELD_TYPES, canonicalDynamicType, dynamicFieldChoices, isDynamicFieldType } from "../lib/dynamicTypes";
 import { EditorRange } from "./ImageAdjustmentControls";
 import { localizeRuntimeMessage, useI18n } from "../i18n/I18nContext";
+import { clearPickedFolderFiles, registerPickedFolderFiles } from "../lib/folderFileCache.js";
+import { isHttpImageUrl, readLocalFolderValue } from "../lib/localImageFolder.js";
 
 const INPUT_FAVORITES_KEY = "comfyui-build:input-image-favorites:v1";
 
@@ -40,10 +42,18 @@ function pruneInvalidImageValue(rawValue, libraryImages) {
   const next = [];
   let changed = false;
 
+  const single = Array.isArray(rawValue) ? null : rawValue;
+  if (single?.kind === "local-folder" || single?.kind === "local-folder-picked") {
+    return { next: single, changed: false };
+  }
+
   for (const item of readImageFieldValue(rawValue)) {
     if (item?.startsWith?.("data:image")) {
       next.push(item);
       continue;
+    }
+    if (item?.kind === "local-folder" || item?.kind === "local-folder-picked") {
+      return { next: item, changed: false };
     }
     if (item?.kind === "input-image") {
       const libraryImage = availableByName.get(item.name);
@@ -282,6 +292,7 @@ export function DynamicField({
   const [imageUrlInput, setImageUrlInput] = useState("");
   const [imageUrlLoading, setImageUrlLoading] = useState(false);
   const [imageUrlError, setImageUrlError] = useState("");
+  const folderPickerRef = useRef(null);
   const [lightboxScale, setLightboxScale] = useState(1);
   const [lightboxPan, setLightboxPan] = useState({ x: 0, y: 0 });
   const [isPanningLightbox, setIsPanningLightbox] = useState(false);
@@ -291,9 +302,10 @@ export function DynamicField({
   const reorderDragRef = useRef(null);
   const supportsMultipleImages = ui.type === "image" || ui.type === "image_mask";
   const isImageField = ui.type === "image" || ui.type === "image_mask" || ui.type === "file";
+  const folderValue = useMemo(() => readLocalFolderValue(value), [value]);
   const selectedImages = useMemo(
-    () => resolveSelectedImages(value, inputLibraryReady, inputImages),
-    [value, inputLibraryReady, inputImages]
+    () => (folderValue ? [] : resolveSelectedImages(value, inputLibraryReady, inputImages)),
+    [folderValue, value, inputLibraryReady, inputImages]
   );
   const activeImage = selectedImages[Math.min(activeImageIndex, Math.max(0, selectedImages.length - 1))] || null;
   const selectedInputName = activeImage?.kind === "input-image" ? activeImage.name : "";
@@ -345,7 +357,11 @@ export function DynamicField({
     if (!inputLibraryReady || !isImageField) return;
     const { next, changed } = pruneInvalidImageValue(value, inputImages);
     if (!changed) return;
-    const sanitized = next.filter(Boolean);
+    if (next?.kind === "local-folder" || next?.kind === "local-folder-picked") {
+      onChange(next);
+      return;
+    }
+    const sanitized = Array.isArray(next) ? next.filter(Boolean) : [next].filter(Boolean);
     if (!sanitized.length) {
       onChange("");
       return;
@@ -487,9 +503,45 @@ export function DynamicField({
     }
   }
 
+  async function handlePickLocalFolder(event) {
+    const fileList = [...(event.target.files || [])];
+    event.target.value = "";
+    if (!fileList.length) return;
+    setImageUrlLoading(true);
+    setImageUrlError("");
+    try {
+      const previous = readLocalFolderValue(value);
+      if (previous?.kind === "local-folder-picked" && previous.sessionId) {
+        clearPickedFolderFiles(previous.sessionId);
+      }
+      const { sessionId, imageCount, files } = registerPickedFolderFiles(fileList);
+      if (!imageCount) throw new Error(t("field.folderNoImages"));
+      const folderName = files[0]?.webkitRelativePath?.split("/")?.[0]
+        || files[0]?.name
+        || t("field.folderDefaultName");
+      onChange({
+        kind: "local-folder-picked",
+        sessionId,
+        folderName,
+        imageCount
+      });
+      setImageUrlInput("");
+    } catch (error) {
+      setImageUrlError(localizeRuntimeMessage(error.message, locale) || t("field.folderError"));
+    } finally {
+      setImageUrlLoading(false);
+    }
+  }
+
   async function handleLoadImageFromUrl(event) {
     event.preventDefault();
-    await loadImageFromUrl(imageUrlInput.trim(), { clearInput: true });
+    const source = imageUrlInput.trim();
+    if (!source) return;
+    if (!isHttpImageUrl(source)) {
+      setImageUrlError(t("field.urlOnlyRequired"));
+      return;
+    }
+    await loadImageFromUrl(source, { clearInput: true });
   }
 
   function firstDroppedUri(dataTransfer) {
@@ -517,7 +569,10 @@ export function DynamicField({
     }
     const uri = firstDroppedUri(event.dataTransfer);
     if (uri) {
-      await loadImageFromUrl(uri.split("\n")[0]);
+      const source = uri.split("\n")[0].trim();
+      if (isHttpImageUrl(source)) {
+        await loadImageFromUrl(source);
+      }
       return;
     }
     await handlePickedFiles(event.dataTransfer.files);
@@ -829,7 +884,44 @@ export function DynamicField({
               handleImageDrop(event);
             }}
           >
-            {selectedImages.length ? (
+            {folderValue ? (
+              <div className="localFolderSelection">
+                <div className="localFolderSelectionIcon">
+                  {imageUrlLoading ? <Loader2 size={18} className="spin" /> : <Folder size={18} />}
+                </div>
+                <div className="localFolderSelectionBody">
+                  <strong>
+                    {imageUrlLoading
+                      ? t("field.folderLoading")
+                      : t("field.folderReady", { count: folderValue.imageCount || 0 })}
+                  </strong>
+                  <small>
+                    {folderValue.kind === "local-folder-picked"
+                      ? folderValue.folderName
+                      : folderValue.folderPath}
+                  </small>
+                  <small>
+                    {folderValue.kind === "local-folder-picked"
+                      ? t("field.folderPickedHint")
+                      : t("field.folderRunHint")}
+                  </small>
+                </div>
+                <button
+                  type="button"
+                  className="localFolderSelectionRemove"
+                  onClick={() => {
+                    if (folderValue?.kind === "local-folder-picked" && folderValue.sessionId) {
+                      clearPickedFolderFiles(folderValue.sessionId);
+                    }
+                    onChange("");
+                  }}
+                  title={t("field.removeFolder")}
+                  aria-label={t("field.removeFolder")}
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            ) : selectedImages.length ? (
               <div className="multiImageGrid">
                 {selectedImages.map((image, index) => {
                   const imageUrl = image?.startsWith?.("data:image")
@@ -972,9 +1064,11 @@ export function DynamicField({
           {acceptsImageUrl ? (
             <form className="imageUrlLoader" onSubmit={handleLoadImageFromUrl}>
               <div className="imageUrlInputRow">
-                <Link size={14} />
+                <span className="imageUrlInputIcon" aria-hidden="true">
+                  <Link size={14} />
+                </span>
                 <input
-                  type="url"
+                  type="text"
                   value={imageUrlInput}
                   placeholder={t("field.urlPlaceholder")}
                   onChange={event => {
@@ -982,23 +1076,55 @@ export function DynamicField({
                     if (imageUrlError) setImageUrlError("");
                   }}
                 />
-                <button type="submit" disabled={imageUrlLoading || !imageUrlInput.trim()}>
-                  {imageUrlLoading ? <Loader2 size={14} className="spin" /> : <Upload size={14} />}
-                  <span>{t("field.loadUrl")}</span>
-                </button>
-                <button
-                  type="button"
-                  className="inputFolderButton"
-                  onClick={event => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    openInputLibrary();
-                  }}
-                  title={t("field.chooseInput")}
-                >
-                  <Folder size={14} />
-                  <span>Input</span>
-                </button>
+                <div className="imageUrlInputActions">
+                  <button
+                    type="submit"
+                    className="imageUrlActionButton"
+                    disabled={imageUrlLoading || !imageUrlInput.trim()}
+                    title={t("field.loadUrl")}
+                    aria-label={t("field.loadUrl")}
+                  >
+                    {imageUrlLoading ? <Loader2 size={14} className="spin" /> : <Upload size={14} />}
+                  </button>
+                  <button
+                    type="button"
+                    className="imageUrlActionButton inputFolderButton"
+                    onClick={event => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      folderPickerRef.current?.click();
+                    }}
+                    title={t("field.pickLocalFolder")}
+                    aria-label={t("field.pickLocalFolder")}
+                    disabled={imageUrlLoading}
+                  >
+                    <Folder size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    className="imageUrlActionButton imageUrlInputLibraryButton"
+                    onClick={event => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      openInputLibrary();
+                    }}
+                    title={t("field.chooseInput")}
+                    aria-label={t("field.chooseInput")}
+                  >
+                    <Images size={14} />
+                    <span>Input</span>
+                  </button>
+                </div>
+                <input
+                  ref={folderPickerRef}
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="srOnly"
+                  webkitdirectory=""
+                  directory=""
+                  onChange={handlePickLocalFolder}
+                />
               </div>
               {imageUrlError ? <small className="imageUrlStatus bad">{imageUrlError}</small> : null}
             </form>

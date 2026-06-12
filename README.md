@@ -169,12 +169,18 @@ sudo pacman -S nodejs npm
 
 ## Cài đặt
 
-Clone repository và cài dependency:
+Clone repository kèm các dự án con (git submodule) và cài dependency:
 
 ```bash
-git clone <repository-url>
+git clone --recurse-submodules <repository-url>
 cd aPix_Builder
 npm install
+```
+
+Nếu đã clone trước đó mà chưa có submodule:
+
+```bash
+git submodule update --init --recursive
 ```
 
 ## Khởi động nhanh
@@ -222,6 +228,14 @@ npm run dev
 
 ## Cấu trúc dự án
 
+Repo tổng gồm app web chính và hai dự án con (git submodule):
+
+| Dự án | Thư mục | Repository | Mô tả |
+| --- | --- | --- | --- |
+| aPix Builder (web) | `.` | repo hiện tại | Ứng dụng web React/Vite + backend Node.js. |
+| aPix Builder (Photoshop) | `aPix_builder_pts/` | [aPix_builder_pts](https://github.com/StableDiffusionVN/aPix_builder_pts) | Plugin UXP cho Adobe Photoshop. |
+| RunningHub Shortcut | `runninghub_shortcut/` | [runninghub_shortcut](https://github.com/phamhungd/runninghub_shortcut) | Apple Shortcuts và workflow JSON cho RunningHub. |
+
 | Đường dẫn | Nội dung |
 | --- | --- |
 | `src/` | Frontend React, component UI, hook xử lý state và tương tác. |
@@ -233,6 +247,28 @@ npm run dev
 | `uploads/` | File upload tạm khi gửi sang workflow. |
 | `presets/` | Preset chỉnh ảnh của Image Editor. |
 | `scripts/start-app.mjs` | Script khởi động app một lệnh. |
+| `aPix_builder_pts/` | Submodule — plugin Photoshop; xem README trong thư mục. |
+| `runninghub_shortcut/` | Submodule — Apple Shortcuts; xem README trong thư mục. |
+
+### Làm việc với submodule
+
+Cập nhật tất cả submodule lên commit mới nhất trên remote:
+
+```bash
+git submodule update --remote --merge
+```
+
+Commit thay đổi trong một submodule (ví dụ plugin Photoshop):
+
+```bash
+cd aPix_builder_pts
+git add .
+git commit -m "your message"
+git push origin main
+cd ..
+git add aPix_builder_pts
+git commit -m "chore: bump aPix_builder_pts submodule"
+```
 
 ## Template workflow
 

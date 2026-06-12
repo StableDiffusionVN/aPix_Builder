@@ -1,0 +1,11 @@
+{
+    "Upscale Size": [1024, 1536,1920,2048,3800,4000,5600,6000,7400,8000,9200,10000],
+    "Upscale Lora": {
+        "Default": "upsacle_200_9b_8k.safetensors",
+        "Product": "SDVN_Upscale_Product_Klein-9b_v1.safetensors",
+        "Architecture": "sdvn_arc_upsacle_9b.safetensors"
+    },
+    "Lora Strength": [0.8,0.6,0.4,0.2,1],
+    "Color Method": ["wavelet","mkl"],
+    "Color Match": [1,0,0.8,0.6,0.4,0.2]
+}

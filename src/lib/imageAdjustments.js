@@ -1,11 +1,15 @@
+export const HSL_CHANNEL_SPAN = 60;
+
 export const COLOR_CHANNELS = [
-  { id: "reds", name: "Reds", center: 0, color: "#ef4444" },
-  { id: "yellows", name: "Yellows", center: 60, color: "#f59e0b" },
-  { id: "greens", name: "Greens", center: 120, color: "#22c55e" },
-  { id: "aquas", name: "Aquas", center: 180, color: "#22d3ee" },
-  { id: "blues", name: "Blues", center: 240, color: "#3b82f6" },
-  { id: "magentas", name: "Magentas", center: 300, color: "#d946ef" }
+  { id: "reds", name: "Reds", center: 0, minHue: 330, maxHue: 30, color: "#ef4444" },
+  { id: "yellows", name: "Yellows", center: 60, minHue: 30, maxHue: 90, color: "#f59e0b" },
+  { id: "greens", name: "Greens", center: 120, minHue: 90, maxHue: 150, color: "#22c55e" },
+  { id: "aquas", name: "Aquas", center: 180, minHue: 150, maxHue: 210, color: "#22d3ee" },
+  { id: "blues", name: "Blues", center: 240, minHue: 210, maxHue: 270, color: "#3b82f6" },
+  { id: "magentas", name: "Magentas", center: 300, minHue: 270, maxHue: 330, color: "#d946ef" }
 ];
+
+export const HSL_CHANNEL_RADIUS = HSL_CHANNEL_SPAN / 2 + 5;
 
 export const DEFAULT_HSL = Object.fromEntries(
   COLOR_CHANNELS.map(channel => [channel.id, { h: 0, s: 0, l: 0 }])
@@ -166,6 +170,44 @@ export function hslToRgb(h, s, l) {
 export function hueDistance(a, b) {
   const diff = Math.abs(((a - b + 180) % 360) - 180);
   return Math.abs(diff);
+}
+
+export function getHslChannelWeight(hue, center) {
+  const dist = hueDistance(hue, center);
+  if (dist >= HSL_CHANNEL_RADIUS) return 0;
+  const t = 1 - dist / HSL_CHANNEL_RADIUS;
+  return t * t * (3 - 2 * t);
+}
+
+export function applyHslChannelMix(hsl, channelAdjusts) {
+  if (!channelAdjusts?.length) return hsl;
+
+  const satGate = Math.min(1, Math.max(hsl.s, 0) / 12);
+  if (satGate <= 0) return hsl;
+
+  let weightSum = 0;
+  const weights = channelAdjusts.map(channel => {
+    const weight = getHslChannelWeight(hsl.h, channel.center);
+    weightSum += weight;
+    return weight;
+  });
+  if (weightSum <= 0) return hsl;
+
+  let deltaH = 0;
+  let deltaS = 0;
+  let deltaL = 0;
+  for (let i = 0; i < channelAdjusts.length; i++) {
+    const blend = weights[i] / weightSum;
+    deltaH += channelAdjusts[i].h * blend;
+    deltaS += channelAdjusts[i].s * blend;
+    deltaL += channelAdjusts[i].l * blend;
+  }
+
+  return {
+    h: hsl.h + deltaH * satGate,
+    s: hsl.s + deltaS * satGate,
+    l: hsl.l + deltaL * satGate
+  };
 }
 
 export function isCurveActive(points) {
@@ -636,16 +678,8 @@ export function applyImageAdjustments(image, adjustments, targetCanvas, { fullRe
 
       if (needsHsl) {
         const hsl = rgbToHsl(r, g, b);
-        for (let i = 0; i < activeChannelAdjusts.length; i++) {
-          const channelAdjust = activeChannelAdjusts[i];
-          const weight = Math.max(0, 1 - hueDistance(hsl.h, channelAdjust.center) / 42);
-          if (weight > 0) {
-            hsl.h += channelAdjust.h * weight;
-            hsl.s += channelAdjust.s * weight;
-            hsl.l += channelAdjust.l * weight;
-          }
-        }
-        const shifted = hslToRgb(hsl.h, hsl.s, hsl.l);
+        const mixed = applyHslChannelMix(hsl, activeChannelAdjusts);
+        const shifted = hslToRgb(mixed.h, mixed.s, mixed.l);
         r = shifted.r;
         g = shifted.g;
         b = shifted.b;

@@ -1,0 +1,59 @@
+app:
+  name: Klein Edit Image Lora
+input:
+  checkpoint:
+    id: 46-ckpt_name
+    ui:
+      type: string
+      label: Checkpoint
+      value: Flux2-klein-9b-fp8.safetensors
+  lora_klein:
+    id: 47-lora_name
+    ui:
+      type: string
+      label: Lora Klein
+      value: SDVN_Make_cosplay_klein_9b_v1.safetensors
+  edit_image:
+    id: 48-image
+    ui:
+      type: image
+      label: Edit Image
+  prompt_edit:
+    id: 49-value
+    ui:
+      type: text
+      label: Prompt edit
+  image_size:
+    id: 51-value
+    ui:
+      type: int
+      label: Image Size
+      minimum: 0
+      maximum: 2048
+      step: 1
+      display: slider
+      value: 2048
+  note:
+    ui:
+      type: note
+      markdown: "*Đặt image size = 0 để giữ nguyên size gốc*"
+  ratio:
+    id: 42-ratio
+    ui:
+      type: menu
+      label: Ratio
+      choices:
+        - None
+        - 1:1
+        - 4:5
+        - 5:4
+        - 2:3
+        - 3:2
+        - 16:9
+        - 9:16
+        - 1:2
+        - 2:1
+      value: None
+runninghub:
+  workflowId: "2064644362323189762"
+  saveWorkflowJson: true

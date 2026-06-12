@@ -134,6 +134,8 @@ export function itemValueKey(item) {
 export function extractImageValueUrl(value) {
   if (typeof value === "string" && value.startsWith("data:image")) return value;
   if (value?.kind === "input-image" && value.url) return value.url;
+  if (value?.kind === "local-folder") return "";
+  if (value?.kind === "local-file" && value.filePath) return value.filePath;
   return "";
 }
 
@@ -156,16 +158,23 @@ function collectActiveImageValueKeys(items, values) {
   return keys;
 }
 
+function batchEntriesForKey(values, key) {
+  const raw = values[key];
+  if (Array.isArray(raw) && raw.length > 0) return raw;
+  if (raw?.kind === "local-folder" || raw?.kind === "local-folder-picked") return [raw];
+  return [];
+}
+
 export function expandImageBatchValues(items, values) {
   const imageKeys = collectActiveImageValueKeys(items, values);
-  const batchKeys = imageKeys.filter(key => Array.isArray(values[key]) && values[key].length > 0);
-  const batchSize = Math.max(1, ...batchKeys.map(key => values[key].length));
+  const batchKeys = imageKeys.filter(key => batchEntriesForKey(values, key).length > 0);
+  const batchSize = Math.max(1, ...batchKeys.map(key => batchEntriesForKey(values, key).length));
   if (!batchKeys.length) return [values];
 
   return Array.from({ length: batchSize }, (_, index) => {
     const next = { ...values };
     for (const key of batchKeys) {
-      const images = values[key];
+      const images = batchEntriesForKey(values, key);
       next[key] = images[Math.min(index, images.length - 1)];
     }
     return next;
@@ -173,14 +182,14 @@ export function expandImageBatchValues(items, values) {
 }
 
 export function expandImageBatchByKeys(values, imageKeys) {
-  const batchKeys = imageKeys.filter(key => Array.isArray(values[key]) && values[key].length > 0);
-  const batchSize = Math.max(1, ...batchKeys.map(key => values[key].length));
+  const batchKeys = imageKeys.filter(key => batchEntriesForKey(values, key).length > 0);
+  const batchSize = Math.max(1, ...batchKeys.map(key => batchEntriesForKey(values, key).length));
   if (!batchKeys.length) return [values];
 
   return Array.from({ length: batchSize }, (_, index) => {
     const next = { ...values };
     for (const key of batchKeys) {
-      const images = values[key];
+      const images = batchEntriesForKey(values, key);
       next[key] = images[Math.min(index, images.length - 1)];
     }
     return next;

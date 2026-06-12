@@ -258,6 +258,12 @@ async function resolveImageFieldValue(apiKey, value, { inputDir, signal }) {
     }
     if (/^https?:\/\//i.test(value)) return value;
   }
+  if (value?.kind === "local-file" && value.filePath) {
+    const buffer = await readFile(value.filePath);
+    const ext = path.extname(value.filePath).slice(1) || "png";
+    const mimeType = ext === "jpg" || ext === "jpeg" ? "image/jpeg" : `image/${ext}`;
+    return uploadToRunningHub(apiKey, buffer, value.name || path.basename(value.filePath), mimeType, signal);
+  }
   if (value?.kind === "input-image" && value.url) {
     return resolveImageFieldValue(apiKey, value.url, { inputDir, signal });
   }

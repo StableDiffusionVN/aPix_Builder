@@ -13,7 +13,9 @@ export function inferRunningHubFieldType(fieldName, value) {
   if (lower.includes("video")) return "VIDEO";
   if (typeof value === "number") return Number.isInteger(value) ? "INT" : "FLOAT";
   if (value && typeof value === "object") {
-    if (value.kind === "input-image" || value.url) return "IMAGE";
+    if (value.kind === "input-image" || value.kind === "local-file" || value.kind === "local-folder" || value.url) {
+      return "IMAGE";
+    }
     return "STRING";
   }
   return "STRING";

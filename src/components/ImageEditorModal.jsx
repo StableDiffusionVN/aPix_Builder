@@ -26,6 +26,8 @@ import {
   ZoomOut
 } from "lucide-react";
 import { useI18n } from "../i18n/I18nContext";
+import { isTextEntryTarget, preventToolbarFocus } from "../lib/keyboard";
+import { applyHslChannelMix } from "../lib/imageAdjustments";
 
 const CurveIcon = ({ size = 14, ...props }) => (
   <svg
@@ -77,12 +79,12 @@ const HealingIcon = ({ size = 14, ...props }) => (
 );
 
 const COLOR_CHANNELS = [
-  { id: "reds", name: "Reds", center: 0, color: "#ef4444" },
-  { id: "yellows", name: "Yellows", center: 60, color: "#f59e0b" },
-  { id: "greens", name: "Greens", center: 120, color: "#22c55e" },
-  { id: "aquas", name: "Aquas", center: 180, color: "#22d3ee" },
-  { id: "blues", name: "Blues", center: 240, color: "#3b82f6" },
-  { id: "magentas", name: "Magentas", center: 300, color: "#d946ef" }
+  { id: "reds", name: "Reds", center: 0, minHue: 330, maxHue: 30, color: "#ef4444" },
+  { id: "yellows", name: "Yellows", center: 60, minHue: 30, maxHue: 90, color: "#f59e0b" },
+  { id: "greens", name: "Greens", center: 120, minHue: 90, maxHue: 150, color: "#22c55e" },
+  { id: "aquas", name: "Aquas", center: 180, minHue: 150, maxHue: 210, color: "#22d3ee" },
+  { id: "blues", name: "Blues", center: 240, minHue: 210, maxHue: 270, color: "#3b82f6" },
+  { id: "magentas", name: "Magentas", center: 300, minHue: 270, maxHue: 330, color: "#d946ef" }
 ];
 
 const DEFAULT_HSL = Object.fromEntries(COLOR_CHANNELS.map(channel => [channel.id, { h: 0, s: 0, l: 0 }]));
@@ -1367,16 +1369,8 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
  
         if (needsHsl) {
           const hsl = rgbToHsl(r, g, b);
-          for (let i = 0; i < activeChannelAdjusts.length; i++) {
-            const channelAdjust = activeChannelAdjusts[i];
-            const weight = Math.max(0, 1 - hueDistance(hsl.h, channelAdjust.center) / 42);
-            if (weight > 0) {
-              hsl.h += channelAdjust.h * weight;
-              hsl.s += channelAdjust.s * weight;
-              hsl.l += channelAdjust.l * weight;
-            }
-          }
-          const shifted = hslToRgb(hsl.h, hsl.s, hsl.l);
+          const mixed = applyHslChannelMix(hsl, activeChannelAdjusts);
+          const shifted = hslToRgb(mixed.h, mixed.s, mixed.l);
           r = shifted.r;
           g = shifted.g;
           b = shifted.b;
@@ -1942,12 +1936,6 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
   }
 
   useEffect(() => {
-    const isEditableTarget = target => {
-      if (!target) return false;
-      const tagName = target.tagName?.toLowerCase();
-      return tagName === "input" || tagName === "textarea" || tagName === "select" || target.isContentEditable;
-    };
-
     const activateTool = tool => {
       setActiveTool(tool);
       if (tool === "crop") openSection("crop");
@@ -1961,7 +1949,7 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
       if (event.key === "Shift") {
         setIsShiftPressed(true);
       }
-      const editable = isEditableTarget(event.target);
+      const editable = isTextEntryTarget(event.target);
       const key = event.key.toLowerCase();
       const hasUndoModifier = event.metaKey || event.ctrlKey;
 
@@ -2660,7 +2648,13 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
   return (
     <div className="imageEditorBackdrop" role="presentation" onMouseDown={onClose}>
       <section className="imageEditorModal" role="dialog" aria-modal="true" aria-label={title} onMouseDown={event => event.stopPropagation()}>
-        <nav className="imageEditorRail" aria-label="Image editor tools">
+        <nav
+          className="imageEditorRail"
+          aria-label="Image editor tools"
+          onMouseDown={event => {
+            if (event.target.closest("button")) preventToolbarFocus(event);
+          }}
+        >
           <button type="button" className={activeTool === "crop" ? "active" : ""} onClick={() => { setActiveTool("crop"); openSection("crop"); }} title="Crop">
             <Crop size={15} />
           </button>
@@ -3412,7 +3406,13 @@ function CropOverlay({ crop, ratio, aspect, onChange, onCommit }) {
 function AccordionSection({ icon: Icon, title, open, onToggle, children }) {
   return (
     <div className={`imageEditorAccordion ${open ? "isOpen" : ""}`}>
-      <button type="button" className="imageEditorAccordionHeader" onClick={onToggle} aria-expanded={open}>
+      <button
+        type="button"
+        className="imageEditorAccordionHeader"
+        onMouseDown={preventToolbarFocus}
+        onClick={onToggle}
+        aria-expanded={open}
+      >
         <span className="imageEditorAccordionTitle"><Icon size={14} /> {title}</span>
         <ChevronDown size={15} className="imageEditorAccordionChevron" />
       </button>
@@ -3433,6 +3433,7 @@ function EditorRange({ label, value, min, max, step = 1, resetValue = 0, onChang
         className="editorRangeReset"
         title={t("editor.reset")}
         disabled={isDefault}
+        onMouseDown={preventToolbarFocus}
         onClick={event => {
           event.preventDefault();
           event.stopPropagation();
@@ -3449,8 +3450,14 @@ function EditorRange({ label, value, min, max, step = 1, resetValue = 0, onChang
         step={step}
         value={value}
         onChange={event => onChange(Number(event.target.value))}
-        onMouseUp={onCommit}
-        onTouchEnd={onCommit}
+        onMouseUp={event => {
+          onCommit?.();
+          event.currentTarget.blur();
+        }}
+        onTouchEnd={event => {
+          onCommit?.();
+          event.currentTarget.blur();
+        }}
         onBlur={onCommit}
       />
     </label>

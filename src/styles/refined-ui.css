@@ -713,24 +713,34 @@ html[data-theme="light"] .sidebar .imageUrlInputRow {
 }
 
 html[data-theme="dark"] .sidebar .imageUrlInputRow button,
+html[data-theme="dark"] .sidebar .imageUrlInputRow .imageUrlActionButton,
 html[data-theme="dark"] .sidebar .imageUrlInputRow .inputFolderButton,
+html[data-theme="dark"] .sidebar .imageUrlInputRow .imageUrlInputLibraryButton,
 html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .sidebar .imageUrlInputRow button,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .sidebar .imageUrlInputRow .imageUrlActionButton,
 html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .sidebar .imageUrlInputRow .inputFolderButton,
-html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .sidebar .imageUrlInputRow .inputFolderButton,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .sidebar .imageUrlInputRow .imageUrlInputLibraryButton,
 html[data-theme="light"] .sidebar .imageUrlInputRow button,
-html[data-theme="light"] .sidebar .imageUrlInputRow .inputFolderButton {
+html[data-theme="light"] .sidebar .imageUrlInputRow .imageUrlActionButton,
+html[data-theme="light"] .sidebar .imageUrlInputRow .inputFolderButton,
+html[data-theme="light"] .sidebar .imageUrlInputRow .imageUrlInputLibraryButton {
   border-color: var(--border-subtle);
   background: transparent;
   color: var(--text-secondary);
 }
 
 html[data-theme="dark"] .sidebar .imageUrlInputRow button:hover:not(:disabled),
+html[data-theme="dark"] .sidebar .imageUrlInputRow .imageUrlActionButton:hover:not(:disabled),
 html[data-theme="dark"] .sidebar .imageUrlInputRow .inputFolderButton:hover:not(:disabled),
 html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .sidebar .imageUrlInputRow button:hover:not(:disabled),
-html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .sidebar .imageUrlInputRow .inputFolderButton:hover:not(:disabled),
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .sidebar .imageUrlInputRow .imageUrlActionButton:hover:not(:disabled),
 html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .sidebar .imageUrlInputRow .inputFolderButton:hover:not(:disabled),
 html[data-theme="light"] .sidebar .imageUrlInputRow button:hover:not(:disabled),
-html[data-theme="light"] .sidebar .imageUrlInputRow .inputFolderButton:hover:not(:disabled) {
+html[data-theme="light"] .sidebar .imageUrlInputRow .imageUrlActionButton:hover:not(:disabled),
+html[data-theme="light"] .sidebar .imageUrlInputRow .inputFolderButton:hover:not(:disabled),
+html[data-theme="dark"] .sidebar .imageUrlInputRow .imageUrlInputLibraryButton:hover:not(:disabled),
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .sidebar .imageUrlInputRow .imageUrlInputLibraryButton:hover:not(:disabled),
+html[data-theme="light"] .sidebar .imageUrlInputRow .imageUrlInputLibraryButton:hover:not(:disabled) {
   border-color: var(--border-default);
   background: var(--surface-3);
   color: var(--text-primary);

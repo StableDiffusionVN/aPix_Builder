@@ -72,6 +72,7 @@ import {
   hasRhApiKey,
   RH_TOKEN_POLICY
 } from "./lib/rhTokenPool.js";
+import { expandFolderImageValues } from "./lib/localImageFolder.js";
 import { rhWfWorkspaceKey } from "./lib/runningHubTemplate";
 import { ExecutionModeToggle, RunningHubPanel } from "./components/RunningHubPanel";
 import { SidebarLayoutHandles } from "./components/SidebarLayoutHandles";
@@ -87,6 +88,7 @@ import {
   THEME_OPTIONS,
   THEME_STORAGE_KEY
 } from "./constants/appearance";
+import { isTextEntryTarget, isUiControlTarget } from "./lib/keyboard";
 
 const SERVER_STORAGE_KEY = "comfyui-build:server:v2";
 const NOTIFY_STORAGE_KEY = "comfyui-build:notify:v1";
@@ -131,13 +133,6 @@ function formatServerName(address) {
   } catch {
     return address;
   }
-}
-
-function isTextEntryTarget(target) {
-  return target instanceof HTMLElement && (
-    target.isContentEditable ||
-    ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)
-  );
 }
 
 function isLogToggleKey(event) {
@@ -226,7 +221,7 @@ export default function App() {
       const body = isRunningHubMode(executionMode)
         ? t("notify.rhComplete")
         : t("notify.workflowComplete");
-      new Notification("aPix Builder", { body, icon: "/sdvn-icon.png" });
+      new Notification("aPix Builder", { body, icon: "/favicon.png" });
     }
   };
 
@@ -707,11 +702,13 @@ export default function App() {
       return Boolean(document.querySelector(".imageEditorModal, .maskEditorModal"));
     }
     function handleSpaceReset(event) {
-      if (!heroImage || event.code !== "Space") return;
+      if (event.code !== "Space") return;
       if (isTextEntryTarget(event.target)) return;
       if (hasActiveEditorModal()) return;
-      event.preventDefault(); event.stopPropagation();
-      resetImageView();
+      event.preventDefault();
+      event.stopPropagation();
+      if (isUiControlTarget(event.target)) event.target.blur();
+      if (heroImage) resetImageView();
     }
     function handleCompareToggle(event) {
       if (!canCompare || event.key.toLowerCase() !== "s") return;
@@ -722,10 +719,13 @@ export default function App() {
       setCompareMode(current => !current);
     }
     function preventSpaceClick(event) {
-      if (!heroImage || event.code !== "Space") return;
+      if (event.code !== "Space") return;
       if (isTextEntryTarget(event.target)) return;
       if (hasActiveEditorModal()) return;
-      event.preventDefault(); event.stopPropagation();
+      if (!isUiControlTarget(event.target) && !heroImage) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (isUiControlTarget(event.target)) event.target.blur();
     }
     window.addEventListener("keydown", handleSpaceReset, true);
     window.addEventListener("keydown", handleCompareToggle, true);
@@ -970,71 +970,82 @@ export default function App() {
     return restoredValues;
   }
 
-  function handleRunClick() {
+  async function handleRunClick() {
     setShowWaitScreen(true);
-    if (isRunningHubApp) {
-      if (!hasRhApiKey(rhSettings)) {
-        setError(t("error.rhMissingApiKey"));
-        setStatus(t("error.rhMissingConfig"));
-        setShowWaitScreen(false);
+    setError("");
+    try {
+      if (isRunningHubApp) {
+        if (!hasRhApiKey(rhSettings)) {
+          setError(t("error.rhMissingApiKey"));
+          setStatus(t("error.rhMissingConfig"));
+          setShowWaitScreen(false);
+          return;
+        }
+        if (!rhNodes.length) {
+          setError(t("error.rhMissingNodes"));
+          setStatus(t("error.rhMissingAppNodes"));
+          setShowWaitScreen(false);
+          return;
+        }
+        const rhAuth = buildRhRunAuth(rhSettings);
+        const imageKeys = rhNodes
+          .filter(node => String(node.fieldType || "").toUpperCase() === "IMAGE")
+          .map(nodeFieldKey);
+        const expandedRhValues = await expandFolderImageValues(rhValues, imageKeys);
+        for (const batchValues of expandImageBatchByKeys(expandedRhValues, imageKeys)) {
+          runStep({
+            ...rhAuth,
+            webappId: rhSettings.webappId.trim(),
+            nodes: rhNodes,
+            values: batchValues
+          });
+        }
         return;
       }
-      if (!rhNodes.length) {
-        setError(t("error.rhMissingNodes"));
-        setStatus(t("error.rhMissingAppNodes"));
-        setShowWaitScreen(false);
+      if (isRunningHubWf) {
+        const workflowId = String(rhWfConfig?.runninghub?.workflowId || "").trim();
+        if (!hasRhApiKey(rhSettings)) {
+          setError(t("error.rhMissingApiKey"));
+          setStatus(t("error.rhMissingConfig"));
+          setShowWaitScreen(false);
+          return;
+        }
+        if (!rhWfConfig || !rhWfInputs.length) {
+          setError(t("error.rhWfMissingTemplate"));
+          setStatus(t("error.rhWfMissingTemplateShort"));
+          setShowWaitScreen(false);
+          return;
+        }
+        if (!workflowId) {
+          setError(t("error.rhMissingWorkflowId"));
+          setStatus(t("error.rhMissingWorkflowIdShort"));
+          setShowWaitScreen(false);
+          return;
+        }
+        const rhAuth = buildRhRunAuth(rhSettings);
+        const expandedRhWfValues = await expandFolderImageValues(rhWfValues);
+        for (const batchValues of expandImageBatchValues(rhWfInputs, expandedRhWfValues)) {
+          runStep({
+            ...rhAuth,
+            templateId: rhWfSelectedTemplate,
+            values: batchValues
+          });
+        }
         return;
       }
-      const rhAuth = buildRhRunAuth(rhSettings);
-      const imageKeys = rhNodes
-        .filter(node => String(node.fieldType || "").toUpperCase() === "IMAGE")
-        .map(nodeFieldKey);
-      for (const batchValues of expandImageBatchByKeys(rhValues, imageKeys)) {
+      const expandedValues = await expandFolderImageValues(values);
+      for (const batchValues of expandImageBatchValues(inputs, expandedValues)) {
         runStep({
-          ...rhAuth,
-          webappId: rhSettings.webappId.trim(),
-          nodes: rhNodes,
-          values: batchValues
+          template: selectedTemplate,
+          address: comfyAddress,
+          values: requestPayload(inputs, batchValues)
         });
       }
-      return;
-    }
-    if (isRunningHubWf) {
-      const workflowId = String(rhWfConfig?.runninghub?.workflowId || "").trim();
-      if (!hasRhApiKey(rhSettings)) {
-        setError(t("error.rhMissingApiKey"));
-        setStatus(t("error.rhMissingConfig"));
-        setShowWaitScreen(false);
-        return;
-      }
-      if (!rhWfConfig || !rhWfInputs.length) {
-        setError(t("error.rhWfMissingTemplate"));
-        setStatus(t("error.rhWfMissingTemplateShort"));
-        setShowWaitScreen(false);
-        return;
-      }
-      if (!workflowId) {
-        setError(t("error.rhMissingWorkflowId"));
-        setStatus(t("error.rhMissingWorkflowIdShort"));
-        setShowWaitScreen(false);
-        return;
-      }
-      const rhAuth = buildRhRunAuth(rhSettings);
-      for (const batchValues of expandImageBatchValues(rhWfInputs, rhWfValues)) {
-        runStep({
-          ...rhAuth,
-          templateId: rhWfSelectedTemplate,
-          values: batchValues
-        });
-      }
-      return;
-    }
-    for (const batchValues of expandImageBatchValues(inputs, values)) {
-      runStep({
-        template: selectedTemplate,
-        address: comfyAddress,
-        values: requestPayload(inputs, batchValues)
-      });
+    } catch (err) {
+      const message = localizeRuntimeMessage(err.message, locale);
+      setError(message);
+      setStatus(message);
+      setShowWaitScreen(false);
     }
   }
 

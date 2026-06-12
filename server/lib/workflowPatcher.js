@@ -1,5 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { localFileToUpload } from "./localImageFolder.js";
 import { lookupMenuSubFields, menuChoiceOptions, menuChoiceValue, resolveMenuStoredValue } from "./menuChoices.js";
 
 function menuSubSelectionStorageKey(yamlKey) {
@@ -130,7 +131,9 @@ export function inferRunningHubFieldType(fieldName, value) {
   if (lower.includes("video")) return "VIDEO";
   if (typeof value === "number") return Number.isInteger(value) ? "INT" : "FLOAT";
   if (value && typeof value === "object") {
-    if (value.kind === "input-image" || value.url) return "IMAGE";
+    if (value.kind === "input-image" || value.kind === "local-file" || value.kind === "local-folder" || value.url) {
+      return "IMAGE";
+    }
     return "STRING";
   }
   return "STRING";
@@ -224,6 +227,33 @@ async function applyMask(target, uploaded, maskDataUrl, signal, options) {
 export async function setWorkflowValue(workflow, id, value, target, signal, options = {}) {
   const { nodeInputs, section, field } = resolveWorkflowInput(workflow, id);
   const { inputDir, uploadDir, uploadImageToComfy, uploadedImageUrl, urlUploadMode } = options;
+
+  if (value?.kind === "local-file") {
+    const upload = await localFileToUpload(value);
+    if (section === "inputs" && field.toLowerCase() === "url") {
+      const uploaded = await uploadImageToComfy(target, upload, signal);
+      if ("Load_url" in nodeInputs) nodeInputs.Load_url = true;
+      if ("mode" in nodeInputs) nodeInputs.mode = "Url";
+      if ("image" in nodeInputs) nodeInputs.image = "None";
+      nodeInputs[field] = uploadedImageUrl(target, uploaded);
+      return nodeInputs[field];
+    }
+    if (section === "inputs" && "image" in nodeInputs) {
+      const uploaded = await uploadImageToComfy(target, upload, signal);
+      if ("Load_url" in nodeInputs) nodeInputs.Load_url = false;
+      if ("Url" in nodeInputs) nodeInputs.Url = "";
+      if ("url" in nodeInputs) nodeInputs.url = "";
+      if ("mode" in nodeInputs) nodeInputs.mode = "Image";
+      nodeInputs.image = uploaded.name || uploaded.filename || uploaded.image || uploaded;
+      return nodeInputs.image;
+    }
+    nodeInputs[field] = await persistDataUrl(
+      uploadDir,
+      `data:${upload.mimeType};base64,${upload.buffer.toString("base64")}`,
+      upload.index
+    );
+    return nodeInputs[field];
+  }
 
   if (value?.kind === "input-image") {
     const upload = await inputImageToUpload(inputDir, value);

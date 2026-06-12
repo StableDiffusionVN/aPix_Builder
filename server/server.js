@@ -49,6 +49,7 @@ import {
   waitForRhApiKeyIdle
 } from "./lib/runningHubClient.js";
 import { withRhTokenFailover, resolveRhApiKeys, RH_TOKEN_POLICY } from "./lib/rhTokenFailover.js";
+import { scanLocalImageFolder } from "./lib/localImageFolder.js";
 import {
   appendRunLog,
   clearRunLogSessions,
@@ -229,7 +230,9 @@ async function handleRun(req, res) {
     };
     for (const [id, value] of Object.entries(request)) {
       const patchedValue = await setWorkflowValue(workflow, id, value, target, abortController.signal, patchOptions);
-      responseRequest[id] = value?.kind === "upload" || value?.kind === "input-image" ? patchedValue : value;
+      responseRequest[id] = value?.kind === "upload" || value?.kind === "input-image" || value?.kind === "local-file"
+        ? patchedValue
+        : value;
     }
 
     const clientId = randomUUID();
@@ -474,6 +477,26 @@ async function handleInputUpload(req, res) {
     image,
     images: await listInputImages()
   });
+}
+
+async function handleInputScanFolder(req, res) {
+  const body = JSON.parse(await readBody(req) || "{}");
+  const folderPath = String(body.folderPath || "").trim();
+  const includeFiles = body.includeFiles !== false;
+  if (!folderPath) {
+    send(res, 400, { error: "Thiếu đường dẫn thư mục" });
+    return;
+  }
+  try {
+    const result = await scanLocalImageFolder(folderPath, { includeFiles });
+    if (!result.imageCount) {
+      send(res, 400, { error: "Thư mục không có ảnh hợp lệ" });
+      return;
+    }
+    send(res, 200, result);
+  } catch (error) {
+    send(res, 400, { error: error.message || "Không quét được thư mục ảnh" });
+  }
 }
 
 async function handleInputFromUrl(req, res) {
@@ -1626,6 +1649,8 @@ const server = http.createServer(async (req, res) => {
       send(res, 200, { images: all.slice(start, start + limit), total: all.length, page, limit });
     } else if (req.method === "POST" && url.pathname === "/api/input-images") {
       await handleInputUpload(req, res);
+    } else if (req.method === "POST" && url.pathname === "/api/input-images/scan-folder") {
+      await handleInputScanFolder(req, res);
     } else if (req.method === "POST" && url.pathname === "/api/input-images/from-url") {
       await handleInputFromUrl(req, res);
     } else if (req.method === "POST" && url.pathname === "/api/input-images/delete") {

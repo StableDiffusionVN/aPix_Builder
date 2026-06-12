@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { useI18n } from "../i18n/I18nContext";
 import { COLOR_CHANNELS, PRESETS } from "../lib/imageAdjustments";
+import { isTextEntryTarget, preventToolbarFocus } from "../lib/keyboard";
 
 export const HealingIcon = ({ size = 14, ...props }) => (
   <svg
@@ -58,7 +59,13 @@ export const CurveIcon = ({ size = 14, ...props }) => (
 export function AccordionSection({ icon: Icon, title, open, onToggle, children }) {
   return (
     <div className={`imageEditorAccordion ${open ? "isOpen" : ""}`}>
-      <button type="button" className="imageEditorAccordionHeader" onClick={onToggle} aria-expanded={open}>
+      <button
+        type="button"
+        className="imageEditorAccordionHeader"
+        onMouseDown={preventToolbarFocus}
+        onClick={onToggle}
+        aria-expanded={open}
+      >
         <span className="imageEditorAccordionTitle"><Icon size={14} /> {title}</span>
         <ChevronDown size={15} className="imageEditorAccordionChevron" />
       </button>
@@ -79,6 +86,7 @@ export function EditorRange({ label, value, min, max, step = 1, resetValue = 0, 
         className="editorRangeReset"
         title={t("editor.reset")}
         disabled={isDefault}
+        onMouseDown={preventToolbarFocus}
         onClick={event => {
           event.preventDefault();
           event.stopPropagation();
@@ -95,8 +103,14 @@ export function EditorRange({ label, value, min, max, step = 1, resetValue = 0, 
         step={step}
         value={value}
         onChange={event => onChange(Number(event.target.value))}
-        onMouseUp={onCommit}
-        onTouchEnd={onCommit}
+        onMouseUp={event => {
+          onCommit?.();
+          event.currentTarget.blur();
+        }}
+        onTouchEnd={event => {
+          onCommit?.();
+          event.currentTarget.blur();
+        }}
         onBlur={onCommit}
       />
     </label>
@@ -173,14 +187,8 @@ export function ImageAdjustmentControls({
   } = engine;
 
   useEffect(() => {
-    const isEditableTarget = target => {
-      if (!target) return false;
-      const tagName = target.tagName?.toLowerCase();
-      return tagName === "input" || tagName === "textarea" || tagName === "select" || target.isContentEditable;
-    };
-
     function handleKeyDown(event) {
-      const editable = isEditableTarget(event.target);
+      const editable = isTextEntryTarget(event.target);
       const hasUndoModifier = event.metaKey || event.ctrlKey;
       const key = event.key.toLowerCase();
 
@@ -217,15 +225,51 @@ export function ImageAdjustmentControls({
       if (showHealingTool && (event.key === "j" || event.key === "J")) {
         event.preventDefault();
         toggleHealingActive();
+        return;
+      }
+      if (showHealingTool && healingActive && (event.key === "[" || event.key === "]")) {
+        event.preventDefault();
+        const step = event.repeat ? 4 : 1;
+        const next = event.key === "["
+          ? Math.max(1, healingBrushSize - step)
+          : Math.min(180, healingBrushSize + step);
+        updateHealingBrushSize(next);
       }
     }
 
     window.addEventListener("keydown", handleKeyDown, true);
     return () => window.removeEventListener("keydown", handleKeyDown, true);
-  }, [showHealingTool, toggleHealingActive, toggleSection, handleUndo, handleRedo]);
+  }, [
+    showHealingTool,
+    healingActive,
+    healingBrushSize,
+    updateHealingBrushSize,
+    toggleHealingActive,
+    toggleSection,
+    handleUndo,
+    handleRedo
+  ]);
+
+  const replaceHistogramWithHealing = showHealingTool && healingActive && !openSections.presets;
+  const showHealingSizeStrip = showHealingTool && healingActive && openSections.presets;
+  const healingSizeRange = (
+    <EditorRange
+      label="Size"
+      value={healingBrushSize}
+      min={1}
+      max={180}
+      resetValue={DEFAULT_HEALING_BRUSH_SIZE}
+      onChange={updateHealingBrushSize}
+    />
+  );
 
   return (
-    <aside className="imageEditorControls">
+    <aside
+      className={`imageEditorControls${replaceHistogramWithHealing ? " isHealingFocus" : ""}`}
+      onMouseDown={event => {
+        if (event.target.closest("button")) preventToolbarFocus(event);
+      }}
+    >
       <div className="panelTitle colorAdjustPanelTitle">
         <h3>{title}</h3>
         {showHealingTool ? (
@@ -233,6 +277,7 @@ export function ImageAdjustmentControls({
             <button
               type="button"
               className="historyIconButton"
+              onMouseDown={preventToolbarFocus}
               onClick={handleUndo}
               disabled={!canUndo}
               title={`${t("editor.undo")} (⌘Z)`}
@@ -243,6 +288,7 @@ export function ImageAdjustmentControls({
             <button
               type="button"
               className={`historyIconButton colorAdjustHealingButton${healingActive ? " active" : ""}`}
+              onMouseDown={preventToolbarFocus}
               onClick={toggleHealingActive}
               title={`${t("editor.healing")} (J)`}
               aria-pressed={healingActive}
@@ -253,6 +299,7 @@ export function ImageAdjustmentControls({
             <button
               type="button"
               className="historyIconButton"
+              onMouseDown={preventToolbarFocus}
               onClick={handleRedo}
               disabled={!canRedo}
               title={`${t("editor.redo")} (⌘⇧Z)`}
@@ -264,25 +311,21 @@ export function ImageAdjustmentControls({
         ) : null}
       </div>
 
-      {showHealingTool && healingActive ? (
-        <div className="colorAdjustHealingTools">
-          <EditorRange
-            label="Size"
-            value={healingBrushSize}
-            min={1}
-            max={180}
-            resetValue={DEFAULT_HEALING_BRUSH_SIZE}
-            onChange={updateHealingBrushSize}
-          />
-        </div>
+      {showHealingSizeStrip ? (
+        <div className="colorAdjustHealingTools">{healingSizeRange}</div>
+      ) : null}
+
+      {replaceHistogramWithHealing ? (
+        <div className="colorAdjustHealingPanel">{healingSizeRange}</div>
       ) : null}
 
       <div
-        className="editorHistogramWrap"
-        onPointerDown={handleHistogramPointerDown}
-        onPointerMove={handleHistogramPointerMove}
-        onPointerUp={handleHistogramPointerUp}
-        onPointerLeave={handleHistogramPointerLeave}
+        className={`editorHistogramWrap${replaceHistogramWithHealing ? " isHidden" : ""}`}
+        aria-hidden={replaceHistogramWithHealing}
+        onPointerDown={replaceHistogramWithHealing ? undefined : handleHistogramPointerDown}
+        onPointerMove={replaceHistogramWithHealing ? undefined : handleHistogramPointerMove}
+        onPointerUp={replaceHistogramWithHealing ? undefined : handleHistogramPointerUp}
+        onPointerLeave={replaceHistogramWithHealing ? undefined : handleHistogramPointerLeave}
       >
         <canvas ref={histogramCanvasRef} width="240" height="60" className="editorHistogramCanvas" />
         <div className="histogramHoverOverlay">

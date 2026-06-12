@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Brush, Contrast, Eraser, Hand, RotateCcw, X, Check, Loader2, ZoomIn, ZoomOut, Maximize, Undo2, Redo2, PenTool, PaintBucket } from "lucide-react";
 import { useI18n } from "../i18n/I18nContext";
+import { isTextEntryTarget } from "../lib/keyboard";
 
 const MIN_ZOOM = 0.2;
 const MAX_ZOOM = 100;
@@ -242,18 +243,18 @@ export function MaskEditorModal({ source, initialMask, title = "Tô Mask", onClo
     function onKeyDown(event) {
       if (event.key === "Escape") { event.stopPropagation(); onClose(); return; }
       const hasUndoModifier = event.metaKey || event.ctrlKey;
-      if (hasUndoModifier && event.key.toLowerCase() === "z" && !isTextTarget(event.target)) {
+      if (hasUndoModifier && event.key.toLowerCase() === "z" && !isTextEntryTarget(event.target)) {
         claimShortcut(event);
         if (event.shiftKey) redo();
         else undo();
         return;
       }
-      if (hasUndoModifier && event.key === "Enter" && !isTextTarget(event.target)) {
+      if (hasUndoModifier && event.key === "Enter" && !isTextEntryTarget(event.target)) {
         claimShortcut(event);
         fillPenPath();
         return;
       }
-      if (event.code === "Space" && !isTextTarget(event.target)) {
+      if (event.code === "Space" && !isTextEntryTarget(event.target)) {
         claimShortcut(event);
         if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
         if (!spaceHeldRef.current) { spaceHeldRef.current = true; setSpaceHeld(true); }
@@ -262,7 +263,7 @@ export function MaskEditorModal({ source, initialMask, title = "Tô Mask", onClo
       if (event.key === "+" || event.key === "=") { claimShortcut(event); updateZoom(0.2); }
       else if (event.key === "-" || event.key === "_") { claimShortcut(event); updateZoom(-0.2); }
       else if (event.key === "0") { claimShortcut(event); resetView(); }
-      else if (!hasUndoModifier && !event.altKey && !event.shiftKey && !isTextTarget(event.target)) {
+      else if (!hasUndoModifier && !event.altKey && !event.shiftKey && !isTextEntryTarget(event.target)) {
         const key = event.key.toLowerCase();
         if (key === "b") {
           claimShortcut(event);
@@ -291,7 +292,7 @@ export function MaskEditorModal({ source, initialMask, title = "Tô Mask", onClo
       }
     }
     function onKeyUp(event) {
-      if (event.code === "Space" && !isTextTarget(event.target)) {
+      if (event.code === "Space" && !isTextEntryTarget(event.target)) {
         claimShortcut(event);
         spaceHeldRef.current = false;
         setSpaceHeld(false);
@@ -305,13 +306,6 @@ export function MaskEditorModal({ source, initialMask, title = "Tô Mask", onClo
     };
   }, [historyIndex, maskColor, onClose, penAnchors, penClosed]);
 
-  function isTextTarget(target) {
-    if (!(target instanceof HTMLElement)) return false;
-    if (target.isContentEditable || target.tagName === "TEXTAREA" || target.tagName === "SELECT") return true;
-    if (target.tagName !== "INPUT") return false;
-    const textInputTypes = new Set(["", "text", "search", "url", "tel", "email", "password", "number"]);
-    return textInputTypes.has(target.getAttribute("type") || "");
-  }
 
   function snapshotCanvas(canvas = canvasRef.current) {
     if (!canvas?.width || !canvas?.height) return null;

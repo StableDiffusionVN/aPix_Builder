@@ -1,6 +1,6 @@
-# aPix Builder · v1.0
+# aPix Builder · v1 alpha
 
-**Website:** [apix.sdvn.vn](https://apix.sdvn.vn)
+**Website:** [apix.sdvn.vn](https://apix.sdvn.vn) · **Release:** [v1 alpha](https://github.com/StableDiffusionVN/aPix_Builder/releases/tag/v1-alpha)
 
 **English:** aPix Builder is a web app for running, managing, and editing ComfyUI and RunningHub workflows through YAML templates. It includes a React/Vite frontend and a Node.js backend for template loading, workflow patching, image upload, real-time progress, output history, and a local input image library.
 
@@ -10,7 +10,7 @@
 
 ## Tải bản desktop / Desktop downloads
 
-Phiên bản hiện tại: **1.0.0** (`v1.0`)
+Phiên bản hiện tại: **1.0.0** (`v1 alpha`)
 
 | Nền tảng | File | Ghi chú |
 | --- | --- | --- |
@@ -18,11 +18,11 @@ Phiên bản hiện tại: **1.0.0** (`v1.0`)
 | Windows (x64) | `aPix Builder-1.0.0-x64-portable.exe` | Portable — chạy trực tiếp, không cần cài đặt |
 | Adobe Photoshop (UXP) | [`aPixBuilder_v1.ccx`](https://github.com/StableDiffusionVN/aPix_builder_pts/releases) | Plugin PS 24+ — repo [aPix_builder_pts](https://github.com/StableDiffusionVN/aPix_builder_pts) |
 
-Tải tại [apix.sdvn.vn/releases](https://apix.sdvn.vn/releases) hoặc từ [GitHub Releases](https://github.com/StableDiffusionVN/aPix_Builder/releases) (khi có).
+Tải tại [apix.sdvn.vn/releases](https://apix.sdvn.vn/releases) hoặc [GitHub Releases — v1 alpha](https://github.com/StableDiffusionVN/aPix_Builder/releases/tag/v1-alpha) (DMG + EXE).
 
 Bản desktop tự kiểm tra cập nhật qua `https://apix.sdvn.vn/releases/latest.json` và hiện banner tải bản mới (macOS DMG). Cài bản mới ghi đè lên bản cũ; settings lưu trong thư mục dữ liệu hệ điều hành (macOS: `~/Library/Application Support/aPix Builder/`).
 
-**English:** Current release **1.0.0**. Download DMG (macOS arm64) or portable EXE (Windows x64) from [apix.sdvn.vn/releases](https://apix.sdvn.vn/releases). The desktop app checks `latest.json` for updates and prompts you to download a newer DMG.
+**English:** Current release **1.0.0 (v1 alpha)**. Download DMG (macOS arm64) or portable EXE (Windows x64) from [apix.sdvn.vn/releases](https://apix.sdvn.vn/releases) or [GitHub Releases](https://github.com/StableDiffusionVN/aPix_Builder/releases/tag/v1-alpha). The desktop app checks `latest.json` for updates and prompts you to download a newer DMG.
 
 ## Video hướng dẫn / Tutorial
 
@@ -130,7 +130,7 @@ Local builds use ad-hoc signing on macOS. For wide distribution, use Apple Devel
 ### Project info
 
 - **Official website:** [apix.sdvn.vn](https://apix.sdvn.vn)
-- **Downloads:** [apix.sdvn.vn/releases](https://apix.sdvn.vn/releases)
+- **Downloads:** [apix.sdvn.vn/releases](https://apix.sdvn.vn/releases) · [GitHub v1 alpha](https://github.com/StableDiffusionVN/aPix_Builder/releases/tag/v1-alpha)
 - Creator: [© Phạm Hưng](https://www.facebook.com/phamhungd/)
 - Community: [SDVN - AI Art Community](https://www.facebook.com/groups/stablediffusion.vn)
 - GitHub: [StableDiffusionVN](https://github.com/StableDiffusionVN/)
@@ -347,7 +347,7 @@ Xem đầy đủ phím tắt Image Editor và Mask Editor trong modal thông tin
 ### Thông tin dự án
 
 - **Website chính thức:** [apix.sdvn.vn](https://apix.sdvn.vn)
-- **Tải bản desktop:** [apix.sdvn.vn/releases](https://apix.sdvn.vn/releases)
+- **Tải bản desktop:** [apix.sdvn.vn/releases](https://apix.sdvn.vn/releases) · [GitHub v1 alpha](https://github.com/StableDiffusionVN/aPix_Builder/releases/tag/v1-alpha)
 - Người tạo: [© Phạm Hưng](https://www.facebook.com/phamhungd/)
 - Liên hệ: [0355873687](https://zalo.me/0355873687)
 - Cộng đồng: [SDVN - Cộng đồng AI Art](https://www.facebook.com/groups/stablediffusion.vn)

@@ -1370,6 +1370,12 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
         return;
       }
 
+      if (hasUndoModifier && event.shiftKey && !event.altKey && !editable && key === "r") {
+        event.preventDefault();
+        handleReset();
+        return;
+      }
+
       if (hasUndoModifier && !event.altKey && (event.key === "+" || event.key === "=" || event.code === "NumpadAdd")) {
         event.preventDefault();
         updateZoom(0.1);
@@ -1737,19 +1743,20 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
   }
 
   function handleReset() {
-    setAdjustments(DEFAULT_ADJUSTMENTS);
-    setBrush(DEFAULT_BRUSH);
-    setStrokes([]);
+    adjustmentsRef.current = DEFAULT_ADJUSTMENTS;
+    brushRef.current = DEFAULT_BRUSH;
+    strokesRef.current = [];
     penAnchorsRef.current = [];
     penClosedRef.current = false;
     activeSelectionRef.current = null;
+    setAdjustments(DEFAULT_ADJUSTMENTS);
+    setBrush(DEFAULT_BRUSH);
+    setStrokes([]);
     setPenAnchors([]);
     setPenClosed(false);
     setSelectedPenAnchor(-1);
     setActiveSelection(null);
-    const initial = snapshot(DEFAULT_ADJUSTMENTS, DEFAULT_BRUSH, [], { penAnchors: [], penClosed: false, activeSelection: null });
-    setHistory([initial]);
-    setHistoryIndex(0);
+    commitHistory(DEFAULT_ADJUSTMENTS, DEFAULT_BRUSH, []);
     setZoom(1);
     setPan({ x: 0, y: 0 });
   }
@@ -2304,7 +2311,7 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
         <aside className="imageEditorControls">
           <div className="imageEditorPanelHeader">
             <h2>Image Editor</h2>
-            <button type="button" onClick={handleReset}>Reset All</button>
+            <button type="button" onClick={handleReset} title="Reset All (⌘⇧R / Ctrl+Shift+R)">Reset All</button>
           </div>
 
           <div

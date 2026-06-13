@@ -92,7 +92,9 @@ export function useColorAdjustments({
   const [healingBrushDiameter, setHealingBrushDiameter] = useState(DEFAULT_HEALING_BRUSH_SIZE);
   const [colorPickTarget, setColorPickTarget] = useState(null);
   const [colorPickCursor, setColorPickCursor] = useState(null);
+  const [spaceToolSuspended, setSpaceToolSuspended] = useState(false);
   const colorPickTargetRef = useRef(null);
+  const spaceToolSuspendedRef = useRef(false);
   const activeCurveChannelRef = useRef(activeCurveChannel);
   const presetLibrary = useColorPresetLibrary(adjustments);
 
@@ -120,6 +122,13 @@ export function useColorAdjustments({
     colorPickTargetRef.current = colorPickTarget;
     if (!colorPickTarget) setColorPickCursor(null);
   }, [colorPickTarget]);
+
+  useEffect(() => {
+    if (!healingActive && !colorPickTarget) {
+      spaceToolSuspendedRef.current = false;
+      setSpaceToolSuspended(false);
+    }
+  }, [healingActive, colorPickTarget]);
 
   useEffect(() => {
     activeCurveChannelRef.current = activeCurveChannel;
@@ -419,17 +428,19 @@ export function useColorAdjustments({
     setAdjustments(nextAdjustments);
     setHealingStrokesSync([]);
     activeHealingStrokeRef.current = null;
+    healingPointerIdRef.current = null;
     setActiveCurveChannel("rgb");
     setSelectedCurvePointIndex(null);
     setActiveColorTab("reds");
     setColorPickTarget(null);
+    setHealingActive(false);
     setHoveredZone(null);
-    const initial = snapshotColorAdjustState(nextAdjustments, []);
-    setHistory([initial]);
-    setHistoryIndex(0);
+    commitHistory(nextAdjustments, []);
     skipPersistRef.current = false;
     flushPersist();
-  }, [flushPersist, setAdjustments, setHealingStrokesSync]);
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    rafRef.current = requestAnimationFrame(renderPreview);
+  }, [commitHistory, flushPersist, renderPreview, setAdjustments, setHealingStrokesSync]);
 
   const toggleHealingActive = useCallback(() => {
     setColorPickTarget(null);
@@ -443,7 +454,7 @@ export function useColorAdjustments({
   }, []);
 
   const updateColorPickCursor = useCallback((event, previewArea) => {
-    if (!colorPickTargetRef.current || !previewArea) return false;
+    if (spaceToolSuspendedRef.current || !colorPickTargetRef.current || !previewArea) return false;
     const areaRect = previewArea.getBoundingClientRect();
     setColorPickCursor({
       x: event.clientX - areaRect.left,
@@ -457,7 +468,7 @@ export function useColorAdjustments({
   }, []);
 
   const handleColorPickPointerMove = useCallback((event, _imageElement, previewArea) => {
-    if (!colorPickTargetRef.current) return false;
+    if (spaceToolSuspendedRef.current || !colorPickTargetRef.current) return false;
     return updateColorPickCursor(event, previewArea);
   }, [updateColorPickCursor]);
 
@@ -484,7 +495,7 @@ export function useColorAdjustments({
   }, []);
 
   const updateHealingCursor = useCallback((event, imageElement, previewArea) => {
-    if (!healingActiveRef.current || !previewArea) {
+    if (spaceToolSuspendedRef.current || !healingActiveRef.current || !previewArea) {
       setHealingCursor(null);
       return false;
     }
@@ -514,6 +525,7 @@ export function useColorAdjustments({
   }, []);
 
   const handleColorPickPointerDown = useCallback((event, imageElement) => {
+    if (spaceToolSuspendedRef.current) return false;
     const target = colorPickTargetRef.current;
     if (!target || !isReady || event.button !== 0 || !imageElement) return false;
 
@@ -568,7 +580,7 @@ export function useColorAdjustments({
   }, [commitHistory, isReady, setAdjustments]);
 
   const handleHealingPointerDown = useCallback((event, imageElement) => {
-    if (!healingActiveRef.current || !isReady || event.button !== 0 || !imageElement) return false;
+    if (spaceToolSuspendedRef.current || !healingActiveRef.current || !isReady || event.button !== 0 || !imageElement) return false;
     const point = getHealingImagePoint(event, imageElement);
     if (!point) return false;
     event.preventDefault();
@@ -586,12 +598,12 @@ export function useColorAdjustments({
   }, [getHealingImagePoint, isReady, renderPreview]);
 
   const handleHealingPointerHover = useCallback((event, imageElement, previewArea) => {
-    if (!healingActiveRef.current || healingPointerIdRef.current) return false;
+    if (spaceToolSuspendedRef.current || !healingActiveRef.current || healingPointerIdRef.current) return false;
     return updateHealingCursor(event, imageElement, previewArea);
   }, [updateHealingCursor]);
 
   const handleHealingPointerMove = useCallback((event, imageElement, previewArea) => {
-    if (!healingActiveRef.current || !imageElement) return false;
+    if (spaceToolSuspendedRef.current || !healingActiveRef.current || !imageElement) return false;
     if (healingPointerIdRef.current === event.pointerId) {
       const point = getHealingImagePoint(event, imageElement);
       if (!point || !activeHealingStrokeRef.current) return false;
@@ -626,6 +638,37 @@ export function useColorAdjustments({
     }
     return Boolean(finished);
   }, [commitHistory, renderPreview, setHealingStrokesSync]);
+
+  const finishActiveHealingStroke = useCallback(() => {
+    if (!healingPointerIdRef.current) return;
+    const finished = activeHealingStrokeRef.current;
+    activeHealingStrokeRef.current = null;
+    healingPointerIdRef.current = null;
+    if (finished?.points?.length) {
+      const nextStrokes = healingStrokesRef.current.concat(finished);
+      setHealingStrokesSync(nextStrokes);
+      commitHistory(adjustmentsRef.current, nextStrokes);
+    } else if (finished) {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      rafRef.current = requestAnimationFrame(renderPreview);
+    }
+  }, [commitHistory, renderPreview, setHealingStrokesSync]);
+
+  const suspendToolsForSpace = useCallback(() => {
+    if (!healingActiveRef.current && !colorPickTargetRef.current) return false;
+    spaceToolSuspendedRef.current = true;
+    setSpaceToolSuspended(true);
+    setHealingCursor(null);
+    setColorPickCursor(null);
+    finishActiveHealingStroke();
+    return true;
+  }, [finishActiveHealingStroke]);
+
+  const resumeToolsAfterSpace = useCallback(() => {
+    if (!spaceToolSuspendedRef.current) return;
+    spaceToolSuspendedRef.current = false;
+    setSpaceToolSuspended(false);
+  }, []);
 
   const toggleSection = useCallback((id) => {
     setOpenSections(current => {
@@ -896,6 +939,9 @@ export function useColorAdjustments({
     renderFullResolutionDataUrl,
     colorPickTarget,
     colorPickCursor,
+    spaceToolSuspended,
+    suspendToolsForSpace,
+    resumeToolsAfterSpace,
     toggleColorPickTarget,
     handleColorPickPointerDown,
     handleColorPickPointerMove,

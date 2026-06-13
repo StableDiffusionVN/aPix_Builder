@@ -74,9 +74,9 @@ function RunningHubAppInfo({ info, t }) {
 }
 
 const EXECUTION_MODE_OPTIONS = [
-  { id: "local", label: "ComfyUI", icon: ComfyUiLogomark, iconTitle: "ComfyUI" },
-  { id: "runninghub-wf", label: "RH Workflow", title: "RunningHub Workflow", icon: RunningHubLogomark, iconTitle: "RunningHub" },
-  { id: "runninghub-app", label: "RH App", title: "RunningHub App", icon: RunningHubLogomark, iconTitle: "RunningHub" }
+  { id: "local", label: "ComfyUI", icon: ComfyUiLogomark, iconTitle: "ComfyUI", title: "ComfyUI (Alt/Option+1)", shortcut: "Alt+1" },
+  { id: "runninghub-wf", label: "RH Workflow", title: "RunningHub Workflow (Alt/Option+2)", icon: RunningHubLogomark, iconTitle: "RunningHub", shortcut: "Alt+2" },
+  { id: "runninghub-app", label: "RH App", title: "RunningHub App (Alt/Option+3)", icon: RunningHubLogomark, iconTitle: "RunningHub", shortcut: "Alt+3" }
 ];
 
 export function ExecutionModeToggle({ mode, onChange }) {
@@ -138,6 +138,7 @@ export function ExecutionModeToggle({ mode, onChange }) {
             aria-selected={mode === option.id}
             className={`${mode === option.id ? "active" : ""}${Icon ? " hasModeIcon" : ""}`}
             title={option.title}
+            aria-keyshortcuts={option.shortcut}
             onClick={() => onChange(option.id)}
           >
             {Icon ? (

@@ -11,15 +11,19 @@ import {
   resolveMenuStoredValue
 } from "../../../shared/menuChoices.js";
 
-function descriptionNode(description) {
-  return description ? <small className="fieldDescription">{description}</small> : null;
+function tooltipProps(description, extraClass = "") {
+  const text = String(description || "").trim();
+  const className = ["field", text ? "fieldWithTooltip" : "", extraClass].filter(Boolean).join(" ");
+  return text
+    ? { className, "data-field-tooltip": text }
+    : { className };
 }
 
 const renderers = {
-  seed({ ui, label, value, onChange, t }) {
+  seed({ ui, label, description, value, onChange, t }) {
     const isRandomSeed = value === "random_seed" || value === "";
     return (
-      <label className="field compact">
+      <label {...tooltipProps(description, "compact")}>
         <span>{label}</span>
         <div className="inlineControl">
           <input
@@ -44,28 +48,26 @@ const renderers = {
   },
   text({ ui, label, description, value, onChange }) {
     return (
-      <label className="field">
+      <label {...tooltipProps(description)}>
         <span>{label}</span>
         <textarea rows={ui.lines || 3} placeholder={ui.placeholder || ""} value={value} onChange={event => onChange(event.target.value)} />
-        {descriptionNode(description)}
       </label>
     );
   },
   string({ ui, label, description, display, value, onChange }) {
     const multiline = display === "multiline" || ui.multiline === true || Number(ui.lines || ui.rows || 1) > 1;
     return (
-      <label className="field">
+      <label {...tooltipProps(description)}>
         <span>{label}</span>
         {multiline
           ? <textarea rows={ui.lines || ui.rows || 3} placeholder={ui.placeholder || ""} value={value} onChange={event => onChange(event.target.value)} />
           : <input type="text" placeholder={ui.placeholder || ""} value={value} onChange={event => onChange(event.target.value)} />}
-        {descriptionNode(description)}
       </label>
     );
   },
   slider({ ui, label, description, value, onChange, parseNumber, resetValue }) {
     return (
-      <div className="field">
+      <div {...tooltipProps(description)}>
         <EditorRange
           label={label}
           value={value}
@@ -75,7 +77,6 @@ const renderers = {
           resetValue={resetValue}
           onChange={next => onChange(parseNumber(next))}
         />
-        {descriptionNode(description)}
       </div>
     );
   },
@@ -92,7 +93,7 @@ const renderers = {
       ? (rawChoices.includes(value) ? value : "")
       : resolveMenuStoredValue(value, rawChoices, options);
     return (
-      <label className="field">
+      <label {...tooltipProps(description)}>
         <span>{label}</span>
         <div className="fieldSelectWrap">
           <select value={selected} onChange={event => onChange(event.target.value)} disabled={dynamic && discoveryLoading}>
@@ -100,7 +101,6 @@ const renderers = {
             {choices.map(choice => <option key={choice.value} value={choice.value}>{choice.label}</option>)}
           </select>
         </div>
-        {descriptionNode(description)}
       </label>
     );
   },
@@ -109,7 +109,7 @@ const renderers = {
     const choices = parseMenuChoices(ui.choices || [], options);
     const selected = resolveMenuStoredValue(value, ui.choices, options);
     return (
-      <fieldset className="field radioGroup">
+      <fieldset {...tooltipProps(description, "radioGroup")}>
         <legend>{label}</legend>
         {choices.map(choice => (
           <label key={choice.value}>
@@ -117,25 +117,23 @@ const renderers = {
             {choice.label}
           </label>
         ))}
-        {descriptionNode(description)}
       </fieldset>
     );
   },
   boolean({ label, description, value, onChange }) {
     return (
-      <fieldset className="field booleanField">
+      <fieldset {...tooltipProps(description, "booleanField")}>
         <legend>{label}</legend>
         <div className="booleanToggle">
           <button type="button" className={value === true ? "active" : ""} onClick={() => onChange(true)}>True</button>
           <button type="button" className={value === false ? "active" : ""} onClick={() => onChange(false)}>False</button>
         </div>
-        {descriptionNode(description)}
       </fieldset>
     );
   },
   number({ ui, label, description, value, onChange, parseNumber, resetValue, isAtResetValue, t }) {
     return (
-      <label className="field compact">
+      <label {...tooltipProps(description, "compact")}>
         <span>{label}</span>
         <div className="inlineControl">
           <input
@@ -150,18 +148,17 @@ const renderers = {
             <RefreshCcw size={13} />
           </button>
         </div>
-        {descriptionNode(description)}
       </label>
     );
   },
   colorpicker({ label, description, value, onChange }) {
-    return <label className="field compact colorField"><span>{label}</span><input type="color" value={value || "#10b981"} onChange={event => onChange(event.target.value)} />{descriptionNode(description)}</label>;
+    return <label {...tooltipProps(description, "compact colorField")}><span>{label}</span><input type="color" value={value || "#10b981"} onChange={event => onChange(event.target.value)} /></label>;
   },
   date({ label, description, value, onChange }) {
-    return <label className="field compact"><span>{label}</span><input type="date" value={value || ""} onChange={event => onChange(event.target.value)} />{descriptionNode(description)}</label>;
+    return <label {...tooltipProps(description, "compact")}><span>{label}</span><input type="date" value={value || ""} onChange={event => onChange(event.target.value)} /></label>;
   },
   json({ label, description, value, onChange }) {
-    return <label className="field"><span>{label}</span><textarea rows={5} value={value} onChange={event => onChange(event.target.value)} />{descriptionNode(description)}</label>;
+    return <label {...tooltipProps(description)}><span>{label}</span><textarea rows={5} value={value} onChange={event => onChange(event.target.value)} /></label>;
   }
 };
 

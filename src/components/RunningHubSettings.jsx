@@ -122,8 +122,19 @@ export function RunningHubSettings({
 
   return (
     <div className="runningHubSettings">
-      <header className="settingsPaneHeader">
-        <h3>RunningHub API</h3>
+      <header className="settingsPaneHeader rhSettingsHeader">
+        <div className="rhSettingsHeaderTop">
+          <h3>RunningHub API</h3>
+          <a
+            className="rhDocLink"
+            href={RUNNINGHUB_API_GUIDE_URL}
+            target="_blank"
+            rel="noreferrer"
+          >
+            <ExternalLink size={14} />
+            {t("rh.guide")}
+          </a>
+        </div>
         <p>{t("rh.intro")}</p>
       </header>
 
@@ -315,15 +326,6 @@ export function RunningHubSettings({
           {testing ? <Loader2 size={14} className="spin" /> : <RefreshCcw size={14} />}
           {t("rh.test")}
         </button>
-        <a
-          className="rhDocLink"
-          href={RUNNINGHUB_API_GUIDE_URL}
-          target="_blank"
-          rel="noreferrer"
-        >
-          <ExternalLink size={14} />
-          {t("rh.guide")}
-        </a>
       </div>
 
       {testResult ? (

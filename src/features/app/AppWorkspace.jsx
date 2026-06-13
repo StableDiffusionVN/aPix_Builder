@@ -509,22 +509,26 @@ export function AppWorkspace() {
   const handleHealingBridgeChange = useCallback((bridge) => {
     setHealingBridge(bridge);
   }, []);
+  const healingBridgeRef = useRef(healingBridge);
+  useEffect(() => {
+    healingBridgeRef.current = healingBridge;
+  }, [healingBridge]);
 
   const handlePreviewPointerDownWithHealing = useCallback((event) => {
-    if (healingBridge?.colorPickTarget && imageElementRef.current) {
+    if (!healingBridge?.spaceToolSuspended && healingBridge?.colorPickTarget && imageElementRef.current) {
       if (healingBridge.handleColorPickPointerDown?.(event, imageElementRef.current)) return;
     }
-    if (healingBridge?.active && imageElementRef.current) {
+    if (!healingBridge?.spaceToolSuspended && healingBridge?.active && imageElementRef.current) {
       if (healingBridge.handlePointerDown(event, imageElementRef.current, previewAreaRef.current)) return;
     }
     handlePreviewPointerDown(event);
   }, [healingBridge, handlePreviewPointerDown, imageElementRef, previewAreaRef]);
 
   const handlePreviewPointerMoveWithHealing = useCallback((event) => {
-    if (healingBridge?.colorPickTarget && previewAreaRef.current) {
+    if (!healingBridge?.spaceToolSuspended && healingBridge?.colorPickTarget && previewAreaRef.current) {
       if (healingBridge.handleColorPickPointerMove?.(event, imageElementRef.current, previewAreaRef.current)) return;
     }
-    if (healingBridge?.active && imageElementRef.current) {
+    if (!healingBridge?.spaceToolSuspended && healingBridge?.active && imageElementRef.current) {
       if (healingBridge.handlePointerMove(event, imageElementRef.current, previewAreaRef.current)) return;
     }
     handlePreviewPointerMove(event);
@@ -725,6 +729,30 @@ export function AppWorkspace() {
     };
   }, [themeMenuOpen]);
 
+  // Execution mode shortcuts (Alt/Option + 1/2/3)
+  useEffect(() => {
+    const MODE_BY_CODE = {
+      Digit1: "local",
+      Digit2: "runninghub-wf",
+      Digit3: "runninghub-app"
+    };
+
+    function handleExecutionModeShortcut(event) {
+      const mode = MODE_BY_CODE[event.code];
+      if (!mode) return;
+      if (!event.altKey) return;
+      if (event.metaKey || event.ctrlKey || event.shiftKey) return;
+      if (isTextEntryTarget(event.target)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      releaseGlobalShortcutFocus(event.target);
+      setExecutionMode(mode);
+    }
+
+    window.addEventListener("keydown", handleExecutionModeShortcut, true);
+    return () => window.removeEventListener("keydown", handleExecutionModeShortcut, true);
+  }, [setExecutionMode]);
+
   // Settings modal shortcut (Cmd/Ctrl + ,)
   useEffect(() => {
     function handleSettingsShortcut(event) {
@@ -820,7 +848,14 @@ export function AppWorkspace() {
       event.preventDefault();
       event.stopPropagation();
       releaseGlobalShortcutFocus(event.target);
+      if (healingBridgeRef.current?.suspendToolsForSpace?.()) return;
       if (heroImage) resetImageView();
+    }
+    function handleSpaceKeyUp(event) {
+      if (event.code !== "Space") return;
+      if (isTypingTarget(event.target)) return;
+      if (hasActiveEditorModal()) return;
+      healingBridgeRef.current?.resumeToolsAfterSpace?.();
     }
     function handleCompareToggle(event) {
       if (!canCompare || event.key.toLowerCase() !== "s") return;
@@ -842,10 +877,12 @@ export function AppWorkspace() {
     }
     window.addEventListener("keydown", handleSpaceReset, true);
     window.addEventListener("keydown", handleCompareToggle, true);
+    window.addEventListener("keyup", handleSpaceKeyUp, true);
     window.addEventListener("keyup", preventSpaceClick, true);
     return () => {
       window.removeEventListener("keydown", handleSpaceReset, true);
       window.removeEventListener("keydown", handleCompareToggle, true);
+      window.removeEventListener("keyup", handleSpaceKeyUp, true);
       window.removeEventListener("keyup", preventSpaceClick, true);
     };
   }, [canCompare, heroImage]);
@@ -1675,11 +1712,11 @@ export function AppWorkspace() {
           handlePreviewPointerMove={handlePreviewPointerMoveWithHealing}
           handlePreviewPointerUp={handlePreviewPointerUpWithHealing}
           handlePreviewPointerLeave={handlePreviewPointerLeaveWithHealing}
-          healingActive={Boolean(healingBridge?.active)}
-          healingCursor={healingBridge?.cursor ?? null}
+          healingActive={Boolean(healingBridge?.active) && !healingBridge?.spaceToolSuspended}
+          healingCursor={healingBridge?.spaceToolSuspended ? null : (healingBridge?.cursor ?? null)}
           healingBrushDiameter={healingBridge?.brushDiameter ?? 0}
-          colorPickTarget={healingBridge?.colorPickTarget ?? null}
-          colorPickCursor={healingBridge?.colorPickCursor ?? null}
+          colorPickTarget={healingBridge?.spaceToolSuspended ? null : (healingBridge?.colorPickTarget ?? null)}
+          colorPickCursor={healingBridge?.spaceToolSuspended ? null : (healingBridge?.colorPickCursor ?? null)}
           stepOutput={stepOutput}
           selectOutput={selectOutput}
           RunningState={RunningState}
@@ -1866,6 +1903,9 @@ export function AppWorkspace() {
                   <p>{t("info.shortcutsGeneralDesc")}</p>
                   <div className="shortcutList">
                     <ShortcutRow label={t("info.shortcutSettings")} keys={["Cmd/Ctrl", ","]} />
+                    <ShortcutRow label={t("info.shortcutModeComfy")} keys={["Alt/Option", "1"]} />
+                    <ShortcutRow label={t("info.shortcutModeRhWf")} keys={["Alt/Option", "2"]} />
+                    <ShortcutRow label={t("info.shortcutModeRhApp")} keys={["Alt/Option", "3"]} />
                     <ShortcutRow label={t("info.shortcutHelp")} keys={["Cmd/Ctrl", "/"]} />
                     <ShortcutRow label={t("info.shortcutFullscreen")} keys={["Cmd/Ctrl", "Shift", "F"]} />
                     <ShortcutRow label={t("info.shortcutRun")} keys={["Cmd/Ctrl", "Enter"]} />
@@ -1892,6 +1932,7 @@ export function AppWorkspace() {
                   <p>{t("info.shortcutsEditorDesc")}</p>
                   <div className="shortcutList">
                     <ShortcutRow label={t("info.shortcutBeforeAfter")} keys={["S"]} />
+                    <ShortcutRow label={t("info.shortcutResetAdjustments")} keys={["Cmd/Ctrl", "Shift", "R"]} />
                     <ShortcutRow label={t("info.shortcutTempPan")} keys={[t("info.holdSpace")]} />
                     <ShortcutRow label={t("info.shortcutCancelAction")} keys={["Esc"]} />
                     <ShortcutRow label={t("info.shortcutSaveOutput")} keys={["Save"]} />

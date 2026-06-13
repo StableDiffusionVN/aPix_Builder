@@ -499,6 +499,20 @@ body.sidebar-layout-resizing {
   font-size: 12px;
 }
 
+.addressFieldHelp {
+  display: grid;
+  gap: 2px;
+}
+
+.addressFieldHelp a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.addressFieldHelp a:hover {
+  text-decoration: underline;
+}
+
 .addressInput,
 .templateSelect {
   display: grid;
@@ -774,7 +788,8 @@ html[data-theme="light"] select option:focus-visible {
   flex-direction: column;
   flex: 0 1 auto;
   gap: 8px;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   padding-right: 4px;
 }
 
@@ -861,6 +876,72 @@ html[data-theme="light"] select option:focus-visible {
   color: var(--muted);
   font-size: 12px;
   line-height: 1.45;
+}
+
+.fieldWithTooltip {
+  position: relative;
+}
+
+.fieldWithTooltip::before,
+.fieldWithTooltip::after {
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity 0s,
+    transform 0s,
+    visibility 0s;
+}
+
+.fieldWithTooltip::before {
+  content: "";
+  position: absolute;
+  z-index: 81;
+  left: var(--tooltip-pointer-x, 12px);
+  top: calc(var(--tooltip-pointer-y, 28px) - 6px);
+  width: 10px;
+  height: 6px;
+  transform: translateX(-50%);
+  background: #3b3b42;
+  clip-path: polygon(50% 100%, 0 0, 100% 0);
+}
+
+.fieldWithTooltip::after {
+  content: attr(data-field-tooltip);
+  position: absolute;
+  z-index: 80;
+  left: var(--tooltip-pointer-x, 12px);
+  top: var(--tooltip-pointer-y, 28px);
+  width: max-content;
+  max-width: min(260px, calc(100vw - 24px));
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 7px;
+  background: #3b3b42;
+  box-shadow: 0 5px 14px rgba(0, 0, 0, 0.22);
+  color: #f2f2f4;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.35;
+  letter-spacing: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  transform: translate(-50%, calc(-100% - 6px)) translateY(-3px);
+}
+
+.fieldWithTooltip.isTooltipVisible::before,
+.fieldWithTooltip.isTooltipVisible::after {
+  opacity: 1;
+  visibility: visible;
+  transition:
+    opacity 0.12s ease 0s,
+    transform 0.12s ease 0s,
+    visibility 0s;
+}
+
+.fieldWithTooltip.isTooltipVisible::after {
+  transform: translate(-50%, calc(-100% - 6px));
 }
 
 .field input:not([type="range"]):not([type="color"]),
@@ -8893,6 +8974,17 @@ html:not([data-theme="dark"]):not([data-theme="light"]) .appShell.is-runninghub 
   border-top: 1px solid var(--border);
 }
 
+.rhSettingsHeaderTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.rhSettingsHeaderTop h3 {
+  margin: 0;
+}
+
 .rhAccountOverview {
   display: grid;
   gap: 10px;
@@ -9034,6 +9126,7 @@ html:not([data-theme="dark"]):not([data-theme="light"]) .appShell.is-runninghub 
 }
 .rhDocLink {
   display: inline-flex;
+  flex: 0 0 auto;
   align-items: center;
   gap: 6px;
   min-height: 32px;
@@ -9043,6 +9136,11 @@ html:not([data-theme="dark"]):not([data-theme="light"]) .appShell.is-runninghub 
   color: var(--muted);
   font-size: 12px;
   text-decoration: none;
+}
+
+.rhDocLink:hover {
+  color: var(--text);
+  border-color: rgba(var(--accent-rgb), 0.34);
 }
 .rhTestResult {
   margin-top: 10px;

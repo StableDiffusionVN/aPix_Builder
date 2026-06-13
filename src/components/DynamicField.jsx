@@ -630,7 +630,10 @@ export function DynamicField({
 
     return (
       <section className="menuSubField">
-        <label className="field">
+        <label
+          className={`field ${description ? "fieldWithTooltip" : ""}`}
+          data-field-tooltip={description || undefined}
+        >
           <span>{label}</span>
           <div className="fieldSelectWrap">
             <select value={menuValue} onChange={event => onChange(event.target.value)}>
@@ -640,7 +643,6 @@ export function DynamicField({
               ))}
             </select>
           </div>
-          {description ? <small className="fieldDescription">{description}</small> : null}
         </label>
         {activeSubs.length ? (
           <div className="menuSubInputs">
@@ -691,7 +693,10 @@ export function DynamicField({
 
     return (
       <>
-        <label className="field">
+        <label
+          className={`field ${description ? "fieldWithTooltip" : ""}`}
+          data-field-tooltip={description || undefined}
+        >
           <span>{label}</span>
           <div
             className={`multiImageDropzone ${isDraggingFile ? "isDragging" : ""}`}
@@ -986,7 +991,6 @@ export function DynamicField({
               <span>{t("field.chooseInput")}</span>
             </button>
           ) : null}
-          {description ? <small className="fieldDescription">{description}</small> : null}
         </label>
         {libraryOpen ? createPortal(
           <div className="inputLibraryModal" role="presentation" onMouseDown={() => setLibraryOpen(false)}>

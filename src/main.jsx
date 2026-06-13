@@ -3,12 +3,14 @@ import { createRoot } from "react-dom/client";
 import App from "./App.jsx";
 import { I18nProvider } from "./i18n/I18nContext.jsx";
 import { initializeAppSettings } from "./lib/appSettings.js";
+import { initFieldTooltips } from "./lib/fieldTooltips.js";
 import "./styles.css";
 import "./styles/tokens.css";
 import "./styles/refined-ui.css";
 import "./styles/modals.css";
 
 async function bootstrap() {
+  initFieldTooltips();
   await initializeAppSettings();
   createRoot(document.getElementById("root")).render(
     <React.StrictMode>

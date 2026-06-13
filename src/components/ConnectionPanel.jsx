@@ -7,30 +7,38 @@ export function ConnectionPanel({ comfyAddress, serverAddress, onAddressChange }
   const { t } = useI18n();
 
   return (
-    <label className="field addressField">
-      <span>ComfyUI address</span>
-      <div className="addressInput secretInput">
-        <Server size={16} />
-        <input
-          type={showAddress ? "text" : "password"}
-          value={comfyAddress}
-          placeholder={serverAddress || "http://127.0.0.1:8188"}
-          onChange={event => onAddressChange(event.target.value)}
-          autoComplete="off"
-        />
-        <button
-          type="button"
-          className="secretToggleButton"
-          onClick={() => setShowAddress(current => !current)}
-          title={showAddress ? t("connection.hide") : t("connection.show")}
-          aria-label={showAddress ? t("connection.hide") : t("connection.show")}
-          aria-pressed={showAddress}
-        >
-          {showAddress ? <EyeOff size={15} /> : <Eye size={15} />}
-        </button>
+    <div className="field addressField">
+      <label>
+        <span>ComfyUI address</span>
+        <div className="addressInput secretInput">
+          <Server size={16} />
+          <input
+            type={showAddress ? "text" : "password"}
+            value={comfyAddress}
+            placeholder={serverAddress || "http://127.0.0.1:8188"}
+            onChange={event => onAddressChange(event.target.value)}
+            autoComplete="off"
+          />
+          <button
+            type="button"
+            className="secretToggleButton"
+            onClick={() => setShowAddress(current => !current)}
+            title={showAddress ? t("connection.hide") : t("connection.show")}
+            aria-label={showAddress ? t("connection.hide") : t("connection.show")}
+            aria-pressed={showAddress}
+          >
+            {showAddress ? <EyeOff size={15} /> : <Eye size={15} />}
+          </button>
+        </div>
+      </label>
+      <div className="addressFieldHelp">
+        <small>{t("connection.help")}</small>
+        <small>
+          {t("connection.helpExtra")}{" "}
+          <a href="https://comfy.vn" target="_blank" rel="noreferrer">comfy.vn</a>
+        </small>
       </div>
-      <small>{t("connection.help")}</small>
-    </label>
+    </div>
   );
 }
 

@@ -196,6 +196,15 @@ function InputDetailPanel({ row, nodes, fieldTypes, onUpdate, onDelete }) {
           <span>{t("templateEditor.displayName")}</span>
           <input value={row.label} onChange={event => onUpdate({ label: event.target.value })} />
         </label>
+        <label className="field inputDetailFieldWide">
+          <span>{t("templateEditor.description")}</span>
+          <textarea
+            rows={3}
+            value={row.description || ""}
+            placeholder={t("templateEditor.descriptionPlaceholder")}
+            onChange={event => onUpdate({ description: event.target.value })}
+          />
+        </label>
         {(row.type === "int" || row.type === "float" || row.type === "seed") ? (
           <div className="inputDetailNumericGrid">
             <label className="field">
@@ -324,6 +333,15 @@ function SubInputEditor({ subRow, nodes, workflow, fieldTypes, onUpdate, onDelet
         <label className="field inputDetailFieldWide">
           <span>{t("templateEditor.displayName")}</span>
           <input value={subRow.label} onChange={event => onUpdate({ label: event.target.value })} />
+        </label>
+        <label className="field inputDetailFieldWide">
+          <span>{t("templateEditor.description")}</span>
+          <textarea
+            rows={3}
+            value={subRow.description || ""}
+            placeholder={t("templateEditor.descriptionPlaceholder")}
+            onChange={event => onUpdate({ description: event.target.value })}
+          />
         </label>
         {(subRow.type === "int" || subRow.type === "float" || subRow.type === "seed") ? (
           <div className="inputDetailNumericGrid">
@@ -476,6 +494,15 @@ function MenuSubDetailPanel({ row, nodes, workflow, fieldTypes, onUpdate, onDele
           <span>{t("templateEditor.menuDisplayName")}</span>
           <input value={row.label} onChange={event => onUpdate({ label: event.target.value })} />
         </label>
+        <label className="field inputDetailFieldWide">
+          <span>{t("templateEditor.description")}</span>
+          <textarea
+            rows={3}
+            value={row.description || ""}
+            placeholder={t("templateEditor.descriptionPlaceholder")}
+            onChange={event => onUpdate({ description: event.target.value })}
+          />
+        </label>
         <RhWfSwitch
           compact
           title={t("templateEditor.labelSyntax")}
@@ -606,6 +633,7 @@ function subRowFromConfig(item, workflow, fallbackKey) {
     nodeId,
     field,
     label: item.ui?.label || fallbackKey,
+    description: item.ui?.description || "",
     type,
     display: item.ui?.type === "text" ? "multiline" : item.ui?.display === "slider" ? "slider" : "input",
     minimum: item.ui?.minimum ?? (type === "float" ? 0 : 0),
@@ -648,6 +676,7 @@ function rowFromConfig(item, workflow, fallbackKey) {
       nodeId: item.id ? nodeId : "",
       field: item.id ? field : "",
       label: ui.label || fallbackKey,
+      description: ui.description || "",
       choicesText: choiceLines.join("\n"),
       menuLabelSyntax: ui.menuLabelSyntax === true,
       value: resolveMenuStoredValue(ui.value, choiceLines, menuOpts),
@@ -664,6 +693,7 @@ function rowFromConfig(item, workflow, fallbackKey) {
     nodeId,
     field,
     label: ui.label || fallbackKey,
+    description: ui.description || "",
     type,
     display: ui.type === "text" ? "multiline" : ui.display === "slider" ? "slider" : "input",
     minimum: ui.minimum ?? (type === "float" ? 0 : 0),
@@ -692,6 +722,8 @@ function buildInputUiFromRow(row) {
     type: row.type === "string" && row.display === "multiline" ? "text" : row.type,
     label: row.label || row.field
   };
+  const description = String(row.description || "").trim();
+  if (description) ui.description = description;
   if ((row.type === "int" || row.type === "float" || row.type === "seed") && row.minimum !== "") {
     ui.minimum = numericValue(row.minimum);
   }
@@ -755,6 +787,8 @@ function buildConfig({
         value: parsedChoices.some(choice => choice.value === row.value) ? row.value : (parsedChoices[0]?.value || ""),
         sub: {}
       };
+      const description = String(row.description || "").trim();
+      if (description) ui.description = description;
       if (row.menuLabelSyntax) ui.menuLabelSyntax = true;
       for (const choice of parsedChoices) {
         const usedSubKeys = new Set();
@@ -1050,6 +1084,7 @@ export function TemplateEditorModal({
       nodeId: firstNode?.id || "",
       field,
       label: field || "Input",
+      description: "",
       ...typeDefaults
     }]);
     setSelectedInputId(rowId);
@@ -1074,6 +1109,7 @@ export function TemplateEditorModal({
       nodeId: "",
       field: "",
       label: "Menu",
+      description: "",
       choicesText: "option_a\noption_b",
       menuLabelSyntax: false,
       value: "option_a",
@@ -1133,6 +1169,7 @@ export function TemplateEditorModal({
         nodeId: firstNode?.id || "",
         field,
         label: field || "Sub-input",
+        description: "",
         ...typeDefaults
       };
       sub[choice] = [...(sub[choice] || []), nextSubRow];

@@ -207,6 +207,13 @@ export function ImageAdjustmentControls({
         return;
       }
 
+      if (hasUndoModifier && event.shiftKey && !event.altKey && key === "r") {
+        if (editable) return;
+        event.preventDefault();
+        onReset?.();
+        return;
+      }
+
       const hasModifier = hasUndoModifier || event.altKey || event.shiftKey;
       if (editable || hasModifier) return;
 
@@ -255,7 +262,8 @@ export function ImageAdjustmentControls({
     toggleHealingActive,
     toggleSection,
     handleUndo,
-    handleRedo
+    handleRedo,
+    onReset
   ]);
 
   const replaceHistogramWithHealing = showHealingTool && healingActive && !openSections.presets;
@@ -647,7 +655,12 @@ export function ImageAdjustmentControls({
       {error ? <div className="editorError">{error}</div> : null}
 
       <div className="imageEditorFooter colorAdjustFooter">
-        <button type="button" className="colorAdjustFooterButton" onClick={onReset}>
+        <button
+          type="button"
+          className="colorAdjustFooterButton"
+          onClick={onReset}
+          title={`${resetLabel} (⌘⇧R / Ctrl+Shift+R)`}
+        >
           <span>{resetLabel}</span>
         </button>
         {onSyncClick ? (

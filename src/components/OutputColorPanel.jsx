@@ -117,6 +117,9 @@ export function OutputColorPanel({
     }
     onHealingBridgeChange?.({
       active: engine.healingActive,
+      spaceToolSuspended: engine.spaceToolSuspended,
+      suspendToolsForSpace: engine.suspendToolsForSpace,
+      resumeToolsAfterSpace: engine.resumeToolsAfterSpace,
       cursor: engine.healingCursor,
       brushDiameter: engine.healingBrushDiameter,
       handlePointerDown: engine.handleHealingPointerDown,
@@ -136,6 +139,9 @@ export function OutputColorPanel({
     disabled,
     onHealingBridgeChange,
     engine.healingActive,
+    engine.spaceToolSuspended,
+    engine.suspendToolsForSpace,
+    engine.resumeToolsAfterSpace,
     engine.healingCursor,
     engine.healingBrushDiameter,
     engine.handleHealingPointerDown,

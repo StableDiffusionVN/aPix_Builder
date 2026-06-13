@@ -1,10 +1,28 @@
 # aPix Builder · v1.0
 
+**Website:** [apix.sdvn.vn](https://apix.sdvn.vn)
+
 **English:** aPix Builder is a web app for running, managing, and editing ComfyUI and RunningHub workflows through YAML templates. It includes a React/Vite frontend and a Node.js backend for template loading, workflow patching, image upload, real-time progress, output history, and a local input image library.
 
 **Tiếng Việt:** aPix Builder là ứng dụng web dùng để chạy, quản lý và chỉnh sửa workflow ComfyUI và RunningHub bằng template YAML. Dự án gồm frontend React/Vite và backend Node.js để đọc template, vá workflow API JSON, upload ảnh, theo dõi tiến trình, lưu lịch sử output và quản lý thư viện ảnh input cục bộ.
 
 Ứng dụng phù hợp cho các workflow tạo ảnh, chỉnh ảnh hoặc upscale lặp lại nhiều lần — nơi người dùng cần giao diện gọn hơn ComfyUI gốc, có preset input, lịch sử output, preview ảnh, so sánh trước/sau, công cụ chỉnh ảnh nhanh và chạy cloud qua RunningHub khi không có GPU local.
+
+## Tải bản desktop / Desktop downloads
+
+Phiên bản hiện tại: **1.0.0** (`v1.0`)
+
+| Nền tảng | File | Ghi chú |
+| --- | --- | --- |
+| macOS (Apple Silicon) | `aPix Builder-1.0.0-arm64.dmg` | Cài như app thông thường; không cần Node.js |
+| Windows (x64) | `aPix Builder-1.0.0-x64-portable.exe` | Portable — chạy trực tiếp, không cần cài đặt |
+| Adobe Photoshop (UXP) | [`aPixBuilder_v1.ccx`](https://github.com/StableDiffusionVN/aPix_builder_pts/releases) | Plugin PS 24+ — repo [aPix_builder_pts](https://github.com/StableDiffusionVN/aPix_builder_pts) |
+
+Tải tại [apix.sdvn.vn/releases](https://apix.sdvn.vn/releases) hoặc từ [GitHub Releases](https://github.com/StableDiffusionVN/aPix_Builder/releases) (khi có).
+
+Bản desktop tự kiểm tra cập nhật qua `https://apix.sdvn.vn/releases/latest.json` và hiện banner tải bản mới (macOS DMG). Cài bản mới ghi đè lên bản cũ; settings lưu trong thư mục dữ liệu hệ điều hành (macOS: `~/Library/Application Support/aPix Builder/`).
+
+**English:** Current release **1.0.0**. Download DMG (macOS arm64) or portable EXE (Windows x64) from [apix.sdvn.vn/releases](https://apix.sdvn.vn/releases). The desktop app checks `latest.json` for updates and prompts you to download a newer DMG.
 
 ## Video hướng dẫn / Tutorial
 
@@ -88,6 +106,35 @@ npm run dev      # frontend on port 5173
 | `npm run dev` | Vite dev server (`5173`) |
 | `npm run build` | Production build to `dist/` |
 | `npm run preview` | Preview production build |
+| `npm run desktop` | Run Electron from source (dev) |
+| `npm run dist:mac` | Build macOS DMG arm64 → `release/` + update `releases/latest.json` |
+| `npm run dist:win` | Build Windows portable EXE x64 → `release/` |
+| `npm run sync:brand` | Sync app icons from `_local/apix.iconset/` |
+
+### Desktop app packaging
+
+```bash
+npm install
+npm run dist:mac   # → release/aPix Builder-{version}-arm64.dmg
+npm run dist:win   # → release/aPix Builder-{version}-x64-portable.exe
+```
+
+| Path | Contents |
+| --- | --- |
+| `release/` | Built installers (DMG, EXE) — local output, not committed to git |
+| `releases/latest.json` | Update manifest template for desktop auto-update (upload to server with DMG) |
+| `electron/` | Electron main process, preload, auto-update check |
+
+Local builds use ad-hoc signing on macOS. For wide distribution, use Apple Developer ID + notarization and Windows code signing.
+
+### Project info
+
+- **Official website:** [apix.sdvn.vn](https://apix.sdvn.vn)
+- **Downloads:** [apix.sdvn.vn/releases](https://apix.sdvn.vn/releases)
+- Creator: [© Phạm Hưng](https://www.facebook.com/phamhungd/)
+- Community: [SDVN - AI Art Community](https://www.facebook.com/groups/stablediffusion.vn)
+- GitHub: [StableDiffusionVN](https://github.com/StableDiffusionVN/)
+- Related: [aPix Python](https://github.com/StableDiffusionVN/sdvn_apix_python) · [aPix React](https://github.com/StableDiffusionVN/sdvn_apix_react) · [Photoshop plugin](https://github.com/StableDiffusionVN/aPix_builder_pts/releases) · [Colab SDVN](https://sdvn.me)
 
 ### Project structure
 
@@ -117,13 +164,6 @@ npm run dev      # frontend on port 5173
 | `PORT` | `8787` | Backend port |
 | `COMFY_TIMEOUT_MS` | `600000` | ComfyUI workflow timeout |
 | `MAX_IMAGE_BODY_BYTES` | `536870912` | Max upload body size |
-
-### Project info
-
-- Creator: [© Phạm Hưng](https://www.facebook.com/phamhungd/)
-- Community: [SDVN - AI Art Community](https://www.facebook.com/groups/stablediffusion.vn)
-- GitHub: [StableDiffusionVN](https://github.com/StableDiffusionVN/)
-- Related: [aPix Python](https://github.com/StableDiffusionVN/sdvn_apix_python) · [aPix React](https://github.com/StableDiffusionVN/sdvn_apix_react) · [Colab SDVN](https://sdvn.me)
 
 ---
 
@@ -191,16 +231,31 @@ Trong **Settings → Thư mục dữ liệu**, có thể tùy chỉnh các thư 
 
 Double-click `Update-windows.bat`. Tệp sẽ tạm lưu thay đổi cục bộ, cập nhật nhánh Git hiện tại từ `origin`, cập nhật dependency nếu cần, rồi khôi phục thay đổi cục bộ.
 
-### Đóng gói ứng dụng macOS
+### Đóng gói ứng dụng desktop
 
 ```bash
 npm install
-npm run dist:mac
+npm run dist:mac   # macOS DMG arm64 → thư mục release/
+npm run dist:win   # Windows portable EXE x64 → thư mục release/
 ```
 
-DMG arm64 được tạo trong thư mục `release/`. Bản build cục bộ dùng chữ ký ad-hoc; để phát hành rộng rãi cần chứng chỉ Developer ID và notarization của Apple.
+| File output | Mô tả |
+| --- | --- |
+| `release/aPix Builder-1.0.0-arm64.dmg` | Bản cài macOS (Apple Silicon) |
+| `release/aPix Builder-1.0.0-x64-portable.exe` | Bản portable Windows, chạy không cần Node.js |
+| `releases/latest.json` | Manifest kiểm tra cập nhật — upload cùng DMG lên `apix.sdvn.vn/releases/` |
 
-### Xử lý lỗi khởi động trên Windows
+Sau khi build macOS, script tự cập nhật `releases/latest.json`. Khi phát hành:
+
+1. Tăng `version` trong `package.json`
+2. `npm run dist:mac` và/hoặc `npm run dist:win`
+3. Upload file trong `release/` + `releases/latest.json` lên [apix.sdvn.vn/releases](https://apix.sdvn.vn/releases)
+
+Bản build local dùng chữ ký ad-hoc trên macOS; phát hành rộng cần Developer ID + notarization (Apple) và ký code Windows.
+
+**Lưu ý dữ liệu:** Bản desktop lưu settings trong thư mục app của hệ điều hành, khác với `user/` khi chạy dev bằng `npm run start:app`.
+
+### Cập nhật tự động trên Windows
 
 - Cài Node.js LTS từ `nodejs.org`, chọn thêm Node.js vào `PATH`, rồi khởi động lại Windows.
 - Không chép thư mục `node_modules` từ macOS/Linux sang Windows. Launcher sẽ tự phát hiện và sửa bằng `npm install`.
@@ -291,12 +346,14 @@ Xem đầy đủ phím tắt Image Editor và Mask Editor trong modal thông tin
 
 ### Thông tin dự án
 
+- **Website chính thức:** [apix.sdvn.vn](https://apix.sdvn.vn)
+- **Tải bản desktop:** [apix.sdvn.vn/releases](https://apix.sdvn.vn/releases)
 - Người tạo: [© Phạm Hưng](https://www.facebook.com/phamhungd/)
 - Liên hệ: [0355873687](https://zalo.me/0355873687)
 - Cộng đồng: [SDVN - Cộng đồng AI Art](https://www.facebook.com/groups/stablediffusion.vn)
-- Website: [sdvn.vn](https://sdvn.vn) · [hungdiffusion.com](https://hungdiffusion.com) · [trainlora.vn](https://trainlora.vn) · [comfy.vn](https://comfy.vn)
+- Website liên quan: [sdvn.vn](https://sdvn.vn) · [hungdiffusion.com](https://hungdiffusion.com) · [trainlora.vn](https://trainlora.vn) · [comfy.vn](https://comfy.vn)
 - GitHub: [StableDiffusionVN](https://github.com/StableDiffusionVN/)
-- Dự án liên quan: [aPix Google Studio](https://aistudio.google.com/app/u/0/apps/d798af97-ec18-4946-bce4-3b5b0e7d403e) · [aPix Python](https://github.com/StableDiffusionVN/sdvn_apix_python) · [aPix React](https://github.com/StableDiffusionVN/sdvn_apix_react) · [Colab SDVN](https://sdvn.me)
+- Dự án liên quan: [aPix Google Studio](https://aistudio.google.com/app/u/0/apps/d798af97-ec18-4946-bce4-3b5b0e7d403e) · [aPix Python](https://github.com/StableDiffusionVN/sdvn_apix_python) · [aPix React](https://github.com/StableDiffusionVN/sdvn_apix_react) · [Photoshop plugin](https://github.com/StableDiffusionVN/aPix_builder_pts/releases) · [Colab SDVN](https://sdvn.me)
 
 ### Build production
 

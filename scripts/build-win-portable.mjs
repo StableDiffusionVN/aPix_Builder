@@ -5,7 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
-const temporaryOutput = path.join(tmpdir(), "apix-builder-release");
+const temporaryOutput = path.join(tmpdir(), "apix-builder-release-win");
 const releaseDir = path.join(root, "release");
 const electronBuilder = process.platform === "win32" ? "electron-builder.cmd" : "electron-builder";
 const electronBuilderPath = path.join(root, "node_modules", ".bin", electronBuilder);
@@ -14,14 +14,14 @@ rmSync(temporaryOutput, { recursive: true, force: true });
 mkdirSync(releaseDir, { recursive: true });
 
 for (const name of readdirSync(releaseDir)) {
-  if (name.endsWith(".dmg") || name.endsWith(".dmg.blockmap")) {
+  if (name.endsWith("-portable.exe") || name.endsWith("-portable.exe.blockmap")) {
     rmSync(path.join(releaseDir, name), { force: true });
   }
 }
 
 const build = spawnSync(
   electronBuilderPath,
-  ["--mac", "dmg", "--arm64", `--config.directories.output=${temporaryOutput}`],
+  ["--win", "portable", "--x64", `--config.directories.output=${temporaryOutput}`],
   { cwd: root, stdio: "inherit" }
 );
 
@@ -30,10 +30,10 @@ if (build.status !== 0) {
 }
 
 const artifacts = readdirSync(temporaryOutput)
-  .filter(name => name.endsWith(".dmg") || name.endsWith(".dmg.blockmap"));
+  .filter(name => name.endsWith("-portable.exe") || name.endsWith("-portable.exe.blockmap"));
 
-if (!artifacts.some(name => name.endsWith(".dmg"))) {
-  console.error("DMG build completed without producing a .dmg artifact.");
+if (!artifacts.some(name => name.endsWith("-portable.exe"))) {
+  console.error("Windows build completed without producing a portable .exe artifact.");
   process.exit(1);
 }
 
@@ -42,4 +42,4 @@ for (const artifact of artifacts) {
 }
 
 rmSync(temporaryOutput, { recursive: true, force: true });
-console.log(`DMG copied to ${releaseDir}`);
+console.log(`Portable Windows build copied to ${releaseDir}`);

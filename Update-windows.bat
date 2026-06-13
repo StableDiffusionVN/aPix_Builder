@@ -12,7 +12,6 @@ if /i not "%~1"=="--worker" (
   call "!UPDATE_COPY!" --worker "%~dp0"
   set "UPDATE_EXIT=!ERRORLEVEL!"
   del /q "!UPDATE_COPY!" >nul 2>&1
-  endlocal
   exit /b !UPDATE_EXIT!
 )
 
@@ -101,6 +100,7 @@ if not "!OLD_COMMIT!"=="!NEW_COMMIT!" (
       call npm.cmd install
       if errorlevel 1 (
         echo [ERROR] Git was updated, but npm install failed.
+        git reset --hard "!OLD_COMMIT!"
         goto :restore_and_fail
       )
     )

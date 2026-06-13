@@ -112,6 +112,167 @@ p {
   grid-row: 2;
 }
 
+.appShell.hasUpdateBanner {
+  grid-template-rows: 38px auto minmax(0, 1fr);
+}
+
+.appShell.hasUpdateBanner .sidebar,
+.appShell.hasUpdateBanner .workspace {
+  grid-row: 3;
+}
+
+.appShell.sidebar-right.hasUpdateBanner .sidebar {
+  grid-row: 3;
+}
+
+.appShell.sidebar-right.hasUpdateBanner .workspace {
+  grid-row: 3;
+}
+
+.appUpdateBanner {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  margin: 0 calc(-1 * var(--app-shell-padding));
+  padding: 8px 12px;
+  border: 1px solid rgba(var(--accent-rgb), 0.28);
+  border-inline: 0;
+  background:
+    linear-gradient(90deg, rgba(var(--accent-rgb), 0.14), rgba(var(--accent-rgb), 0.04)),
+    var(--panel);
+  color: var(--text);
+}
+
+.appUpdateBannerContent {
+  min-width: 0;
+}
+
+.appUpdateBannerText {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--text);
+}
+
+.appUpdateBannerHint {
+  margin: 2px 0 0;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.appUpdateBannerActions {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 6px;
+}
+
+.appUpdateBannerPrimary,
+.appUpdateBannerSecondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.appUpdateBannerPrimary {
+  border: 1px solid rgba(var(--accent-rgb), 0.45);
+  background: rgba(var(--accent-rgb), 0.18);
+  color: var(--accent-hover);
+}
+
+.appUpdateBannerPrimary:hover {
+  background: rgba(var(--accent-rgb), 0.28);
+}
+
+.appUpdateBannerSecondary {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.appUpdateBannerSecondary:hover {
+  border-color: var(--border);
+  background: var(--panel-soft);
+  color: var(--text);
+}
+
+.appUpdateBannerClose {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.appUpdateBannerClose:hover {
+  border-color: var(--border);
+  color: var(--text);
+}
+
+.infoUpdateRow .infoUpdateActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.infoUpdateButton {
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-soft);
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.infoUpdateButton:hover:not(:disabled) {
+  border-color: rgba(var(--accent-rgb), 0.45);
+  color: var(--accent-hover);
+}
+
+.infoUpdateButton:disabled {
+  opacity: 0.65;
+  cursor: default;
+}
+
+.infoUpdateStatus {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.infoUpdateStatus.isError {
+  color: var(--danger);
+}
+
+.infoUpdateLink {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--accent-hover);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
 .appTopBar {
   display: grid;
   grid-column: 1 / -1;
@@ -5110,65 +5271,104 @@ html[data-theme="light"] .logTaskInspectLine {
 
 .infoBackdrop {
   align-items: center;
+  padding: 12px;
 }
 
 .infoModal {
-  width: min(1180px, 100%);
+  width: calc(100vw - 24px);
+  max-width: 1400px;
+  max-height: calc(100vh - 24px);
   gap: 0;
   padding: 0;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  align-self: center;
+  font-size: 12px;
+  line-height: 1.42;
 }
 
 .infoModalHeader {
-  padding: 18px 20px 16px;
+  display: grid;
+  gap: 10px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+@media (min-width: 860px) {
+  .infoModalHeader {
+    grid-template-columns: minmax(0, 1fr) minmax(300px, 38%);
+    align-items: center;
+    gap: 12px 16px;
+  }
+
+  .infoModalHeaderMain {
+    grid-column: 1;
+  }
+
+  .infoStatusStrip {
+    grid-column: 2;
+    align-self: center;
+  }
+}
+
+.infoModal .infoModalHeader.modalHeader {
+  display: grid;
+  align-items: stretch;
+  padding-bottom: 12px;
+}
+
+.infoModalHeaderMain {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
 }
 
 .infoModalTitle {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   flex-wrap: wrap;
   gap: 8px;
   color: var(--text);
-  font-size: 17px;
-  font-weight: 700;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
   line-height: 1.25;
 }
 
 .infoVersion {
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border: 1px solid rgba(var(--accent-rgb), 0.28);
+  border-radius: 999px;
+  background: rgba(var(--accent-rgb), 0.1);
+}
+
+.infoModalLead {
+  margin: 4px 0 0;
   color: var(--muted-2);
   font-size: 12px;
-  font-weight: 500;
+  line-height: 1.42;
 }
 
-.infoModalHeader p {
-  margin-top: 4px;
-  color: var(--muted-2);
-  font-size: 12px;
-  line-height: 1.45;
-}
-
-.infoModalBody {
+.infoStatusStrip {
   display: grid;
-  gap: 18px;
-  padding: 18px 20px 22px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
 }
 
-.infoIntro {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.infoIntro div {
+.infoStatusStrip div {
   min-width: 0;
-  padding: 10px 12px;
+  padding: 6px 9px;
   border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--panel-soft);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.14);
 }
 
-.infoIntro span,
-.infoIntro b {
+.infoStatusStrip span,
+.infoStatusStrip b {
   display: block;
   min-width: 0;
   overflow: hidden;
@@ -5176,183 +5376,356 @@ html[data-theme="light"] .logTaskInspectLine {
   white-space: nowrap;
 }
 
-.infoIntro span {
+.infoStatusStrip span {
   color: var(--muted-2);
   font-size: 11px;
-  font-weight: 750;
+  font-weight: 700;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
 }
 
-.infoIntro b {
+.infoStatusStrip b {
+  margin-top: 2px;
   color: var(--text);
-  font-size: 13px;
+  font-size: 12px;
+  font-weight: 600;
 }
 
-.infoNotice {
-  display: flex;
+.infoModalBody {
+  display: grid;
   gap: 10px;
-  align-items: flex-start;
+  padding: 12px 18px 14px;
+  align-content: start;
+  min-width: 0;
+}
+
+.infoFeatureBar {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  padding: 9px 11px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.12);
+}
+
+.infoFeatureBarLabel {
+  flex: 0 0 auto;
+  padding-top: 2px;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.infoFeatureList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.infoFeatureList li {
+  padding: 3px 8px;
+  border: 1px solid rgba(var(--accent-rgb), 0.16);
+  border-radius: 999px;
+  background: rgba(var(--accent-rgb), 0.07);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.infoMainWide {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.infoGuideGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+@media (max-width: 1120px) {
+  .infoGuideGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.infoGuideBlock {
+  min-width: 0;
+  padding: 10px 11px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 7px;
+  background: rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+}
+
+.infoGuideBlock h4 {
+  margin: 0 0 6px;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.infoGuideList {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.42;
+  overflow-wrap: anywhere;
+}
+
+.infoGuideList li + li {
+  margin-top: 4px;
+}
+
+.infoGuideListBullets {
+  padding-left: 14px;
+  list-style: disc;
+}
+
+.infoGuideListBullets li::marker {
+  color: rgba(var(--accent-rgb), 0.75);
+}
+
+.infoGuideList:not(.infoGuideListBullets) li::marker {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.infoShortcutSheetWide {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px 14px;
+}
+
+.infoPanel {
   min-width: 0;
   padding: 10px 12px;
   border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--panel-soft);
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1.45;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.12);
 }
 
-.infoNotice b {
-  flex: 0 0 auto;
-  color: var(--accent);
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.infoCredits {
-  display: grid;
-  gap: 12px;
-  min-width: 0;
-  padding: 14px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--panel-soft);
-}
-
-.infoCredits h3 {
-  margin: 0;
-  padding-bottom: 10px;
-  border-bottom: 1px solid var(--border);
+.infoPanel h3 {
+  margin: 0 0 8px;
   color: var(--text);
   font-size: 12px;
-  font-weight: 600;
-  line-height: 1.3;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
 }
 
-.infoCreditsGrid {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.infoCreditsGrid div {
-  display: grid;
-  gap: 3px;
+.infoShortcutsPanel {
+  display: block;
   min-width: 0;
 }
 
-.infoCredits span,
-.infoLinkGroup > span {
-  display: block;
+.infoShortcutSheet {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px 14px;
+  min-width: 0;
+}
+
+.infoShortcutGroup h4:not(:first-child) {
+  margin-top: 8px;
+}
+
+.infoShortcutGroup {
+  min-width: 0;
+}
+
+.infoShortcutGroup h4 {
+  margin: 0 0 5px;
+  padding-bottom: 5px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   color: var(--muted-2);
   font-size: 11px;
-  font-weight: 500;
+  font-weight: 650;
 }
 
-.infoCredits a {
-  color: var(--text);
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 1.4;
-  text-decoration: none;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.infoTipsPanel {
+  align-self: start;
 }
 
-.infoCredits a:hover {
+.tipsListCompact {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tipsListCompact li {
+  position: relative;
+  padding-left: 10px;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.tipsListCompact li::before {
+  content: "•";
+  position: absolute;
+  left: 0;
   color: var(--accent);
-  text-decoration: underline;
 }
 
-.infoLinkGroup {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 10px;
+.infoContactsPanel {
+  display: grid;
+  gap: 6px;
+  align-content: start;
+}
+
+.infoContactRows {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px 10px;
+}
+
+.infoContactRow {
+  display: grid;
+  grid-template-columns: 84px minmax(0, 1fr);
+  gap: 8px;
   align-items: baseline;
   min-width: 0;
 }
 
-.infoLinkGroup span {
-  flex: 0 0 112px;
+.infoContactRow span {
+  color: var(--muted-2);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
-.infoGrid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 16px;
-}
-
-.infoSection {
-  min-width: 0;
-}
-
-.infoSection h3 {
-  margin: 0;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--border);
+.infoContactRow a {
   color: var(--text);
   font-size: 12px;
-  font-weight: 600;
-  line-height: 1.3;
+  font-weight: 500;
+  line-height: 1.35;
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.infoSection p {
-  margin: 10px 0 8px;
+.infoContactRow a:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.infoLinkBlock {
+  display: grid;
+  gap: 4px;
+}
+
+.infoLinkBlocks {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 10px;
+}
+
+.infoLinkBlock > span {
   color: var(--muted-2);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.infoLinkPills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.infoLinkPills a {
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.16);
+  color: var(--muted);
   font-size: 12px;
-  line-height: 1.45;
+  font-weight: 500;
+  line-height: 1.3;
+  text-decoration: none;
+}
+
+.infoLinkPills a:hover {
+  border-color: rgba(var(--accent-rgb), 0.34);
+  color: var(--accent);
+}
+
+.tipsList {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 14px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 400;
+  line-height: 1.35;
 }
 
 .shortcutList {
   display: grid;
-  gap: 7px;
+  gap: 3px;
 }
 
 .shortcutRow {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 10px;
-  min-height: 28px;
+  gap: 8px;
+  min-height: 22px;
+  min-width: 0;
   color: var(--muted);
   font-size: 12px;
   font-weight: 500;
+}
+
+.shortcutRow > span:first-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .keyGroup {
   display: inline-flex;
   flex-wrap: wrap;
   justify-content: flex-end;
-  gap: 4px;
+  gap: 3px;
 }
 
 .shortcutRow kbd {
-  min-width: 28px;
-  padding: 4px 8px;
+  min-width: 24px;
+  padding: 3px 6px;
   border: 1px solid var(--border);
-  border-bottom-color: rgba(255, 255, 255, 0.28);
-  border-radius: 7px;
-  background: rgba(0, 0, 0, 0.32);
+  border-bottom-color: rgba(255, 255, 255, 0.24);
+  border-radius: 5px;
+  background: rgba(0, 0, 0, 0.28);
   color: var(--text);
-  font: 750 12px/1 var(--main-font), ui-monospace, SFMono-Regular, Menlo, monospace;
+  font: 700 11px/1 var(--main-font), ui-monospace, SFMono-Regular, Menlo, monospace;
   text-align: center;
-  box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.22);
+  box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.18);
 }
 
 html[data-theme="light"] .shortcutRow kbd {
   background: rgba(255, 255, 255, 0.72);
   border-bottom-color: rgba(23, 23, 23, 0.2);
-}
-
-.tipsList {
-  display: grid;
-  gap: 8px;
-  margin: 10px 0 0;
-  padding-left: 18px;
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 400;
-  line-height: 1.45;
 }
 
 .modalHeader {
@@ -6835,6 +7208,18 @@ html[data-theme="light"] .saveTemplateButton:hover:not(:disabled) {
     min-height: 100vh;
   }
 
+  .appShell.hasUpdateBanner {
+    grid-template-rows: 38px auto auto auto;
+  }
+
+  .appShell.hasUpdateBanner .sidebar {
+    grid-row: 3;
+  }
+
+  .appShell.hasUpdateBanner .workspace {
+    grid-row: 4;
+  }
+
   .appShell .sidebar {
     grid-column: 1;
     grid-row: 2;
@@ -7016,6 +7401,15 @@ html[data-theme="light"] .saveTemplateButton:hover:not(:disabled) {
     padding: 16px;
   }
 
+  .appUpdateBanner {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .appUpdateBannerActions {
+    justify-content: flex-end;
+  }
+
   .appTopBar {
     grid-template-columns: minmax(0, 1fr) auto;
   }
@@ -7046,16 +7440,51 @@ html[data-theme="light"] .saveTemplateButton:hover:not(:disabled) {
   }
 
   .infoModal {
-    align-self: stretch;
     width: 100%;
+    max-height: calc(100vh - 16px);
   }
 
   .infoModalHeader {
-    padding: 14px 14px 12px;
+    padding: 10px 12px;
   }
 
   .infoModalBody {
-    padding: 14px 14px 18px;
+    padding: 8px 12px 10px;
+  }
+
+  .infoStatusStrip {
+    grid-template-columns: 1fr;
+  }
+
+  .infoFeatureBar {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+
+  .infoMainWide {
+    gap: 8px;
+  }
+
+  .infoGuideGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .infoModalHeader {
+    grid-template-columns: 1fr;
+  }
+
+  .infoStatusStrip {
+    grid-column: auto;
+  }
+
+  .infoShortcutSheet,
+  .infoShortcutSheetWide {
+    grid-template-columns: 1fr;
+  }
+
+  .infoContactRows,
+  .infoLinkBlocks {
+    grid-template-columns: 1fr;
   }
 
   .settingsModal.appSettingsModal {
@@ -7113,32 +7542,6 @@ html[data-theme="light"] .saveTemplateButton:hover:not(:disabled) {
 
   .settingsPaneFields .themeSelectField {
     grid-column: auto;
-  }
-
-  .infoNotice {
-    display: grid;
-  }
-
-  .infoCreditsGrid {
-    grid-template-columns: 1fr;
-  }
-
-  .infoIntro {
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .infoLinkGroup {
-    display: grid;
-    gap: 6px;
-  }
-
-  .infoLinkGroup span {
-    flex-basis: auto;
-  }
-
-  .infoGrid {
-    grid-template-columns: 1fr;
-    gap: 18px;
   }
 
   .workspace {

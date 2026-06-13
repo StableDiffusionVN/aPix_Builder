@@ -1,15 +1,97 @@
-import { app, BrowserWindow, shell } from "electron";
+import { app, BrowserWindow, ipcMain, shell } from "electron";
+import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { isVersionNewer } from "../shared/version.js";
 
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const preloadPath = path.join(appRoot, "electron", "preload.mjs");
+const UPDATE_MANIFEST_URL = process.env.APIX_UPDATE_MANIFEST_URL ?? "https://apix.sdvn.vn/releases/latest.json";
+const UPDATE_CHECK_DELAY_MS = 5000;
+
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+  app.quit();
+}
+
 let mainWindow;
 let backend;
+let dismissedUpdateVersion = "";
+
+async function readDismissedUpdateVersion() {
+  try {
+    const filePath = path.join(app.getPath("userData"), "update-dismiss.json");
+    const raw = await fs.readFile(filePath, "utf8");
+    const parsed = JSON.parse(raw);
+    dismissedUpdateVersion = typeof parsed?.version === "string" ? parsed.version : "";
+  } catch {
+    dismissedUpdateVersion = "";
+  }
+}
+
+async function writeDismissedUpdateVersion(version) {
+  dismissedUpdateVersion = version;
+  const filePath = path.join(app.getPath("userData"), "update-dismiss.json");
+  await fs.writeFile(filePath, `${JSON.stringify({ version }, null, 2)}\n`, "utf8");
+}
+
+async function fetchUpdateManifest() {
+  const response = await fetch(UPDATE_MANIFEST_URL, {
+    cache: "no-store",
+    headers: { Accept: "application/json" }
+  });
+
+  if (!response.ok) {
+    throw new Error(`Update manifest request failed (${response.status})`);
+  }
+
+  return response.json();
+}
+
+function normalizeManifest(manifest) {
+  if (!manifest || typeof manifest !== "object") return null;
+  const version = String(manifest.version ?? "").trim();
+  const downloadUrl = String(manifest.downloadUrl ?? "").trim();
+  if (!version || !downloadUrl) return null;
+
+  return {
+    version,
+    label: String(manifest.label ?? version).trim(),
+    publishedAt: manifest.publishedAt ?? null,
+    notes: Array.isArray(manifest.notes) ? manifest.notes.map(String) : [],
+    downloadUrl,
+    mandatory: Boolean(manifest.mandatory)
+  };
+}
+
+async function checkForUpdates({ notify = true } = {}) {
+  const currentVersion = app.getVersion();
+  const manifest = normalizeManifest(await fetchUpdateManifest());
+  if (!manifest) return null;
+
+  if (!isVersionNewer(manifest.version, currentVersion)) return null;
+  if (manifest.version === dismissedUpdateVersion) return null;
+
+  if (notify && mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send("app:update-available", manifest);
+  }
+
+  return manifest;
+}
+
+function scheduleUpdateCheck() {
+  setTimeout(() => {
+    checkForUpdates().catch(error => {
+      console.warn("Update check failed:", error.message);
+    });
+  }, UPDATE_CHECK_DELAY_MS);
+}
 
 async function createWindow() {
   if (!backend) {
     process.env.APIX_RESOURCE_ROOT = appRoot;
-    process.env.APIX_DATA_ROOT = app.getPath("userData");
+    // Dev / npm run desktop → repo/user/ · Packaged DMG/exe → OS app data folder
+    process.env.APIX_DATA_ROOT = app.isPackaged ? app.getPath("userData") : appRoot;
     process.env.APIX_SERVE_FRONTEND = "1";
     process.env.PORT = "0";
 
@@ -25,6 +107,7 @@ async function createWindow() {
     backgroundColor: "#111318",
     title: "aPix Builder",
     webPreferences: {
+      preload: preloadPath,
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true
@@ -37,21 +120,68 @@ async function createWindow() {
   });
 
   await mainWindow.loadURL(`http://${backend.host}:${backend.port}/`);
+  scheduleUpdateCheck();
 }
 
-app.whenReady().then(createWindow).catch(error => {
-  console.error("Failed to start aPix Builder:", error);
-  app.quit();
-});
+function registerIpcHandlers() {
+  ipcMain.handle("app:get-version", () => app.getVersion());
 
-app.on("activate", () => {
-  if (BrowserWindow.getAllWindows().length === 0) createWindow();
-});
+  ipcMain.handle("app:check-for-updates", async () => {
+    try {
+      return await checkForUpdates({ notify: true });
+    } catch (error) {
+      return { error: error.message };
+    }
+  });
 
-app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") app.quit();
-});
+  ipcMain.handle("app:open-external", async (_event, url) => {
+    if (typeof url !== "string" || !/^https?:/i.test(url)) return false;
+    await shell.openExternal(url);
+    return true;
+  });
 
-app.on("before-quit", () => {
-  backend?.server?.close();
-});
+  ipcMain.handle("app:dismiss-update", async (_event, version) => {
+    if (typeof version !== "string" || !version.trim()) return false;
+    await writeDismissedUpdateVersion(version.trim());
+    return true;
+  });
+}
+
+if (gotSingleInstanceLock) {
+  app.whenReady().then(async () => {
+    registerIpcHandlers();
+    await readDismissedUpdateVersion();
+    await createWindow();
+  }).catch(error => {
+    console.error("Failed to start aPix Builder:", error);
+    app.quit();
+  });
+
+  app.on("second-instance", () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    }
+  });
+
+  app.on("activate", () => {
+    if (BrowserWindow.getAllWindows().length === 0) {
+      createWindow().catch(error => {
+        console.error("Failed to recreate aPix Builder window:", error);
+        app.quit();
+      });
+      return;
+    }
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.focus();
+    }
+  });
+
+  app.on("window-all-closed", () => {
+    if (process.platform !== "darwin") app.quit();
+  });
+
+  app.on("before-quit", () => {
+    backend?.server?.close();
+  });
+}

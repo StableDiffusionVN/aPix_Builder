@@ -19,7 +19,9 @@
     "build": "vite build",
     "preview": "vite preview --host 0.0.0.0",
     "desktop": "npm run build && electron .",
-    "dist:mac": "npm run build && node scripts/build-mac-dmg.mjs"
+    "sync:brand": "node scripts/sync-brand-assets.mjs",
+    "dist:mac": "npm run sync:brand && npm run build && node scripts/build-mac-dmg.mjs && node scripts/update-release-manifest.mjs",
+    "dist:win": "npm run sync:brand && npm run build && node scripts/build-win-portable.mjs"
   },
   "dependencies": {
     "jimp": "^1.6.1",
@@ -78,6 +80,20 @@
     "dmg": {
       "artifactName": "${productName}-${version}-${arch}.${ext}",
       "title": "${productName} ${version}"
+    },
+    "win": {
+      "icon": "build/icon.icns",
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "portable": {
+      "artifactName": "${productName}-${version}-${arch}-portable.${ext}"
     }
   }
 }

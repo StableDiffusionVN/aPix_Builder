@@ -19,11 +19,22 @@ import {
   X
 } from "lucide-react";
 import YAML from "yaml";
-import { DYNAMIC_FIELD_TYPES, canonicalDynamicType, inferDynamicTypeFromField } from "../lib/dynamicTypes";
+import { DYNAMIC_FIELD_TYPES, canonicalDynamicType } from "../lib/dynamicTypes";
 import { DEFAULT_RH_WF_ID } from "../hooks/useRunningHub";
-import { menuChoiceOptions, menuChoiceValue, parseMenuChoices, resolveMenuStoredValue } from "../lib/menuChoices";
+import { menuChoiceOptions, menuChoiceValue, parseMenuChoices, resolveMenuStoredValue } from "../../shared/menuChoices.js";
 import { RunningHubLogomark } from "./icons/RunningHubIcon";
 import { localizeRuntimeMessage, useI18n } from "../i18n/I18nContext";
+import {
+  defaultValueForType,
+  defaultsForType,
+  inferRowType,
+  inferValueType,
+  moveRow,
+  pruneInputRows,
+  reorderRows,
+  slugifyTemplateKey as slugify,
+  workflowNodes
+} from "../features/template-editor/templateEditorModel.js";
 
 function menuOptsFromRow(row) {
   return menuChoiceOptions(row);
@@ -563,15 +574,6 @@ function MenuSubDetailPanel({ row, nodes, workflow, fieldTypes, onUpdate, onDele
   );
 }
 
-function slugify(value = "") {
-  return String(value)
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "") || "field";
-}
-
 function uniqueKey(base, used) {
   let key = slugify(base);
   let index = 2;
@@ -581,72 +583,6 @@ function uniqueKey(base, used) {
   }
   used.add(key);
   return key;
-}
-
-function workflowNodes(workflow) {
-  return Object.entries(workflow || {}).map(([id, node]) => ({
-    id,
-    title: node?._meta?.title || node?.class_type || id,
-    classType: node?.class_type || "",
-    fields: Object.keys(node?.inputs || {})
-  }));
-}
-
-function workflowFieldExists(workflow, nodeId, field) {
-  if (!nodeId || !field) return false;
-  const inputs = workflow?.[nodeId]?.inputs;
-  return inputs != null && Object.prototype.hasOwnProperty.call(inputs, field);
-}
-
-function pruneSubInputRow(subRow, workflow) {
-  if (!workflowFieldExists(workflow, subRow.nodeId, subRow.field)) return null;
-  return subRow;
-}
-
-function pruneInputRow(row, workflow) {
-  if (row.kind === "note") return row;
-  if (row.kind === "menu-sub") {
-    if (row.hasTargetId && row.nodeId && row.field && !workflowFieldExists(workflow, row.nodeId, row.field)) {
-      return null;
-    }
-    const sub = {};
-    for (const [choice, subRows] of Object.entries(row.sub || {})) {
-      sub[choice] = (subRows || [])
-        .map(subRow => pruneSubInputRow(subRow, workflow))
-        .filter(Boolean);
-    }
-    return { ...row, sub };
-  }
-  if (!workflowFieldExists(workflow, row.nodeId, row.field)) return null;
-  return row;
-}
-
-function pruneInputRows(rows, workflow) {
-  return (Array.isArray(rows) ? rows : [])
-    .map(row => pruneInputRow(row, workflow))
-    .filter(Boolean);
-}
-
-function defaultValueForType(type, fieldValue) {
-  if (type === "image") return "";
-  if (type === "seed") return "random_seed";
-  if (type === "checkbox" || type === "boolean") return Boolean(fieldValue);
-  if (type === "int" || type === "float") return Number.isFinite(Number(fieldValue)) ? Number(fieldValue) : 0;
-  if (type === "json") return "{}";
-  return typeof fieldValue === "string" ? fieldValue : "";
-}
-
-function defaultsForType(type, fieldValue) {
-  return {
-    type,
-    display: "input",
-    minimum: type === "float" ? 0 : 0,
-    maximum: type === "float" ? 1 : "",
-    step: type === "float" ? 0.1 : 1,
-    value: type === "menu" && Array.isArray(fieldValue) ? fieldValue[0] || "" : defaultValueForType(type, fieldValue),
-    choicesText: type === "menu" && Array.isArray(fieldValue) ? fieldValue.join("\n") : "",
-    menuLabelSyntax: false
-  };
 }
 
 function numericValue(value) {
@@ -659,31 +595,12 @@ function booleanValue(value) {
   return value === true || value === "true";
 }
 
-function inferType(value) {
-  if (typeof value === "boolean") return "boolean";
-  if (typeof value === "number") return Number.isInteger(value) ? "int" : "float";
-  if (Array.isArray(value)) return "string";
-  return "string";
-}
-
-function inferRowType({ field, nodeClass, value }, mode = "local") {
-  if (mode === "runninghub-wf") {
-    if (String(field || "").toLowerCase().includes("image")) return "image";
-    if (Array.isArray(value)) return "menu";
-    return inferType(value);
-  }
-  const dynamicType = inferDynamicTypeFromField(field, nodeClass);
-  if (dynamicType) return dynamicType;
-  if (Array.isArray(value)) return "menu";
-  return inferType(value);
-}
-
 function subRowFromConfig(item, workflow, fallbackKey) {
   const [nodeId, ...fieldParts] = String(item.id || "").split("-");
   const field = fieldParts[fieldParts[0] === "inputs" ? 1 : 0] || "";
   const value = workflow?.[nodeId]?.inputs?.[field];
   const dynamicType = canonicalDynamicType(item.ui?.type);
-  const type = dynamicType || (item.ui?.type === "text" ? "string" : item.ui?.type || inferType(value));
+  const type = dynamicType || (item.ui?.type === "text" ? "string" : item.ui?.type || inferValueType(value));
   return {
     rowId: crypto.randomUUID(),
     nodeId,
@@ -741,7 +658,7 @@ function rowFromConfig(item, workflow, fallbackKey) {
   const field = fieldParts[fieldParts[0] === "inputs" ? 1 : 0] || "";
   const value = workflow?.[nodeId]?.inputs?.[field];
   const dynamicType = canonicalDynamicType(ui.type);
-  const type = dynamicType || (ui.type === "text" ? "string" : ui.type || inferType(value));
+  const type = dynamicType || (ui.type === "text" ? "string" : ui.type || inferValueType(value));
   return {
     rowId: crypto.randomUUID(),
     nodeId,
@@ -768,27 +685,6 @@ function outputFromConfig(item, locale = "vi") {
     nodeId: String(item.id || ""),
     label: item.ui?.label || (locale === "vi" ? "Ảnh kết quả" : "Output image")
   };
-}
-
-function moveRow(rows, rowId, direction) {
-  const index = rows.findIndex(row => row.rowId === rowId);
-  if (index < 0) return rows;
-  const nextIndex = index + direction;
-  if (nextIndex < 0 || nextIndex >= rows.length) return rows;
-  const next = [...rows];
-  [next[index], next[nextIndex]] = [next[nextIndex], next[index]];
-  return next;
-}
-
-function reorderRows(rows, draggedId, targetId) {
-  if (!draggedId || !targetId || draggedId === targetId) return rows;
-  const draggedIndex = rows.findIndex(row => row.rowId === draggedId);
-  const targetIndex = rows.findIndex(row => row.rowId === targetId);
-  if (draggedIndex < 0 || targetIndex < 0) return rows;
-  const next = [...rows];
-  const [dragged] = next.splice(draggedIndex, 1);
-  next.splice(targetIndex, 0, dragged);
-  return next;
 }
 
 function buildInputUiFromRow(row) {

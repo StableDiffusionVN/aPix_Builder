@@ -1,5 +1,6 @@
+// @ts-check
 import { isDynamicFieldType } from "./dynamicTypes";
-import { lookupMenuSubFields, menuChoiceOptions, resolveMenuStoredValue } from "./menuChoices";
+import { lookupMenuSubFields, menuChoiceOptions, resolveMenuStoredValue } from "../../shared/menuChoices.js";
 
 export function isMenuSub(item) {
   return item?.ui?.type === "menu-sub";

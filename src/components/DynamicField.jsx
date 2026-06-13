@@ -1,16 +1,17 @@
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Check, Eye, Filter, Folder, Images, Link, ListChecks, Loader2, Pencil, RefreshCcw, Scissors, Star, Trash2, Upload, X } from "lucide-react";
+import { Check, Eye, Filter, Folder, Images, Link, ListChecks, Loader2, Pencil, Scissors, Star, Trash2, Upload, X } from "lucide-react";
 import { ImageEditorModal } from "./lazyModals";
 import { MaskEditorModal } from "./MaskEditorModal";
 import { defaultValue, getActiveSubInputs, isMenuSub, normalizeId } from "../lib/template";
-import { menuChoiceOptions, parseMenuChoices, resolveMenuStoredValue } from "../lib/menuChoices";
+import { menuChoiceOptions, parseMenuChoices, resolveMenuStoredValue } from "../../shared/menuChoices.js";
 import { DYNAMIC_FIELD_TYPES, canonicalDynamicType, dynamicFieldChoices, isDynamicFieldType } from "../lib/dynamicTypes";
-import { EditorRange } from "./ImageAdjustmentControls";
 import { localizeRuntimeMessage, useI18n } from "../i18n/I18nContext";
 import { clearPickedFolderFiles, registerPickedFolderFiles } from "../lib/folderFileCache.js";
 import { isHttpImageUrl, readLocalFolderValue } from "../lib/localImageFolder.js";
 import { getSetting, setSetting } from "../lib/appSettings.js";
+import { StaticFieldBlock } from "../features/fields/StaticFieldBlock.jsx";
+import { renderBasicField } from "../features/fields/basicFieldRegistry.jsx";
 
 function readImageFieldValue(value) {
   return Array.isArray(value) ? value : value ? [value] : [];
@@ -144,110 +145,7 @@ function matchesTimeFilter(value, filter) {
   return true;
 }
 
-function safeLinkHref(href = "") {
-  const trimmed = String(href).trim();
-  return /^(https?:|mailto:|tel:)/i.test(trimmed) ? trimmed : "";
-}
-
-function renderInlineMarkdown(text, keyPrefix) {
-  const nodes = [];
-  const pattern = /(`([^`]+)`)|(\*\*([^*]+)\*\*)|(\[([^\]]+)\]\(([^)]+)\))|(?<!\*)\*([^*\s][^*]*?)\*(?!\*)/g;
-  let lastIndex = 0;
-  let match;
-  let index = 0;
-  while ((match = pattern.exec(text))) {
-    if (match.index > lastIndex) nodes.push(text.slice(lastIndex, match.index));
-    if (match[2]) {
-      nodes.push(<code key={`${keyPrefix}-code-${index}`}>{match[2]}</code>);
-    } else if (match[4]) {
-      nodes.push(<strong key={`${keyPrefix}-strong-${index}`}>{match[4]}</strong>);
-    } else if (match[6]) {
-      const href = safeLinkHref(match[7]);
-      nodes.push(href
-        ? <a key={`${keyPrefix}-link-${index}`} href={href} target="_blank" rel="noreferrer">{match[6]}</a>
-        : <span key={`${keyPrefix}-link-${index}`}>{match[6]}</span>);
-    } else if (match[8]) {
-      nodes.push(<em key={`${keyPrefix}-em-${index}`}>{match[8]}</em>);
-    }
-    lastIndex = pattern.lastIndex;
-    index += 1;
-  }
-  if (lastIndex < text.length) nodes.push(text.slice(lastIndex));
-  return nodes.length ? nodes : text;
-}
-
-function renderMarkdown(markdown = "") {
-  const lines = String(markdown || "").replace(/\r\n/g, "\n").split("\n");
-  const blocks = [];
-  let index = 0;
-  while (index < lines.length) {
-    const line = lines[index];
-    if (!line.trim()) {
-      index += 1;
-      continue;
-    }
-    if (/^```/.test(line.trim())) {
-      const code = [];
-      index += 1;
-      while (index < lines.length && !/^```/.test(lines[index].trim())) {
-        code.push(lines[index]);
-        index += 1;
-      }
-      if (index < lines.length) index += 1;
-      blocks.push(<pre key={`pre-${index}`}><code>{code.join("\n")}</code></pre>);
-      continue;
-    }
-    const heading = /^(#{1,3})\s+(.+)$/.exec(line);
-    if (heading) {
-      const Tag = `h${Math.min(4, heading[1].length + 2)}`;
-      blocks.push(<Tag key={`heading-${index}`}>{renderInlineMarkdown(heading[2], `heading-${index}`)}</Tag>);
-      index += 1;
-      continue;
-    }
-    if (/^\s*[-*]\s+/.test(line)) {
-      const items = [];
-      while (index < lines.length && /^\s*[-*]\s+/.test(lines[index])) {
-        const item = lines[index].replace(/^\s*[-*]\s+/, "");
-        items.push(<li key={`li-${index}`}>{renderInlineMarkdown(item, `li-${index}`)}</li>);
-        index += 1;
-      }
-      blocks.push(<ul key={`ul-${index}`}>{items}</ul>);
-      continue;
-    }
-    if (/^\s*>\s?/.test(line)) {
-      const quote = [];
-      while (index < lines.length && /^\s*>\s?/.test(lines[index])) {
-        quote.push(lines[index].replace(/^\s*>\s?/, ""));
-        index += 1;
-      }
-      blocks.push(<blockquote key={`quote-${index}`}>{renderInlineMarkdown(quote.join(" "), `quote-${index}`)}</blockquote>);
-      continue;
-    }
-    const paragraph = [line.trim()];
-    index += 1;
-    while (index < lines.length && lines[index].trim() && !/^(#{1,3})\s+/.test(lines[index]) && !/^\s*[-*]\s+/.test(lines[index]) && !/^```/.test(lines[index].trim())) {
-      paragraph.push(lines[index].trim());
-      index += 1;
-    }
-    blocks.push(<p key={`p-${index}`}>{renderInlineMarkdown(paragraph.join(" "), `p-${index}`)}</p>);
-  }
-  return blocks;
-}
-
-export function StaticBlock({ item }) {
-  const ui = item.ui || {};
-  if (ui.type === "note" || ui.type === "markdown") {
-    return (
-      <section className="workflowNote">
-        <div className="workflowNoteContent">{renderMarkdown(ui.markdown ?? ui.value ?? "")}</div>
-      </section>
-    );
-  }
-  if (ui.type === "html") {
-    return <div className="note" dangerouslySetInnerHTML={{ __html: ui.value }} />;
-  }
-  return null;
-}
+export { StaticFieldBlock as StaticBlock };
 
 export function DynamicField({
   item,
@@ -302,14 +200,11 @@ export function DynamicField({
     : activeImage?.kind === "input-image" ? activeImage.url : "";
   const maskDataUrl = activeImage?.kind === "input-image" ? (activeImage.maskDataUrl || "") : "";
   const isNumberType = ui.type === "number" || ui.type === "int" || ui.type === "float";
-  const isSlider = ui.type === "slider" || (isNumberType && display === "slider");
   const canResetNumber = isNumberType || ui.type === "slider";
   const resetValue = canResetNumber ? defaultValue(item) : undefined;
   const isAtResetValue = canResetNumber && Number(value) === Number(resetValue);
   const dynamicKind = canonicalDynamicType(ui.type);
   const isDynamicList = isDynamicFieldType(ui.type);
-  const isDropdown = ui.type === "dropdown" || ui.type === "menu" || isDynamicList;
-  const isBoolean = ui.type === "checkbox" || ui.type === "boolean";
   const parseNumber = inputValue => {
     if (inputValue === "") return "";
     const next = Number(inputValue);
@@ -771,77 +666,22 @@ export function DynamicField({
       </section>
     );
   }
-  if (!inputTypes.has(ui.type) && !isDynamicFieldType(ui.type)) return <StaticBlock item={item} />;
-  if (ui.type === "seed") {
-    const isRandomSeed = value === "random_seed" || value === "";
-    const handleSeedChange = event => {
-      const inputValue = event.target.value;
-      if (inputValue === "") {
-        onChange("random_seed");
-        return;
-      }
-      const next = Math.max(ui.minimum ?? 0, Math.trunc(Number(inputValue)));
-      onChange(Number.isFinite(next) ? next : "random_seed");
-    };
-
-    return (
-      <label className="field compact">
-        <span>{label}</span>
-        <div className="inlineControl">
-          <input
-            type="number"
-            min={ui.minimum ?? 0}
-            max={ui.maximum}
-            step={ui.step ?? 1}
-            placeholder={isRandomSeed ? t("field.randomSeed") : ""}
-            value={isRandomSeed ? "" : value}
-            onChange={handleSeedChange}
-          />
-          <button type="button" className="fieldResetButton" onClick={() => onChange("random_seed")} title={t("field.randomSeed")}>
-            <RefreshCcw size={13} />
-          </button>
-        </div>
-      </label>
-    );
-  }
-  if (ui.type === "text") {
-    return (
-      <label className="field">
-        <span>{label}</span>
-        <textarea
-          rows={ui.lines || 3}
-          placeholder={ui.placeholder || ""}
-          value={value}
-          onChange={event => onChange(event.target.value)}
-        />
-        {description ? <small className="fieldDescription">{description}</small> : null}
-      </label>
-    );
-  }
-  if (ui.type === "string") {
-    const multiline = display === "multiline" || ui.multiline === true || Number(ui.lines || ui.rows || 1) > 1;
-    return (
-      <label className="field">
-        <span>{label}</span>
-        {multiline ? (
-          <textarea
-            rows={ui.lines || ui.rows || 3}
-            placeholder={ui.placeholder || ""}
-            value={value}
-            onChange={event => onChange(event.target.value)}
-          />
-        ) : (
-          <input
-            type="text"
-            placeholder={ui.placeholder || ""}
-            value={value}
-            onChange={event => onChange(event.target.value)}
-          />
-        )}
-        {description ? <small className="fieldDescription">{description}</small> : null}
-      </label>
-    );
-  }
+  if (!inputTypes.has(ui.type) && !isDynamicFieldType(ui.type)) return <StaticFieldBlock item={item} />;
+  const basicField = renderBasicField({
+    ui,
+    label,
+    description,
+    display,
+    value,
+    onChange,
+    discovery,
+    discoveryLoading,
+    parseNumber,
+    resetValue,
+    isAtResetValue,
+    t
+  });
+  if (basicField) return basicField;
   if (ui.type === "image" || ui.type === "image_mask" || ui.type === "file") {
     const acceptsImageUrl = ui.type === "image" || ui.type === "image_mask";
     const visibleInputImages = inputImages.filter(image => {
@@ -1308,129 +1148,5 @@ export function DynamicField({
       </>
     );
   }
-  if (isSlider) {
-    return (
-      <div className="field">
-        <EditorRange
-          label={label}
-          value={value}
-          min={ui.minimum}
-          max={ui.maximum}
-          step={ui.step || 1}
-          resetValue={resetValue}
-          onChange={next => onChange(parseNumber(next))}
-        />
-        {description ? <small className="fieldDescription">{description}</small> : null}
-      </div>
-    );
-  }
-  if (isDropdown) {
-    const rawChoices = isDynamicList ? dynamicFieldChoices(discovery, dynamicKind) : ui.choices || [];
-    const menuOpts = menuChoiceOptions(ui);
-    const parsedChoices = isDynamicList
-      ? rawChoices.map(choice => ({ label: choice, value: choice, raw: choice }))
-      : parseMenuChoices(rawChoices, menuOpts);
-    const selectValue = isDynamicList
-      ? (rawChoices.includes(value) ? value : "")
-      : resolveMenuStoredValue(value, rawChoices, menuOpts);
-    return (
-      <label className="field">
-        <span>{label}</span>
-        <div className="fieldSelectWrap">
-          <select value={selectValue} onChange={event => onChange(event.target.value)} disabled={isDynamicList && discoveryLoading}>
-            {isDynamicList && rawChoices.length === 0 ? (
-              <option value="">{discoveryLoading ? t("field.scanning") : t("field.noData")}</option>
-            ) : null}
-            {parsedChoices.map(choice => (
-              <option key={choice.value} value={choice.value}>{choice.label}</option>
-            ))}
-          </select>
-        </div>
-        {description ? <small className="fieldDescription">{description}</small> : null}
-      </label>
-    );
-  }
-  if (ui.type === "radio") {
-    const menuOpts = menuChoiceOptions(ui);
-    const parsedChoices = parseMenuChoices(ui.choices || [], menuOpts);
-    const radioValue = resolveMenuStoredValue(value, ui.choices, menuOpts);
-    return (
-      <fieldset className="field radioGroup">
-        <legend>{label}</legend>
-        {parsedChoices.map(choice => (
-          <label key={choice.value}>
-            <input type="radio" checked={radioValue === choice.value} onChange={() => onChange(choice.value)} />
-            {choice.label}
-          </label>
-        ))}
-        {description ? <small className="fieldDescription">{description}</small> : null}
-      </fieldset>
-    );
-  }
-  if (isBoolean) {
-    return (
-      <fieldset className="field booleanField">
-        <legend>{label}</legend>
-        <div className="booleanToggle">
-          <button type="button" className={value === true ? "active" : ""} onClick={() => onChange(true)}>True</button>
-          <button type="button" className={value === false ? "active" : ""} onClick={() => onChange(false)}>False</button>
-        </div>
-        {description ? <small className="fieldDescription">{description}</small> : null}
-      </fieldset>
-    );
-  }
-  if (isNumberType) {
-    return (
-      <label className="field compact">
-        <span>{label}</span>
-        <div className="inlineControl">
-          <input
-            type="number"
-            min={ui.minimum}
-            max={ui.maximum}
-            step={ui.step || (ui.type === "float" ? 0.1 : 1)}
-            value={value}
-            onChange={event => onChange(parseNumber(event.target.value))}
-          />
-          <button
-            type="button"
-            className="fieldResetButton"
-            onClick={() => onChange(resetValue)}
-            disabled={isAtResetValue}
-            title={t("field.reset")}
-          >
-            <RefreshCcw size={13} />
-          </button>
-        </div>
-        {description ? <small className="fieldDescription">{description}</small> : null}
-      </label>
-    );
-  }
-  if (ui.type === "colorpicker") {
-    return (
-      <label className="field compact colorField">
-        <span>{label}</span>
-        <input type="color" value={value || "#10b981"} onChange={event => onChange(event.target.value)} />
-        {description ? <small className="fieldDescription">{description}</small> : null}
-      </label>
-    );
-  }
-  if (ui.type === "date") {
-    return (
-      <label className="field compact">
-        <span>{label}</span>
-        <input type="date" value={value || ""} onChange={event => onChange(event.target.value)} />
-        {description ? <small className="fieldDescription">{description}</small> : null}
-      </label>
-    );
-  }
-  if (ui.type === "json") {
-    return (
-      <label className="field">
-        <span>{label}</span>
-        <textarea rows={5} value={value} onChange={event => onChange(event.target.value)} />
-        {description ? <small className="fieldDescription">{description}</small> : null}
-      </label>
-    );
-  }
+  return null;
 }

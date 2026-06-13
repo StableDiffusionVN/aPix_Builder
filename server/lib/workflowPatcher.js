@@ -1,7 +1,8 @@
+// @ts-check
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { localFileToUpload } from "./localImageFolder.js";
-import { lookupMenuSubFields, menuChoiceOptions, menuChoiceValue, resolveMenuStoredValue } from "./menuChoices.js";
+import { lookupMenuSubFields, menuChoiceOptions, menuChoiceValue, resolveMenuStoredValue } from "../../shared/menuChoices.js";
 
 function menuSubSelectionStorageKey(yamlKey) {
   return `__menu__${yamlKey}`;

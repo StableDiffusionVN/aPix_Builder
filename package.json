@@ -11,6 +11,11 @@
     "start:app": "node scripts/start-app.mjs",
     "dev": "vite --host 0.0.0.0",
     "server": "node server/server.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc -p tsconfig.check.json",
+    "lint": "eslint src server shared test",
+    "check": "npm run test && npm run typecheck && npm run lint && npm run build",
     "build": "vite build",
     "preview": "vite preview --host 0.0.0.0",
     "desktop": "npm run build && electron .",
@@ -23,13 +28,20 @@
     "yaml": "^2.6.1"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^25.9.3",
     "@vitejs/plugin-react": "^5.0.0",
     "electron": "^42.4.0",
     "electron-builder": "^26.15.3",
+    "eslint": "^10.5.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.6.0",
     "lucide-react": "^0.468.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "vite": "^7.1.0"
+    "typescript": "^6.0.3",
+    "vite": "^7.1.0",
+    "vitest": "^4.1.8"
   },
   "build": {
     "appId": "vn.stablediffusion.apixbuilder",
@@ -39,6 +51,7 @@
       "dist/**/*",
       "electron/**/*",
       "server/**/*",
+      "shared/**/*",
       "config/default/**/*",
       "config/default-rh/**/*",
       "package.json"

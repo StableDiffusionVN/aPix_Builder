@@ -1,43 +1,18 @@
 import { pickedFolderFilesToValues } from "./folderFileCache.js";
+import {
+  isHttpImageUrl,
+  isLocalFolderPath as isSharedLocalFolderPath,
+  normalizeLocalPathInput as normalizeSharedLocalPathInput
+} from "../../shared/localImagePath.js";
 
-export function isHttpImageUrl(raw = "") {
-  const value = String(raw || "").trim();
-  return /^https?:\/\//i.test(value);
-}
+export { isHttpImageUrl };
 
 export function normalizeLocalPathInput(raw = "") {
-  let value = String(raw || "").trim();
-  if (
-    (value.startsWith("\"") && value.endsWith("\""))
-    || (value.startsWith("'") && value.endsWith("'"))
-  ) {
-    value = value.slice(1, -1).trim();
-  }
-  if (/^file:\/\//i.test(value)) {
-    try {
-      const url = new URL(value);
-      value = decodeURIComponent(url.pathname);
-      if (/^\/[A-Za-z]:\//.test(value)) {
-        value = value.slice(1).replace(/\//g, "\\");
-      }
-    } catch {
-      value = value.replace(/^file:\/\//i, "");
-    }
-  }
-  return value.replace(/[\\/]+$/, "");
+  return normalizeSharedLocalPathInput(raw, { windowsFileUrl: true });
 }
 
 export function isLocalFolderPath(raw = "") {
-  const value = normalizeLocalPathInput(raw);
-  if (!value) return false;
-  if (isHttpImageUrl(value)) return false;
-  if (value.startsWith("data:")) return false;
-  return (
-    value.startsWith("/")
-    || value.startsWith("~")
-    || /^[A-Za-z]:[\\/]/.test(value)
-    || value.startsWith("\\\\")
-  );
+  return isSharedLocalFolderPath(raw, { windowsFileUrl: true });
 }
 
 export function isLocalFolderImageValue(value) {

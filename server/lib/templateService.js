@@ -1,3 +1,4 @@
+// @ts-check
 import { readdir, readFile, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import YAML from "yaml";
@@ -9,6 +10,29 @@ export const TEMPLATE_SCOPES = {
 
 export const LOCAL_DEFAULT_TEMPLATE_ID = "sdvn-klein-upscale-ultimate";
 export const RH_WF_DEFAULT_TEMPLATE_ID = "sdvn-klein-upscale-ultimate";
+
+export function validateTemplateConfig(config, template, scope = TEMPLATE_SCOPES.local) {
+  const errors = [];
+  const isRhWf = scope === TEMPLATE_SCOPES.runninghubWf;
+  if (!config || typeof config !== "object") {
+    errors.push("YAML must parse to an object");
+  }
+  if (!config?.app || typeof config.app !== "object") {
+    errors.push("YAML is missing required object: app");
+  }
+  if (!config?.input || typeof config.input !== "object") {
+    errors.push("YAML is missing required object: input");
+  }
+  if (!isRhWf && (!config?.output || typeof config.output !== "object")) {
+    errors.push("YAML is missing required object: output");
+  }
+  if (isRhWf && !String(config?.runninghub?.workflowId || "").trim()) {
+    errors.push("YAML is missing required runninghub.workflowId");
+  }
+  if (errors.length > 0) {
+    throw new Error(`Invalid template "${template.id}": ${errors.join("; ")}`);
+  }
+}
 
 export function createTemplateService({
   configDir,
@@ -169,26 +193,7 @@ export function createTemplateService({
   }
 
   function validateConfig(config, template, scope = TEMPLATE_SCOPES.local) {
-    const errors = [];
-    const isRhWf = normalizeScope(scope) === TEMPLATE_SCOPES.runninghubWf;
-    if (!config || typeof config !== "object") {
-      errors.push("YAML must parse to an object");
-    }
-    if (!config?.app || typeof config.app !== "object") {
-      errors.push("YAML is missing required object: app");
-    }
-    if (!config?.input || typeof config.input !== "object") {
-      errors.push("YAML is missing required object: input");
-    }
-    if (!isRhWf && (!config?.output || typeof config.output !== "object")) {
-      errors.push("YAML is missing required object: output");
-    }
-    if (isRhWf && !String(config?.runninghub?.workflowId || "").trim()) {
-      errors.push("YAML is missing required runninghub.workflowId");
-    }
-    if (errors.length > 0) {
-      throw new Error(`Invalid template "${template.id}": ${errors.join("; ")}`);
-    }
+    validateTemplateConfig(config, template, normalizeScope(scope));
   }
 
   function extractRunningHubWorkflowId(raw, config) {

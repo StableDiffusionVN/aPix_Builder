@@ -1,43 +1,14 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import {
+  isLocalFolderPath,
+  normalizeLocalPathInput
+} from "../../shared/localImagePath.js";
+
+export { isLocalFolderPath, normalizeLocalPathInput };
 
 const IMAGE_EXT = /\.(png|jpe?g|webp|gif|avif|bmp|tiff?)$/i;
-
-export function isLocalFolderPath(raw = "") {
-  const value = String(raw || "").trim();
-  if (!value) return false;
-  if (/^https?:\/\//i.test(value)) return false;
-  if (value.startsWith("data:")) return false;
-  return (
-    value.startsWith("/")
-    || value.startsWith("~")
-    || /^[A-Za-z]:[\\/]/.test(value)
-    || value.startsWith("\\\\")
-  );
-}
-
-export function normalizeLocalPathInput(raw = "") {
-  let value = String(raw || "").trim();
-  if (
-    (value.startsWith("\"") && value.endsWith("\""))
-    || (value.startsWith("'") && value.endsWith("'"))
-  ) {
-    value = value.slice(1, -1).trim();
-  }
-  if (/^file:\/\//i.test(value)) {
-    try {
-      const url = new URL(value);
-      value = decodeURIComponent(url.pathname);
-      if (/^\/[A-Za-z]:\//.test(value)) {
-        value = value.slice(1);
-      }
-    } catch {
-      value = value.replace(/^file:\/\//i, "");
-    }
-  }
-  return value.replace(/[\\/]+$/, "");
-}
 
 export function resolveLocalFolderPath(raw = "") {
   let value = normalizeLocalPathInput(raw);

@@ -34,6 +34,7 @@ import {
   drawHealingOverlay,
   snapshotColorAdjustState
 } from "../lib/healingBrush";
+import { useColorPresetLibrary } from "../features/color-adjust/useColorPresetLibrary.js";
 
 export function useColorAdjustments({
   source,
@@ -84,11 +85,6 @@ export function useColorAdjustments({
   const [activeColorTab, setActiveColorTab] = useState("reds");
   const [activeCurveChannel, setActiveCurveChannel] = useState("rgb");
   const [selectedCurvePointIndex, setSelectedCurvePointIndex] = useState(null);
-  const [customPresets, setCustomPresets] = useState([]);
-  const [showNewPresetForm, setShowNewPresetForm] = useState(false);
-  const [newPresetName, setNewPresetName] = useState("");
-  const [editingPresetId, setEditingPresetId] = useState(null);
-  const [renameValue, setRenameValue] = useState("");
   const [healingActive, setHealingActive] = useState(false);
   const [healingStrokes, setHealingStrokes] = useState([]);
   const [healingBrushSize, setHealingBrushSize] = useState(DEFAULT_HEALING_BRUSH_SIZE);
@@ -98,6 +94,7 @@ export function useColorAdjustments({
   const [colorPickCursor, setColorPickCursor] = useState(null);
   const colorPickTargetRef = useRef(null);
   const activeCurveChannelRef = useRef(activeCurveChannel);
+  const presetLibrary = useColorPresetLibrary(adjustments);
 
   useEffect(() => {
     onPreviewChangeRef.current = onPreviewChange;
@@ -186,43 +183,6 @@ export function useColorAdjustments({
     setHistoryIndex(nextIndex);
     restoreHistoryEntry(history[nextIndex]);
   }, [canRedo, history, historyIndex, restoreHistoryEntry]);
-
-  const savePresets = useCallback((updated) => {
-    setCustomPresets(updated);
-    fetch("/api/presets", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ presets: updated })
-    })
-      .then(res => {
-        if (!res.ok) throw new Error("HTTP error " + res.status);
-        return res.json();
-      })
-      .then(data => {
-        if (data.success && Array.isArray(data.presets)) {
-          setCustomPresets(data.presets);
-        }
-      })
-      .catch(e => {
-        console.error("Failed to sync presets with server", e);
-      });
-  }, []);
-
-  useEffect(() => {
-    fetch("/api/presets")
-      .then(res => {
-        if (!res.ok) throw new Error("HTTP error " + res.status);
-        return res.json();
-      })
-      .then(data => {
-        if (data && Array.isArray(data.presets)) {
-          setCustomPresets(data.presets);
-        }
-      })
-      .catch(error => {
-        console.error("Failed to load presets from server", error);
-      });
-  }, []);
 
   const schedulePersist = useCallback(() => {
     if (!onPersistRef.current || !persistKey) return;
@@ -698,38 +658,6 @@ export function useColorAdjustments({
     return adjustmentsMatchPreset(adjustments, preset.adjustments);
   }, [adjustments]);
 
-  const handleCreatePreset = useCallback(() => {
-    if (!newPresetName.trim()) return;
-    const newPreset = {
-      id: `custom_${Date.now()}`,
-      name: newPresetName.trim(),
-      adjustments: JSON.parse(JSON.stringify(adjustments))
-    };
-    savePresets([...customPresets, newPreset]);
-    setShowNewPresetForm(false);
-    setNewPresetName("");
-  }, [newPresetName, adjustments, customPresets, savePresets]);
-
-  const handleDeletePreset = useCallback((id) => {
-    savePresets(customPresets.filter(item => item.id !== id));
-  }, [customPresets, savePresets]);
-
-  const handleUpdatePresetSettings = useCallback((id) => {
-    savePresets(customPresets.map(item => (
-      item.id === id
-        ? { ...item, adjustments: JSON.parse(JSON.stringify(adjustments)) }
-        : item
-    )));
-  }, [adjustments, customPresets, savePresets]);
-
-  const handleSaveRename = useCallback((id) => {
-    if (!renameValue.trim()) return;
-    savePresets(customPresets.map(item => (
-      item.id === id ? { ...item, name: renameValue.trim() } : item
-    )));
-    setEditingPresetId(null);
-  }, [renameValue, customPresets, savePresets]);
-
   function getHistogramZone(event) {
     const rect = event.currentTarget.getBoundingClientRect();
     const x = clamp((event.clientX - rect.left) / rect.width, 0, 1);
@@ -927,8 +855,8 @@ export function useColorAdjustments({
 
   const hsl = adjustments.hsl[activeColorTab];
   const activePresetId = useMemo(
-    () => findActivePresetId(adjustments, [...PRESETS, ...customPresets]),
-    [adjustments, customPresets]
+    () => findActivePresetId(adjustments, [...PRESETS, ...presetLibrary.customPresets]),
+    [adjustments, presetLibrary.customPresets]
   );
 
   return {
@@ -942,11 +870,7 @@ export function useColorAdjustments({
     activeColorTab,
     activeCurveChannel,
     selectedCurvePointIndex,
-    customPresets,
-    showNewPresetForm,
-    newPresetName,
-    editingPresetId,
-    renameValue,
+    ...presetLibrary,
     histogramCanvasRef,
     curvesCanvasRef,
     updateAdjustment,
@@ -957,14 +881,6 @@ export function useColorAdjustments({
     beginSliderDrag,
     commitCurrent,
     isPresetActive,
-    handleCreatePreset,
-    handleDeletePreset,
-    handleUpdatePresetSettings,
-    handleSaveRename,
-    setShowNewPresetForm,
-    setNewPresetName,
-    setEditingPresetId,
-    setRenameValue,
     setActiveColorTab,
     setActiveCurveChannel,
     setSelectedCurvePointIndex,

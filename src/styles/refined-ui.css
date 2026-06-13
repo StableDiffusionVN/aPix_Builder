@@ -885,22 +885,13 @@ html[data-theme="light"] .logTerminal {
   font-size: var(--font-caption);
 }
 
-html[data-theme="dark"] .outputLogResizeHandle,
-html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .outputLogResizeHandle,
-html[data-theme="light"] .outputLogResizeHandle {
-  border-bottom-color: var(--log-border);
-  color: var(--log-muted);
-}
-
-html[data-theme="dark"] .outputLogResizeHandle:hover,
-html[data-theme="dark"] .outputLogResizeHandle:focus-visible,
-html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .outputLogResizeHandle:hover,
-html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .outputLogResizeHandle:focus-visible,
-html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .outputLogResizeHandle:focus-visible,
-html[data-theme="light"] .outputLogResizeHandle:hover,
-html[data-theme="light"] .outputLogResizeHandle:focus-visible {
-  color: var(--log-accent);
-  background: var(--accent-muted);
+html[data-theme="dark"] .outputLogResizeHandle:hover::before,
+html[data-theme="dark"] .outputLogResizeHandle:focus-visible::before,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .outputLogResizeHandle:hover::before,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .outputLogResizeHandle:focus-visible::before,
+html[data-theme="light"] .outputLogResizeHandle:hover::before,
+html[data-theme="light"] .outputLogResizeHandle:focus-visible::before {
+  background: var(--log-muted);
 }
 
 html[data-theme="dark"] .logHeader,

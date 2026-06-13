@@ -27,7 +27,31 @@ import {
 } from "lucide-react";
 import { useI18n } from "../i18n/I18nContext";
 import { isTextEntryTarget, preventToolbarFocus } from "../lib/keyboard";
-import { applyHslChannelMix } from "../lib/imageAdjustments";
+import {
+  adjustmentsMatchPreset,
+  applyImageAdjustments,
+  clamp,
+  clampCrop,
+  COLOR_CHANNELS,
+  computeHistogram,
+  DEFAULT_CURVES,
+  DEFAULT_HSL,
+  drawCurvesCanvas,
+  drawHistogram,
+  getCurvePoint,
+  getOutputGeometry,
+  getCurveSampleFromPixel,
+  getDominantHslChannelId,
+  mergePresetAdjustments,
+  findActivePresetId,
+  PRESET_GROUPS,
+  PRESETS,
+  PREVIEW_MAX_EDGE,
+  PREVIEW_INTERACTIVE_MAX_EDGE,
+  sampleCanvasPixel,
+  upsertCurvePoint
+} from "../lib/imageAdjustments";
+import { ColorPickButton, ColorPickCursorOverlay } from "./colorPickUi";
 
 const CurveIcon = ({ size = 14, ...props }) => (
   <svg
@@ -78,24 +102,6 @@ const HealingIcon = ({ size = 14, ...props }) => (
   </svg>
 );
 
-const COLOR_CHANNELS = [
-  { id: "reds", name: "Reds", center: 0, minHue: 330, maxHue: 30, color: "#ef4444" },
-  { id: "yellows", name: "Yellows", center: 60, minHue: 30, maxHue: 90, color: "#f59e0b" },
-  { id: "greens", name: "Greens", center: 120, minHue: 90, maxHue: 150, color: "#22c55e" },
-  { id: "aquas", name: "Aquas", center: 180, minHue: 150, maxHue: 210, color: "#22d3ee" },
-  { id: "blues", name: "Blues", center: 240, minHue: 210, maxHue: 270, color: "#3b82f6" },
-  { id: "magentas", name: "Magentas", center: 300, minHue: 270, maxHue: 330, color: "#d946ef" }
-];
-
-const DEFAULT_HSL = Object.fromEntries(COLOR_CHANNELS.map(channel => [channel.id, { h: 0, s: 0, l: 0 }]));
-
-const DEFAULT_CURVES = {
-  rgb: [{ x: 0, y: 0 }, { x: 255, y: 255 }],
-  red: [{ x: 0, y: 0 }, { x: 255, y: 255 }],
-  green: [{ x: 0, y: 0 }, { x: 255, y: 255 }],
-  blue: [{ x: 0, y: 0 }, { x: 255, y: 255 }]
-};
-
 const DEFAULT_ADJUSTMENTS = {
   luminance: 0,
   contrast: 0,
@@ -109,8 +115,12 @@ const DEFAULT_ADJUSTMENTS = {
   whites: 0,
   blacks: 0,
   grain: 0,
+  grainSize: 50,
+  grainRoughness: 50,
   clarity: 0,
   dehaze: 0,
+  texture: 0,
+  vignette: 0,
   blur: 0,
   cropTop: 0,
   cropRight: 0,
@@ -131,55 +141,6 @@ const DEFAULT_BRUSH = {
   hardness: 100
 };
 
-const PRESETS = [
-  {
-    id: "original",
-    name: "Original",
-    adjustments: {
-      luminance: 0, contrast: 0, temperature: 0, tint: 0, vibrance: 0, saturation: 0, hue: 0, highlights: 0, shadows: 0, whites: 0, blacks: 0, clarity: 0, dehaze: 0, blur: 0, invert: false
-    }
-  },
-  {
-    id: "cinematic",
-    name: "Cinematic",
-    adjustments: {
-      luminance: -5, contrast: 15, temperature: 10, tint: -5, vibrance: 15, saturation: -10, hue: 0, highlights: 5, shadows: 10, whites: -5, blacks: 5, clarity: 15, dehaze: 5, blur: 0, invert: false
-    }
-  },
-  {
-    id: "vintage",
-    name: "Vintage",
-    adjustments: {
-      luminance: 5, contrast: -10, temperature: 15, tint: 10, vibrance: -10, saturation: -15, hue: 5, highlights: -5, shadows: 5, whites: -10, blacks: 10, clarity: -10, dehaze: -5, blur: 0, invert: false
-    }
-  },
-  {
-    id: "vibrant",
-    name: "Vibrant",
-    adjustments: {
-      luminance: 0, contrast: 10, temperature: 0, tint: 0, vibrance: 30, saturation: 15, hue: 0, highlights: 10, shadows: 5, whites: 10, blacks: -5, clarity: 10, dehaze: 10, blur: 0, invert: false
-    }
-  },
-  {
-    id: "dramatic",
-    name: "Dramatic",
-    adjustments: {
-      luminance: -10, contrast: 30, temperature: -5, tint: 5, vibrance: 10, saturation: -20, hue: 0, highlights: 15, shadows: -15, whites: 15, blacks: -20, clarity: 25, dehaze: 15, blur: 0, invert: false
-    }
-  },
-  {
-    id: "blackwhite",
-    name: "B&W",
-    adjustments: {
-      luminance: 0, contrast: 20, temperature: 0, tint: 0, vibrance: -100, saturation: -100, hue: 0, highlights: 0, shadows: 0, whites: 0, blacks: 0, clarity: 15, dehaze: 10, blur: 0, invert: false
-    }
-  }
-];
-
-// Preview is rendered at a capped resolution so the per-pixel pass and canvas
-// reads stay cheap while dragging sliders. Full resolution is only used on save.
-const PREVIEW_MAX_EDGE = 1024;
-
 function loadImage(src) {
   return new Promise((resolve, reject) => {
     const image = new Image();
@@ -188,14 +149,6 @@ function loadImage(src) {
     image.onerror = reject;
     image.src = src;
   });
-}
-
-function clamp(value, min, max) {
-  return Math.min(max, Math.max(min, Number.isFinite(value) ? value : min));
-}
-
-function clampCrop(value) {
-  return clamp(Number(value) || 0, 0, 95);
 }
 
 const CROP_RATIOS = [
@@ -224,285 +177,6 @@ function componentToHex(value) {
 
 function rgbToHex(r, g, b) {
   return `#${componentToHex(r)}${componentToHex(g)}${componentToHex(b)}`;
-}
-
-function rgbToHsl(r, g, b) {
-  const rn = r / 255;
-  const gn = g / 255;
-  const bn = b / 255;
-  const max = Math.max(rn, gn, bn);
-  const min = Math.min(rn, gn, bn);
-  let h = 0;
-  let s = 0;
-  const l = (max + min) / 2;
-  if (max !== min) {
-    const d = max - min;
-    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
-    if (max === rn) h = (gn - bn) / d + (gn < bn ? 6 : 0);
-    if (max === gn) h = (bn - rn) / d + 2;
-    if (max === bn) h = (rn - gn) / d + 4;
-    h *= 60;
-  }
-  return { h, s: s * 100, l: l * 100 };
-}
-
-function hslToRgb(h, s, l) {
-  const hn = ((h % 360) + 360) % 360 / 360;
-  const sn = clamp(s, 0, 100) / 100;
-  const ln = clamp(l, 0, 100) / 100;
-  if (sn === 0) {
-    const grey = ln * 255;
-    return { r: grey, g: grey, b: grey };
-  }
-  const hue2rgb = (p, q, t) => {
-    let next = t;
-    if (next < 0) next += 1;
-    if (next > 1) next -= 1;
-    if (next < 1 / 6) return p + (q - p) * 6 * next;
-    if (next < 1 / 2) return q;
-    if (next < 2 / 3) return p + (q - p) * (2 / 3 - next) * 6;
-    return p;
-  };
-  const q = ln < 0.5 ? ln * (1 + sn) : ln + sn - ln * sn;
-  const p = 2 * ln - q;
-  return {
-    r: hue2rgb(p, q, hn + 1 / 3) * 255,
-    g: hue2rgb(p, q, hn) * 255,
-    b: hue2rgb(p, q, hn - 1 / 3) * 255
-  };
-}
-
-function hueDistance(a, b) {
-  const diff = Math.abs(((a - b + 180) % 360) - 180);
-  return Math.abs(diff);
-}
-
-function isCurveActive(points) {
-  if (!points) return false;
-  if (points.length !== 2) return true;
-  return points[0].y !== 0 || points[1].y !== 255;
-}
-
-function getSplineLut(points) {
-  const lut = new Uint8Array(256);
-  const n = points.length;
-
-  if (n === 2) {
-    const p0 = points[0];
-    const p1 = points[1];
-    const dx = p1.x - p0.x || 1;
-    for (let i = 0; i < 256; i++) {
-      if (i < p0.x) {
-        lut[i] = p0.y;
-      } else if (i > p1.x) {
-        lut[i] = p1.y;
-      } else {
-        const t = (i - p0.x) / dx;
-        lut[i] = clamp(Math.round(p0.y + t * (p1.y - p0.y)), 0, 255);
-      }
-    }
-    return lut;
-  }
-
-  const h = new Array(n - 1);
-  for (let i = 0; i < n - 1; i++) {
-    h[i] = points[i + 1].x - points[i].x || 1;
-  }
-
-  const a = new Array(n);
-  for (let i = 0; i < n; i++) {
-    a[i] = points[i].y;
-  }
-
-  const alpha = new Array(n - 1);
-  for (let i = 1; i < n - 1; i++) {
-    alpha[i] = (3 / h[i]) * (a[i + 1] - a[i]) - (3 / h[i - 1]) * (a[i] - a[i - 1]);
-  }
-
-  const l = new Array(n);
-  const mu = new Array(n);
-  const z = new Array(n);
-
-  l[0] = 1;
-  mu[0] = 0;
-  z[0] = 0;
-
-  for (let i = 1; i < n - 1; i++) {
-    l[i] = 2 * (points[i + 1].x - points[i - 1].x) - h[i - 1] * mu[i - 1];
-    mu[i] = h[i] / l[i];
-    z[i] = (alpha[i] - h[i - 1] * z[i - 1]) / l[i];
-  }
-
-  l[n - 1] = 1;
-  z[n - 1] = 0;
-
-  const b = new Array(n);
-  const c = new Array(n);
-  const d = new Array(n);
-
-  c[n - 1] = 0;
-
-  for (let j = n - 2; j >= 0; j--) {
-    c[j] = z[j] - mu[j] * c[j + 1];
-    b[j] = (a[j + 1] - a[j]) / h[j] - (h[j] * (c[j + 1] + 2 * c[j])) / 3;
-    d[j] = (c[j + 1] - c[j]) / (3 * h[j]);
-  }
-
-  let j = 0;
-  for (let i = 0; i < 256; i++) {
-    if (i < points[0].x) {
-      lut[i] = points[0].y;
-    } else if (i > points[n - 1].x) {
-      lut[i] = points[n - 1].y;
-    } else {
-      while (j < n - 1 && i > points[j + 1].x) {
-        j++;
-      }
-      const dx = i - points[j].x;
-      const val = a[j] + b[j] * dx + c[j] * dx * dx + d[j] * dx * dx * dx;
-      lut[i] = clamp(Math.round(val), 0, 255);
-    }
-  }
-
-  return lut;
-}
-
-function drawCurvesCanvas(canvas, points, activeChannel, selectedPointIndex, histData) {
-  if (!canvas || !points) return;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return;
-
-  const width = canvas.width;
-  const height = canvas.height;
-
-  ctx.clearRect(0, 0, width, height);
-
-  // 1. Draw Complementary Colors Gradient Background
-  let grad = null;
-  if (activeChannel === "red") {
-    grad = ctx.createLinearGradient(0, 0, 0, height);
-    grad.addColorStop(0, "rgba(239, 68, 68, 0.22)");  // Đỏ (thêm đỏ) - trên
-    grad.addColorStop(1, "rgba(6, 182, 212, 0.22)");  // Xanh lam/Lục (giảm đỏ -> cyan) - dưới
-  } else if (activeChannel === "green") {
-    grad = ctx.createLinearGradient(0, 0, 0, height);
-    grad.addColorStop(0, "rgba(34, 197, 94, 0.22)");  // Xanh lá (thêm xanh lá) - trên
-    grad.addColorStop(1, "rgba(217, 70, 239, 0.22)"); // Hồng cánh sen (giảm xanh lá -> magenta) - dưới
-  } else if (activeChannel === "blue") {
-    grad = ctx.createLinearGradient(0, 0, 0, height);
-    grad.addColorStop(0, "rgba(59, 130, 246, 0.22)"); // Xanh dương (thêm xanh dương) - trên
-    grad.addColorStop(1, "rgba(234, 179, 8, 0.22)");  // Vàng (giảm xanh dương -> vàng) - dưới
-  } else if (activeChannel === "rgb") {
-    grad = ctx.createLinearGradient(0, 0, 0, height);
-    grad.addColorStop(0, "rgba(255, 255, 255, 0.05)"); // Sáng (top)
-    grad.addColorStop(1, "rgba(0, 0, 0, 0.3)");        // Tối (bottom)
-  }
-
-  if (grad) {
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, width, height);
-  }
-
-  // 2. Draw Grid Lines
-  ctx.strokeStyle = "rgba(255, 255, 255, 0.09)";
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  for (let i = 1; i < 4; i++) {
-    const pos = Math.round((i / 4) * width);
-    // Vertical line
-    ctx.moveTo(pos, 0);
-    ctx.lineTo(pos, height);
-    // Horizontal line
-    ctx.moveTo(0, pos);
-    ctx.lineTo(width, pos);
-  }
-  ctx.stroke();
-
-  // 3. Draw Diagonal Guide Line (y = x)
-  ctx.strokeStyle = "rgba(255, 255, 255, 0.16)";
-  ctx.lineWidth = 1;
-  ctx.setLineDash([4, 4]);
-  ctx.beginPath();
-  ctx.moveTo(0, height);
-  ctx.lineTo(width, 0);
-  ctx.stroke();
-  ctx.setLineDash([]); // Reset line dash
-
-  // 4. Draw Channel Histogram in background (charcoal translucent shape)
-  if (histData) {
-    let hist = null;
-    if (activeChannel === "rgb") {
-      hist = histData.lHist;
-    } else if (activeChannel === "red") {
-      hist = histData.rHist;
-    } else if (activeChannel === "green") {
-      hist = histData.gHist;
-    } else if (activeChannel === "blue") {
-      hist = histData.bHist;
-    }
-
-    if (hist) {
-      let maxVal = 0;
-      for (let i = 0; i < 256; i++) {
-        if (hist[i] > maxVal) maxVal = hist[i];
-      }
-      if (maxVal > 0) {
-        ctx.beginPath();
-        ctx.moveTo(0, height);
-        for (let i = 0; i < 256; i++) {
-          const x = (i / 255) * width;
-          const y = height - (hist[i] / maxVal) * height * 0.8;
-          ctx.lineTo(x, y);
-        }
-        ctx.lineTo(width, height);
-        ctx.closePath();
-        ctx.fillStyle = "rgba(10, 15, 22, 0.58)";
-        ctx.fill();
-      }
-    }
-  }
-
-  // 4. Draw Spline Curve
-  const lut = getSplineLut(points);
-  ctx.beginPath();
-  ctx.moveTo(0, height - (lut[0] / 255) * height);
-  for (let i = 1; i < 256; i++) {
-    const cx = (i / 255) * width;
-    const cy = height - (lut[i] / 255) * height;
-    ctx.lineTo(cx, cy);
-  }
-  ctx.strokeStyle = activeChannel === "rgb" ? "#cbd5e1" :
-                    activeChannel === "red" ? "#ef4444" :
-                    activeChannel === "green" ? "#22c55e" : "#3b82f6";
-  ctx.lineWidth = 2;
-  ctx.stroke();
-
-  // 5. Draw Control Points
-  points.forEach((pt, idx) => {
-    const cx = (pt.x / 255) * width;
-    const cy = height - (pt.y / 255) * height;
-
-    if (idx === selectedPointIndex) {
-      ctx.beginPath();
-      ctx.arc(cx, cy, 7, 0, 2 * Math.PI);
-      ctx.fillStyle = activeChannel === "rgb" ? "rgba(255, 255, 255, 0.25)" :
-                      activeChannel === "red" ? "rgba(239, 68, 68, 0.25)" :
-                      activeChannel === "green" ? "rgba(34, 197, 94, 0.25)" : "rgba(59, 130, 246, 0.25)";
-      ctx.fill();
-      ctx.strokeStyle = "#ffffff";
-      ctx.lineWidth = 1;
-      ctx.stroke();
-    }
-
-    ctx.beginPath();
-    ctx.arc(cx, cy, 4, 0, 2 * Math.PI);
-    ctx.fillStyle = activeChannel === "rgb" ? "#ffffff" :
-                    activeChannel === "red" ? "#ef4444" :
-                    activeChannel === "green" ? "#22c55e" : "#3b82f6";
-    ctx.strokeStyle = "#ffffff";
-    ctx.lineWidth = 1.2;
-    ctx.fill();
-    ctx.stroke();
-  });
 }
 
 function drawStroke(ctx, stroke, width, height, scale) {
@@ -793,92 +467,6 @@ function drawHealingOverlay(ctx, stroke, width, height, scale) {
   ctx.restore();
 }
 
-
-function computeHistogram(canvas) {
-  if (!canvas) return null;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return null;
-  const { width, height } = canvas;
-  
-  const imageData = ctx.getImageData(0, 0, width, height);
-  const data = imageData.data;
-  
-  const rHist = new Uint32Array(256);
-  const gHist = new Uint32Array(256);
-  const bHist = new Uint32Array(256);
-  const lHist = new Uint32Array(256);
-  
-  for (let i = 0; i < data.length; i += 16) {
-    const r = data[i];
-    const g = data[i + 1];
-    const b = data[i + 2];
-    const a = data[i + 3];
-    if (a === 0) continue;
-    
-    rHist[r]++;
-    gHist[g]++;
-    bHist[b]++;
-    const l = Math.round(0.299 * r + 0.587 * g + 0.114 * b);
-    lHist[l]++;
-  }
-  
-  return { rHist, gHist, bHist, lHist };
-}
-
-function drawHistogram(canvas, histData) {
-  if (!canvas || !histData) return;
-  const context = canvas.getContext("2d");
-  if (!context) return;
-  
-  const { width, height } = canvas;
-  context.clearRect(0, 0, width, height);
-  
-  const { rHist, gHist, bHist, lHist } = histData;
-  let maxVal = 0;
-  for (let i = 0; i < 256; i++) {
-    if (rHist[i] > maxVal) maxVal = rHist[i];
-    if (gHist[i] > maxVal) maxVal = gHist[i];
-    if (bHist[i] > maxVal) maxVal = bHist[i];
-    if (lHist[i] > maxVal) maxVal = lHist[i];
-  }
-  
-  if (maxVal === 0) return;
-  
-  const drawPath = (hist, fillColor, strokeColor) => {
-    // Draw the fill
-    context.beginPath();
-    context.moveTo(0, height);
-    for (let i = 0; i < 256; i++) {
-      const x = (i / 255) * width;
-      const y = height - (hist[i] / maxVal) * height * 0.92;
-      context.lineTo(x, y);
-    }
-    context.lineTo(width, height);
-    context.closePath();
-    context.fillStyle = fillColor;
-    context.fill();
-    
-    // Draw the outline
-    context.beginPath();
-    for (let i = 0; i < 256; i++) {
-      const x = (i / 255) * width;
-      const y = height - (hist[i] / maxVal) * height * 0.92;
-      if (i === 0) context.moveTo(x, y);
-      else context.lineTo(x, y);
-    }
-    context.lineWidth = 1.2;
-    context.strokeStyle = strokeColor;
-    context.stroke();
-  };
-  
-  context.globalCompositeOperation = "screen";
-  drawPath(rHist, "rgba(239, 68, 68, 0.22)", "rgba(239, 68, 68, 0.8)");
-  drawPath(gHist, "rgba(34, 197, 94, 0.22)", "rgba(34, 197, 94, 0.8)");
-  drawPath(bHist, "rgba(59, 130, 246, 0.22)", "rgba(59, 130, 246, 0.8)");
-  drawPath(lHist, "rgba(255, 255, 255, 0.08)", "rgba(255, 255, 255, 0.6)");
-  context.globalCompositeOperation = "source-over";
-}
-
 function snapshot(adjustments, brush, strokes, extra = {}) {
   return {
     adjustments: JSON.parse(JSON.stringify(adjustments)),
@@ -904,6 +492,7 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
   const zoomRef = useRef(1);
   const panRef = useRef({ x: 0, y: 0 });
   const rafRef = useRef(null);
+  const isSliderDraggingRef = useRef(false);
   const baseCanvasRef = useRef(null);
   const strokeLayerRef = useRef(null);
   const overlayLayerRef = useRef(null);
@@ -925,8 +514,10 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
   const [hoveredZone, setHoveredZone] = useState(null);
   const histogramDragRef = useRef(null);
   const [activeTool, setActiveTool] = useState("hand");
-  const [openSections, setOpenSections] = useState({ basic: true, presets: true });
+  const [openSections, setOpenSections] = useState({ basic: true, presets: false });
   const [activeColorTab, setActiveColorTab] = useState("reds");
+  const [colorPickTarget, setColorPickTarget] = useState(null);
+  const [colorPickCursor, setColorPickCursor] = useState(null);
   const [cropRatio, setCropRatio] = useState("free");
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -1095,16 +686,14 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
   }, [renameValue, customPresets, savePresets]);
 
   const isPresetActive = useCallback((preset) => {
-    if (!preset || !preset.adjustments) return false;
-    const adj = adjustments;
-    const padj = preset.adjustments;
-    return Math.abs(adj.luminance - padj.luminance) < 1
-      && Math.abs(adj.contrast - padj.contrast) < 1
-      && Math.abs(adj.temperature - padj.temperature) < 1
-      && Math.abs(adj.vibrance - padj.vibrance) < 1
-      && Math.abs(adj.saturation - padj.saturation) < 1
-      && adj.invert === padj.invert;
+    if (!preset?.adjustments) return false;
+    return adjustmentsMatchPreset(adjustments, preset.adjustments);
   }, [adjustments]);
+
+  const activePresetId = useMemo(
+    () => findActivePresetId(adjustments, [...PRESETS, ...customPresets]),
+    [adjustments, customPresets]
+  );
 
   useEffect(() => {
     adjustmentsRef.current = adjustments;
@@ -1183,221 +772,25 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
     };
   }, [source]);
 
-  const getOutputGeometry = useCallback((image = imageRef.current, nextAdjustments = adjustments) => {
-    if (!image) return null;
-    const cropLeft = clampCrop(nextAdjustments.cropLeft) / 100;
-    const cropRight = clampCrop(nextAdjustments.cropRight) / 100;
-    const cropTop = clampCrop(nextAdjustments.cropTop) / 100;
-    const cropBottom = clampCrop(nextAdjustments.cropBottom) / 100;
-    const sx = Math.round(image.naturalWidth * cropLeft);
-    const sy = Math.round(image.naturalHeight * cropTop);
-    const sw = Math.max(1, Math.round(image.naturalWidth * (1 - cropLeft - cropRight)));
-    const sh = Math.max(1, Math.round(image.naturalHeight * (1 - cropTop - cropBottom)));
-    const rotated = Math.abs(nextAdjustments.rotation % 180) === 90;
-    return {
-      sx,
-      sy,
-      sw,
-      sh,
-      width: rotated ? sh : sw,
-      height: rotated ? sw : sh
-    };
-  }, [adjustments]);
-
-  // Applies all colour/geometry adjustments onto a target canvas. Cheap GPU
-  // filters (brightness/contrast/saturate/blur/hue/invert) are handled by
-  // ctx.filter; the costly per-pixel JS pass only runs when an adjustment that
-  // truly needs it is active, and the HSL round-trip is gated even further.
-  const applyAdjustments = useCallback((targetCanvas, { fullResolution = false, ignoreCrop = false } = {}) => {
+  // Applies all colour/geometry adjustments via the shared Lightroom-style pipeline.
+  const applyAdjustments = useCallback((targetCanvas, { fullResolution = false, ignoreCrop = false, interactive = false } = {}) => {
     const image = imageRef.current;
-    // While the crop tool is active the preview shows the full, un-rotated image
-    // so the draggable crop box maps 1:1 to the source pixels.
-    const geomAdj = ignoreCrop
-      ? { ...adjustments, cropTop: 0, cropRight: 0, cropBottom: 0, cropLeft: 0, rotation: 0, flipH: false, flipV: false }
-      : adjustments;
-    const geometry = getOutputGeometry(image, geomAdj);
-    if (!image || !targetCanvas || !geometry) return null;
-
-    let scale = 1;
-    if (!fullResolution) {
-      const longest = Math.max(geometry.width, geometry.height);
-      if (longest > PREVIEW_MAX_EDGE) scale = PREVIEW_MAX_EDGE / longest;
-    }
-    const width = Math.max(1, Math.round(geometry.width * scale));
-    const height = Math.max(1, Math.round(geometry.height * scale));
-
-    targetCanvas.width = width;
-    targetCanvas.height = height;
-    const ctx = targetCanvas.getContext("2d");
-    if (!ctx) return null;
-
-    ctx.clearRect(0, 0, width, height);
-    ctx.save();
-    ctx.translate(width / 2, height / 2);
-    ctx.rotate((geomAdj.rotation * Math.PI) / 180);
-    ctx.scale(geomAdj.flipH ? -1 : 1, geomAdj.flipV ? -1 : 1);
-
-    const brightness = clamp(100 + adjustments.luminance + adjustments.dehaze * 0.15, 0, 220);
-    const contrast = clamp(100 + adjustments.contrast + adjustments.clarity * 0.35 + adjustments.dehaze * 0.45, 0, 240);
-    const saturation = clamp(100 + adjustments.saturation + adjustments.vibrance * 0.6, 0, 240);
-    const filters = [`brightness(${brightness}%)`, `contrast(${contrast}%)`, `saturate(${saturation}%)`];
-    if (adjustments.blur > 0) filters.push(`blur(${adjustments.blur * scale}px)`);
-    if (adjustments.hue) filters.push(`hue-rotate(${adjustments.hue}deg)`);
-    if (adjustments.invert) filters.push("invert(1)");
-    ctx.filter = filters.join(" ");
-
-    const dw = geometry.sw * scale;
-    const dh = geometry.sh * scale;
-    ctx.drawImage(image, geometry.sx, geometry.sy, geometry.sw, geometry.sh, -dw / 2, -dh / 2, dw, dh);
-    ctx.restore();
-    ctx.filter = "none";
-
-    // Apply healing strokes on the adjusted base canvas
-    const healingStrokes = (strokesRef.current || []).filter(s => s.tool === "healing");
-    if (healingStrokes.length > 0) {
-      healingStrokes.forEach(stroke => {
-        applyHealingStroke(ctx, stroke, scale);
-      });
-    }
-
-        const activeHslChannels = COLOR_CHANNELS.filter(channel => {
-      const a = adjustments.hsl[channel.id];
-      return a.h !== 0 || a.s !== 0 || a.l !== 0;
+    if (!image) return null;
+    const maxEdge = interactive ? PREVIEW_INTERACTIVE_MAX_EDGE : PREVIEW_MAX_EDGE;
+    return applyImageAdjustments(image, adjustments, targetCanvas, {
+      fullResolution,
+      maxEdge: fullResolution ? Infinity : maxEdge,
+      interactive,
+      skipBlur: interactive,
+      ignoreCrop,
+      onAfterDraw: (ctx, scale) => {
+        (strokesRef.current || [])
+          .filter(stroke => stroke.tool === "healing")
+          .forEach(stroke => applyHealingStroke(ctx, stroke, scale));
+      },
+      seed: 8421
     });
-    const hasCurves = adjustments.curves && (
-      isCurveActive(adjustments.curves.rgb) ||
-      isCurveActive(adjustments.curves.red) ||
-      isCurveActive(adjustments.curves.green) ||
-      isCurveActive(adjustments.curves.blue)
-    );
-    const needsPixelPass = adjustments.temperature !== 0
-      || adjustments.tint !== 0
-      || adjustments.grain > 0
-      || adjustments.clarity !== 0
-      || adjustments.dehaze !== 0
-      || adjustments.highlights !== 0
-      || adjustments.shadows !== 0
-      || adjustments.whites !== 0
-      || adjustments.blacks !== 0
-      || activeHslChannels.length > 0
-      || hasCurves;
- 
-    if (needsPixelPass) {
-      const needsHsl = activeHslChannels.length > 0;
-      const imageData = ctx.getImageData(0, 0, width, height);
-      const data = imageData.data;
-      const tempShift = adjustments.temperature * 0.42;
-      const tintShift = adjustments.tint * 0.35;
-      const grainStrength = adjustments.grain * 0.9;
-      const dehazeBias = adjustments.dehaze * 0.18;
-      const clarityBias = adjustments.clarity * 0.12;
- 
-      // Cache shifts and calculate cb ratio outside the loop
-      const rShift = tempShift + dehazeBias;
-      const bShift = -(tempShift - dehazeBias);
-      const cb = clarityBias / 64;
- 
-      const activeChannelAdjusts = needsHsl
-        ? activeHslChannels.map(channel => ({
-            center: channel.center,
-            h: adjustments.hsl[channel.id].h,
-            s: adjustments.hsl[channel.id].s,
-            l: adjustments.hsl[channel.id].l
-          }))
-        : null;
- 
-      const highlightsVal = adjustments.highlights * 0.45;
-      const shadowsVal = adjustments.shadows * 0.45;
-      const whitesVal = adjustments.whites * 0.55;
-      const blacksVal = adjustments.blacks * 0.55;
-      const hasLightAdjustments = highlightsVal !== 0 || shadowsVal !== 0 || whitesVal !== 0 || blacksVal !== 0;
-
-      // Precalculate curves LUTs if active
-      let lutR, lutG, lutB;
-      if (hasCurves) {
-        const lutRGB = getSplineLut(adjustments.curves.rgb);
-        const lutRedOnly = getSplineLut(adjustments.curves.red);
-        const lutGreenOnly = getSplineLut(adjustments.curves.green);
-        const lutBlueOnly = getSplineLut(adjustments.curves.blue);
-
-        lutR = new Uint8Array(256);
-        lutG = new Uint8Array(256);
-        lutB = new Uint8Array(256);
-
-        for (let i = 0; i < 256; i++) {
-          lutR[i] = lutRGB[lutRedOnly[i]];
-          lutG[i] = lutRGB[lutGreenOnly[i]];
-          lutB[i] = lutRGB[lutBlueOnly[i]];
-        }
-      }
- 
-      for (let index = 0; index < data.length; index += 4) {
-        if (data[index + 3] === 0) continue;
-        let r = data[index];
-        let g = data[index + 1];
-        let b = data[index + 2];
- 
-        r += rShift;
-        b += bShift;
-        g += tintShift;
- 
-        if (clarityBias) {
-          r += cb * (r - 128);
-          g += cb * (g - 128);
-          b += cb * (b - 128);
-        }
- 
-        if (hasLightAdjustments) {
-          const y = (0.299 * r + 0.587 * g + 0.114 * b) / 255.0;
-          let shift = 0;
-          if (highlightsVal !== 0 && y > 0.2) {
-            shift += highlightsVal * Math.pow((y - 0.2) / 0.8, 1.5);
-          }
-          if (shadowsVal !== 0 && y < 0.8) {
-            shift += shadowsVal * Math.pow((0.8 - y) / 0.8, 1.5);
-          }
-          if (whitesVal !== 0 && y > 0.5) {
-            shift += whitesVal * Math.pow((y - 0.5) / 0.5, 2);
-          }
-          if (blacksVal !== 0 && y < 0.4) {
-            shift += blacksVal * Math.pow((0.4 - y) / 0.4, 2);
-          }
-          r += shift;
-          g += shift;
-          b += shift;
-        }
- 
-        if (needsHsl) {
-          const hsl = rgbToHsl(r, g, b);
-          const mixed = applyHslChannelMix(hsl, activeChannelAdjusts);
-          const shifted = hslToRgb(mixed.h, mixed.s, mixed.l);
-          r = shifted.r;
-          g = shifted.g;
-          b = shifted.b;
-        }
-
-        if (hasCurves) {
-          r = lutR[clamp(Math.round(r), 0, 255)];
-          g = lutG[clamp(Math.round(g), 0, 255)];
-          b = lutB[clamp(Math.round(b), 0, 255)];
-        }
- 
-        if (grainStrength > 0) {
-          const noise = (Math.random() - 0.5) * grainStrength;
-          r += noise;
-          g += noise;
-          b += noise;
-        }
- 
-        data[index] = clamp(Math.round(r), 0, 255);
-        data[index + 1] = clamp(Math.round(g), 0, 255);
-        data[index + 2] = clamp(Math.round(b), 0, 255);
-      }
-      ctx.putImageData(imageData, 0, 0);
-    }
- 
-    return { width, height, scale };
-  }, [adjustments, getOutputGeometry]);
+  }, [adjustments]);
 
   // Rebuilds the dedicated (transparent) brush layer by replaying all committed
   // strokes. Kept separate from the image so the eraser only removes brush
@@ -1435,8 +828,12 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
       saturation: 0,
       hue: 0,
       grain: 0,
+      grainSize: 50,
+      grainRoughness: 50,
       clarity: 0,
       dehaze: 0,
+      texture: 0,
+      vignette: 0,
       blur: 0,
       invert: false
     });
@@ -1455,7 +852,7 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
     const dh = geometry.sh * meta.scale;
     ctx.drawImage(image, geometry.sx, geometry.sy, geometry.sw, geometry.sh, -dw / 2, -dh / 2, dw, dh);
     ctx.restore();
-  }, [adjustments, getOutputGeometry]);
+  }, [adjustments]);
 
   // Composites image + cached brush layer (+ the live in-progress stroke) onto
   // the visible canvas. Cheap and constant-cost regardless of stroke count.
@@ -1518,30 +915,32 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
     }
   }, [editorCompareMode, editorComparePosition, drawOriginalGeometry]);
 
-  const renderPreview = useCallback(() => {
+  const renderPreview = useCallback((options = {}) => {
+    const interactive = options.interactive ?? isSliderDraggingRef.current;
     if (!baseCanvasRef.current) baseCanvasRef.current = document.createElement("canvas");
-    const meta = applyAdjustments(baseCanvasRef.current, { ignoreCrop: croppingRef.current });
+    const meta = applyAdjustments(baseCanvasRef.current, { ignoreCrop: croppingRef.current, interactive });
     if (!meta) return;
     previewMetaRef.current = meta;
     syncStrokeLayer();
     compositePreview();
 
-    // Draw live histogram
-    const histData = baseCanvasRef.current ? computeHistogram(baseCanvasRef.current) : null;
-    if (histogramCanvasRef.current && histData) {
-      drawHistogram(histogramCanvasRef.current, histData);
-    }
+    if (!interactive) {
+      const histData = baseCanvasRef.current ? computeHistogram(baseCanvasRef.current) : null;
+      if (histogramCanvasRef.current && histData) {
+        drawHistogram(histogramCanvasRef.current, histData);
+      }
 
-    if (curvesCanvasRef.current && histData && adjustments.curves) {
-      drawCurvesCanvas(
-        curvesCanvasRef.current,
-        adjustments.curves[activeCurveChannel],
-        activeCurveChannel,
-        selectedCurvePointIndex,
-        histData
-      );
+      if (curvesCanvasRef.current && histData && adjustments.curves) {
+        drawCurvesCanvas(
+          curvesCanvasRef.current,
+          adjustments.curves[activeCurveChannel],
+          activeCurveChannel,
+          selectedCurvePointIndex,
+          histData
+        );
+      }
     }
-  }, [applyAdjustments, syncStrokeLayer, compositePreview, activeCurveChannel, selectedCurvePointIndex]);
+  }, [applyAdjustments, syncStrokeLayer, compositePreview, activeCurveChannel, selectedCurvePointIndex, adjustments.curves]);
 
   // Heavy path: rebuild the adjusted base (throttled to one per animation frame)
   // whenever an adjustment changes.
@@ -1566,6 +965,14 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
       );
     }
   }, [openSections.curves, adjustments.curves, activeCurveChannel, selectedCurvePointIndex]);
+
+  useEffect(() => {
+    if (selectedCurvePointIndex === null) return;
+    const points = adjustments.curves?.[activeCurveChannel];
+    if (!points || selectedCurvePointIndex < 0 || selectedCurvePointIndex >= points.length) {
+      setSelectedCurvePointIndex(null);
+    }
+  }, [adjustments.curves, activeCurveChannel, selectedCurvePointIndex]);
 
   // When the committed stroke set changes (commit / undo / redo / reset), rebuild
   // the brush layer and recomposite. Not triggered during dragging.
@@ -1600,12 +1007,9 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
   }
 
   function applyPreset(preset) {
+    setSelectedCurvePointIndex(null);
     setAdjustments(current => {
-      const next = {
-        ...current,
-        ...preset.adjustments,
-        curves: preset.adjustments.curves || DEFAULT_CURVES
-      };
+      const next = mergePresetAdjustments(current, preset.adjustments);
       commitHistory(next, brush, strokes);
       return next;
     });
@@ -1627,8 +1031,15 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
     });
   }
 
+  function beginSliderDrag() {
+    isSliderDraggingRef.current = true;
+  }
+
   function commitCurrent() {
+    isSliderDraggingRef.current = false;
     commitHistory(adjustments, brush, strokes);
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    rafRef.current = requestAnimationFrame(() => renderPreview({ interactive: false }));
   }
 
   function getHistogramZone(event) {
@@ -1643,6 +1054,7 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
 
   function handleHistogramPointerDown(event) {
     event.preventDefault();
+    beginSliderDrag();
     event.currentTarget.setPointerCapture(event.pointerId);
     
     const { zone } = getHistogramZone(event);
@@ -2404,11 +1816,59 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
     };
   }, [editorCompareMode, editorComparePosition, isReady, pan, zoom]);
 
+  function toggleColorPickTarget(target) {
+    setColorPickTarget(current => (current === target ? null : target));
+    setColorPickCursor(null);
+  }
+
+  function applyColorPickFromCanvas(point) {
+    const base = baseCanvasRef.current;
+    if (!base || !colorPickTarget) return false;
+
+    const px = clamp(Math.round(point.x * base.width), 0, base.width - 1);
+    const py = clamp(Math.round(point.y * base.height), 0, base.height - 1);
+    const pixel = sampleCanvasPixel(base, px, py);
+    if (!pixel) return false;
+
+    if (colorPickTarget === "hsl") {
+      setActiveColorTab(getDominantHslChannelId(pixel.r, pixel.g, pixel.b));
+      openSection("hsl");
+      setColorPickTarget(null);
+      setColorPickCursor(null);
+      return true;
+    }
+
+    if (colorPickTarget === "curves") {
+      const sample = getCurveSampleFromPixel(pixel.r, pixel.g, pixel.b, activeCurveChannel);
+      const points = adjustments.curves?.[activeCurveChannel];
+      if (!points) return false;
+      const { points: nextPoints, selectedIndex } = upsertCurvePoint(points, sample);
+      setAdjustments(current => ({
+        ...current,
+        curves: {
+          ...current.curves,
+          [activeCurveChannel]: nextPoints
+        }
+      }));
+      setSelectedCurvePointIndex(selectedIndex);
+      openSection("curves");
+      commitCurrent();
+      setColorPickTarget(null);
+      setColorPickCursor(null);
+      return true;
+    }
+
+    return false;
+  }
+
   function handlePointerDown(event) {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const point = getCanvasPoint(event);
     if (!point) return;
+    if (colorPickTarget) {
+      if (applyColorPickFromCanvas(point)) return;
+    }
     if (activeTool === "pen") {
       event.currentTarget.setPointerCapture(event.pointerId);
       handlePenPointerDown(event);
@@ -2461,6 +1921,14 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
   }
 
   function handlePointerMove(event) {
+    if (colorPickTarget && stageRef.current) {
+      const stageRect = stageRef.current.getBoundingClientRect();
+      setColorPickCursor({
+        x: event.clientX - stageRect.left,
+        y: event.clientY - stageRect.top
+      });
+      return;
+    }
     if (activeTool === "pen") {
       if (penDragRef.current) handlePenPointerMove(event);
       return;
@@ -2629,6 +2097,7 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
   }
 
   const previewCursor = useMemo(() => {
+    if (colorPickTarget) return undefined;
     if (activeTool === "brush" || activeTool === "eraser" || activeTool === "healing") return "none";
     if (activeTool === "colorpicker") return "copy";
     if (activeTool === "zoom") return isShiftPressed ? "zoom-out" : "zoom-in";
@@ -2637,11 +2106,12 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
       return selectionHoverInside ? "move" : "crosshair";
     }
     return panStartRef.current ? "grabbing" : "grab";
-  }, [activeTool, isShiftPressed, selectionHoverInside]);
+  }, [activeTool, colorPickTarget, isShiftPressed, selectionHoverInside]);
 
   const brushDiameter = brush.size * (previewMetaRef.current?.scale ?? 1) * canvasScaleRef.current;
 
   const hsl = adjustments.hsl[activeColorTab];
+  const selectedCurvePoint = getCurvePoint(adjustments.curves, activeCurveChannel, selectedCurvePointIndex);
   const cropRatioValue = CROP_RATIOS.find(option => option.id === cropRatio)?.value ?? null;
   const imageAspect = (imageRef.current?.naturalWidth || 1) / (imageRef.current?.naturalHeight || 1);
 
@@ -2708,11 +2178,18 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
 
         <main className="imageEditorStage">
           <div
-            className="imageEditorPreview"
+            className={`imageEditorPreview${colorPickTarget ? " isColorPickTool" : ""}`}
             ref={stageRef}
-            onMouseLeave={() => { setBrushCursor(null); setSelectionHoverInside(false); }}
+            onMouseLeave={() => {
+              setBrushCursor(null);
+              setSelectionHoverInside(false);
+              setColorPickCursor(null);
+            }}
           >
             {!isReady ? <span className="editorLoading">{t("editor.loading")}</span> : null}
+            {colorPickTarget && colorPickCursor ? (
+              <ColorPickCursorOverlay x={colorPickCursor.x} y={colorPickCursor.y} />
+            ) : null}
             {brushCursor && (activeTool === "brush" || activeTool === "eraser" || activeTool === "healing") ? (
               <div
                 className={`brushCursorCircle ${activeTool === "eraser" ? "eraserMode" : activeTool === "healing" ? "healingMode" : "brushMode"}`}
@@ -2748,7 +2225,7 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
             >
               <canvas
                 ref={canvasRef}
-                style={{ cursor: previewCursor }}
+                style={colorPickTarget ? { cursor: "none" } : { cursor: previewCursor }}
                 onPointerDown={handlePointerDown}
                 onPointerMove={handlePointerMove}
                 onPointerUp={endPointerInteraction}
@@ -2881,22 +2358,42 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
           </div>
 
           <div className="accordionListWithSlider">
+            {colorPickTarget ? (
+              <p className="colorPickHint">{t("editor.pickOnImage")}</p>
+            ) : null}
             <div className="imageEditorAccordionList">
               <AccordionSection icon={Sparkles} title="Presets" open={!!openSections.presets} onToggle={() => toggleSection("presets")}>
                 <div className="presetAccordionContent">
-                  <div className="presetGroupTitle">{t("editor.defaults")}</div>
-                  <div className="presetGrid">
-                    {PRESETS.map(preset => (
-                      <button
-                        type="button"
-                        key={preset.id}
-                        className={`presetButton ${isPresetActive(preset) ? "active" : ""}`}
-                        onClick={() => applyPreset(preset)}
-                      >
-                        {preset.name}
-                      </button>
-                    ))}
-                  </div>
+                  <label className="field compact presetSelectField">
+                    <span>{t("editor.selectPreset")}</span>
+                    <select
+                      value={activePresetId}
+                      onChange={event => {
+                        const preset = [...PRESETS, ...customPresets].find(item => item.id === event.target.value);
+                        if (preset) applyPreset(preset);
+                      }}
+                    >
+                      <option value="">{t("editor.selectPresetPlaceholder")}</option>
+                      {PRESET_GROUPS.map(group => {
+                        const groupPresets = PRESETS.filter(preset => preset.group === group.id);
+                        if (!groupPresets.length) return null;
+                        return (
+                          <optgroup key={group.id} label={group.label}>
+                            {groupPresets.map(preset => (
+                              <option key={preset.id} value={preset.id}>{preset.name}</option>
+                            ))}
+                          </optgroup>
+                        );
+                      })}
+                      {customPresets.length > 0 ? (
+                        <optgroup label={t("editor.custom")}>
+                          {customPresets.map(preset => (
+                            <option key={preset.id} value={preset.id}>{preset.name}</option>
+                          ))}
+                        </optgroup>
+                      ) : null}
+                    </select>
+                  </label>
 
                   <div className="presetGroupTitle custom">{t("editor.custom")}</div>
                   {customPresets.length === 0 ? (
@@ -3090,50 +2587,57 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
               ) : null}
 
               <AccordionSection icon={SlidersHorizontal} title="Basic" open={!!openSections.basic} onToggle={() => toggleSection("basic")}>
-                <EditorRange label="Temperature" value={adjustments.temperature} min={-100} max={100} onChange={value => updateAdjustment("temperature", value)} onCommit={commitCurrent} />
-                <EditorRange label="Tint" value={adjustments.tint} min={-100} max={100} onChange={value => updateAdjustment("tint", value)} onCommit={commitCurrent} />
-                <EditorRange label="Exposure" value={adjustments.luminance} min={-100} max={100} onChange={value => updateAdjustment("luminance", value)} onCommit={commitCurrent} />
-                <EditorRange label="Contrast" value={adjustments.contrast} min={-100} max={100} onChange={value => updateAdjustment("contrast", value)} onCommit={commitCurrent} />
-                <EditorRange label="Highlights" value={adjustments.highlights} min={-100} max={100} onChange={value => updateAdjustment("highlights", value)} onCommit={commitCurrent} />
-                <EditorRange label="Shadows" value={adjustments.shadows} min={-100} max={100} onChange={value => updateAdjustment("shadows", value)} onCommit={commitCurrent} />
-                <EditorRange label="Whites" value={adjustments.whites} min={-100} max={100} onChange={value => updateAdjustment("whites", value)} onCommit={commitCurrent} />
-                <EditorRange label="Blacks" value={adjustments.blacks} min={-100} max={100} onChange={value => updateAdjustment("blacks", value)} onCommit={commitCurrent} />
-                <EditorRange label="Vibrance" value={adjustments.vibrance} min={-100} max={100} onChange={value => updateAdjustment("vibrance", value)} onCommit={commitCurrent} />
-                <EditorRange label="Saturation" value={adjustments.saturation} min={-100} max={100} onChange={value => updateAdjustment("saturation", value)} onCommit={commitCurrent} />
-                <EditorRange label="Hue" value={adjustments.hue} min={-180} max={180} onChange={value => updateAdjustment("hue", value)} onCommit={commitCurrent} />
+                <EditorRange label="Temperature" value={adjustments.temperature} min={-100} max={100} onChange={value => updateAdjustment("temperature", value)} onDragStart={beginSliderDrag} onCommit={commitCurrent} />
+                <EditorRange label="Tint" value={adjustments.tint} min={-100} max={100} onChange={value => updateAdjustment("tint", value)} onDragStart={beginSliderDrag} onCommit={commitCurrent} />
+                <EditorRange label="Exposure" value={adjustments.luminance} min={-100} max={100} onChange={value => updateAdjustment("luminance", value)} onDragStart={beginSliderDrag} onCommit={commitCurrent} />
+                <EditorRange label="Contrast" value={adjustments.contrast} min={-100} max={100} onChange={value => updateAdjustment("contrast", value)} onDragStart={beginSliderDrag} onCommit={commitCurrent} />
+                <EditorRange label="Highlights" value={adjustments.highlights} min={-100} max={100} onChange={value => updateAdjustment("highlights", value)} onDragStart={beginSliderDrag} onCommit={commitCurrent} />
+                <EditorRange label="Shadows" value={adjustments.shadows} min={-100} max={100} onChange={value => updateAdjustment("shadows", value)} onDragStart={beginSliderDrag} onCommit={commitCurrent} />
+                <EditorRange label="Whites" value={adjustments.whites} min={-100} max={100} onChange={value => updateAdjustment("whites", value)} onDragStart={beginSliderDrag} onCommit={commitCurrent} />
+                <EditorRange label="Blacks" value={adjustments.blacks} min={-100} max={100} onChange={value => updateAdjustment("blacks", value)} onDragStart={beginSliderDrag} onCommit={commitCurrent} />
+                <EditorRange label="Vibrance" value={adjustments.vibrance} min={-100} max={100} onChange={value => updateAdjustment("vibrance", value)} onDragStart={beginSliderDrag} onCommit={commitCurrent} />
+                <EditorRange label="Saturation" value={adjustments.saturation} min={-100} max={100} onChange={value => updateAdjustment("saturation", value)} onDragStart={beginSliderDrag} onCommit={commitCurrent} />
+                <EditorRange label="Hue" value={adjustments.hue} min={-180} max={180} onChange={value => updateAdjustment("hue", value)} onDragStart={beginSliderDrag} onCommit={commitCurrent} />
               </AccordionSection>
  
               <AccordionSection icon={CurveIcon} title="Curves" open={!!openSections.curves} onToggle={() => toggleSection("curves")}>
                 <div className="curvesTabContainer">
-                  <div className="curvesTabs">
-                    <button
-                      type="button"
-                      className={`curvesTabButton rgb ${activeCurveChannel === "rgb" ? "active" : ""}`}
-                      onClick={() => { setActiveCurveChannel("rgb"); setSelectedCurvePointIndex(null); }}
-                    >
-                      RGB
-                    </button>
-                    <button
-                      type="button"
-                      className={`curvesTabButton red ${activeCurveChannel === "red" ? "active" : ""}`}
-                      onClick={() => { setActiveCurveChannel("red"); setSelectedCurvePointIndex(null); }}
-                    >
-                      Red
-                    </button>
-                    <button
-                      type="button"
-                      className={`curvesTabButton green ${activeCurveChannel === "green" ? "active" : ""}`}
-                      onClick={() => { setActiveCurveChannel("green"); setSelectedCurvePointIndex(null); }}
-                    >
-                      Green
-                    </button>
-                    <button
-                      type="button"
-                      className={`curvesTabButton blue ${activeCurveChannel === "blue" ? "active" : ""}`}
-                      onClick={() => { setActiveCurveChannel("blue"); setSelectedCurvePointIndex(null); }}
-                    >
-                      Blue
-                    </button>
+                  <div className="curvesHeaderRow">
+                    <div className="curvesTabs">
+                      <button
+                        type="button"
+                        className={`curvesTabButton rgb ${activeCurveChannel === "rgb" ? "active" : ""}`}
+                        onClick={() => { setActiveCurveChannel("rgb"); setSelectedCurvePointIndex(null); }}
+                      >
+                        RGB
+                      </button>
+                      <button
+                        type="button"
+                        className={`curvesTabButton red ${activeCurveChannel === "red" ? "active" : ""}`}
+                        onClick={() => { setActiveCurveChannel("red"); setSelectedCurvePointIndex(null); }}
+                      >
+                        Red
+                      </button>
+                      <button
+                        type="button"
+                        className={`curvesTabButton green ${activeCurveChannel === "green" ? "active" : ""}`}
+                        onClick={() => { setActiveCurveChannel("green"); setSelectedCurvePointIndex(null); }}
+                      >
+                        Green
+                      </button>
+                      <button
+                        type="button"
+                        className={`curvesTabButton blue ${activeCurveChannel === "blue" ? "active" : ""}`}
+                        onClick={() => { setActiveCurveChannel("blue"); setSelectedCurvePointIndex(null); }}
+                      >
+                        Blue
+                      </button>
+                    </div>
+                    <ColorPickButton
+                      active={colorPickTarget === "curves"}
+                      title={t("editor.pickCurveColor")}
+                      onClick={() => toggleColorPickTarget("curves")}
+                    />
                   </div>
                 </div>
 
@@ -3154,9 +2658,9 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
                 {adjustments.curves && (
                   <div className="curvesControlsRow">
                     <div className="curvesPointInfo">
-                      {selectedCurvePointIndex !== null ? (
+                      {selectedCurvePoint ? (
                         <span>
-                          {t("editor.point")}: {adjustments.curves[activeCurveChannel][selectedCurvePointIndex].x}, {adjustments.curves[activeCurveChannel][selectedCurvePointIndex].y}
+                          {t("editor.point")}: {selectedCurvePoint.x}, {selectedCurvePoint.y}
                         </span>
                       ) : (
                         <span className="curvesHelpText">{t("editor.addCurvePoint")}</span>
@@ -3167,7 +2671,7 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
                         type="button"
                         className="curvesActionBtn delete"
                         title={t("editor.deletePoint")}
-                        disabled={selectedCurvePointIndex === null || selectedCurvePointIndex === 0 || selectedCurvePointIndex === adjustments.curves[activeCurveChannel].length - 1}
+                        disabled={!selectedCurvePoint || selectedCurvePointIndex === 0 || selectedCurvePointIndex === adjustments.curves[activeCurveChannel].length - 1}
                         onClick={() => {
                           const points = adjustments.curves[activeCurveChannel];
                           if (selectedCurvePointIndex > 0 && selectedCurvePointIndex < points.length - 1) {
@@ -3210,28 +2714,39 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
               </AccordionSection>
 
               <AccordionSection icon={Droplet} title="Color HSL" open={!!openSections.hsl} onToggle={() => toggleSection("hsl")}>
-                <div className="hslSwatches">
-                  {COLOR_CHANNELS.map(channel => (
-                    <button
-                      type="button"
-                      key={channel.id}
-                      className={activeColorTab === channel.id ? "active" : ""}
-                      style={{ backgroundColor: channel.color }}
-                      onClick={() => setActiveColorTab(channel.id)}
-                      title={channel.name}
-                    />
-                  ))}
+                <div className="hslHeaderRow">
+                  <div className="hslSwatches">
+                    {COLOR_CHANNELS.map(channel => (
+                      <button
+                        type="button"
+                        key={channel.id}
+                        className={activeColorTab === channel.id ? "active" : ""}
+                        style={{ backgroundColor: channel.color }}
+                        onClick={() => setActiveColorTab(channel.id)}
+                        title={channel.name}
+                      />
+                    ))}
+                  </div>
+                  <ColorPickButton
+                    active={colorPickTarget === "hsl"}
+                    title={t("editor.pickHslColor")}
+                    onClick={() => toggleColorPickTarget("hsl")}
+                  />
                 </div>
-                <EditorRange label="Hue" value={hsl.h} min={-180} max={180} onChange={value => updateHsl(activeColorTab, "h", value)} onCommit={commitCurrent} />
-                <EditorRange label="Saturation" value={hsl.s} min={-100} max={100} onChange={value => updateHsl(activeColorTab, "s", value)} onCommit={commitCurrent} />
-                <EditorRange label="Luminance" value={hsl.l} min={-100} max={100} onChange={value => updateHsl(activeColorTab, "l", value)} onCommit={commitCurrent} />
+                <EditorRange label="Hue" value={hsl.h} min={-180} max={180} onChange={value => updateHsl(activeColorTab, "h", value)} onDragStart={beginSliderDrag} onCommit={commitCurrent} />
+                <EditorRange label="Saturation" value={hsl.s} min={-100} max={100} onChange={value => updateHsl(activeColorTab, "s", value)} onDragStart={beginSliderDrag} onCommit={commitCurrent} />
+                <EditorRange label="Luminance" value={hsl.l} min={-100} max={100} onChange={value => updateHsl(activeColorTab, "l", value)} onDragStart={beginSliderDrag} onCommit={commitCurrent} />
               </AccordionSection>
 
               <AccordionSection icon={Sparkles} title="Effects" open={!!openSections.effects} onToggle={() => toggleSection("effects")}>
-                <EditorRange label="Grain" value={adjustments.grain} min={0} max={100} onChange={value => updateAdjustment("grain", value)} onCommit={commitCurrent} />
-                <EditorRange label="Clarity" value={adjustments.clarity} min={-100} max={100} onChange={value => updateAdjustment("clarity", value)} onCommit={commitCurrent} />
-                <EditorRange label="Dehaze" value={adjustments.dehaze} min={-100} max={100} onChange={value => updateAdjustment("dehaze", value)} onCommit={commitCurrent} />
-                <EditorRange label="Blur" value={adjustments.blur} min={0} max={20} step={0.5} onChange={value => updateAdjustment("blur", value)} onCommit={commitCurrent} />
+                <EditorRange label="Clarity" value={adjustments.clarity} min={-100} max={100} onChange={value => updateAdjustment("clarity", value)} onDragStart={beginSliderDrag} onCommit={commitCurrent} />
+                <EditorRange label="Texture" value={adjustments.texture ?? 0} min={-100} max={100} onChange={value => updateAdjustment("texture", value)} onDragStart={beginSliderDrag} onCommit={commitCurrent} />
+                <EditorRange label="Dehaze" value={adjustments.dehaze} min={-100} max={100} onChange={value => updateAdjustment("dehaze", value)} onDragStart={beginSliderDrag} onCommit={commitCurrent} />
+                <EditorRange label="Grain" value={adjustments.grain} min={0} max={100} onChange={value => updateAdjustment("grain", value)} onDragStart={beginSliderDrag} onCommit={commitCurrent} />
+                <EditorRange label="Grain Size" value={adjustments.grainSize ?? 50} min={0} max={100} onChange={value => updateAdjustment("grainSize", value)} onDragStart={beginSliderDrag} onCommit={commitCurrent} />
+                <EditorRange label="Grain Roughness" value={adjustments.grainRoughness ?? 50} min={0} max={100} onChange={value => updateAdjustment("grainRoughness", value)} onDragStart={beginSliderDrag} onCommit={commitCurrent} />
+                <EditorRange label="Vignette" value={adjustments.vignette ?? 0} min={-100} max={100} onChange={value => updateAdjustment("vignette", value)} onDragStart={beginSliderDrag} onCommit={commitCurrent} />
+                <EditorRange label="Blur" value={adjustments.blur} min={0} max={20} step={0.5} onChange={value => updateAdjustment("blur", value)} onDragStart={beginSliderDrag} onCommit={commitCurrent} />
               </AccordionSection>
 
               <AccordionSection icon={Save} title="Export" open={!!openSections.export} onToggle={() => toggleSection("export")}>
@@ -3421,7 +2936,7 @@ function AccordionSection({ icon: Icon, title, open, onToggle, children }) {
   );
 }
 
-function EditorRange({ label, value, min, max, step = 1, resetValue = 0, onChange, onCommit }) {
+function EditorRange({ label, value, min, max, step = 1, resetValue = 0, onChange, onCommit, onDragStart }) {
   const { t } = useI18n();
   const isDefault = Number(value) === Number(resetValue);
   return (
@@ -3449,6 +2964,7 @@ function EditorRange({ label, value, min, max, step = 1, resetValue = 0, onChang
         max={max}
         step={step}
         value={value}
+        onPointerDown={() => onDragStart?.()}
         onChange={event => onChange(Number(event.target.value))}
         onMouseUp={event => {
           onCommit?.();

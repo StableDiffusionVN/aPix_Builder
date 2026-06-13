@@ -1,7 +1,7 @@
 import http from "node:http";
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -51,6 +51,7 @@ import {
   waitForRhApiKeyIdle
 } from "./lib/runningHubClient.js";
 import { withRhTokenFailover, resolveRhApiKeys, RH_TOKEN_POLICY } from "./lib/rhTokenFailover.js";
+import { RhResourceAccessExhaustedError } from "./lib/runningHubClient.js";
 import { scanLocalImageFolder } from "./lib/localImageFolder.js";
 import {
   appendRunLog,
@@ -77,6 +78,15 @@ const outputHistoryPath = path.join(outputDir, "history.json");
 const presetsDir = path.join(root, "presets");
 const presetsFilePath = path.join(presetsDir, "presets.json");
 const workflowPresetsFilePath = path.join(presetsDir, "workflow-presets.json");
+const rhSavedAppsFilePath = path.join(templatesRhDir, "apps.json");
+const rhDefaultAppsFilePath = path.join(defaultRhDir, "apps.json");
+const legacyRhAppsDir = path.join(root, "rh-apps");
+const legacyRhSavedAppsFilePath = path.join(legacyRhAppsDir, "apps.json");
+const legacyRhDefaultAppsFilePath = path.join(legacyRhAppsDir, "defaults.json");
+const RH_DEFAULT_WEBAPP_IDS = [
+  "2039924771751731201",
+  "2064284416448491522"
+];
 const port = Number(process.env.PORT || 8787);
 const comfyTimeoutMs = Number(process.env.COMFY_TIMEOUT_MS || 10 * 60 * 1000);
 const maxImageBodyBytes = Number(process.env.MAX_IMAGE_BODY_BYTES || 512 * 1024 * 1024);
@@ -187,6 +197,128 @@ async function readWorkflowPresets() {
 async function writeWorkflowPresets(presets) {
   await mkdir(presetsDir, { recursive: true });
   await writeFile(workflowPresetsFilePath, JSON.stringify(presets, null, 2), "utf8");
+}
+
+function normalizeRhSavedApps(raw) {
+  if (!Array.isArray(raw)) return [];
+  const seen = new Set();
+  return raw
+    .map(entry => {
+      const id = String(entry?.id || "").trim();
+      if (!id) return null;
+      const name = String(entry?.name || "").trim() || id;
+      return { id, name };
+    })
+    .filter(entry => {
+      if (!entry || seen.has(entry.id)) return false;
+      seen.add(entry.id);
+      return true;
+    });
+}
+
+async function migrateRhAppsFile(legacyPath, targetPath) {
+  try {
+    await access(targetPath);
+    return;
+  } catch {}
+  try {
+    const raw = await readFile(legacyPath, "utf8");
+    await mkdir(path.dirname(targetPath), { recursive: true });
+    await writeFile(targetPath, raw, "utf8");
+  } catch {}
+}
+
+async function readRhSavedApps() {
+  try {
+    await migrateRhAppsFile(legacyRhSavedAppsFilePath, rhSavedAppsFilePath);
+    await mkdir(templatesRhDir, { recursive: true });
+    const raw = await readFile(rhSavedAppsFilePath, "utf8");
+    return normalizeRhSavedApps(JSON.parse(raw));
+  } catch {
+    return [];
+  }
+}
+
+async function writeRhSavedApps(apps) {
+  const normalized = normalizeRhSavedApps(apps);
+  await mkdir(templatesRhDir, { recursive: true });
+  await writeFile(rhSavedAppsFilePath, JSON.stringify(normalized, null, 2), "utf8");
+  return normalized;
+}
+
+function buildRhDefaultApps(entries = []) {
+  const normalized = normalizeRhSavedApps(entries);
+  const byId = new Map(normalized.map(app => [app.id, app]));
+  const canonical = {
+    "2039924771751731201": "SDVN Klein Upscale",
+    "2064284416448491522": "SDVN Make Cosplay"
+  };
+  const built = RH_DEFAULT_WEBAPP_IDS.map(id => {
+    const fromFile = byId.get(id);
+    const name = String(fromFile?.name || canonical[id] || id).trim() || id;
+    return { id, name };
+  });
+  const nameCounts = new Map();
+  for (const app of built) {
+    nameCounts.set(app.name, (nameCounts.get(app.name) || 0) + 1);
+  }
+  return built.map(app => {
+    if ((nameCounts.get(app.name) || 0) <= 1) return app;
+    return { id: app.id, name: canonical[app.id] || `${app.name} · ${app.id.slice(-6)}` };
+  });
+}
+
+async function readRhDefaultApps() {
+  try {
+    await migrateRhAppsFile(legacyRhDefaultAppsFilePath, rhDefaultAppsFilePath);
+    await mkdir(defaultRhDir, { recursive: true });
+    const raw = await readFile(rhDefaultAppsFilePath, "utf8");
+    return buildRhDefaultApps(JSON.parse(raw));
+  } catch {
+    return buildRhDefaultApps();
+  }
+}
+
+async function writeRhDefaultApps(apps) {
+  const normalized = buildRhDefaultApps(apps);
+  await mkdir(defaultRhDir, { recursive: true });
+  await writeFile(rhDefaultAppsFilePath, JSON.stringify(normalized, null, 2), "utf8");
+  return normalized;
+}
+
+async function refreshRhDefaultApps(apiKey) {
+  const trimmedKey = String(apiKey || "").trim();
+  if (!trimmedKey) {
+    throw new Error("Missing RunningHub API key");
+  }
+  const current = buildRhDefaultApps(await readRhDefaultApps());
+  const byId = new Map(current.map(app => [app.id, app]));
+  for (const id of RH_DEFAULT_WEBAPP_IDS) {
+    try {
+      const demo = await getWebappCallDemo(trimmedKey, id);
+      const name = String(demo.webappName || "").trim();
+      if (name) {
+        byId.set(id, { id, name });
+      }
+    } catch (error) {
+      console.warn(`Failed to refresh RunningHub default app ${id}:`, error.message || error);
+    }
+  }
+  return writeRhDefaultApps(RH_DEFAULT_WEBAPP_IDS.map(id => byId.get(id)));
+}
+
+async function handleRhDefaultApps(req, res) {
+  send(res, 200, { apps: await readRhDefaultApps() });
+}
+
+async function handleRhDefaultAppsRefresh(req, res) {
+  try {
+    const body = JSON.parse(await readBody(req) || "{}");
+    const apps = await refreshRhDefaultApps(body.apiKey);
+    send(res, 200, { success: true, apps });
+  } catch (error) {
+    send(res, 400, { error: error.message || "Không cập nhật được app mặc định RunningHub" });
+  }
 }
 
 async function assertTemplateWorkflow(config, template, options = {}) {
@@ -1339,8 +1471,12 @@ async function handleRunningHubRun(req, res) {
   const onTokenWait = ({ label, status }) => {
     emitRhStatus(status || "waiting", label || "Đang chờ API key RunningHub rảnh...");
   };
-  const onTokenSwitch = ({ label }) => {
-    emitRhStatus("waiting", label || "Đang chuyển sang token RunningHub kế tiếp...");
+  const onTokenSwitch = ({ label, reason }) => {
+    const status = reason === "resource_access" ? "warning" : "waiting";
+    emitRhStatus(status, label || "Đang chuyển sang token RunningHub kế tiếp...");
+  };
+  const onResourceAccessExhausted = ({ label, status }) => {
+    emitRhStatus(status || "warning", label);
   };
 
   try {
@@ -1354,10 +1490,12 @@ async function handleRunningHubRun(req, res) {
       apiKeys,
       tokenPolicy,
       rotateIndex,
+      resourceKind: "app",
       runId,
       signal: abortController.signal,
       onWait: onTokenWait,
-      onSwitch: onTokenSwitch
+      onSwitch: onTokenSwitch,
+      onExhausted: onResourceAccessExhausted
     }, async (apiKey) => {
       await waitForRhApiKeyIdle(apiKey, {
         signal: abortController.signal,
@@ -1461,8 +1599,12 @@ async function handleRunningHubWfRun(req, res) {
   const onTokenWait = ({ label, status }) => {
     emitRhStatus(status || "waiting", label || "Đang chờ API key RunningHub rảnh...");
   };
-  const onTokenSwitch = ({ label }) => {
-    emitRhStatus("waiting", label || "Đang chuyển sang token RunningHub kế tiếp...");
+  const onTokenSwitch = ({ label, reason }) => {
+    const status = reason === "resource_access" ? "warning" : "waiting";
+    emitRhStatus(status, label || "Đang chuyển sang token RunningHub kế tiếp...");
+  };
+  const onResourceAccessExhausted = ({ label, status }) => {
+    emitRhStatus(status || "warning", label);
   };
 
   try {
@@ -1487,10 +1629,12 @@ async function handleRunningHubWfRun(req, res) {
       apiKeys,
       tokenPolicy,
       rotateIndex,
+      resourceKind: "workflow",
       runId,
       signal: abortController.signal,
       onWait: onTokenWait,
-      onSwitch: onTokenSwitch
+      onSwitch: onTokenSwitch,
+      onExhausted: onResourceAccessExhausted
     }, async (apiKey) => {
       await waitForRhApiKeyIdle(apiKey, {
         signal: abortController.signal,
@@ -1761,6 +1905,16 @@ const server = http.createServer(async (req, res) => {
         : {};
       await writeWorkflowPresets(nextPresets);
       send(res, 200, { success: true, presets: nextPresets });
+    } else if (req.method === "GET" && url.pathname === "/api/runninghub/default-apps") {
+      await handleRhDefaultApps(req, res);
+    } else if (req.method === "POST" && url.pathname === "/api/runninghub/default-apps/refresh") {
+      await handleRhDefaultAppsRefresh(req, res);
+    } else if (req.method === "GET" && url.pathname === "/api/runninghub/saved-apps") {
+      send(res, 200, { apps: await readRhSavedApps() });
+    } else if (req.method === "POST" && url.pathname === "/api/runninghub/saved-apps") {
+      const body = JSON.parse(await readBody(req) || "{}");
+      const nextApps = await writeRhSavedApps(body.apps || []);
+      send(res, 200, { success: true, apps: nextApps });
     } else if (req.method === "POST" && url.pathname === "/api/runninghub/nodes") {
       await handleRunningHubNodes(req, res);
     } else if (req.method === "POST" && url.pathname === "/api/runninghub/account-status") {
@@ -1791,6 +1945,10 @@ const server = http.createServer(async (req, res) => {
       send(res, 404, { error: "Not found" });
     }
   } catch (error) {
+    if (error?.name === "RhResourceAccessExhaustedError") {
+      send(res, 403, { error: error.message, errorCode: "rh_resource_access_exhausted" });
+      return;
+    }
     send(res, 500, { error: error.message || String(error) });
   }
 });

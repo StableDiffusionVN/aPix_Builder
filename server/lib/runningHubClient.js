@@ -96,6 +96,35 @@ export function isRhRetryLaterCode(code) {
     || normalized === 1005;
 }
 
+const RH_RESOURCE_ACCESS_CODES = new Set([
+  380,
+  801,
+  810,
+  901,
+  1014,
+  436,
+  811
+]);
+
+export function isRhResourceAccessError(error) {
+  if (!error) return false;
+  const code = normalizeRhErrorCode(error instanceof RhApiError ? error.code : error.code);
+  if (RH_RESOURCE_ACCESS_CODES.has(code)) return true;
+  const message = String(
+    error instanceof RhApiError ? error.msg : error.message || error.msg || ""
+  ).toLowerCase();
+  return /workflow_not_exists|webapp_not_exists|workflow_not_saved|access denied|apikey_unsupported_free_user|corpapikey_invalid|task_user_exclapi_required|không.*quyền|không.*truy cập|没有权限|无权限|permission denied|no permission|not authorized.*workflow|not authorized.*webapp/.test(message);
+}
+
+export class RhResourceAccessExhaustedError extends Error {
+  constructor(message, options = {}) {
+    super(message);
+    this.name = "RhResourceAccessExhaustedError";
+    this.tokenCount = options.tokenCount ?? 0;
+    this.resourceKind = options.resourceKind || "resource";
+  }
+}
+
 function parseRhTaskCount(value) {
   const count = Number(value);
   return Number.isFinite(count) ? Math.max(0, count) : 0;
@@ -184,6 +213,7 @@ export async function submitRhTaskWhenReady(apiKey, submitFn, options = {}) {
     try {
       return await submitFn();
     } catch (error) {
+      if (isRhResourceAccessError(error)) throw error;
       const code = error instanceof RhApiError ? error.code : null;
       if (!code || (!isRhTokenBusyCode(code) && !isRhRetryLaterCode(code))) throw error;
       onWait?.({

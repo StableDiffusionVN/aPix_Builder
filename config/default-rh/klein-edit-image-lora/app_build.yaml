@@ -23,6 +23,7 @@ input:
     ui:
       type: text
       label: Prompt edit
+      value: "Make realistic this image"
   image_size:
     id: 51-value
     ui:

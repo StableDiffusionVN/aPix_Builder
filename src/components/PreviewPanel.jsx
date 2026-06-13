@@ -11,6 +11,7 @@ import {
   Pencil,
   RotateCcw
 } from "lucide-react";
+import { ColorPickCursorOverlay } from "./colorPickUi";
 import { useI18n } from "../i18n/I18nContext";
 import { RunningHubRunningState } from "./RunningHubRunningState";
 import { RunLogPanel } from "./lazyModals";
@@ -75,6 +76,8 @@ export function PreviewPanel({
   healingActive = false,
   healingCursor = null,
   healingBrushDiameter = 0,
+  colorPickTarget = null,
+  colorPickCursor = null,
   handlePreviewPointerLeave
 }) {
   const { t } = useI18n();
@@ -132,7 +135,7 @@ export function PreviewPanel({
 
       <div className="outputViewer">
         <div
-          className={`previewArea ${heroImage && !showRunningScreen ? "isInteractive" : ""} ${resultOutputs.length > 1 ? "hasOutputRail" : ""} ${compareMode ? "isCompareMode" : ""} ${healingActive ? "isHealingTool" : ""} ${draggingImage || isWheeling ? "isDragging" : ""}`}
+          className={`previewArea ${heroImage && !showRunningScreen ? "isInteractive" : ""} ${resultOutputs.length > 1 ? "hasOutputRail" : ""} ${compareMode ? "isCompareMode" : ""} ${healingActive ? "isHealingTool" : ""} ${colorPickTarget ? "isColorPickTool" : ""} ${draggingImage || isWheeling ? "isDragging" : ""}`}
           ref={previewAreaRef}
           onWheel={handlePreviewWheel}
           onPointerDown={handlePreviewPointerDown}
@@ -141,6 +144,9 @@ export function PreviewPanel({
           onPointerCancel={handlePreviewPointerUp}
           onPointerLeave={handlePreviewPointerLeave}
         >
+          {colorPickTarget && colorPickCursor ? (
+            <ColorPickCursorOverlay x={colorPickCursor.x} y={colorPickCursor.y} />
+          ) : null}
           {healingActive && healingCursor ? (
             <div
               className="brushCursorCircle healingMode"

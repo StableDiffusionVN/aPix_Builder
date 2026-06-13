@@ -129,9 +129,19 @@ export function useImageViewer(heroImage, canCompare) {
     return target instanceof Element && target.closest(".outputLogDock, .outputNavButton, .outputRail, .outputMetaStack");
   }
 
+  function releaseStalePanelFocus(previewArea) {
+    const active = document.activeElement;
+    if (!(active instanceof HTMLElement) || !previewArea) return;
+    if (previewArea.contains(active)) return;
+    if (active.closest(".sidebar, .colorAdjustPanel, .settingsModal, .modalBackdrop")) {
+      active.blur();
+    }
+  }
+
   function handlePreviewPointerDown(event) {
     if (!heroImage || event.button !== 0) return;
     if (isPreviewOverlayTarget(event.target)) return;
+    releaseStalePanelFocus(event.currentTarget);
     event.preventDefault();
     event.currentTarget.setPointerCapture(event.pointerId);
     imageDragRef.current = {

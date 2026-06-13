@@ -28,7 +28,8 @@ export function useRunningHubExecution({ onComplete, runLog } = {}) {
   const activeTaskIdRef = useRef("");
 
   function rhStatusLabel(nextStatus, dataLabel) {
-    if (locale === "vi") return dataLabel || t("execRh.waitingRh");
+    if (dataLabel) return dataLabel;
+    if (locale === "vi") return t("execRh.waitingRh");
     return t(`execRh.status.${nextStatus}`) || t("execRh.waitingRh");
   }
 
@@ -68,6 +69,12 @@ export function useRunningHubExecution({ onComplete, runLog } = {}) {
         }
         setTaskStatus({ status: nextStatus, label });
         setProgress({ type: nextStatus, label });
+        if (nextStatus === "warning") {
+          setStatus(label);
+          setError(label);
+          appendLog("warn", label, { runId, taskId: taskId || undefined });
+          break;
+        }
         if (nextStatus === "queued" || nextStatus === "running" || nextStatus === "waiting" || nextStatus === "token_wait" || nextStatus === "upload" || nextStatus === "submit" || nextStatus === "download") {
           setStatus(label);
         }
@@ -136,7 +143,11 @@ export function useRunningHubExecution({ onComplete, runLog } = {}) {
         body: JSON.stringify(job)
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(localizeRuntimeMessage(data.error, locale) || "Run failed");
+      if (!response.ok) {
+        const err = new Error(localizeRuntimeMessage(data.error, locale) || "Run failed");
+        if (data.errorCode) err.code = data.errorCode;
+        throw err;
+      }
 
       const taskId = String(data.taskId || "");
       if (taskId) {
@@ -182,11 +193,12 @@ export function useRunningHubExecution({ onComplete, runLog } = {}) {
     } catch (err) {
       setProgress(null);
       const message = localizeRuntimeMessage(err.message, locale);
-      const failedLabel = t("execRh.requestFailed");
-      setTaskStatus({ status: "error", label: message || failedLabel });
+      const isAccessWarning = err.code === "rh_resource_access_exhausted";
+      const failedLabel = isAccessWarning ? message : t("execRh.requestFailed");
+      setTaskStatus({ status: isAccessWarning ? "warning" : "error", label: message || failedLabel });
       setError(message);
-      setStatus(failedLabel);
-      appendLog("error", message || failedLabel, {
+      setStatus(isAccessWarning ? message : failedLabel);
+      appendLog(isAccessWarning ? "warn" : "error", message || failedLabel, {
         runId: job.runId,
         taskId: activeTaskIdRef.current || undefined
       });

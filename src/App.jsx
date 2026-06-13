@@ -61,7 +61,6 @@ import {
   isRunningHubMode,
   loadExecutionMode,
   nodeFieldKey,
-  RUNNINGHUB_APP_OPTIONS,
   useRunningHub
 } from "./hooks/useRunningHub";
 import {
@@ -88,7 +87,8 @@ import {
   THEME_OPTIONS,
   THEME_STORAGE_KEY
 } from "./constants/appearance";
-import { isTextEntryTarget, isUiControlTarget } from "./lib/keyboard";
+import { APP_VERSION_LABEL } from "./constants/app";
+import { isTextEntryTarget, isTypingTarget, releaseGlobalShortcutFocus } from "./lib/keyboard";
 
 const SERVER_STORAGE_KEY = "comfyui-build:server:v2";
 const NOTIFY_STORAGE_KEY = "comfyui-build:notify:v1";
@@ -195,6 +195,10 @@ export default function App() {
     updateSettings: updateRhSettings,
     nodes: rhNodes,
     webappInfo: rhWebappInfo,
+    savedWebapps: rhSavedWebapps,
+    savedAppsError: rhSavedAppsError,
+    webappOptions: rhWebappOptions,
+    saveCurrentWebapp,
     restoreNodes: restoreRhNodes,
     restoreWebappInfo: restoreRhWebappInfo,
     nodesLoading: rhNodesLoading,
@@ -283,10 +287,50 @@ export default function App() {
   const rhDisplayCoins = rhEnabledTokenCount > 1
     ? rhTotalCoins
     : rhAccount?.remainCoins ?? rhTotalCoins;
-  const selectedRunningHubApp = RUNNINGHUB_APP_OPTIONS.find(app => app.id === rhSettings.webappId);
+  const selectedRunningHubApp = rhWebappOptions.find(app => app.id === rhSettings.webappId);
   const selectedRunningHubName = rhWebappInfo?.webappName
     || selectedRunningHubApp?.name
     || (rhSettings.webappId ? `RunningHub ${rhSettings.webappId}` : "RunningHub App");
+  const infoModeLabel = useMemo(() => {
+    if (executionMode === "local") return t("info.modeLocal");
+    if (executionMode === "runninghub-app") return t("info.modeRhApp");
+    if (executionMode === "runninghub-wf") return t("info.modeRhWf");
+    return t("info.notConfigured");
+  }, [executionMode, t]);
+  const infoTemplateLabel = useMemo(() => {
+    if (isRunningHubApp) return selectedRunningHubName;
+    if (isRunningHubWf) {
+      return rhWfConfig?.app?.name || rhWfSelectedTemplate || t("info.notConfigured");
+    }
+    return app.name || selectedTemplate || t("info.notConfigured");
+  }, [
+    app.name,
+    isRunningHubApp,
+    isRunningHubWf,
+    rhWfConfig,
+    rhWfSelectedTemplate,
+    selectedRunningHubName,
+    selectedTemplate,
+    t
+  ]);
+  const infoTargetLabel = useMemo(() => {
+    if (isRunningHubApp) {
+      return rhSettings.webappId ? `ID ${rhSettings.webappId}` : t("info.notConfigured");
+    }
+    if (isRunningHubWf) {
+      const workflowId = String(rhWfConfig?.runninghub?.workflowId || "").trim();
+      return workflowId ? `ID ${workflowId}` : t("info.notConfigured");
+    }
+    return comfyAddress || serverAddress || t("info.notConfigured");
+  }, [
+    comfyAddress,
+    isRunningHubApp,
+    isRunningHubWf,
+    rhSettings.webappId,
+    rhWfConfig,
+    serverAddress,
+    t
+  ]);
   const activeServer = getServers().find(server => server.address === comfyAddress);
   const topBarServerLabel = isRunningHubWf
     ? "RunningHub Workflow"
@@ -441,6 +485,9 @@ export default function App() {
   }, []);
 
   const handlePreviewPointerDownWithHealing = useCallback((event) => {
+    if (healingBridge?.colorPickTarget && imageElementRef.current) {
+      if (healingBridge.handleColorPickPointerDown?.(event, imageElementRef.current)) return;
+    }
     if (healingBridge?.active && imageElementRef.current) {
       if (healingBridge.handlePointerDown(event, imageElementRef.current, previewAreaRef.current)) return;
     }
@@ -448,6 +495,9 @@ export default function App() {
   }, [healingBridge, handlePreviewPointerDown, imageElementRef, previewAreaRef]);
 
   const handlePreviewPointerMoveWithHealing = useCallback((event) => {
+    if (healingBridge?.colorPickTarget && previewAreaRef.current) {
+      if (healingBridge.handleColorPickPointerMove?.(event, imageElementRef.current, previewAreaRef.current)) return;
+    }
     if (healingBridge?.active && imageElementRef.current) {
       if (healingBridge.handlePointerMove(event, imageElementRef.current, previewAreaRef.current)) return;
     }
@@ -461,6 +511,7 @@ export default function App() {
 
   const handlePreviewPointerLeaveWithHealing = useCallback(() => {
     healingBridge?.clearHealingCursor?.();
+    healingBridge?.clearColorPickCursor?.();
   }, [healingBridge]);
 
   const applyColorAdjustState = useCallback((historyId, outputIndex, colorAdjust) => {
@@ -707,29 +758,30 @@ export default function App() {
     }
     function handleSpaceReset(event) {
       if (event.code !== "Space") return;
-      if (isTextEntryTarget(event.target)) return;
+      if (isTypingTarget(event.target)) return;
       if (hasActiveEditorModal()) return;
       event.preventDefault();
       event.stopPropagation();
-      if (isUiControlTarget(event.target)) event.target.blur();
+      releaseGlobalShortcutFocus(event.target);
       if (heroImage) resetImageView();
     }
     function handleCompareToggle(event) {
       if (!canCompare || event.key.toLowerCase() !== "s") return;
       if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
-      if (isTextEntryTarget(event.target)) return;
+      if (isTypingTarget(event.target)) return;
       if (hasActiveEditorModal()) return;
       event.preventDefault(); event.stopPropagation();
+      releaseGlobalShortcutFocus(event.target);
       setCompareMode(current => !current);
     }
     function preventSpaceClick(event) {
       if (event.code !== "Space") return;
-      if (isTextEntryTarget(event.target)) return;
+      if (isTypingTarget(event.target)) return;
       if (hasActiveEditorModal()) return;
-      if (!isUiControlTarget(event.target) && !heroImage) return;
+      if (!heroImage) return;
       event.preventDefault();
       event.stopPropagation();
-      if (isUiControlTarget(event.target)) event.target.blur();
+      releaseGlobalShortcutFocus(event.target);
     }
     window.addEventListener("keydown", handleSpaceReset, true);
     window.addEventListener("keydown", handleCompareToggle, true);
@@ -747,9 +799,10 @@ export default function App() {
       if (!heroImage || resultOutputs.length < 2) return;
       if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
       if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
-      if (isTextEntryTarget(event.target)) return;
+      if (isTypingTarget(event.target)) return;
       if (document.querySelector(".imageEditorModal")) return;
       event.preventDefault(); event.stopPropagation();
+      releaseGlobalShortcutFocus(event.target);
       stepOutput(event.key === "ArrowRight" ? 1 : -1);
     }
     window.addEventListener("keydown", handleOutputNavigation, true);
@@ -1506,6 +1559,10 @@ export default function App() {
         {isRunningHubApp ? (
           <RunningHubPanel
             settings={rhSettings}
+            webappOptions={rhWebappOptions}
+            savedWebapps={rhSavedWebapps}
+            savedAppsError={rhSavedAppsError}
+            onSaveWebapp={saveCurrentWebapp}
             onSettingsChange={patch => {
               updateRhSettings(patch);
               setRhTestResult(null);
@@ -1708,6 +1765,8 @@ export default function App() {
           healingActive={Boolean(healingBridge?.active)}
           healingCursor={healingBridge?.cursor ?? null}
           healingBrushDiameter={healingBridge?.brushDiameter ?? 0}
+          colorPickTarget={healingBridge?.colorPickTarget ?? null}
+          colorPickCursor={healingBridge?.colorPickCursor ?? null}
           stepOutput={stepOutput}
           selectOutput={selectOutput}
           RunningState={RunningState}
@@ -1825,7 +1884,7 @@ export default function App() {
             <div className="modalHeader infoModalHeader">
               <div>
                 <h2 className="infoModalTitle">
-                  aPix Builder <span className="infoVersion">beta v1.0</span>
+                  aPix Builder <span className="infoVersion">{APP_VERSION_LABEL}</span>
                 </h2>
                 <p>{t("info.description")}</p>
               </div>
@@ -1833,6 +1892,13 @@ export default function App() {
             </div>
 
             <div className="infoModalBody">
+              <div className="infoIntro" aria-label={t("info.summary")}>
+                <div><span>{t("info.version")}</span><b>{APP_VERSION_LABEL}</b></div>
+                <div><span>{t("info.mode")}</span><b>{infoModeLabel}</b></div>
+                <div><span>{t("info.currentTemplate")}</span><b>{infoTemplateLabel}</b></div>
+                <div><span>{t("info.target")}</span><b>{infoTargetLabel}</b></div>
+              </div>
+
               <div className="infoNotice">
                 <b>{t("info.update")}</b>
                 <span>{t("info.updateText")}</span>

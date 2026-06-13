@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronRight, Copy, Download, GripHorizontal, ImageIcon, Loader2, ScrollText, Trash2, X } from "lucide-react";
+import { ChevronRight, Copy, Download, ImageIcon, Loader2, ScrollText, Trash2, X } from "lucide-react";
 import {
   copyToClipboard,
   describeJob,
@@ -639,13 +639,15 @@ export function RunLogPanel({
         >
           <div
             className="outputLogResizeHandle"
+            role="separator"
+            aria-orientation="horizontal"
+            aria-label={t("log.resizePanel")}
+            tabIndex={0}
             onPointerDown={handleResizePointerDown}
             onPointerMove={handleResizePointerMove}
             onPointerUp={handleResizePointerUp}
             onPointerCancel={handleResizePointerUp}
-          >
-            <GripHorizontal size={12} />
-          </div>
+          />
 
           <header className="logHeader">
             <div className="logHeaderTitle">

@@ -1,7 +1,9 @@
 import {
   RhApiError,
+  RhResourceAccessExhaustedError,
   fetchAccountRemainCoins,
   getRhApiKeyActiveTaskCount,
+  isRhResourceAccessError,
   isRhRetryLaterCode,
   isRhTokenBusyCode,
   normalizeRhErrorCode
@@ -44,6 +46,7 @@ export function isRhInsufficientCoinsError(error) {
 
 export function isRhFailoverError(error) {
   if (!error) return false;
+  if (isRhResourceAccessError(error)) return false;
   if (error instanceof RhApiError) {
     const code = normalizeRhErrorCode(error.code);
     return isRhTokenBusyCode(code)
@@ -52,6 +55,34 @@ export function isRhFailoverError(error) {
   }
   const message = String(error.message || "").toLowerCase();
   return /api key.*(busy|bận|rảnh)|timeout khi chờ api key|không gửi được task runninghub sau khi chờ/.test(message);
+}
+
+export function formatRhResourceAccessExhaustedMessage(tokenCount, resourceKind = "resource") {
+  const count = Math.max(1, Number(tokenCount) || 1);
+  if (resourceKind === "app") {
+    return count === 1
+      ? "API key hiện tại không có quyền chạy RunningHub App này. Kiểm tra App ID và quyền truy cập trên RunningHub."
+      : `Đã thử ${count} API key nhưng không key nào có quyền chạy RunningHub App này. Kiểm tra App ID và quyền truy cập trên RunningHub.`;
+  }
+  if (resourceKind === "workflow") {
+    return count === 1
+      ? "API key hiện tại không có quyền chạy workflow RunningHub này. Kiểm tra Workflow ID, lưu/chạy thử workflow trên RunningHub, hoặc quyền truy cập."
+      : `Đã thử ${count} API key nhưng không key nào có quyền chạy workflow RunningHub này. Kiểm tra Workflow ID, lưu/chạy thử workflow trên RunningHub, hoặc quyền truy cập.`;
+  }
+  return count === 1
+    ? "API key hiện tại không có quyền chạy tài nguyên RunningHub này."
+    : `Đã thử ${count} API key nhưng không key nào có quyền chạy tài nguyên RunningHub này.`;
+}
+
+function resourceAccessSwitchLabel(tokenIndex, total, resourceKind) {
+  const noun = resourceKind === "app" ? "App" : resourceKind === "workflow" ? "workflow" : "tài nguyên";
+  return `Token ${tokenIndex}/${total} không có quyền dùng ${noun} này, thử token kế tiếp...`;
+}
+
+function throwResourceAccessExhausted(tokenCount, resourceKind, onExhausted) {
+  const message = formatRhResourceAccessExhaustedMessage(tokenCount, resourceKind);
+  onExhausted?.({ status: "warning", label: message, reason: "resource_access" });
+  throw new RhResourceAccessExhaustedError(message, { tokenCount, resourceKind });
 }
 
 async function inspectRhApiKeyAvailability(apiKey, signal) {
@@ -83,10 +114,12 @@ export async function withRhTokenFailover({
   apiKeys,
   tokenPolicy = RH_TOKEN_POLICY.PRIORITY,
   rotateIndex = 0,
+  resourceKind = "resource",
   runId,
   signal,
   onWait,
-  onSwitch
+  onSwitch,
+  onExhausted
 }, fn) {
   const orderedKeys = orderRhApiKeysForRun(apiKeys, { tokenPolicy, rotateIndex });
   if (!orderedKeys.length) throw new Error("Missing RunningHub API key");
@@ -115,6 +148,15 @@ export async function withRhTokenFailover({
       }, { signal, onWait });
     } catch (error) {
       errors.push(error);
+      if (isRhResourceAccessError(error)) {
+        if (!allowSkip || index === orderedKeys.length - 1) {
+          throwResourceAccessExhausted(orderedKeys.length, resourceKind, onExhausted);
+        }
+        const label = resourceAccessSwitchLabel(index + 1, orderedKeys.length, resourceKind);
+        onSwitch?.({ apiKey, index, reason: "resource_access", label, error });
+        onWait?.({ type: "token_switch", status: "waiting", label });
+        continue;
+      }
       if (!allowSkip || !isRhFailoverError(error) || index === orderedKeys.length - 1) {
         throw error;
       }

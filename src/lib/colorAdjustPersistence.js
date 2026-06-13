@@ -1,6 +1,7 @@
 import {
   cloneDefaultAdjustments,
-  DEFAULT_CURVES
+  DEFAULT_CURVES,
+  normalizeHslAdjustments
 } from "./imageAdjustments";
 import { DEFAULT_HEALING_BRUSH_SIZE } from "./healingBrush";
 
@@ -22,10 +23,7 @@ export function normalizePersistedColorState(state) {
   const source = state?.adjustments;
   if (source && typeof source === "object") {
     Object.assign(adjustments, JSON.parse(JSON.stringify(source)));
-    adjustments.hsl = {
-      ...adjustments.hsl,
-      ...(source.hsl || {})
-    };
+    adjustments.hsl = normalizeHslAdjustments(source.hsl || adjustments.hsl);
     adjustments.curves = source.curves
       ? JSON.parse(JSON.stringify(source.curves))
       : DEFAULT_CURVES;
@@ -71,12 +69,16 @@ export function mergeColorAdjustGroups(targetState, sourceState, groups = COLOR_
     next.adjustments.curves = JSON.parse(JSON.stringify(source.adjustments.curves || DEFAULT_CURVES));
   }
   if (groups.includes("hsl")) {
-    next.adjustments.hsl = JSON.parse(JSON.stringify(source.adjustments.hsl || {}));
+    next.adjustments.hsl = normalizeHslAdjustments(source.adjustments.hsl);
   }
   if (groups.includes("effects")) {
     next.adjustments.grain = source.adjustments.grain;
+    next.adjustments.grainSize = source.adjustments.grainSize ?? 50;
+    next.adjustments.grainRoughness = source.adjustments.grainRoughness ?? 50;
     next.adjustments.clarity = source.adjustments.clarity;
     next.adjustments.dehaze = source.adjustments.dehaze;
+    next.adjustments.texture = source.adjustments.texture ?? 0;
+    next.adjustments.vignette = source.adjustments.vignette ?? 0;
     next.adjustments.blur = source.adjustments.blur;
   }
   if (groups.includes("healing")) {

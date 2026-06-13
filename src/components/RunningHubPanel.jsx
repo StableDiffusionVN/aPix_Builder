@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Loader2, Lock, RefreshCcw, Settings2, Wifi, WifiOff } from "lucide-react";
+import { Bookmark, Loader2, Lock, RefreshCcw, Settings2, Wifi, WifiOff } from "lucide-react";
 import { RunningHubField } from "./RunningHubField";
 import { ComfyUiLogomark } from "./icons/ComfyUiIcon";
 import { RunningHubLogomark } from "./icons/RunningHubIcon";
-import { RUNNINGHUB_APP_OPTIONS } from "../hooks/useRunningHub";
 import { useI18n } from "../i18n/I18nContext";
+import { isDefaultRhWebapp } from "../lib/rhSavedApps.js";
 
 function formatRhStatValue(value) {
   const numeric = Number(value);
@@ -159,6 +159,10 @@ export function ExecutionModeToggle({ mode, onChange }) {
 export function RunningHubPanel({
   settings,
   onSettingsChange,
+  webappOptions = [],
+  savedWebapps = [],
+  savedAppsError = "",
+  onSaveWebapp,
   nodes,
   webappInfo = null,
   values,
@@ -170,12 +174,37 @@ export function RunningHubPanel({
   onRefreshInputImages,
   onUpdateInputImages
 }) {
-  const { locale, t } = useI18n();
+  const { t } = useI18n();
+  const [saveHint, setSaveHint] = useState("");
   const connected = Boolean(nodes.length && !nodesError);
   const healthStatus = nodesLoading ? "loading" : connected ? "online" : "offline";
-  const selectedPresetId = RUNNINGHUB_APP_OPTIONS.some(app => app.id === settings.webappId)
+  const selectedPresetId = webappOptions.some(app => app.id === settings.webappId)
     ? settings.webappId
     : "custom";
+  const canSaveWebapp = Boolean(
+    settings.webappId?.trim()
+    && webappInfo?.webappName
+    && webappInfo.webappId === settings.webappId.trim()
+  );
+  const isSavedWebapp = savedWebapps.some(app => app.id === settings.webappId?.trim());
+  const isBuiltinWebapp = isDefaultRhWebapp(settings.webappId);
+  const canToggleWebapp = Boolean(
+    !isBuiltinWebapp
+    && settings.webappId?.trim()
+    && (isSavedWebapp || canSaveWebapp)
+  );
+
+  function handleSaveWebapp() {
+    void (async () => {
+      const result = await onSaveWebapp?.();
+      if (!result) return;
+      if (!result.ok) {
+        setSaveHint(result.error || "");
+        return;
+      }
+      setSaveHint(result.removed ? t("rh.appRemoved") : t("rh.appSaved"));
+    })();
+  }
 
   return (
     <section className="settingsGroup runningHubPanel">
@@ -199,10 +228,11 @@ export function RunningHubPanel({
             onChange={event => {
               const nextId = event.target.value;
               if (nextId === "custom") return;
+              setSaveHint("");
               onSettingsChange?.({ webappId: nextId });
             }}
           >
-            {RUNNINGHUB_APP_OPTIONS.map(app => (
+            {webappOptions.map(app => (
               <option key={app.id} value={app.id}>{app.name}</option>
             ))}
             <option value="custom">{t("rh.customId")}</option>
@@ -214,14 +244,38 @@ export function RunningHubPanel({
           <input
             value={settings.webappId}
             placeholder="2039924771751731201"
-            onChange={event => onSettingsChange?.({ webappId: event.target.value })}
+            onChange={event => {
+              setSaveHint("");
+              onSettingsChange?.({ webappId: event.target.value });
+            }}
           />
           </label>
-          <button type="button" className="rhRefreshBtn" onClick={onRefreshNodes} disabled={nodesLoading}>
+          {!isBuiltinWebapp ? (
+            <button
+              type="button"
+              className={`rhWebappActionBtn${isSavedWebapp ? " isSaved" : ""}`}
+              onClick={handleSaveWebapp}
+              disabled={!canToggleWebapp}
+              title={isSavedWebapp ? t("rh.removeApp") : canSaveWebapp ? t("rh.saveApp") : t("rh.saveAppNeedReload")}
+              aria-label={isSavedWebapp ? t("rh.removeApp") : t("rh.saveApp")}
+              aria-pressed={isSavedWebapp}
+            >
+              <Bookmark size={14} />
+            </button>
+          ) : null}
+          <button
+            type="button"
+            className="rhWebappActionBtn"
+            onClick={onRefreshNodes}
+            disabled={nodesLoading}
+            title={t("rh.reload")}
+            aria-label={t("rh.reload")}
+          >
             {nodesLoading ? <Loader2 size={14} className="spin" /> : <RefreshCcw size={14} />}
-            {t("rh.reload")}
           </button>
         </div>
+        {saveHint ? <small className="rhAppSaveHint">{saveHint}</small> : null}
+        {savedAppsError ? <small className="rhAppSaveHint rhAppSaveHintError">{savedAppsError}</small> : null}
       </div>
 
       {nodesError ? <div className="rhPanelError">{nodesError}</div> : null}

@@ -19,6 +19,7 @@
   --radius: 16px;
   --canvas-bg: rgba(2, 3, 11, 0.56);
   --canvas-checker: rgba(255, 255, 255, 0.045);
+  --cursor-color-pick: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none'%3E%3Cpath d='M12 2v9.5' stroke='%23fff' stroke-width='3.5' stroke-linecap='round'/%3E%3Cpath d='M12 2v9.5' stroke='%23111827' stroke-width='1.75' stroke-linecap='round'/%3E%3Cpath d='M18 4.5 9 13.5' stroke='%23fff' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M18 4.5 9 13.5' stroke='%23111827' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M9 13.5 4 18.5' stroke='%23fff' stroke-width='3.5' stroke-linecap='round'/%3E%3Cpath d='M9 13.5 4 18.5' stroke='%23111827' stroke-width='1.75' stroke-linecap='round'/%3E%3Ccircle cx='12' cy='19' r='2.5' stroke='%23fff' stroke-width='3.5'/%3E%3Ccircle cx='12' cy='19' r='2.5' stroke='%23111827' stroke-width='1.75'/%3E%3C/svg%3E") 4 20, crosshair;
   --main-font: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI";
   font-family: var(--main-font), sans-serif;
   line-height: 1.5;
@@ -2232,7 +2233,7 @@ html[data-theme="light"] .editorRangeReset {
   font-weight: 600;
   letter-spacing: 0.02em;
   text-transform: uppercase;
-  margin-top: 6px;
+  margin-top: 10px;
   margin-bottom: 2px;
 }
 
@@ -2488,10 +2489,94 @@ html[data-theme="light"] .newPresetBtn.cancel:hover {
 }
 
 /* Curves Editor styles */
+.curvesHeaderRow,
+.hslHeaderRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.curvesHeaderRow .curvesTabs,
+.hslHeaderRow .hslSwatches {
+  flex: 1;
+  min-width: 0;
+}
+
+.colorPickBtn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-strong, rgba(255, 255, 255, 0.04));
+  color: var(--muted);
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+
+.colorPickBtn:hover {
+  color: var(--text);
+  border-color: rgba(var(--accent-rgb), 0.45);
+}
+
+.colorPickBtn.active {
+  color: rgb(var(--accent-rgb));
+  border-color: rgba(var(--accent-rgb), 0.55);
+  background: rgba(var(--accent-rgb), 0.12);
+}
+
+.colorPickHint {
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px dashed rgba(var(--accent-rgb), 0.35);
+  background: rgba(var(--accent-rgb), 0.08);
+  color: var(--text);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.previewArea.isColorPickTool,
+.previewArea.isColorPickTool .resultImage,
+.previewArea.isColorPickTool .imageStage,
+.imageEditorPreview.isColorPickTool,
+.imageEditorPreview.isColorPickTool .imageEditorCanvasWrap,
+.imageEditorPreview.isColorPickTool canvas {
+  cursor: none;
+}
+
+.colorPickCursorIcon {
+  position: absolute;
+  pointer-events: none;
+  z-index: 12;
+  width: 18px;
+  height: 18px;
+  transform: translate(0, -2px);
+}
+
+.colorPickCursorIcon svg {
+  position: absolute;
+  inset: 0;
+  display: block;
+}
+
+.colorPickCursorOutline {
+  color: #111827;
+}
+
+.colorPickCursorInner {
+  color: #fff;
+}
+
 .curvesTabContainer {
   display: flex;
   justify-content: center;
   margin-bottom: 6px;
+  width: 100%;
 }
 
 .curvesTabs {
@@ -2640,15 +2725,16 @@ html[data-theme="light"] .curvesCanvasWrapper {
 
 .hslSwatches {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: center;
-  gap: 12px;
+  gap: 8px;
   padding: 3px 0 5px;
 }
 
 .hslSwatches button {
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 999px;
   cursor: pointer;
@@ -3519,6 +3605,18 @@ body.color-panel-resizing {
   cursor: grabbing;
 }
 
+.previewArea.isInteractive.isColorPickTool,
+.previewArea.isInteractive.isColorPickTool .resultImage,
+.previewArea.isInteractive.isColorPickTool .imageStage,
+.previewArea.isCompareMode.isColorPickTool,
+.previewArea.isCompareMode.isColorPickTool .resultImage,
+.previewArea.isCompareMode.isColorPickTool .imageStage,
+.previewArea.isInteractive.isColorPickTool.isDragging,
+.previewArea.isInteractive.isColorPickTool.isDragging .resultImage,
+.previewArea.isInteractive.isColorPickTool.isDragging .imageStage {
+  cursor: none;
+}
+
 .outputSizeBadge,
 .imageSizeBadge,
 .outputTimingBadge {
@@ -3644,20 +3742,36 @@ body.color-panel-resizing {
 }
 
 .outputLogResizeHandle {
-  display: grid;
-  place-items: center;
-  height: 10px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-  color: var(--text-tertiary);
+  position: relative;
+  flex-shrink: 0;
+  height: 8px;
   cursor: ns-resize;
   touch-action: none;
   user-select: none;
 }
 
-.outputLogResizeHandle:hover,
+.outputLogResizeHandle::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 44px;
+  height: 2px;
+  border-radius: 999px;
+  background: transparent;
+  transform: translate(-50%, -50%);
+  transition: background 0.15s ease, width 0.15s ease, opacity 0.15s ease;
+  opacity: 0;
+}
+
+.outputLogResizeHandle:hover::before,
+.outputLogResizeHandle:focus-visible::before {
+  opacity: 1;
+  width: 56px;
+  background: rgba(255, 255, 255, 0.28);
+}
+
 .outputLogResizeHandle:focus-visible {
-  color: var(--log-accent);
-  background: rgba(var(--accent-rgb), 0.06);
   outline: none;
 }
 
@@ -4931,6 +5045,41 @@ html[data-theme="light"] .logTaskInspectLine {
   display: grid;
   gap: 18px;
   padding: 18px 20px 22px;
+}
+
+.infoIntro {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.infoIntro div {
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel-soft);
+}
+
+.infoIntro span,
+.infoIntro b {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.infoIntro span {
+  color: var(--muted-2);
+  font-size: 11px;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
+.infoIntro b {
+  color: var(--text);
+  font-size: 13px;
 }
 
 .infoNotice {
@@ -6868,6 +7017,10 @@ html[data-theme="light"] .saveTemplateButton:hover:not(:disabled) {
     grid-template-columns: 1fr;
   }
 
+  .infoIntro {
+    grid-template-columns: 1fr 1fr;
+  }
+
   .infoLinkGroup {
     display: grid;
     gap: 6px;
@@ -7124,6 +7277,33 @@ html[data-theme="light"] .saveTemplateButton:hover:not(:disabled) {
   grid-template-columns: repeat(3, 1fr);
   gap: 8px;
   margin-top: 4px;
+}
+
+.presetSelectField {
+  margin-bottom: 12px;
+}
+
+.presetSelectField select {
+  width: 100%;
+  min-height: 32px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 4px);
+  background: var(--surface, rgba(255, 255, 255, 0.04));
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color 0.16s ease;
+}
+
+.presetSelectField select:hover {
+  border-color: rgba(var(--accent-rgb), 0.4);
+}
+
+.presetSelectField select:focus {
+  outline: none;
+  border-color: rgba(var(--accent-rgb), 0.55);
 }
 
 .presetButton {
@@ -8435,9 +8615,53 @@ html:not([data-theme="dark"]):not([data-theme="light"]) .appShell.is-runninghub 
 }
 .rhWebappIdRow {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: end;
   gap: 8px;
+}
+
+.rhWebappActionBtn {
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
+  min-height: 34px;
+  padding: 0;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--panel-soft);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.rhWebappActionBtn:hover:not(:disabled),
+.rhWebappActionBtn:focus-visible {
+  border-color: rgba(var(--accent-rgb), 0.4);
+  outline: none;
+}
+
+.rhWebappActionBtn:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+.rhWebappActionBtn.isSaved {
+  border-color: rgba(var(--accent-rgb), 0.42);
+  color: var(--accent-hover);
+  background: rgba(var(--accent-rgb), 0.1);
+}
+
+.rhAppSaveHint {
+  display: block;
+  margin-top: -2px;
+  color: var(--muted-2);
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.rhAppSaveHintError {
+  color: var(--danger, #ef4444);
 }
 .rhImportBtn {
   width: 100%;

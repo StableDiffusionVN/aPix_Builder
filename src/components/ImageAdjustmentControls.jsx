@@ -11,8 +11,11 @@ import {
   X
 } from "lucide-react";
 import { useI18n } from "../i18n/I18nContext";
-import { COLOR_CHANNELS, PRESETS } from "../lib/imageAdjustments";
+import { COLOR_CHANNELS, getCurvePoint, PRESET_GROUPS, PRESETS } from "../lib/imageAdjustments";
 import { isTextEntryTarget, preventToolbarFocus } from "../lib/keyboard";
+import { ColorPickButton, ColorPickCursorOverlay } from "./colorPickUi";
+
+export { ColorPickButton, ColorPickCursorOverlay } from "./colorPickUi";
 
 export const HealingIcon = ({ size = 14, ...props }) => (
   <svg
@@ -74,7 +77,7 @@ export function AccordionSection({ icon: Icon, title, open, onToggle, children }
   );
 }
 
-export function EditorRange({ label, value, min, max, step = 1, resetValue = 0, onChange, onCommit }) {
+export function EditorRange({ label, value, min, max, step = 1, resetValue = 0, onChange, onCommit, onDragStart }) {
   const { t } = useI18n();
   const isDefault = Number(value) === Number(resetValue);
   return (
@@ -102,6 +105,7 @@ export function EditorRange({ label, value, min, max, step = 1, resetValue = 0, 
         max={max}
         step={step}
         value={value}
+        onPointerDown={() => onDragStart?.()}
         onChange={event => onChange(Number(event.target.value))}
         onMouseUp={event => {
           onCommit?.();
@@ -143,7 +147,10 @@ export function ImageAdjustmentControls({
     activeColorTab,
     activeCurveChannel,
     selectedCurvePointIndex,
+    activePresetId,
     customPresets,
+    colorPickTarget,
+    toggleColorPickTarget,
     showNewPresetForm,
     newPresetName,
     editingPresetId,
@@ -154,6 +161,7 @@ export function ImageAdjustmentControls({
     updateHsl,
     applyPreset,
     toggleSection,
+    beginSliderDrag,
     commitCurrent,
     isPresetActive,
     handleCreatePreset,
@@ -252,6 +260,7 @@ export function ImageAdjustmentControls({
 
   const replaceHistogramWithHealing = showHealingTool && healingActive && !openSections.presets;
   const showHealingSizeStrip = showHealingTool && healingActive && openSections.presets;
+  const selectedCurvePoint = getCurvePoint(adjustments.curves, activeCurveChannel, selectedCurvePointIndex);
   const healingSizeRange = (
     <EditorRange
       label="Size"
@@ -355,19 +364,36 @@ export function ImageAdjustmentControls({
         <div className="imageEditorAccordionList">
           <AccordionSection icon={Sparkles} title="Presets" open={!!openSections.presets} onToggle={() => toggleSection("presets")}>
             <div className="presetAccordionContent">
-              <div className="presetGroupTitle">{t("editor.defaults")}</div>
-              <div className="presetGrid">
-                {PRESETS.map(preset => (
-                  <button
-                    type="button"
-                    key={preset.id}
-                    className={`presetButton ${isPresetActive(preset) ? "active" : ""}`}
-                    onClick={() => applyPreset(preset)}
-                  >
-                    {preset.name}
-                  </button>
-                ))}
-              </div>
+              <label className="field compact presetSelectField">
+                <span>{t("editor.selectPreset")}</span>
+                <select
+                  value={activePresetId}
+                  onChange={event => {
+                    const preset = [...PRESETS, ...customPresets].find(item => item.id === event.target.value);
+                    if (preset) applyPreset(preset);
+                  }}
+                >
+                  <option value="">{t("editor.selectPresetPlaceholder")}</option>
+                  {PRESET_GROUPS.map(group => {
+                    const groupPresets = PRESETS.filter(preset => preset.group === group.id);
+                    if (!groupPresets.length) return null;
+                    return (
+                      <optgroup key={group.id} label={group.label}>
+                        {groupPresets.map(preset => (
+                          <option key={preset.id} value={preset.id}>{preset.name}</option>
+                        ))}
+                      </optgroup>
+                    );
+                  })}
+                  {customPresets.length > 0 ? (
+                    <optgroup label={t("editor.custom")}>
+                      {customPresets.map(preset => (
+                        <option key={preset.id} value={preset.id}>{preset.name}</option>
+                      ))}
+                    </optgroup>
+                  ) : null}
+                </select>
+              </label>
 
               <div className="presetGroupTitle custom">{t("editor.custom")}</div>
               {customPresets.length === 0 ? (
@@ -465,35 +491,42 @@ export function ImageAdjustmentControls({
           </AccordionSection>
 
           <AccordionSection icon={SlidersHorizontal} title="Basic" open={!!openSections.basic} onToggle={() => toggleSection("basic")}>
-            <EditorRange label="Temperature" value={adjustments.temperature} min={-100} max={100} onChange={value => updateAdjustment("temperature", value)} onCommit={commitCurrent} />
-            <EditorRange label="Tint" value={adjustments.tint} min={-100} max={100} onChange={value => updateAdjustment("tint", value)} onCommit={commitCurrent} />
-            <EditorRange label="Exposure" value={adjustments.luminance} min={-100} max={100} onChange={value => updateAdjustment("luminance", value)} onCommit={commitCurrent} />
-            <EditorRange label="Contrast" value={adjustments.contrast} min={-100} max={100} onChange={value => updateAdjustment("contrast", value)} onCommit={commitCurrent} />
-            <EditorRange label="Highlights" value={adjustments.highlights} min={-100} max={100} onChange={value => updateAdjustment("highlights", value)} onCommit={commitCurrent} />
-            <EditorRange label="Shadows" value={adjustments.shadows} min={-100} max={100} onChange={value => updateAdjustment("shadows", value)} onCommit={commitCurrent} />
-            <EditorRange label="Whites" value={adjustments.whites} min={-100} max={100} onChange={value => updateAdjustment("whites", value)} onCommit={commitCurrent} />
-            <EditorRange label="Blacks" value={adjustments.blacks} min={-100} max={100} onChange={value => updateAdjustment("blacks", value)} onCommit={commitCurrent} />
-            <EditorRange label="Vibrance" value={adjustments.vibrance} min={-100} max={100} onChange={value => updateAdjustment("vibrance", value)} onCommit={commitCurrent} />
-            <EditorRange label="Saturation" value={adjustments.saturation} min={-100} max={100} onChange={value => updateAdjustment("saturation", value)} onCommit={commitCurrent} />
-            <EditorRange label="Hue" value={adjustments.hue} min={-180} max={180} onChange={value => updateAdjustment("hue", value)} onCommit={commitCurrent} />
+            <EditorRange label="Temperature" value={adjustments.temperature} min={-100} max={100} onChange={value => updateAdjustment("temperature", value)} onDragStart={beginSliderDrag} onCommit={commitCurrent} />
+            <EditorRange label="Tint" value={adjustments.tint} min={-100} max={100} onChange={value => updateAdjustment("tint", value)} onDragStart={beginSliderDrag} onCommit={commitCurrent} />
+            <EditorRange label="Exposure" value={adjustments.luminance} min={-100} max={100} onChange={value => updateAdjustment("luminance", value)} onDragStart={beginSliderDrag} onCommit={commitCurrent} />
+            <EditorRange label="Contrast" value={adjustments.contrast} min={-100} max={100} onChange={value => updateAdjustment("contrast", value)} onDragStart={beginSliderDrag} onCommit={commitCurrent} />
+            <EditorRange label="Highlights" value={adjustments.highlights} min={-100} max={100} onChange={value => updateAdjustment("highlights", value)} onDragStart={beginSliderDrag} onCommit={commitCurrent} />
+            <EditorRange label="Shadows" value={adjustments.shadows} min={-100} max={100} onChange={value => updateAdjustment("shadows", value)} onDragStart={beginSliderDrag} onCommit={commitCurrent} />
+            <EditorRange label="Whites" value={adjustments.whites} min={-100} max={100} onChange={value => updateAdjustment("whites", value)} onDragStart={beginSliderDrag} onCommit={commitCurrent} />
+            <EditorRange label="Blacks" value={adjustments.blacks} min={-100} max={100} onChange={value => updateAdjustment("blacks", value)} onDragStart={beginSliderDrag} onCommit={commitCurrent} />
+            <EditorRange label="Vibrance" value={adjustments.vibrance} min={-100} max={100} onChange={value => updateAdjustment("vibrance", value)} onDragStart={beginSliderDrag} onCommit={commitCurrent} />
+            <EditorRange label="Saturation" value={adjustments.saturation} min={-100} max={100} onChange={value => updateAdjustment("saturation", value)} onDragStart={beginSliderDrag} onCommit={commitCurrent} />
+            <EditorRange label="Hue" value={adjustments.hue} min={-180} max={180} onChange={value => updateAdjustment("hue", value)} onDragStart={beginSliderDrag} onCommit={commitCurrent} />
           </AccordionSection>
 
           <AccordionSection icon={CurveIcon} title="Curves" open={!!openSections.curves} onToggle={() => toggleSection("curves")}>
             <div className="curvesTabContainer">
-              <div className="curvesTabs">
-                {["rgb", "red", "green", "blue"].map(channel => (
-                  <button
-                    key={channel}
-                    type="button"
-                    className={`curvesTabButton ${channel} ${activeCurveChannel === channel ? "active" : ""}`}
-                    onClick={() => {
-                      setActiveCurveChannel(channel);
-                      setSelectedCurvePointIndex(null);
-                    }}
-                  >
-                    {channel === "rgb" ? "RGB" : channel.charAt(0).toUpperCase() + channel.slice(1)}
-                  </button>
-                ))}
+              <div className="curvesHeaderRow">
+                <div className="curvesTabs">
+                  {["rgb", "red", "green", "blue"].map(channel => (
+                    <button
+                      key={channel}
+                      type="button"
+                      className={`curvesTabButton ${channel} ${activeCurveChannel === channel ? "active" : ""}`}
+                      onClick={() => {
+                        setActiveCurveChannel(channel);
+                        setSelectedCurvePointIndex(null);
+                      }}
+                    >
+                      {channel === "rgb" ? "RGB" : channel.charAt(0).toUpperCase() + channel.slice(1)}
+                    </button>
+                  ))}
+                </div>
+                <ColorPickButton
+                  active={colorPickTarget === "curves"}
+                  title={t("editor.pickCurveColor")}
+                  onClick={() => toggleColorPickTarget("curves")}
+                />
               </div>
             </div>
 
@@ -514,9 +547,9 @@ export function ImageAdjustmentControls({
             {adjustments.curves ? (
               <div className="curvesControlsRow">
                 <div className="curvesPointInfo">
-                  {selectedCurvePointIndex !== null ? (
+                  {selectedCurvePoint ? (
                     <span>
-                      {t("editor.point")}: {adjustments.curves[activeCurveChannel][selectedCurvePointIndex].x}, {adjustments.curves[activeCurveChannel][selectedCurvePointIndex].y}
+                      {t("editor.point")}: {selectedCurvePoint.x}, {selectedCurvePoint.y}
                     </span>
                   ) : (
                     <span className="curvesHelpText">{t("editor.addCurvePoint")}</span>
@@ -527,7 +560,7 @@ export function ImageAdjustmentControls({
                     type="button"
                     className="curvesActionBtn delete"
                     title={t("editor.deletePoint")}
-                    disabled={selectedCurvePointIndex === null || selectedCurvePointIndex === 0 || selectedCurvePointIndex === adjustments.curves[activeCurveChannel].length - 1}
+                    disabled={!selectedCurvePoint || selectedCurvePointIndex === 0 || selectedCurvePointIndex === adjustments.curves[activeCurveChannel].length - 1}
                     onClick={() => {
                       const points = adjustments.curves[activeCurveChannel];
                       if (selectedCurvePointIndex > 0 && selectedCurvePointIndex < points.length - 1) {
@@ -570,31 +603,46 @@ export function ImageAdjustmentControls({
           </AccordionSection>
 
           <AccordionSection icon={Droplet} title="Color HSL" open={!!openSections.hsl} onToggle={() => toggleSection("hsl")}>
-            <div className="hslSwatches">
-              {COLOR_CHANNELS.map(channel => (
-                <button
-                  type="button"
-                  key={channel.id}
-                  className={activeColorTab === channel.id ? "active" : ""}
-                  style={{ backgroundColor: channel.color }}
-                  onClick={() => setActiveColorTab(channel.id)}
-                  title={channel.name}
-                />
-              ))}
+            <div className="hslHeaderRow">
+              <div className="hslSwatches">
+                {COLOR_CHANNELS.map(channel => (
+                  <button
+                    type="button"
+                    key={channel.id}
+                    className={activeColorTab === channel.id ? "active" : ""}
+                    style={{ backgroundColor: channel.color }}
+                    onClick={() => setActiveColorTab(channel.id)}
+                    title={channel.name}
+                  />
+                ))}
+              </div>
+              <ColorPickButton
+                active={colorPickTarget === "hsl"}
+                title={t("editor.pickHslColor")}
+                onClick={() => toggleColorPickTarget("hsl")}
+              />
             </div>
-            <EditorRange label="Hue" value={hsl.h} min={-180} max={180} onChange={value => updateHsl(activeColorTab, "h", value)} onCommit={commitCurrent} />
-            <EditorRange label="Saturation" value={hsl.s} min={-100} max={100} onChange={value => updateHsl(activeColorTab, "s", value)} onCommit={commitCurrent} />
-            <EditorRange label="Luminance" value={hsl.l} min={-100} max={100} onChange={value => updateHsl(activeColorTab, "l", value)} onCommit={commitCurrent} />
+            <EditorRange label="Hue" value={hsl.h} min={-180} max={180} onChange={value => updateHsl(activeColorTab, "h", value)} onDragStart={beginSliderDrag} onCommit={commitCurrent} />
+            <EditorRange label="Saturation" value={hsl.s} min={-100} max={100} onChange={value => updateHsl(activeColorTab, "s", value)} onDragStart={beginSliderDrag} onCommit={commitCurrent} />
+            <EditorRange label="Luminance" value={hsl.l} min={-100} max={100} onChange={value => updateHsl(activeColorTab, "l", value)} onDragStart={beginSliderDrag} onCommit={commitCurrent} />
           </AccordionSection>
 
           <AccordionSection icon={Sparkles} title="Effects" open={!!openSections.effects} onToggle={() => toggleSection("effects")}>
-            <EditorRange label="Grain" value={adjustments.grain} min={0} max={100} onChange={value => updateAdjustment("grain", value)} onCommit={commitCurrent} />
-            <EditorRange label="Clarity" value={adjustments.clarity} min={-100} max={100} onChange={value => updateAdjustment("clarity", value)} onCommit={commitCurrent} />
-            <EditorRange label="Dehaze" value={adjustments.dehaze} min={-100} max={100} onChange={value => updateAdjustment("dehaze", value)} onCommit={commitCurrent} />
-            <EditorRange label="Blur" value={adjustments.blur} min={0} max={20} step={0.5} onChange={value => updateAdjustment("blur", value)} onCommit={commitCurrent} />
+            <EditorRange label="Clarity" value={adjustments.clarity} min={-100} max={100} onChange={value => updateAdjustment("clarity", value)} onDragStart={beginSliderDrag} onCommit={commitCurrent} />
+            <EditorRange label="Texture" value={adjustments.texture} min={-100} max={100} onChange={value => updateAdjustment("texture", value)} onDragStart={beginSliderDrag} onCommit={commitCurrent} />
+            <EditorRange label="Dehaze" value={adjustments.dehaze} min={-100} max={100} onChange={value => updateAdjustment("dehaze", value)} onDragStart={beginSliderDrag} onCommit={commitCurrent} />
+            <EditorRange label="Grain" value={adjustments.grain} min={0} max={100} onChange={value => updateAdjustment("grain", value)} onDragStart={beginSliderDrag} onCommit={commitCurrent} />
+            <EditorRange label="Grain Size" value={adjustments.grainSize ?? 50} min={0} max={100} onChange={value => updateAdjustment("grainSize", value)} onDragStart={beginSliderDrag} onCommit={commitCurrent} />
+            <EditorRange label="Grain Roughness" value={adjustments.grainRoughness ?? 50} min={0} max={100} onChange={value => updateAdjustment("grainRoughness", value)} onDragStart={beginSliderDrag} onCommit={commitCurrent} />
+            <EditorRange label="Vignette" value={adjustments.vignette} min={-100} max={100} onChange={value => updateAdjustment("vignette", value)} onDragStart={beginSliderDrag} onCommit={commitCurrent} />
+            <EditorRange label="Blur" value={adjustments.blur} min={0} max={20} step={0.5} onChange={value => updateAdjustment("blur", value)} onDragStart={beginSliderDrag} onCommit={commitCurrent} />
           </AccordionSection>
         </div>
       </div>
+
+      {colorPickTarget ? (
+        <p className="colorPickHint">{t("editor.pickOnImage")}</p>
+      ) : null}
 
       {error ? <div className="editorError">{error}</div> : null}
 

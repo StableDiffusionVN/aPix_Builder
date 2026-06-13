@@ -1,15 +1,28 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useI18n } from "../i18n/I18nContext";
 import {
+  applyColorAdjustmentsToCanvas,
   applyImageAdjustments,
+  canvasToPreviewDataUrl,
   clamp,
   cloneDefaultAdjustments,
   computeHistogram,
   DEFAULT_CURVES,
+  adjustmentsMatchPreset,
   drawCurvesCanvas,
   drawHistogram,
+  findActivePresetId,
+  getAdjustmentGeometryKey,
+  getCurveSampleFromPixel,
+  getDominantHslChannelId,
   isAdjustmentsDefault,
-  loadImage
+  loadImage,
+  mergePresetAdjustments,
+  PRESETS,
+  PREVIEW_INTERACTIVE_MAX_EDGE,
+  PREVIEW_MAX_EDGE,
+  sampleCanvasPixel,
+  upsertCurvePoint
 } from "../lib/imageAdjustments";
 import {
   buildPersistedColorState,
@@ -57,6 +70,11 @@ export function useColorAdjustments({
   const healingPointerIdRef = useRef(null);
   const previewMetaRef = useRef({ width: 0, height: 0, scale: 1 });
   const lastHoverImageRef = useRef(null);
+  const sourceCanvasRef = useRef(null);
+  const sourceCacheKeyRef = useRef("");
+  const sourceMetaRef = useRef({ width: 0, height: 0, scale: 1 });
+  const isSliderDraggingRef = useRef(false);
+  const previewUrlFrameRef = useRef(0);
 
   const [adjustments, setAdjustmentsState] = useState(() => cloneDefaultAdjustments());
   const [history, setHistory] = useState([]);
@@ -64,7 +82,7 @@ export function useColorAdjustments({
   const [isReady, setIsReady] = useState(false);
   const [error, setError] = useState("");
   const [hoveredZone, setHoveredZone] = useState(null);
-  const [openSections, setOpenSections] = useState({ basic: true, presets: true });
+  const [openSections, setOpenSections] = useState({ basic: true, presets: false });
   const [activeColorTab, setActiveColorTab] = useState("reds");
   const [activeCurveChannel, setActiveCurveChannel] = useState("rgb");
   const [selectedCurvePointIndex, setSelectedCurvePointIndex] = useState(null);
@@ -78,6 +96,10 @@ export function useColorAdjustments({
   const [healingBrushSize, setHealingBrushSize] = useState(DEFAULT_HEALING_BRUSH_SIZE);
   const [healingCursor, setHealingCursor] = useState(null);
   const [healingBrushDiameter, setHealingBrushDiameter] = useState(DEFAULT_HEALING_BRUSH_SIZE);
+  const [colorPickTarget, setColorPickTarget] = useState(null);
+  const [colorPickCursor, setColorPickCursor] = useState(null);
+  const colorPickTargetRef = useRef(null);
+  const activeCurveChannelRef = useRef(activeCurveChannel);
 
   useEffect(() => {
     onPreviewChangeRef.current = onPreviewChange;
@@ -98,6 +120,15 @@ export function useColorAdjustments({
   useEffect(() => {
     healingBrushSizeRef.current = healingBrushSize;
   }, [healingBrushSize]);
+
+  useEffect(() => {
+    colorPickTargetRef.current = colorPickTarget;
+    if (!colorPickTarget) setColorPickCursor(null);
+  }, [colorPickTarget]);
+
+  useEffect(() => {
+    activeCurveChannelRef.current = activeCurveChannel;
+  }, [activeCurveChannel]);
 
   useEffect(() => {
     if (!healingActive) {
@@ -260,6 +291,7 @@ export function useColorAdjustments({
     healingBrushSizeRef.current = loaded.healingBrushSize;
     previewMetaRef.current = { width: 0, height: 0, scale: 1 };
     imageRef.current = null;
+    sourceCacheKeyRef.current = "";
     onPreviewChangeRef.current?.(null);
 
     if (!source) {
@@ -299,13 +331,41 @@ export function useColorAdjustments({
     };
   }, [adjustments, healingStrokes, healingBrushSize, isReady, persistKey, schedulePersist]);
 
-  const renderPreview = useCallback(() => {
+  const ensureSourceCanvas = useCallback((image, interactive) => {
+    const maxEdge = interactive ? PREVIEW_INTERACTIVE_MAX_EDGE : PREVIEW_MAX_EDGE;
+    const cacheKey = getAdjustmentGeometryKey(adjustmentsRef.current, maxEdge);
+    if (sourceCacheKeyRef.current === cacheKey && sourceCanvasRef.current) {
+      return sourceMetaRef.current;
+    }
+
+    if (!sourceCanvasRef.current) sourceCanvasRef.current = document.createElement("canvas");
+    const meta = applyImageAdjustments(image, adjustmentsRef.current, sourceCanvasRef.current, {
+      maxEdge,
+      skipColorPipeline: true,
+      skipBlur: true
+    });
+    if (!meta) return null;
+    sourceCacheKeyRef.current = cacheKey;
+    sourceMetaRef.current = meta;
+    return meta;
+  }, []);
+
+  const renderPreview = useCallback((options = {}) => {
     const image = imageRef.current;
     if (!image) return;
 
+    const interactive = options.interactive ?? isSliderDraggingRef.current;
+    const sourceMeta = ensureSourceCanvas(image, interactive);
+    if (!sourceMeta || !sourceCanvasRef.current) return;
+
     if (!previewCanvasRef.current) previewCanvasRef.current = document.createElement("canvas");
     const canvas = previewCanvasRef.current;
-    const meta = applyImageAdjustments(image, adjustmentsRef.current, canvas);
+    const meta = applyColorAdjustmentsToCanvas(
+      sourceCanvasRef.current,
+      canvas,
+      adjustmentsRef.current,
+      { scale: sourceMeta.scale, interactive, skipBlur: interactive }
+    );
     if (!meta) return;
     previewMetaRef.current = meta;
 
@@ -321,8 +381,10 @@ export function useColorAdjustments({
         healingOverlayCanvasRef.current = document.createElement("canvas");
       }
       const overlayCanvas = healingOverlayCanvasRef.current;
-      overlayCanvas.width = canvas.width;
-      overlayCanvas.height = canvas.height;
+      if (overlayCanvas.width !== canvas.width || overlayCanvas.height !== canvas.height) {
+        overlayCanvas.width = canvas.width;
+        overlayCanvas.height = canvas.height;
+      }
       const overlayCtx = overlayCanvas.getContext("2d");
       overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
       overlayCtx.drawImage(canvas, 0, 0);
@@ -330,27 +392,35 @@ export function useColorAdjustments({
       outputCanvas = overlayCanvas;
     }
 
-    const histData = computeHistogram(canvas);
-    if (histogramCanvasRef.current && histData) {
-      drawHistogram(histogramCanvasRef.current, histData);
-    }
-    if (curvesCanvasRef.current && histData && adjustmentsRef.current.curves) {
-      drawCurvesCanvas(
-        curvesCanvasRef.current,
-        adjustmentsRef.current.curves[activeCurveChannel],
-        activeCurveChannel,
-        selectedCurvePointIndex,
-        histData
-      );
+    if (!interactive) {
+      const histData = computeHistogram(canvas);
+      if (histogramCanvasRef.current && histData) {
+        drawHistogram(histogramCanvasRef.current, histData);
+      }
+      if (curvesCanvasRef.current && histData && adjustmentsRef.current.curves) {
+        drawCurvesCanvas(
+          curvesCanvasRef.current,
+          adjustmentsRef.current.curves[activeCurveChannel],
+          activeCurveChannel,
+          selectedCurvePointIndex,
+          histData
+        );
+      }
     }
 
     const hasPreviewChanges = !isAdjustmentsDefault(adjustmentsRef.current)
       || healingStrokesRef.current.length > 0
       || Boolean(activeHealingStrokeRef.current);
-    onPreviewChangeRef.current?.(
-      hasPreviewChanges ? outputCanvas.toDataURL("image/png") : null
-    );
-  }, [activeCurveChannel, selectedCurvePointIndex]);
+    if (!hasPreviewChanges) {
+      onPreviewChangeRef.current?.(null);
+      return;
+    }
+
+    previewUrlFrameRef.current += 1;
+    if (!interactive || previewUrlFrameRef.current % 2 === 0) {
+      onPreviewChangeRef.current?.(canvasToPreviewDataUrl(outputCanvas, { interactive }));
+    }
+  }, [activeCurveChannel, ensureSourceCanvas, selectedCurvePointIndex]);
 
   useEffect(() => {
     if (!isReady) return undefined;
@@ -374,6 +444,14 @@ export function useColorAdjustments({
     );
   }, [openSections.curves, adjustments.curves, activeCurveChannel, selectedCurvePointIndex]);
 
+  useEffect(() => {
+    if (selectedCurvePointIndex === null) return;
+    const points = adjustments.curves?.[activeCurveChannel];
+    if (!points || selectedCurvePointIndex < 0 || selectedCurvePointIndex >= points.length) {
+      setSelectedCurvePointIndex(null);
+    }
+  }, [adjustments.curves, activeCurveChannel, selectedCurvePointIndex]);
+
   const updateAdjustment = useCallback((key, value) => {
     setAdjustments(current => ({ ...current, [key]: value }));
   }, []);
@@ -392,12 +470,9 @@ export function useColorAdjustments({
   }, []);
 
   const applyPreset = useCallback((preset) => {
-    const next = {
-      ...adjustmentsRef.current,
-      ...preset.adjustments,
-      curves: preset.adjustments.curves || DEFAULT_CURVES
-    };
+    const next = mergePresetAdjustments(adjustmentsRef.current, preset.adjustments);
     setAdjustments(next);
+    setSelectedCurvePointIndex(null);
     commitHistory(next, healingStrokesRef.current);
   }, [commitHistory, setAdjustments]);
 
@@ -409,6 +484,7 @@ export function useColorAdjustments({
     setActiveCurveChannel("rgb");
     setSelectedCurvePointIndex(null);
     setActiveColorTab("reds");
+    setColorPickTarget(null);
     setHoveredZone(null);
     const initial = snapshotColorAdjustState(nextAdjustments, []);
     setHistory([initial]);
@@ -418,8 +494,34 @@ export function useColorAdjustments({
   }, [flushPersist, setAdjustments, setHealingStrokesSync]);
 
   const toggleHealingActive = useCallback(() => {
+    setColorPickTarget(null);
     setHealingActive(current => !current);
   }, []);
+
+  const toggleColorPickTarget = useCallback((target) => {
+    setHealingActive(false);
+    setColorPickTarget(current => (current === target ? null : target));
+    setColorPickCursor(null);
+  }, []);
+
+  const updateColorPickCursor = useCallback((event, previewArea) => {
+    if (!colorPickTargetRef.current || !previewArea) return false;
+    const areaRect = previewArea.getBoundingClientRect();
+    setColorPickCursor({
+      x: event.clientX - areaRect.left,
+      y: event.clientY - areaRect.top
+    });
+    return true;
+  }, []);
+
+  const clearColorPickCursor = useCallback(() => {
+    setColorPickCursor(null);
+  }, []);
+
+  const handleColorPickPointerMove = useCallback((event, _imageElement, previewArea) => {
+    if (!colorPickTargetRef.current) return false;
+    return updateColorPickCursor(event, previewArea);
+  }, [updateColorPickCursor]);
 
   const updateHealingBrushSize = useCallback((size) => {
     const next = clamp(Number(size), 1, 180);
@@ -472,6 +574,60 @@ export function useColorAdjustments({
       y: clamp((event.clientY - rect.top) / rect.height, 0, 1)
     };
   }, []);
+
+  const handleColorPickPointerDown = useCallback((event, imageElement) => {
+    const target = colorPickTargetRef.current;
+    if (!target || !isReady || event.button !== 0 || !imageElement) return false;
+
+    const canvas = previewCanvasRef.current;
+    const meta = previewMetaRef.current;
+    if (!canvas || !meta?.width) return false;
+
+    const rect = imageElement.getBoundingClientRect();
+    if (!rect.width || !rect.height) return false;
+
+    const px = clamp(Math.round(((event.clientX - rect.left) / rect.width) * meta.width), 0, meta.width - 1);
+    const py = clamp(Math.round(((event.clientY - rect.top) / rect.height) * meta.height), 0, meta.height - 1);
+    const pixel = sampleCanvasPixel(canvas, px, py);
+    if (!pixel) return false;
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (target === "hsl") {
+      setActiveColorTab(getDominantHslChannelId(pixel.r, pixel.g, pixel.b));
+      setOpenSections(current => ({ ...current, hsl: true }));
+      setColorPickTarget(null);
+      setColorPickCursor(null);
+      return true;
+    }
+
+    if (target === "curves") {
+      const channel = activeCurveChannelRef.current;
+      const sample = getCurveSampleFromPixel(pixel.r, pixel.g, pixel.b, channel);
+      const points = adjustmentsRef.current.curves?.[channel];
+      if (!points) return false;
+      const { points: nextPoints, selectedIndex } = upsertCurvePoint(points, sample);
+      setAdjustments(current => {
+        const next = {
+          ...current,
+          curves: {
+            ...current.curves,
+            [channel]: nextPoints
+          }
+        };
+        commitHistory(next, healingStrokesRef.current);
+        return next;
+      });
+      setSelectedCurvePointIndex(selectedIndex);
+      setOpenSections(current => ({ ...current, curves: true }));
+      setColorPickTarget(null);
+      setColorPickCursor(null);
+      return true;
+    }
+
+    return false;
+  }, [commitHistory, isReady, setAdjustments]);
 
   const handleHealingPointerDown = useCallback((event, imageElement) => {
     if (!healingActiveRef.current || !isReady || event.button !== 0 || !imageElement) return false;
@@ -540,20 +696,28 @@ export function useColorAdjustments({
     });
   }, []);
 
+  const beginSliderDrag = useCallback(() => {
+    isSliderDraggingRef.current = true;
+    previewUrlFrameRef.current = 0;
+    sourceCacheKeyRef.current = "";
+  }, []);
+
+  const endSliderDrag = useCallback(() => {
+    isSliderDraggingRef.current = false;
+    sourceCacheKeyRef.current = "";
+    previewUrlFrameRef.current = 0;
+  }, []);
+
   const commitCurrent = useCallback(() => {
+    endSliderDrag();
     commitHistory(adjustmentsRef.current, healingStrokesRef.current);
-  }, [commitHistory]);
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    rafRef.current = requestAnimationFrame(() => renderPreview({ interactive: false }));
+  }, [commitHistory, endSliderDrag, renderPreview]);
 
   const isPresetActive = useCallback((preset) => {
     if (!preset?.adjustments) return false;
-    const adj = adjustments;
-    const padj = preset.adjustments;
-    return Math.abs(adj.luminance - padj.luminance) < 1
-      && Math.abs(adj.contrast - padj.contrast) < 1
-      && Math.abs(adj.temperature - padj.temperature) < 1
-      && Math.abs(adj.vibrance - padj.vibrance) < 1
-      && Math.abs(adj.saturation - padj.saturation) < 1
-      && adj.invert === padj.invert;
+    return adjustmentsMatchPreset(adjustments, preset.adjustments);
   }, [adjustments]);
 
   const handleCreatePreset = useCallback(() => {
@@ -600,6 +764,7 @@ export function useColorAdjustments({
 
   const handleHistogramPointerDown = useCallback((event) => {
     event.preventDefault();
+    beginSliderDrag();
     event.currentTarget.setPointerCapture(event.pointerId);
     const { zone } = getHistogramZone(event);
     histogramDragRef.current = {
@@ -607,7 +772,7 @@ export function useColorAdjustments({
       startX: event.clientX,
       startValue: adjustmentsRef.current[zone] || 0
     };
-  }, []);
+  }, [beginSliderDrag]);
 
   const handleHistogramPointerMove = useCallback((event) => {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -658,6 +823,7 @@ export function useColorAdjustments({
     });
 
     if (closestIdx !== -1) {
+      beginSliderDrag();
       setSelectedCurvePointIndex(closestIdx);
       draggingCurvePointRef.current = { index: closestIdx };
       e.currentTarget.setPointerCapture(e.pointerId);
@@ -686,11 +852,12 @@ export function useColorAdjustments({
           }
         }));
         setSelectedCurvePointIndex(insertIdx);
+        beginSliderDrag();
         draggingCurvePointRef.current = { index: insertIdx };
         e.currentTarget.setPointerCapture(e.pointerId);
       }
     }
-  }, [adjustments.curves, activeCurveChannel]);
+  }, [adjustments.curves, activeCurveChannel, beginSliderDrag]);
 
   const handleCurvesPointerMove = useCallback((e) => {
     if (!draggingCurvePointRef.current || !adjustments.curves) return;
@@ -781,10 +948,15 @@ export function useColorAdjustments({
   }, [t]);
 
   const hsl = adjustments.hsl[activeColorTab];
+  const activePresetId = useMemo(
+    () => findActivePresetId(adjustments, [...PRESETS, ...customPresets]),
+    [adjustments, customPresets]
+  );
 
   return {
     adjustments,
     hsl,
+    activePresetId,
     isReady,
     error,
     hoveredZone,
@@ -804,6 +976,7 @@ export function useColorAdjustments({
     applyPreset,
     resetAdjustments,
     toggleSection,
+    beginSliderDrag,
     commitCurrent,
     isPresetActive,
     handleCreatePreset,
@@ -827,6 +1000,12 @@ export function useColorAdjustments({
     handleCurvesPointerUp,
     handleCurvesDoubleClick,
     renderFullResolutionDataUrl,
+    colorPickTarget,
+    colorPickCursor,
+    toggleColorPickTarget,
+    handleColorPickPointerDown,
+    handleColorPickPointerMove,
+    clearColorPickCursor,
     healingActive,
     healingBrushSize,
     healingCursor,

@@ -7,6 +7,9 @@ export const TEMPLATE_SCOPES = {
   runninghubWf: "runninghub-wf"
 };
 
+export const LOCAL_DEFAULT_TEMPLATE_ID = "sdvn-klein-upscale-ultimate";
+export const RH_WF_DEFAULT_TEMPLATE_ID = "sdvn-klein-upscale-ultimate";
+
 export function createTemplateService({
   configDir,
   defaultDir,
@@ -133,7 +136,13 @@ export function createTemplateService({
     if (templates.length === 0 && normalizedScope === TEMPLATE_SCOPES.local) {
       throw new Error("No templates configured. Add app_build.yaml and api.json inside config/default/<id> or config/templates/<id>.");
     }
-    const defaultTemplate = templates.find(template => template.isDefault) || templates[0] || null;
+    const preferredDefaultId = normalizedScope === TEMPLATE_SCOPES.runninghubWf
+      ? RH_WF_DEFAULT_TEMPLATE_ID
+      : LOCAL_DEFAULT_TEMPLATE_ID;
+    const defaultTemplate = templates.find(template => template.id === preferredDefaultId)
+      || templates.find(template => template.isDefault)
+      || templates[0]
+      || null;
     return {
       scope: normalizedScope,
       default: defaultTemplate?.id || "",

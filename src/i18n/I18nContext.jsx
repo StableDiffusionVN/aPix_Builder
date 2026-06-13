@@ -88,13 +88,18 @@ const messages = {
     "server.cacheUsed": "Đang dùng cache",
     "server.freshData": "Dữ liệu mới",
     "info.dialog": "Thông tin ứng dụng",
-    "info.description": "Ứng dụng dựng workflow ComfyUI bằng template YAML, tối ưu cho tạo ảnh và chỉnh ảnh nhanh.",
+    "info.description": "Ứng dụng web chạy workflow ComfyUI và RunningHub bằng template YAML — tối ưu cho tạo ảnh, chỉnh ảnh và upscale nhanh.",
     "info.currentTemplate": "Template hiện tại",
     "info.mode": "Chế độ",
+    "info.modeLocal": "ComfyUI Local",
+    "info.modeRhApp": "RunningHub App",
+    "info.modeRhWf": "RunningHub Workflow",
+    "info.target": "Đích thực thi",
+    "info.summary": "Tóm tắt phiên bản và cấu hình hiện tại",
     "info.version": "Phiên bản",
     "info.notConfigured": "Chưa cấu hình",
-    "info.update": "Cập nhật",
-    "info.updateText": "Hỗ trợ real-time progress bar, nhiều template, thư viện ảnh input/output, so sánh ảnh, Image Editor và tự quét model từ ComfyUI.",
+    "info.update": "Phiên bản 1.0",
+    "info.updateText": "ComfyUI local, RunningHub App/Workflow cloud, Image Editor, so sánh ảnh, thư viện input/output, Template Editor, đa ngôn ngữ Việt/Anh và hỗ trợ nhiều API Key RunningHub.",
     "info.project": "Dự án & liên hệ",
     "info.creator": "Người tạo",
     "info.contact": "Liên hệ",
@@ -117,6 +122,15 @@ const messages = {
     "rh.disconnected": "Chưa kết nối RunningHub",
     "rh.customId": "Custom WebApp ID",
     "rh.reload": "Tải lại",
+    "rh.saveApp": "Lưu app vào danh sách",
+    "rh.removeApp": "Gỡ app khỏi danh sách",
+    "rh.saveAppNeedReload": "Tải lại thông tin app trước khi lưu",
+    "rh.appSaved": "Đã lưu app vào config/templates-rh",
+    "rh.defaultAppNoBookmark": "App mặc định hệ thống không thể lưu bookmark",
+    "rh.appRemoved": "Đã gỡ app khỏi danh sách",
+    "rh.appStorageLoading": "Đang tải danh sách app...",
+    "rh.appStorageUnavailable": "Không tải được danh sách app từ config/templates-rh — hãy chạy server",
+    "rh.appSaveFailed": "Không lưu được app — kiểm tra server và thư mục config/templates-rh",
     "rh.fetching": "Đang tải thông tin ứng dụng từ RunningHub...",
     "rh.empty": "Nhập API Key trong Settings rồi bấm \"Tải lại node\".",
     "rh.unnamedApp": "RunningHub App",
@@ -239,6 +253,8 @@ const messages = {
     ,"editor.zoomReset": "Về 100%"
     ,"editor.defaults": "Mặc định"
     ,"editor.custom": "Tùy chỉnh"
+    ,"editor.selectPreset": "Preset"
+    ,"editor.selectPresetPlaceholder": "Chọn preset…"
     ,"editor.free": "Tự do"
     ,"editor.noCustomPresets": "Chưa có preset tự lưu"
     ,"editor.overwritePreset": "Ghi đè cài đặt hiện tại vào preset này"
@@ -253,6 +269,9 @@ const messages = {
     ,"editor.addCurvePoint": "Click lên lưới để thêm điểm"
     ,"editor.deletePoint": "Xóa điểm"
     ,"editor.resetCurve": "Đặt lại đường cong kênh này"
+    ,"editor.pickCurveColor": "Chấm màu trên ảnh (Curves)"
+    ,"editor.pickHslColor": "Chấm màu trên ảnh (HSL)"
+    ,"editor.pickOnImage": "Click vào ảnh preview để chọn màu / điểm curve"
     ,"editor.reset": "Đặt lại"
     ,"editor.downloading": "Đang tải..."
     ,"editor.saving": "Đang lưu..."
@@ -276,6 +295,7 @@ const messages = {
     ,"log.missingApi": "Thiếu RunningHub API key"
     ,"log.checkFailed": "Check task thất bại"
     ,"log.exportFocused": "Export session đang focus"
+    ,"log.resizePanel": "Kéo để thay đổi chiều cao log"
     ,"log.search": "Tìm trong run log"
     ,"log.filterStatus": "Lọc status"
     ,"log.filterProvider": "Lọc provider"
@@ -363,13 +383,18 @@ const messages = {
     "server.cacheUsed": "Using cache",
     "server.freshData": "Fresh data",
     "info.dialog": "Application information",
-    "info.description": "Build ComfyUI workflows from YAML templates, optimized for fast image generation and editing.",
+    "info.description": "Web app for running ComfyUI and RunningHub workflows from YAML templates — optimized for fast image generation, editing, and upscaling.",
     "info.currentTemplate": "Current template",
     "info.mode": "Mode",
+    "info.modeLocal": "ComfyUI Local",
+    "info.modeRhApp": "RunningHub App",
+    "info.modeRhWf": "RunningHub Workflow",
+    "info.target": "Execution target",
+    "info.summary": "Version and current configuration summary",
     "info.version": "Version",
     "info.notConfigured": "Not configured",
-    "info.update": "What's new",
-    "info.updateText": "Real-time progress, multiple templates, input/output libraries, image comparison, Image Editor, and automatic ComfyUI model discovery.",
+    "info.update": "Version 1.0",
+    "info.updateText": "Local ComfyUI, RunningHub App/Workflow cloud execution, Image Editor, image comparison, input/output libraries, Template Editor, Vietnamese/English UI, and multi RunningHub API key support.",
     "info.project": "Project & contact",
     "info.creator": "Creator",
     "info.contact": "Contact",
@@ -392,6 +417,15 @@ const messages = {
     "rh.disconnected": "RunningHub is not connected",
     "rh.customId": "Custom WebApp ID",
     "rh.reload": "Reload",
+    "rh.saveApp": "Save app to list",
+    "rh.removeApp": "Remove app from list",
+    "rh.saveAppNeedReload": "Reload app info before saving",
+    "rh.appSaved": "App saved to config/templates-rh",
+    "rh.defaultAppNoBookmark": "Built-in apps cannot be bookmarked",
+    "rh.appRemoved": "App removed from list",
+    "rh.appStorageLoading": "Loading saved apps...",
+    "rh.appStorageUnavailable": "Could not load saved apps from config/templates-rh — start the server",
+    "rh.appSaveFailed": "Could not save app — check server and config/templates-rh folder",
     "rh.fetching": "Loading app info from RunningHub...",
     "rh.empty": "Enter an API Key in Settings, then select \"Reload\".",
     "rh.unnamedApp": "RunningHub App",
@@ -514,6 +548,8 @@ const messages = {
     ,"editor.zoomReset": "Reset to 100%"
     ,"editor.defaults": "Built-in"
     ,"editor.custom": "Custom"
+    ,"editor.selectPreset": "Preset"
+    ,"editor.selectPresetPlaceholder": "Select preset…"
     ,"editor.free": "Free"
     ,"editor.noCustomPresets": "No custom presets"
     ,"editor.overwritePreset": "Overwrite this preset with the current settings"
@@ -528,6 +564,9 @@ const messages = {
     ,"editor.addCurvePoint": "Click the grid to add a point"
     ,"editor.deletePoint": "Delete point"
     ,"editor.resetCurve": "Reset this channel curve"
+    ,"editor.pickCurveColor": "Sample on image (Curves)"
+    ,"editor.pickHslColor": "Sample on image (HSL)"
+    ,"editor.pickOnImage": "Click the preview image to sample color / curve point"
     ,"editor.reset": "Reset"
     ,"editor.downloading": "Downloading..."
     ,"editor.saving": "Saving..."
@@ -551,6 +590,7 @@ const messages = {
     ,"log.missingApi": "Missing RunningHub API key"
     ,"log.checkFailed": "Task check failed"
     ,"log.exportFocused": "Export focused session"
+    ,"log.resizePanel": "Drag to resize log panel"
     ,"log.search": "Search run log"
     ,"log.filterStatus": "Filter status"
     ,"log.filterProvider": "Filter provider"
@@ -598,7 +638,9 @@ const ENGLISH_RUNTIME_MESSAGES = new Map([
   ["Thiếu tên file input image", "The input image filename is missing"],
   ["Đã nhận kết quả từ RunningHub", "Received the result from RunningHub"],
   ["Task RunningHub thất bại", "RunningHub task failed"],
-  ["Timeout khi chờ kết quả từ RunningHub", "Timed out waiting for the RunningHub result"]
+  ["Timeout khi chờ kết quả từ RunningHub", "Timed out waiting for the RunningHub result"],
+  ["API key hiện tại không có quyền chạy RunningHub App này. Kiểm tra App ID và quyền truy cập trên RunningHub.", "The current API key cannot run this RunningHub App. Check the App ID and access permissions on RunningHub."],
+  ["API key hiện tại không có quyền chạy workflow RunningHub này. Kiểm tra Workflow ID, lưu/chạy thử workflow trên RunningHub, hoặc quyền truy cập.", "The current API key cannot run this RunningHub workflow. Check the Workflow ID, save/run the workflow on RunningHub, or your access permissions."]
 ]);
 
 export function localizeRuntimeMessage(message, locale) {
@@ -609,7 +651,11 @@ export function localizeRuntimeMessage(message, locale) {
     .replace(/^Node (.+) lỗi:/, "Node $1 error:")
     .replace(/^Đang upload (.+)\.\.\.$/, "Uploading $1...")
     .replace(/^API key đang xử lý 1 task khác, đang chờ hoàn tất\.\.\.$/, "The API key is processing another task; waiting for it to finish...")
-    .replace(/^API key đang xử lý (\d+) task khác, đang chờ slot trống\.\.\.$/, "The API key is processing $1 other tasks; waiting for an available slot...");
+    .replace(/^API key đang xử lý (\d+) task khác, đang chờ slot trống\.\.\.$/, "The API key is processing $1 other tasks; waiting for an available slot...")
+    .replace(/^Đã thử (\d+) API key nhưng không key nào có quyền chạy RunningHub App này\.(.+)$/, "Tried $1 API keys but none can run this RunningHub App.$2")
+    .replace(/^Đã thử (\d+) API key nhưng không key nào có quyền chạy workflow RunningHub này\.(.+)$/, "Tried $1 API keys but none can run this RunningHub workflow.$2")
+    .replace(/^Token (\d+)\/(\d+) không có quyền dùng App này, thử token kế tiếp\.\.\.$/, "Token $1/$2 cannot access this App; trying the next token...")
+    .replace(/^Token (\d+)\/(\d+) không có quyền dùng workflow này, thử token kế tiếp\.\.\.$/, "Token $1/$2 cannot access this workflow; trying the next token...");
 }
 
 const I18nContext = createContext(null);

@@ -125,7 +125,12 @@ export function OutputColorPanel({
       handlePointerMove: engine.handleHealingPointerMove,
       handlePointerUp: engine.handleHealingPointerUp,
       handlePointerHover: engine.handleHealingPointerHover,
-      clearHealingCursor: engine.clearHealingCursor
+      clearHealingCursor: engine.clearHealingCursor,
+      colorPickTarget: engine.colorPickTarget,
+      colorPickCursor: engine.colorPickCursor,
+      handleColorPickPointerDown: engine.handleColorPickPointerDown,
+      handleColorPickPointerMove: engine.handleColorPickPointerMove,
+      clearColorPickCursor: engine.clearColorPickCursor
     });
     return () => onHealingBridgeChange?.(null);
   }, [
@@ -139,7 +144,12 @@ export function OutputColorPanel({
     engine.handleHealingPointerMove,
     engine.handleHealingPointerUp,
     engine.handleHealingPointerHover,
-    engine.clearHealingCursor
+    engine.clearHealingCursor,
+    engine.colorPickTarget,
+    engine.colorPickCursor,
+    engine.handleColorPickPointerDown,
+    engine.handleColorPickPointerMove,
+    engine.clearColorPickCursor
   ]);
 
   if (!open) return null;

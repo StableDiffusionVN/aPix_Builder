@@ -1,22 +1,26 @@
 # aPix Builder — Review dự án & Kế hoạch phát triển
 
-> Tài liệu tham khảo cho việc triển khai infinity canvas, pipeline đa template, batch và tự động hóa.  
-> Phiên bản: 2026-06-10 · Trạng thái app: v0.1
+> Tài liệu tham khảo nội bộ — kế hoạch phát triển (không đồng bộ git).  
+> Cập nhật: 2026-06-13 · Trạng thái app: **v1.0**
 
 ---
 
-## 1. Hiện trạng (v0.1)
+## 1. Hiện trạng (v1.0)
 
-**aPix Builder** là ứng dụng web runner workflow ComfyUI/RunningHub với UI form-driven (YAML → input fields), không phải node graph editor ComfyUI gốc.
+**aPix Builder v1.0** là ứng dụng web runner workflow ComfyUI/RunningHub với UI form-driven (YAML → input fields), không phải node graph editor ComfyUI gốc.
 
 ### Điểm mạnh đã có
 
 | Lớp | Nội dung |
 |-----|----------|
 | **3 chế độ thực thi** | ComfyUI local, RunningHub Workflow (template YAML), RunningHub App (WebApp nodes) |
-| **Template system** | `app_build.yaml` + `api.json`, scope `local` / `runninghub-wf`, editor trực quan |
-| **Input phong phú** | DynamicField (model scan, image/mask, menu-sub, menu `Nhãn:giá trị`) |
-| **Run & UX** | SSE progress (ComfyUI), queue FIFO client, history 500 mục, preset, drag output→input |
+| **Template system** | `app_build.yaml` + `api.json`, scope `local` / `runninghub-wf`, Template Editor trực quan |
+| **Template mặc định** | `klein-edit-image`, `sdvn-klein-upscale-ultimate` (local); `klein-edit-image-lora`, `sdvn-klein-upscale-ultimate` (RH Wf) |
+| **RunningHub** | Lưu/bookmark WebApp vào `config/templates-rh/apps.json`, multi API Key + rotate/failover |
+| **Input phong phú** | DynamicField (model scan, image/mask, menu-sub, note markdown) |
+| **Run & UX** | SSE progress, queue FIFO client, history 500 mục, preset, drag output→input, Run Log panel (F1) |
+| **Image tooling** | Image Editor (crop, curves, HSL, brush, healing), Mask Editor, color adjust trên output |
+| **i18n** | Giao diện tiếng Việt / tiếng Anh |
 | **Backend** | Proxy ComfyUI, patch workflow, RunningHub client, lưu `input/` / `output/` |
 
 ### Cấu trúc dự án
@@ -26,22 +30,24 @@
 | Frontend | `src/` | React 19 + Vite, `App.jsx` orchestrator |
 | Backend | `server/` | Node HTTP `:8787`, proxy & execution |
 | Template local | `config/default/`, `config/templates/` | ComfyUI YAML + api.json |
-| Template RH Wf | `config/default-rh/` + `config/templates-rh/` | RunningHub workflow templates |
+| Template RH Wf | `config/default-rh/` + `config/templates-rh/` | RunningHub workflow templates + saved WebApp list |
 | Runtime | `input/`, `output/`, `uploads/`, `presets/` | Ảnh, history, preset editor |
+| Legacy RH apps | `rh-apps/` (nếu còn) | Migrate một lần sang `config/templates-rh/` — có thể xóa sau migrate |
 
 ### File then chốt
 
 - Orchestration UI: `src/App.jsx`
 - Template registry: `server/lib/templateService.js`
+- RH saved apps: `src/lib/rhSavedApps.js`, API `config/templates-rh/apps.json`
 - Workflow patching: `server/lib/workflowPatcher.js`
 - HTTP routing: `server/server.js`
-- Run hooks: `src/hooks/useExecution.js`, `src/hooks/useRunningHubExecution.js`
+- Run hooks: `src/hooks/useRunOrchestration.js`, `src/hooks/useExecution.js`, `src/hooks/useRunningHubExecution.js`
 
 ### Hạn chế cấu trúc (liên quan mục tiêu tương lai)
 
 | Vấn đề | Chi tiết |
 |--------|----------|
-| **Monolith App.jsx** | ~1500 dòng, state tập trung — khó gắn canvas đa node |
+| **Monolith App.jsx** | ~2000 dòng, state tập trung — khó gắn canvas đa node |
 | **1 template / lần** | Không có document graph, edge, execution plan |
 | **3 execution model khác nhau** | Local patch JSON vs RH `nodeInfoList` vs RH App — chưa có abstraction “Step” thống nhất |
 | **Queue chỉ trên client** | Mất khi refresh; không batch server-side |

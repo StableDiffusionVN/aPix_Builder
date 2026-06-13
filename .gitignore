@@ -6,9 +6,13 @@ input/
 output/
 config/templates/
 config/templates-rh/
+aPix_builder_pts/package/
 .DS_Store
 *.log
 .env
 .env.*
 !.env.example
 presets/
+# Kế hoạch nội bộ — không đồng bộ git
+docs/DEVELOPMENT-ROADMAP.md
+docs/SMOKE-TEST.md

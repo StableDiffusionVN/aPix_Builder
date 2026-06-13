@@ -1,5 +1,20 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { localizeRuntimeMessage, useI18n } from "../i18n/I18nContext";
+import {
+  buildDefaultRhApps,
+  clearLegacySavedRhApps,
+  DEFAULT_RH_WEBAPP_ID,
+  DEFAULT_RH_WEBAPP_IDS,
+  fetchDefaultRhApps,
+  fetchSavedRhApps,
+  listRhAppOptions,
+  loadLegacySavedRhApps,
+  persistSavedRhApps,
+  refreshDefaultRhApps,
+  removeSavedRhAppFromList,
+  isDefaultRhWebapp,
+  upsertSavedRhAppList
+} from "../lib/rhSavedApps.js";
 import {
   getPrimaryRhApiKey,
   hasRhApiKey,
@@ -9,11 +24,8 @@ import {
 
 export const EXECUTION_MODE_KEY = "comfyui-build:execution-mode";
 export const RUNNINGHUB_STORAGE_KEY = "comfyui-build:runninghub:v1";
-export const DEFAULT_RH_WEBAPP_ID = "2039924771751731201";
+export { DEFAULT_RH_WEBAPP_ID } from "../lib/rhSavedApps.js";
 export const DEFAULT_RH_WF_ID = "2064644362323189762";
-export const RUNNINGHUB_APP_OPTIONS = [
-  { id: DEFAULT_RH_WEBAPP_ID, name: "SDVN Upscale" }
-];
 
 export function loadExecutionMode() {
   const stored = localStorage.getItem(EXECUTION_MODE_KEY);
@@ -72,14 +84,102 @@ export function buildWebappInfo(data = {}, webappId = "") {
 export function useRunningHub() {
   const { locale, t } = useI18n();
   const [settings, setSettings] = useState(loadRunningHubSettings);
+  const [savedWebapps, setSavedWebapps] = useState([]);
+  const [defaultApps, setDefaultApps] = useState(() => buildDefaultRhApps());
+  const [savedAppsReady, setSavedAppsReady] = useState(false);
+  const [savedAppsError, setSavedAppsError] = useState("");
+  const savedWebappsRef = useRef([]);
   const [nodes, setNodes] = useState([]);
   const [webappInfo, setWebappInfo] = useState(null);
   const [nodesLoading, setNodesLoading] = useState(false);
   const [nodesError, setNodesError] = useState("");
+  const webappOptions = listRhAppOptions(defaultApps, savedWebapps);
+
+  useEffect(() => {
+    savedWebappsRef.current = savedWebapps;
+  }, [savedWebapps]);
 
   useEffect(() => {
     localStorage.setItem(RUNNINGHUB_STORAGE_KEY, JSON.stringify(settings));
   }, [settings]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const apps = await fetchDefaultRhApps();
+        if (!cancelled) setDefaultApps(apps);
+      } catch (error) {
+        console.error("Failed to load default RH apps:", error);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    const apiKey = getPrimaryRhApiKey(settings);
+    if (!apiKey?.trim()) return undefined;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const apps = await refreshDefaultRhApps(apiKey);
+        if (!cancelled) setDefaultApps(apps);
+      } catch (error) {
+        console.warn("Failed to refresh default RH app names:", error);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [settings]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      try {
+        let apps = await fetchSavedRhApps();
+        const legacy = loadLegacySavedRhApps().filter(app => !isDefaultRhWebapp(app.id));
+        const hadDefaultBookmarks = apps.some(app => isDefaultRhWebapp(app.id));
+        apps = apps.filter(app => !isDefaultRhWebapp(app.id));
+        if (!apps.length && legacy.length) {
+          apps = await persistSavedRhApps(legacy);
+          clearLegacySavedRhApps();
+        } else if (hadDefaultBookmarks) {
+          apps = await persistSavedRhApps(apps);
+        }
+        if (!cancelled) {
+          setSavedWebapps(apps);
+          setSavedAppsError("");
+          setSavedAppsReady(true);
+        }
+      } catch (error) {
+        console.error("Failed to load RH saved apps from server:", error);
+        if (!cancelled) {
+          setSavedWebapps([]);
+          setSavedAppsError(t("rh.appStorageUnavailable"));
+          setSavedAppsReady(true);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [t]);
+
+  const persistApps = useCallback(async (nextApps) => {
+    const persisted = await persistSavedRhApps(nextApps);
+    setSavedWebapps(persisted);
+    setSavedAppsError("");
+    return persisted;
+  }, []);
 
   const updateSettings = useCallback((patch) => {
     setSettings(current => syncPrimaryApiKey({ ...current, ...patch }));
@@ -133,9 +233,17 @@ export function useRunningHub() {
         throw new Error(text || t("rh.noJsonNodes"));
       }
       if (!response.ok) throw new Error(localizeRuntimeMessage(data.error || data.msg, locale) || t("rh.loadNodesFailed"));
+      const trimmedId = webappId.trim();
       const nextNodes = data.nodes || [];
       setNodes(nextNodes);
-      setWebappInfo(buildWebappInfo(data, webappId.trim()));
+      setWebappInfo(buildWebappInfo(data, trimmedId));
+      const scannedName = String(data.webappName || "").trim();
+      if (scannedName && DEFAULT_RH_WEBAPP_IDS.includes(trimmedId)) {
+        setDefaultApps(current => current.map(app => (
+          app.id === trimmedId ? { ...app, name: scannedName } : app
+        )));
+        refreshDefaultRhApps(apiKey).then(setDefaultApps).catch(() => {});
+      }
       return nextNodes;
     } catch (error) {
       const message = localizeRuntimeMessage(error.message, locale);
@@ -147,11 +255,55 @@ export function useRunningHub() {
     } finally {
       setNodesLoading(false);
     }
-  }, [locale, settings, settings.webappId]);
+  }, [locale, settings, settings.webappId, t]);
+
+  const saveCurrentWebapp = useCallback(async () => {
+    if (!savedAppsReady) {
+      return { ok: false, error: t("rh.appStorageLoading") };
+    }
+    const id = settings.webappId?.trim();
+    if (!id) {
+      return { ok: false, error: t("rh.noWebappId") };
+    }
+    if (isDefaultRhWebapp(id)) {
+      return { ok: false, error: t("rh.defaultAppNoBookmark") };
+    }
+
+    const currentApps = savedWebappsRef.current;
+    if (currentApps.some(app => app.id === id)) {
+      try {
+        const next = removeSavedRhAppFromList(currentApps, id);
+        await persistApps(next);
+        return { ok: true, removed: true };
+      } catch (error) {
+        console.error("Failed to remove RH saved app:", error);
+        return { ok: false, error: t("rh.appSaveFailed") };
+      }
+    }
+
+    const name = webappInfo?.webappName?.trim();
+    if (!name || webappInfo?.webappId !== id) {
+      return { ok: false, error: t("rh.saveAppNeedReload") };
+    }
+
+    try {
+      const next = upsertSavedRhAppList(currentApps, { id, name });
+      await persistApps(next);
+      return { ok: true, removed: false, app: { id, name } };
+    } catch (error) {
+      console.error("Failed to save RH app:", error);
+      return { ok: false, error: t("rh.appSaveFailed") };
+    }
+  }, [persistApps, savedAppsReady, settings.webappId, t, webappInfo]);
 
   return {
     settings,
     updateSettings,
+    savedWebapps,
+    savedAppsReady,
+    savedAppsError,
+    webappOptions,
+    saveCurrentWebapp,
     nodes,
     webappInfo,
     restoreNodes,

@@ -1,15 +1,16 @@
-export const HSL_CHANNEL_SPAN = 60;
+export const HSL_CHANNEL_RADIUS = 32;
 
+// Lightroom-style hue bands: orange covers skin (~12–48°), yellow starts ~40°.
 export const COLOR_CHANNELS = [
-  { id: "reds", name: "Reds", center: 0, minHue: 330, maxHue: 30, color: "#ef4444" },
-  { id: "yellows", name: "Yellows", center: 60, minHue: 30, maxHue: 90, color: "#f59e0b" },
-  { id: "greens", name: "Greens", center: 120, minHue: 90, maxHue: 150, color: "#22c55e" },
-  { id: "aquas", name: "Aquas", center: 180, minHue: 150, maxHue: 210, color: "#22d3ee" },
-  { id: "blues", name: "Blues", center: 240, minHue: 210, maxHue: 270, color: "#3b82f6" },
-  { id: "magentas", name: "Magentas", center: 300, minHue: 270, maxHue: 330, color: "#d946ef" }
+  { id: "reds", name: "Red", center: 0, color: "#ef4444", radius: 14 },
+  { id: "oranges", name: "Orange", center: 28, color: "#f97316", radius: 22 },
+  { id: "yellows", name: "Yellow", center: 58, color: "#eab308", radius: 20 },
+  { id: "greens", name: "Green", center: 125, color: "#22c55e", radius: 38 },
+  { id: "aquas", name: "Aqua", center: 175, color: "#06b6d4", radius: 22 },
+  { id: "blues", name: "Blue", center: 220, color: "#3b82f6", radius: 32 },
+  { id: "purples", name: "Purple", center: 275, color: "#a855f7", radius: 22 },
+  { id: "magentas", name: "Magenta", center: 315, color: "#ec4899", radius: 22 }
 ];
-
-export const HSL_CHANNEL_RADIUS = HSL_CHANNEL_SPAN / 2 + 5;
 
 export const DEFAULT_HSL = Object.fromEntries(
   COLOR_CHANNELS.map(channel => [channel.id, { h: 0, s: 0, l: 0 }])
@@ -35,8 +36,12 @@ export const DEFAULT_ADJUSTMENTS = {
   whites: 0,
   blacks: 0,
   grain: 0,
+  grainSize: 50,
+  grainRoughness: 50,
   clarity: 0,
   dehaze: 0,
+  texture: 0,
+  vignette: 0,
   blur: 0,
   cropTop: 0,
   cropRight: 0,
@@ -50,58 +55,399 @@ export const DEFAULT_ADJUSTMENTS = {
   curves: DEFAULT_CURVES
 };
 
+export const PRESET_GROUPS = [
+  { id: "neutral", label: "Neutral" },
+  { id: "portrait", label: "Portrait" },
+  { id: "landscape", label: "Landscape" },
+  { id: "creative", label: "Creative" },
+  { id: "modern", label: "Modern" },
+  { id: "bw", label: "B&W" },
+  { id: "specialty", label: "Specialty" }
+];
+
+function preset(id, name, group, adjustments) {
+  return { id, name, group, adjustments };
+}
+
 export const PRESETS = [
-  {
-    id: "original",
-    name: "Original",
-    adjustments: {
-      luminance: 0, contrast: 0, temperature: 0, tint: 0, vibrance: 0, saturation: 0, hue: 0,
-      highlights: 0, shadows: 0, whites: 0, blacks: 0, clarity: 0, dehaze: 0, blur: 0, invert: false
+  preset("original", "Original", "neutral", {}),
+
+  preset("portrait", "Portrait", "portrait", {
+    luminance: 3,
+    contrast: -5,
+    temperature: 4,
+    tint: 1,
+    vibrance: 5,
+    saturation: -5,
+    highlights: -8,
+    shadows: 10,
+    whites: -5,
+    blacks: 5,
+    clarity: -8,
+    texture: -10
+  }),
+  preset("portrait-soft", "Soft Portrait", "portrait", {
+    luminance: 5,
+    contrast: -10,
+    temperature: 2,
+    tint: 2,
+    vibrance: 3,
+    saturation: -8,
+    highlights: -12,
+    shadows: 12,
+    whites: -8,
+    blacks: 8,
+    clarity: -12,
+    texture: -14
+  }),
+  preset("golden-skin", "Golden Skin", "portrait", {
+    luminance: 2,
+    contrast: -2,
+    temperature: 6,
+    tint: 2,
+    vibrance: 4,
+    saturation: -2,
+    highlights: -5,
+    shadows: 6,
+    clarity: -6,
+    hsl: {
+      oranges: { h: 0, s: -2, l: 4 }
     }
-  },
-  {
-    id: "cinematic",
-    name: "Cinematic",
-    adjustments: {
-      luminance: -5, contrast: 15, temperature: 10, tint: -5, vibrance: 15, saturation: -10, hue: 0,
-      highlights: 5, shadows: 10, whites: -5, blacks: 5, clarity: 15, dehaze: 5, blur: 0, invert: false
+  }),
+
+  preset("landscape", "Landscape", "landscape", {
+    luminance: 2,
+    contrast: 8,
+    vibrance: 14,
+    saturation: 5,
+    highlights: -12,
+    shadows: 10,
+    whites: 3,
+    blacks: -4,
+    clarity: 12,
+    dehaze: 10,
+    hsl: {
+      greens: { h: 0, s: 6, l: 2 },
+      blues: { h: 0, s: 7, l: -2 },
+      aquas: { h: 0, s: 4, l: 0 }
     }
-  },
-  {
-    id: "vintage",
-    name: "Vintage",
-    adjustments: {
-      luminance: 5, contrast: -10, temperature: 15, tint: 10, vibrance: -10, saturation: -15, hue: 5,
-      highlights: -5, shadows: 5, whites: -10, blacks: 10, clarity: -10, dehaze: -5, blur: 0, invert: false
+  }),
+  preset("landscape-autumn", "Autumn", "landscape", {
+    luminance: 1,
+    contrast: 5,
+    temperature: 12,
+    tint: 2,
+    vibrance: 12,
+    saturation: 3,
+    highlights: -8,
+    shadows: 6,
+    clarity: 6,
+    hsl: {
+      oranges: { h: -3, s: 8, l: 2 },
+      yellows: { h: -4, s: 6, l: 1 },
+      reds: { h: 0, s: 5, l: 0 }
     }
-  },
-  {
-    id: "vibrant",
-    name: "Vibrant",
-    adjustments: {
-      luminance: 0, contrast: 10, temperature: 0, tint: 0, vibrance: 30, saturation: 15, hue: 0,
-      highlights: 10, shadows: 5, whites: 10, blacks: -5, clarity: 10, dehaze: 10, blur: 0, invert: false
+  }),
+  preset("landscape-tropical", "Tropical", "landscape", {
+    luminance: 3,
+    contrast: 4,
+    temperature: 2,
+    tint: -2,
+    vibrance: 16,
+    saturation: 6,
+    highlights: -5,
+    clarity: 8,
+    dehaze: 6,
+    hsl: {
+      aquas: { h: 0, s: 8, l: 3 },
+      greens: { h: 2, s: 5, l: 0 },
+      blues: { h: 0, s: 6, l: -1 }
     }
-  },
-  {
-    id: "dramatic",
-    name: "Dramatic",
-    adjustments: {
-      luminance: -10, contrast: 30, temperature: -5, tint: 5, vibrance: 10, saturation: -20, hue: 0,
-      highlights: 15, shadows: -15, whites: 15, blacks: -20, clarity: 25, dehaze: 15, blur: 0, invert: false
+  }),
+
+  preset("cinematic", "Cinematic", "creative", {
+    luminance: -5,
+    contrast: 12,
+    temperature: 6,
+    tint: -5,
+    vibrance: 6,
+    saturation: -6,
+    highlights: 4,
+    shadows: 10,
+    whites: -4,
+    blacks: 5,
+    clarity: 8,
+    dehaze: 4,
+    vignette: -10,
+    hsl: {
+      blues: { h: 4, s: 4, l: -3 },
+      oranges: { h: 0, s: 6, l: 2 }
     }
-  },
-  {
-    id: "blackwhite",
-    name: "B&W",
-    adjustments: {
-      luminance: 0, contrast: 20, temperature: 0, tint: 0, vibrance: -100, saturation: -100, hue: 0,
-      highlights: 0, shadows: 0, whites: 0, blacks: 0, clarity: 15, dehaze: 10, blur: 0, invert: false
+  }),
+  preset("moody", "Moody", "creative", {
+    luminance: -8,
+    contrast: 14,
+    temperature: -4,
+    tint: 2,
+    vibrance: 3,
+    saturation: -8,
+    highlights: -14,
+    shadows: 7,
+    whites: -6,
+    blacks: -9,
+    clarity: 8,
+    vignette: -14
+  }),
+  preset("vintage", "Vintage", "creative", {
+    luminance: 4,
+    contrast: -7,
+    temperature: 10,
+    tint: 5,
+    vibrance: -4,
+    saturation: -10,
+    highlights: -10,
+    shadows: 8,
+    whites: -7,
+    blacks: 12,
+    clarity: -8,
+    grain: 14,
+    grainSize: 58,
+    grainRoughness: 48,
+    vignette: -12
+  }),
+  preset("fade", "Matte Fade", "creative", {
+    luminance: 3,
+    contrast: -10,
+    temperature: 4,
+    saturation: -7,
+    highlights: -9,
+    shadows: 10,
+    blacks: 14,
+    clarity: -8,
+    grain: 8,
+    vignette: -6
+  }),
+  preset("cross-process", "Cross Process", "creative", {
+    luminance: 2,
+    contrast: 8,
+    temperature: -5,
+    tint: 6,
+    vibrance: 8,
+    saturation: 3,
+    highlights: -4,
+    clarity: 5,
+    hsl: {
+      greens: { h: 4, s: 4, l: 0 }
     }
-  }
+  }),
+
+  preset("bright-airy", "Bright & Airy", "modern", {
+    luminance: 10,
+    contrast: -9,
+    temperature: 2,
+    tint: 1,
+    vibrance: 5,
+    saturation: -4,
+    highlights: -16,
+    shadows: 16,
+    whites: -8,
+    blacks: 6,
+    clarity: -10,
+    texture: -6
+  }),
+  preset("deep-rich", "Deep & Rich", "modern", {
+    luminance: -3,
+    contrast: 12,
+    vibrance: 5,
+    saturation: 5,
+    highlights: -6,
+    shadows: 5,
+    blacks: -8,
+    clarity: 10,
+    dehaze: 3
+  }),
+  preset("punchy", "Punchy", "modern", {
+    luminance: 1,
+    contrast: 10,
+    vibrance: 12,
+    saturation: 6,
+    highlights: -4,
+    shadows: 4,
+    whites: 4,
+    blacks: -5,
+    clarity: 10,
+    texture: 6
+  }),
+  preset("vibrant", "Vibrant", "modern", {
+    luminance: 1,
+    contrast: 5,
+    vibrance: 12,
+    saturation: 4,
+    highlights: 2,
+    shadows: 3,
+    whites: 3,
+    blacks: -3,
+    clarity: 5,
+    dehaze: 4
+  }),
+
+  preset("blackwhite", "B&W", "bw", {
+    vibrance: -100,
+    saturation: -100,
+    contrast: 12,
+    clarity: 8,
+    blacks: -4
+  }),
+  preset("bw-contrast", "B&W Contrast", "bw", {
+    vibrance: -100,
+    saturation: -100,
+    contrast: 18,
+    clarity: 10,
+    blacks: -9,
+    whites: 4
+  }),
+  preset("bw-matte", "B&W Matte", "bw", {
+    vibrance: -100,
+    saturation: -100,
+    contrast: -4,
+    blacks: 14,
+    shadows: 6,
+    clarity: -3,
+    grain: 10,
+    grainSize: 52
+  }),
+  preset("bw-silver", "Silver Gelatin", "bw", {
+    vibrance: -100,
+    saturation: -100,
+    contrast: 14,
+    clarity: 12,
+    texture: 5,
+    blacks: -6,
+    grain: 12,
+    grainRoughness: 36
+  }),
+
+  preset("golden-hour", "Golden Hour", "specialty", {
+    luminance: 2,
+    contrast: 4,
+    temperature: 10,
+    tint: 3,
+    vibrance: 6,
+    saturation: 0,
+    highlights: -6,
+    shadows: 5,
+    clarity: 2,
+    vignette: -5,
+    hsl: {
+      oranges: { h: 0, s: 2, l: 2 },
+      yellows: { h: -2, s: 2, l: 1 }
+    }
+  }),
+  preset("cool-nordic", "Cool Nordic", "specialty", {
+    luminance: 2,
+    contrast: 6,
+    temperature: -12,
+    tint: -3,
+    vibrance: 4,
+    saturation: -4,
+    highlights: -5,
+    clarity: 6,
+    dehaze: 7,
+    hsl: {
+      blues: { h: 0, s: 5, l: -2 },
+      aquas: { h: 0, s: 4, l: 0 }
+    }
+  }),
+  preset("street", "Street", "specialty", {
+    luminance: -2,
+    contrast: 10,
+    vibrance: 7,
+    saturation: 2,
+    highlights: -3,
+    shadows: 5,
+    blacks: -6,
+    clarity: 14,
+    texture: 8,
+    dehaze: 3
+  }),
+  preset("food", "Food", "specialty", {
+    luminance: 3,
+    contrast: 3,
+    temperature: 4,
+    vibrance: 10,
+    saturation: 3,
+    highlights: -5,
+    clarity: 6,
+    texture: 4,
+    hsl: {
+      oranges: { h: 0, s: 3, l: 2 },
+      yellows: { h: 0, s: 2, l: 2 }
+    }
+  }),
+  preset("night", "Night", "specialty", {
+    luminance: 6,
+    contrast: 8,
+    temperature: -7,
+    tint: -2,
+    vibrance: 5,
+    saturation: -2,
+    shadows: 14,
+    blacks: -4,
+    clarity: 4,
+    dehaze: -4,
+    vignette: -10
+  }),
+  preset("editorial", "Editorial", "specialty", {
+    luminance: -4,
+    contrast: 12,
+    saturation: -5,
+    highlights: -10,
+    shadows: 4,
+    whites: -3,
+    blacks: -7,
+    clarity: 10,
+    texture: 4,
+    vignette: -8
+  }),
+  preset("dramatic", "Dramatic", "specialty", {
+    luminance: -6,
+    contrast: 16,
+    temperature: -3,
+    tint: 2,
+    vibrance: 4,
+    saturation: -8,
+    highlights: 6,
+    shadows: -5,
+    whites: 7,
+    blacks: -11,
+    clarity: 14,
+    dehaze: 8,
+    vignette: -10
+  })
 ];
 
 export const PREVIEW_MAX_EDGE = 1024;
+export const PREVIEW_INTERACTIVE_MAX_EDGE = 640;
+
+export function getAdjustmentGeometryKey(adjustments, maxEdge = PREVIEW_MAX_EDGE) {
+  if (!adjustments) return "";
+  return [
+    adjustments.cropTop,
+    adjustments.cropRight,
+    adjustments.cropBottom,
+    adjustments.cropLeft,
+    adjustments.rotation,
+    adjustments.flipH,
+    adjustments.flipV,
+    maxEdge
+  ].join("|");
+}
+
+export function canvasToPreviewDataUrl(canvas, { interactive = false } = {}) {
+  return interactive
+    ? canvas.toDataURL("image/jpeg", 0.86)
+    : canvas.toDataURL("image/png");
+}
 
 export function loadImage(src) {
   return new Promise((resolve, reject) => {
@@ -167,53 +513,219 @@ export function hslToRgb(h, s, l) {
   };
 }
 
+export function normalizeHslAdjustments(hsl) {
+  const normalized = {};
+  for (const channel of COLOR_CHANNELS) {
+    const entry = hsl?.[channel.id];
+    normalized[channel.id] = {
+      h: Number(entry?.h) || 0,
+      s: Number(entry?.s) || 0,
+      l: Number(entry?.l) || 0
+    };
+  }
+  return normalized;
+}
+
 export function hueDistance(a, b) {
   const diff = Math.abs(((a - b + 180) % 360) - 180);
   return Math.abs(diff);
 }
 
-export function getHslChannelWeight(hue, center) {
-  const dist = hueDistance(hue, center);
-  if (dist >= HSL_CHANNEL_RADIUS) return 0;
-  const t = 1 - dist / HSL_CHANNEL_RADIUS;
+function smoothstep(value) {
+  const t = clamp(value, 0, 1);
   return t * t * (3 - 2 * t);
 }
 
-export function applyHslChannelMix(hsl, channelAdjusts) {
-  if (!channelAdjusts?.length) return hsl;
+export function getHslChannelWeight(hue, center, radius = HSL_CHANNEL_RADIUS) {
+  const dist = hueDistance(hue, center);
+  if (dist >= radius) return 0;
+  return smoothstep(1 - dist / radius);
+}
 
-  const satGate = Math.min(1, Math.max(hsl.s, 0) / 12);
-  if (satGate <= 0) return hsl;
+export function sampleCanvasPixel(canvas, x, y) {
+  const ctx = canvas?.getContext?.("2d");
+  if (!ctx || !canvas?.width || !canvas?.height) return null;
+  const px = clamp(Math.round(x), 0, canvas.width - 1);
+  const py = clamp(Math.round(y), 0, canvas.height - 1);
+  const data = ctx.getImageData(px, py, 1, 1).data;
+  if (data[3] === 0) return null;
+  return { r: data[0], g: data[1], b: data[2] };
+}
 
+export function getDominantHslChannelId(r, g, b) {
+  const hsl = rgbToHsl(r, g, b);
+  let bestId = COLOR_CHANNELS[0].id;
+  let bestWeight = 0;
+  for (const channel of COLOR_CHANNELS) {
+    const radius = channel.radius ?? HSL_CHANNEL_RADIUS;
+    const weight = getHslChannelWeight(hsl.h, channel.center, radius) * Math.max(hsl.s, 8) / 100;
+    if (weight > bestWeight) {
+      bestWeight = weight;
+      bestId = channel.id;
+    }
+  }
+  return bestId;
+}
+
+export function getCurveSampleFromPixel(r, g, b, channel = "rgb") {
+  if (channel === "red") return { x: r, y: r };
+  if (channel === "green") return { x: g, y: g };
+  if (channel === "blue") return { x: b, y: b };
+  const luma = Math.round(0.2126 * r + 0.7152 * g + 0.0722 * b);
+  return { x: luma, y: luma };
+}
+
+export function upsertCurvePoint(points, sample) {
+  const x = clamp(Math.round(sample.x), 0, 255);
+  const y = clamp(Math.round(sample.y), 0, 255);
+
+  let closestIdx = -1;
+  let minDist = 10;
+  points.forEach((pt, idx) => {
+    const dist = Math.abs(pt.x - x);
+    if (dist < minDist) {
+      minDist = dist;
+      closestIdx = idx;
+    }
+  });
+  if (closestIdx !== -1) {
+    return { points, selectedIndex: closestIdx };
+  }
+
+  let insertIdx = -1;
+  for (let i = 0; i < points.length; i++) {
+    if (x < points[i].x) {
+      insertIdx = i;
+      break;
+    }
+  }
+
+  if (insertIdx > 0) {
+    const prev = points[insertIdx - 1];
+    const next = points[insertIdx];
+    if (x > prev.x + 2 && x < next.x - 2) {
+      const nextPoints = [...points];
+      nextPoints.splice(insertIdx, 0, { x, y });
+      return { points: nextPoints, selectedIndex: insertIdx };
+    }
+    return { points, selectedIndex: x - prev.x < next.x - x ? insertIdx - 1 : insertIdx };
+  }
+
+  return { points, selectedIndex: closestIdx !== -1 ? closestIdx : 0 };
+}
+
+function hslChromaGate(saturation) {
+  return smoothstep(Math.min(1, Math.max(0, saturation) / 18));
+}
+
+function hslLuminanceGate(saturation, lightness) {
+  const satFactor = smoothstep(Math.min(1, Math.max(0, saturation) / 24));
+  const lumFactor = 0.35 + 0.65 * smoothstep(Math.min(1, Math.max(0, lightness) / 100));
+  return Math.max(satFactor, 0.2 * lumFactor);
+}
+
+function applyLuminanceShiftRgb(r, g, b, lumDelta) {
+  const amount = lumDelta * 0.55;
+  const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  const targetLuma = clamp(luma + amount, 0, 255);
+  if (luma <= 0.001) {
+    return { r: targetLuma, g: targetLuma, b: targetLuma };
+  }
+  const scale = targetLuma / luma;
+  return {
+    r: clamp(r * scale, 0, 255),
+    g: clamp(g * scale, 0, 255),
+    b: clamp(b * scale, 0, 255)
+  };
+}
+
+function applySingleChannelHslToRgb(hsl, { h, s, l }) {
+  const hueGate = hslChromaGate(hsl.s);
+  const satGate = hslChromaGate(hsl.s);
+  const lumGate = hslLuminanceGate(hsl.s, hsl.l);
+
+  let nextH = hsl.h;
+  let nextS = hsl.s;
+
+  if (h !== 0) {
+    nextH = hsl.h + h * hueGate;
+  }
+
+  if (s !== 0) {
+    if (s < 0) {
+      nextS = clamp(hsl.s * Math.max(0, 1 + s / 100), 0, 100);
+    } else {
+      const satScale = satGate * (0.35 + 0.65 * (hsl.s / 100));
+      nextS = clamp(hsl.s + s * satScale, 0, 100);
+    }
+  }
+
+  let rgb = hslToRgb(nextH, nextS, hsl.l);
+
+  if (l !== 0) {
+    rgb = applyLuminanceShiftRgb(rgb.r, rgb.g, rgb.b, l * lumGate);
+  }
+
+  return rgb;
+}
+
+export function applyHslChannelMixRgb(r, g, b, channelAdjusts) {
+  if (!channelAdjusts?.length) return { r, g, b };
+
+  const hsl = rgbToHsl(r, g, b);
   let weightSum = 0;
   const weights = channelAdjusts.map(channel => {
-    const weight = getHslChannelWeight(hsl.h, channel.center);
+    const weight = getHslChannelWeight(hsl.h, channel.center, channel.radius ?? HSL_CHANNEL_RADIUS);
     weightSum += weight;
     return weight;
   });
-  if (weightSum <= 0) return hsl;
+  if (weightSum <= 0) return { r, g, b };
 
-  let deltaH = 0;
-  let deltaS = 0;
-  let deltaL = 0;
+  let outR = 0;
+  let outG = 0;
+  let outB = 0;
+
   for (let i = 0; i < channelAdjusts.length; i++) {
-    const blend = weights[i] / weightSum;
-    deltaH += channelAdjusts[i].h * blend;
-    deltaS += channelAdjusts[i].s * blend;
-    deltaL += channelAdjusts[i].l * blend;
+    const weight = weights[i] / weightSum;
+    if (weight <= 0) continue;
+    const adjust = channelAdjusts[i];
+    if (adjust.h === 0 && adjust.s === 0 && adjust.l === 0) {
+      outR += r * weight;
+      outG += g * weight;
+      outB += b * weight;
+      continue;
+    }
+    const shifted = applySingleChannelHslToRgb(hsl, adjust);
+    outR += shifted.r * weight;
+    outG += shifted.g * weight;
+    outB += shifted.b * weight;
   }
 
-  return {
-    h: hsl.h + deltaH * satGate,
-    s: hsl.s + deltaS * satGate,
-    l: hsl.l + deltaL * satGate
-  };
+  return { r: outR, g: outG, b: outB };
+}
+
+/** @deprecated Use applyHslChannelMixRgb for Lightroom-style weighted RGB blending. */
+export function applyHslChannelMix(hsl, channelAdjusts) {
+  const rgb = hslToRgb(hsl.h, hsl.s, hsl.l);
+  const mixed = applyHslChannelMixRgb(rgb.r, rgb.g, rgb.b, channelAdjusts);
+  return rgbToHsl(mixed.r, mixed.g, mixed.b);
 }
 
 export function isCurveActive(points) {
   if (!points) return false;
   if (points.length !== 2) return true;
   return points[0].y !== 0 || points[1].y !== 255;
+}
+
+export function getCurvePoint(curves, channel, index) {
+  if (index == null || !curves?.[channel]) return null;
+  const point = curves[channel][index];
+  if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.y)) return null;
+  return point;
+}
+
+function getPipelineContext(canvas) {
+  return canvas.getContext("2d", { willReadFrequently: true });
 }
 
 export function getSplineLut(points) {
@@ -508,6 +1020,431 @@ export function drawHistogram(canvas, histData) {
   context.globalCompositeOperation = "source-over";
 }
 
+const SRGB_TO_LINEAR = new Float32Array(256);
+const LINEAR_TO_SRGB = new Uint8Array(4096);
+
+for (let i = 0; i < 256; i++) {
+  const c = i / 255;
+  SRGB_TO_LINEAR[i] = c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+}
+
+for (let i = 0; i < 4096; i++) {
+  const linear = i / 4095;
+  const srgb = linear <= 0.0031308
+    ? linear * 12.92
+    : 1.055 * (linear ** (1 / 2.4)) - 0.055;
+  LINEAR_TO_SRGB[i] = clamp(Math.round(srgb * 255), 0, 255);
+}
+
+function srgbByteToLinear(value) {
+  return SRGB_TO_LINEAR[clamp(Math.round(value), 0, 255)];
+}
+
+function linearToSrgbByte(value) {
+  const normalized = clamp(value, 0, 1);
+  return LINEAR_TO_SRGB[clamp(Math.round(normalized * 4095), 0, 4095)];
+}
+
+function pipelineSmoothstep(edge0, edge1, x) {
+  const t = clamp((x - edge0) / (edge1 - edge0 || 1), 0, 1);
+  return t * t * (3 - 2 * t);
+}
+
+function mulberry32(seed) {
+  let state = seed >>> 0;
+  return () => {
+    state = (state + 0x6D2B79F5) >>> 0;
+    let t = Math.imul(state ^ (state >>> 15), 1 | state);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function applyWhiteBalanceLinear(r, g, b, temperature, tint) {
+  const temp = temperature / 100;
+  const tintNorm = tint / 100;
+  return {
+    r: r * (1 + temp * 0.18),
+    g: g * (1 + tintNorm * 0.1 - temp * 0.025),
+    b: b * (1 - temp * 0.18)
+  };
+}
+
+function applyExposureLinear(r, g, b, luminance) {
+  if (luminance === 0) return { r, g, b };
+  // Slider -100..+100 maps to 0..220% brightness (legacy CSS filter scale).
+  // EV-style 2^(L/20) blew highlights ~4× faster at small values (+10 → +41% vs +10%).
+  const gain = clamp(1 + luminance / 100, 0, 2.2);
+  return { r: r * gain, g: g * gain, b: b * gain };
+}
+
+function applyContrastLinear(r, g, b, contrast) {
+  if (contrast === 0) return { r, g, b };
+  // Soft contrast around mid-gray; +100 ≈ 140% (legacy CSS hit 200% in display filter space).
+  const factor = 1 + (contrast / 100) * 0.4;
+  const pivot = 0.5;
+  const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  const newLuma = pivot + (luma - pivot) * factor;
+  if (luma <= 1e-6) return { r: newLuma, g: newLuma, b: newLuma };
+  const scale = newLuma / luma;
+  return { r: r * scale, g: g * scale, b: b * scale };
+}
+
+function perceptualLumaFromLinear(r, g, b) {
+  const rs = linearToSrgbByte(r) / 255;
+  const gs = linearToSrgbByte(g) / 255;
+  const bs = linearToSrgbByte(b) / 255;
+  return clamp(0.299 * rs + 0.587 * gs + 0.114 * bs, 0, 1);
+}
+
+function applyToneRangesLinear(r, g, b, highlights, shadows, whites, blacks) {
+  const luma = clamp(0.2126 * r + 0.7152 * g + 0.0722 * b, 0, 1);
+  const y = perceptualLumaFromLinear(r, g, b);
+
+  // Legacy additive tone shifts (~45/255 max) with soft power-curve masks.
+  const highlightsVal = highlights * 0.0016;
+  const shadowsVal = shadows * 0.0016;
+  const whitesVal = whites * 0.0019;
+  const blacksVal = blacks * 0.0019;
+
+  let delta = 0;
+  if (highlights !== 0 && y > 0.2) {
+    delta += highlightsVal * ((y - 0.2) / 0.8) ** 1.5;
+  }
+  if (shadows !== 0 && y < 0.8) {
+    delta += shadowsVal * ((0.8 - y) / 0.8) ** 1.5;
+  }
+  if (whites !== 0 && y > 0.5) {
+    delta += whitesVal * ((y - 0.5) / 0.5) ** 2;
+  }
+  if (blacks !== 0 && y < 0.4) {
+    delta += blacksVal * ((0.4 - y) / 0.4) ** 2;
+  }
+
+  if (Math.abs(delta) < 1e-8) return { r, g, b };
+  const newLuma = clamp(luma + delta, 0, 1);
+  if (luma <= 1e-6) return { r: newLuma, g: newLuma, b: newLuma };
+  const scale = newLuma / luma;
+  return { r: r * scale, g: g * scale, b: b * scale };
+}
+
+function applySaturationAndVibranceLinear(r, g, b, saturation, vibrance) {
+  if (saturation === 0 && vibrance === 0) return { r, g, b };
+  const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+
+  // -100 → 0 (full B&W), 0 → 1 (unchanged). Positive boost stays softer than desat.
+  const desatFloor = saturation <= 0 ? Math.max(0, 1 + saturation / 100) : 0;
+  let satFactor = saturation < 0
+    ? 1 + saturation / 100
+    : 1 + saturation / 120;
+
+  if (vibrance !== 0) {
+    const hsl = rgbToHsl(r * 255, g * 255, b * 255);
+    const satNorm = hsl.s / 100;
+    const skinProtect = 1 - pipelineSmoothstep(
+      0,
+      24,
+      hueDistance(hsl.h, 28)
+    ) * 0.65;
+    const vibranceDivisor = vibrance < 0 ? 100 : 120;
+    const vibranceExtra = (vibrance / vibranceDivisor) * (1 - satNorm) ** 2 * skinProtect;
+    satFactor += vibranceExtra;
+  }
+
+  satFactor = clamp(satFactor, desatFloor, 2.2);
+  if (satFactor <= 1e-6) return { r: luma, g: luma, b: luma };
+
+  return {
+    r: luma + (r - luma) * satFactor,
+    g: luma + (g - luma) * satFactor,
+    b: luma + (b - luma) * satFactor
+  };
+}
+
+function applyGlobalHueLinear(r, g, b, hue) {
+  if (hue === 0) return { r, g, b };
+  const hsl = rgbToHsl(r * 255, g * 255, b * 255);
+  const rgb = hslToRgb(hsl.h + hue, hsl.s, hsl.l);
+  return { r: rgb.r / 255, g: rgb.g / 255, b: rgb.b / 255 };
+}
+
+function applyDehazeLinear(r, g, b, dehaze) {
+  if (dehaze === 0) return { r, g, b };
+  const amount = dehaze / 100;
+  const dark = Math.min(r, g, b);
+  const hazeWeight = pipelineSmoothstep(0.35, 0.92, dark);
+  const contrast = 1 + amount * 0.55 * hazeWeight;
+  const blackShift = -amount * 0.025;
+  const sat = 1 + amount * 0.22 * hazeWeight;
+  const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  let nr = luma + (r - luma) * sat;
+  let ng = luma + (g - luma) * sat;
+  let nb = luma + (b - luma) * sat;
+  nr = ((nr - 0.5) * contrast + 0.5) + blackShift;
+  ng = ((ng - 0.5) * contrast + 0.5) + blackShift;
+  nb = ((nb - 0.5) * contrast + 0.5) + blackShift;
+  return { r: nr, g: ng, b: nb };
+}
+
+function buildCurveLuts(curves) {
+  const lutRGB = getSplineLut(curves.rgb);
+  const lutRedOnly = getSplineLut(curves.red);
+  const lutGreenOnly = getSplineLut(curves.green);
+  const lutBlueOnly = getSplineLut(curves.blue);
+  const lutR = new Uint8Array(256);
+  const lutG = new Uint8Array(256);
+  const lutB = new Uint8Array(256);
+  for (let i = 0; i < 256; i++) {
+    lutR[i] = lutRGB[lutRedOnly[i]];
+    lutG[i] = lutRGB[lutGreenOnly[i]];
+    lutB[i] = lutRGB[lutBlueOnly[i]];
+  }
+  return { lutR, lutG, lutB };
+}
+
+function applyCurveLinear(r, g, b, lutR, lutG, lutB) {
+  return {
+    r: srgbByteToLinear(lutR[linearToSrgbByte(r)]),
+    g: srgbByteToLinear(lutG[linearToSrgbByte(g)]),
+    b: srgbByteToLinear(lutB[linearToSrgbByte(b)])
+  };
+}
+
+function boxBlurRgb(source, target, width, height, radius) {
+  const temp = new Float32Array(width * height * 3);
+  const window = radius * 2 + 1;
+  for (let c = 0; c < 3; c++) {
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        let sum = 0;
+        for (let k = -radius; k <= radius; k++) {
+          sum += source[(y * width + clamp(x + k, 0, width - 1)) * 4 + c];
+        }
+        temp[(y * width + x) * 3 + c] = sum / window;
+      }
+    }
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        let sum = 0;
+        for (let k = -radius; k <= radius; k++) {
+          sum += temp[(clamp(y + k, 0, height - 1) * width + x) * 3 + c];
+        }
+        target[(y * width + x) * 4 + c] = sum / window;
+      }
+    }
+  }
+}
+
+function applyClarityPass(data, width, height, clarity, scale) {
+  if (clarity === 0) return;
+  const radius = Math.max(1, Math.round((Math.abs(clarity) / 100) * 10 * Math.max(scale, 0.35)));
+  const strength = clarity / 100 * 0.75;
+  const original = new Uint8ClampedArray(data);
+  const blurred = new Float32Array(data.length);
+  boxBlurRgb(original, blurred, width, height, radius);
+  for (let i = 0; i < data.length; i += 4) {
+    const luma = (0.2126 * original[i] + 0.7152 * original[i + 1] + 0.0722 * original[i + 2]) / 255;
+    const midWeight = 4 * luma * (1 - luma);
+    data[i] = clamp(original[i] + strength * midWeight * (original[i] - blurred[i]), 0, 255);
+    data[i + 1] = clamp(original[i + 1] + strength * midWeight * (original[i + 1] - blurred[i + 1]), 0, 255);
+    data[i + 2] = clamp(original[i + 2] + strength * midWeight * (original[i + 2] - blurred[i + 2]), 0, 255);
+  }
+}
+
+function applyTexturePass(data, width, height, texture, scale) {
+  if (texture === 0) return;
+  const radius = Math.max(1, Math.round(2 * Math.max(scale, 0.35)));
+  const amount = texture / 100 * 0.45;
+  const original = new Uint8ClampedArray(data);
+  const blurred = new Float32Array(data.length);
+  boxBlurRgb(original, blurred, width, height, radius);
+  for (let i = 0; i < data.length; i += 4) {
+    data[i] = clamp(original[i] + amount * (original[i] - blurred[i]), 0, 255);
+    data[i + 1] = clamp(original[i + 1] + amount * (original[i + 1] - blurred[i + 1]), 0, 255);
+    data[i + 2] = clamp(original[i + 2] + amount * (original[i + 2] - blurred[i + 2]), 0, 255);
+  }
+}
+
+function applyVignettePass(data, width, height, vignette) {
+  if (vignette === 0) return;
+  const amount = vignette / 100;
+  const cx = width * 0.5;
+  const cy = height * 0.5;
+  const maxDist = Math.sqrt(cx * cx + cy * cy) || 1;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const idx = (y * width + x) * 4;
+      const dist = Math.sqrt((x - cx) ** 2 + (y - cy) ** 2) / maxDist;
+      const shade = 1 - amount * 0.65 * pipelineSmoothstep(0.35, 1, dist);
+      data[idx] = clamp(data[idx] * shade, 0, 255);
+      data[idx + 1] = clamp(data[idx + 1] * shade, 0, 255);
+      data[idx + 2] = clamp(data[idx + 2] * shade, 0, 255);
+    }
+  }
+}
+
+function applyGrainPass(data, width, height, grain, grainSize, grainRoughness, seed) {
+  if (grain === 0) return;
+  const rand = mulberry32(seed);
+  const sizeScale = 0.5 + (grainSize / 100) * 1.5;
+  const roughness = grainRoughness / 100;
+  const strength = grain * 0.75;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const idx = (y * width + x) * 4;
+      const cellX = Math.floor(x / sizeScale);
+      const cellY = Math.floor(y / sizeScale);
+      const coarse = (mulberry32((cellX + 1) * 374761 + (cellY + 1) * 668265 + seed)() - 0.5) * 2;
+      const fine = (rand() - 0.5) * 2;
+      const noise = coarse * roughness + fine * (1 - roughness * 0.5);
+      const luma = (0.2126 * data[idx] + 0.7152 * data[idx + 1] + 0.0722 * data[idx + 2]) / 255;
+      const lumaWeight = 0.35 + 0.65 * (4 * luma * (1 - luma));
+      const delta = noise * strength * 0.35 * lumaWeight;
+      data[idx] = clamp(data[idx] + delta, 0, 255);
+      data[idx + 1] = clamp(data[idx + 1] + delta * 0.92, 0, 255);
+      data[idx + 2] = clamp(data[idx + 2] + delta * 0.88, 0, 255);
+    }
+  }
+}
+
+export function needsColorPipeline(adjustments) {
+  if (!adjustments) return false;
+  if (adjustments.invert) return true;
+  if (adjustments.luminance !== 0 || adjustments.contrast !== 0) return true;
+  if (adjustments.temperature !== 0 || adjustments.tint !== 0) return true;
+  if (adjustments.vibrance !== 0 || adjustments.saturation !== 0 || adjustments.hue !== 0) return true;
+  if (adjustments.highlights !== 0 || adjustments.shadows !== 0 || adjustments.whites !== 0 || adjustments.blacks !== 0) return true;
+  if (adjustments.grain !== 0 || adjustments.clarity !== 0 || adjustments.dehaze !== 0) return true;
+  if (adjustments.texture !== 0 || adjustments.vignette !== 0) return true;
+  if (adjustments.curves && (
+    isCurveActive(adjustments.curves.rgb)
+    || isCurveActive(adjustments.curves.red)
+    || isCurveActive(adjustments.curves.green)
+    || isCurveActive(adjustments.curves.blue)
+  )) return true;
+  return COLOR_CHANNELS.some(channel => {
+    const entry = adjustments.hsl?.[channel.id];
+    return entry && (entry.h !== 0 || entry.s !== 0 || entry.l !== 0);
+  });
+}
+
+export function applyColorPipeline(imageData, adjustments, { scale = 1, seed = 1, interactive = false } = {}) {
+  const { data, width, height } = imageData;
+  const activeHslChannels = COLOR_CHANNELS.filter(channel => {
+    const entry = adjustments.hsl?.[channel.id];
+    return entry && (entry.h !== 0 || entry.s !== 0 || entry.l !== 0);
+  });
+  const activeChannelAdjusts = activeHslChannels.length
+    ? activeHslChannels.map(channel => ({
+      center: channel.center,
+      radius: channel.radius ?? HSL_CHANNEL_RADIUS,
+      h: adjustments.hsl[channel.id].h,
+      s: adjustments.hsl[channel.id].s,
+      l: adjustments.hsl[channel.id].l
+    }))
+    : null;
+  const hasCurves = adjustments.curves && (
+    isCurveActive(adjustments.curves.rgb)
+    || isCurveActive(adjustments.curves.red)
+    || isCurveActive(adjustments.curves.green)
+    || isCurveActive(adjustments.curves.blue)
+  );
+  const curveLuts = hasCurves ? buildCurveLuts(adjustments.curves) : null;
+
+  for (let index = 0; index < data.length; index += 4) {
+    if (data[index + 3] === 0) continue;
+    let r = srgbByteToLinear(data[index]);
+    let g = srgbByteToLinear(data[index + 1]);
+    let b = srgbByteToLinear(data[index + 2]);
+
+    ({ r, g, b } = applyWhiteBalanceLinear(r, g, b, adjustments.temperature, adjustments.tint));
+    ({ r, g, b } = applyExposureLinear(r, g, b, adjustments.luminance));
+    ({ r, g, b } = applyContrastLinear(r, g, b, adjustments.contrast));
+    if (curveLuts) ({ r, g, b } = applyCurveLinear(r, g, b, curveLuts.lutR, curveLuts.lutG, curveLuts.lutB));
+    ({ r, g, b } = applyToneRangesLinear(
+      r, g, b,
+      adjustments.highlights,
+      adjustments.shadows,
+      adjustments.whites,
+      adjustments.blacks
+    ));
+    ({ r, g, b } = applySaturationAndVibranceLinear(r, g, b, adjustments.saturation, adjustments.vibrance));
+    ({ r, g, b } = applyGlobalHueLinear(r, g, b, adjustments.hue));
+    if (activeChannelAdjusts) {
+      const rgb = applyHslChannelMixRgb(r * 255, g * 255, b * 255, activeChannelAdjusts);
+      r = rgb.r / 255;
+      g = rgb.g / 255;
+      b = rgb.b / 255;
+    }
+    ({ r, g, b } = applyDehazeLinear(r, g, b, adjustments.dehaze));
+    if (adjustments.invert) {
+      r = 1 - r;
+      g = 1 - g;
+      b = 1 - b;
+    }
+    data[index] = linearToSrgbByte(r);
+    data[index + 1] = linearToSrgbByte(g);
+    data[index + 2] = linearToSrgbByte(b);
+  }
+
+  if (!interactive) {
+    applyClarityPass(data, width, height, adjustments.clarity, scale);
+    applyTexturePass(data, width, height, adjustments.texture, scale);
+    applyVignettePass(data, width, height, adjustments.vignette);
+    applyGrainPass(
+      data,
+      width,
+      height,
+      adjustments.grain,
+      adjustments.grainSize ?? 50,
+      adjustments.grainRoughness ?? 50,
+      seed
+    );
+  }
+}
+
+export function applyColorAdjustmentsToCanvas(sourceCanvas, targetCanvas, adjustments, {
+  scale = 1,
+  seed = 1,
+  interactive = false,
+  skipBlur = false
+} = {}) {
+  if (!sourceCanvas || !targetCanvas) return null;
+  const width = sourceCanvas.width;
+  const height = sourceCanvas.height;
+  if (!width || !height) return null;
+
+  if (targetCanvas.width !== width || targetCanvas.height !== height) {
+    targetCanvas.width = width;
+    targetCanvas.height = height;
+  }
+
+  const ctx = getPipelineContext(targetCanvas);
+  if (!ctx) return null;
+  ctx.drawImage(sourceCanvas, 0, 0);
+
+  if (needsColorPipeline(adjustments)) {
+    const imageData = ctx.getImageData(0, 0, width, height);
+    applyColorPipeline(imageData, adjustments, { scale, seed, interactive });
+    ctx.putImageData(imageData, 0, 0);
+  }
+
+  if (!skipBlur && !interactive && adjustments.blur > 0) {
+    const blurCanvas = document.createElement("canvas");
+    blurCanvas.width = width;
+    blurCanvas.height = height;
+    const blurCtx = blurCanvas.getContext("2d");
+    if (blurCtx) {
+      blurCtx.filter = `blur(${adjustments.blur * scale}px)`;
+      blurCtx.drawImage(targetCanvas, 0, 0);
+      ctx.clearRect(0, 0, width, height);
+      ctx.drawImage(blurCanvas, 0, 0);
+    }
+  }
+
+  return { width, height, scale };
+}
+
 export function getOutputGeometry(image, adjustments) {
   if (!image) return null;
   const cropLeft = clampCrop(adjustments.cropLeft) / 100;
@@ -529,180 +1466,80 @@ export function getOutputGeometry(image, adjustments) {
   };
 }
 
-export function applyImageAdjustments(image, adjustments, targetCanvas, { fullResolution = false } = {}) {
-  const geometry = getOutputGeometry(image, adjustments);
+export function applyImageAdjustments(image, adjustments, targetCanvas, {
+  fullResolution = false,
+  maxEdge = fullResolution ? Infinity : PREVIEW_MAX_EDGE,
+  interactive = false,
+  skipColorPipeline = false,
+  skipBlur = false,
+  ignoreCrop = false,
+  onAfterDraw = null,
+  seed = 1
+} = {}) {
+  const geomAdj = ignoreCrop
+    ? {
+      ...adjustments,
+      cropTop: 0,
+      cropRight: 0,
+      cropBottom: 0,
+      cropLeft: 0,
+      rotation: 0,
+      flipH: false,
+      flipV: false
+    }
+    : adjustments;
+  const geometry = getOutputGeometry(image, geomAdj);
   if (!image || !targetCanvas || !geometry) return null;
 
   let scale = 1;
-  if (!fullResolution) {
+  if (!fullResolution && Number.isFinite(maxEdge)) {
     const longest = Math.max(geometry.width, geometry.height);
-    if (longest > PREVIEW_MAX_EDGE) {
-      scale = PREVIEW_MAX_EDGE / longest;
+    if (longest > maxEdge) {
+      scale = maxEdge / longest;
     }
   }
   const width = Math.max(1, Math.round(geometry.width * scale));
   const height = Math.max(1, Math.round(geometry.height * scale));
 
-  targetCanvas.width = width;
-  targetCanvas.height = height;
-  const ctx = targetCanvas.getContext("2d");
+  if (targetCanvas.width !== width || targetCanvas.height !== height) {
+    targetCanvas.width = width;
+    targetCanvas.height = height;
+  }
+  const ctx = getPipelineContext(targetCanvas);
   if (!ctx) return null;
 
   ctx.clearRect(0, 0, width, height);
   ctx.save();
   ctx.translate(width / 2, height / 2);
-  ctx.rotate((adjustments.rotation * Math.PI) / 180);
-  ctx.scale(adjustments.flipH ? -1 : 1, adjustments.flipV ? -1 : 1);
-
-  const brightness = clamp(100 + adjustments.luminance + adjustments.dehaze * 0.15, 0, 220);
-  const contrast = clamp(100 + adjustments.contrast + adjustments.clarity * 0.35 + adjustments.dehaze * 0.45, 0, 240);
-  const saturation = clamp(100 + adjustments.saturation + adjustments.vibrance * 0.6, 0, 240);
-  const filters = [`brightness(${brightness}%)`, `contrast(${contrast}%)`, `saturate(${saturation}%)`];
-  if (adjustments.blur > 0) filters.push(`blur(${adjustments.blur * scale}px)`);
-  if (adjustments.hue) filters.push(`hue-rotate(${adjustments.hue}deg)`);
-  if (adjustments.invert) filters.push("invert(1)");
-  ctx.filter = filters.join(" ");
+  ctx.rotate((geomAdj.rotation * Math.PI) / 180);
+  ctx.scale(geomAdj.flipH ? -1 : 1, geomAdj.flipV ? -1 : 1);
 
   const dw = geometry.sw * scale;
   const dh = geometry.sh * scale;
   ctx.drawImage(image, geometry.sx, geometry.sy, geometry.sw, geometry.sh, -dw / 2, -dh / 2, dw, dh);
   ctx.restore();
-  ctx.filter = "none";
 
-  const activeHslChannels = COLOR_CHANNELS.filter(channel => {
-    const channelAdjust = adjustments.hsl[channel.id];
-    return channelAdjust.h !== 0 || channelAdjust.s !== 0 || channelAdjust.l !== 0;
-  });
-  const hasCurves = adjustments.curves && (
-    isCurveActive(adjustments.curves.rgb)
-    || isCurveActive(adjustments.curves.red)
-    || isCurveActive(adjustments.curves.green)
-    || isCurveActive(adjustments.curves.blue)
-  );
-  const needsPixelPass = adjustments.temperature !== 0
-    || adjustments.tint !== 0
-    || adjustments.grain > 0
-    || adjustments.clarity !== 0
-    || adjustments.dehaze !== 0
-    || adjustments.highlights !== 0
-    || adjustments.shadows !== 0
-    || adjustments.whites !== 0
-    || adjustments.blacks !== 0
-    || activeHslChannels.length > 0
-    || hasCurves;
+  if (onAfterDraw) {
+    onAfterDraw(ctx, scale);
+  }
 
-  if (needsPixelPass) {
-    const needsHsl = activeHslChannels.length > 0;
+  if (!skipColorPipeline && needsColorPipeline(adjustments)) {
     const imageData = ctx.getImageData(0, 0, width, height);
-    const data = imageData.data;
-    const tempShift = adjustments.temperature * 0.42;
-    const tintShift = adjustments.tint * 0.35;
-    const grainStrength = adjustments.grain * 0.9;
-    const dehazeBias = adjustments.dehaze * 0.18;
-    const clarityBias = adjustments.clarity * 0.12;
-
-    const rShift = tempShift + dehazeBias;
-    const bShift = -(tempShift - dehazeBias);
-    const cb = clarityBias / 64;
-
-    const activeChannelAdjusts = needsHsl
-      ? activeHslChannels.map(channel => ({
-        center: channel.center,
-        h: adjustments.hsl[channel.id].h,
-        s: adjustments.hsl[channel.id].s,
-        l: adjustments.hsl[channel.id].l
-      }))
-      : null;
-
-    const highlightsVal = adjustments.highlights * 0.45;
-    const shadowsVal = adjustments.shadows * 0.45;
-    const whitesVal = adjustments.whites * 0.55;
-    const blacksVal = adjustments.blacks * 0.55;
-    const hasLightAdjustments = highlightsVal !== 0 || shadowsVal !== 0 || whitesVal !== 0 || blacksVal !== 0;
-
-    let lutR;
-    let lutG;
-    let lutB;
-    if (hasCurves) {
-      const lutRGB = getSplineLut(adjustments.curves.rgb);
-      const lutRedOnly = getSplineLut(adjustments.curves.red);
-      const lutGreenOnly = getSplineLut(adjustments.curves.green);
-      const lutBlueOnly = getSplineLut(adjustments.curves.blue);
-
-      lutR = new Uint8Array(256);
-      lutG = new Uint8Array(256);
-      lutB = new Uint8Array(256);
-
-      for (let i = 0; i < 256; i++) {
-        lutR[i] = lutRGB[lutRedOnly[i]];
-        lutG[i] = lutRGB[lutGreenOnly[i]];
-        lutB[i] = lutRGB[lutBlueOnly[i]];
-      }
-    }
-
-    for (let index = 0; index < data.length; index += 4) {
-      if (data[index + 3] === 0) continue;
-      let r = data[index];
-      let g = data[index + 1];
-      let b = data[index + 2];
-
-      r += rShift;
-      b += bShift;
-      g += tintShift;
-
-      if (clarityBias) {
-        r += cb * (r - 128);
-        g += cb * (g - 128);
-        b += cb * (b - 128);
-      }
-
-      if (hasLightAdjustments) {
-        const y = (0.299 * r + 0.587 * g + 0.114 * b) / 255.0;
-        let shift = 0;
-        if (highlightsVal !== 0 && y > 0.2) {
-          shift += highlightsVal * Math.pow((y - 0.2) / 0.8, 1.5);
-        }
-        if (shadowsVal !== 0 && y < 0.8) {
-          shift += shadowsVal * Math.pow((0.8 - y) / 0.8, 1.5);
-        }
-        if (whitesVal !== 0 && y > 0.5) {
-          shift += whitesVal * Math.pow((y - 0.5) / 0.5, 2);
-        }
-        if (blacksVal !== 0 && y < 0.4) {
-          shift += blacksVal * Math.pow((0.4 - y) / 0.4, 2);
-        }
-        r += shift;
-        g += shift;
-        b += shift;
-      }
-
-      if (needsHsl) {
-        const hsl = rgbToHsl(r, g, b);
-        const mixed = applyHslChannelMix(hsl, activeChannelAdjusts);
-        const shifted = hslToRgb(mixed.h, mixed.s, mixed.l);
-        r = shifted.r;
-        g = shifted.g;
-        b = shifted.b;
-      }
-
-      if (hasCurves) {
-        r = lutR[clamp(Math.round(r), 0, 255)];
-        g = lutG[clamp(Math.round(g), 0, 255)];
-        b = lutB[clamp(Math.round(b), 0, 255)];
-      }
-
-      if (grainStrength > 0) {
-        const noise = (Math.random() - 0.5) * grainStrength;
-        r += noise;
-        g += noise;
-        b += noise;
-      }
-
-      data[index] = clamp(Math.round(r), 0, 255);
-      data[index + 1] = clamp(Math.round(g), 0, 255);
-      data[index + 2] = clamp(Math.round(b), 0, 255);
-    }
+    applyColorPipeline(imageData, adjustments, { scale, seed, interactive });
     ctx.putImageData(imageData, 0, 0);
+  }
+
+  if (!skipBlur && !interactive && adjustments.blur > 0) {
+    const blurCanvas = document.createElement("canvas");
+    blurCanvas.width = width;
+    blurCanvas.height = height;
+    const blurCtx = blurCanvas.getContext("2d");
+    if (blurCtx) {
+      blurCtx.filter = `blur(${adjustments.blur * scale}px)`;
+      blurCtx.drawImage(targetCanvas, 0, 0);
+      ctx.clearRect(0, 0, width, height);
+      ctx.drawImage(blurCanvas, 0, 0);
+    }
   }
 
   return { width, height, scale };
@@ -710,6 +1547,58 @@ export function applyImageAdjustments(image, adjustments, targetCanvas, { fullRe
 
 export function cloneDefaultAdjustments() {
   return JSON.parse(JSON.stringify(DEFAULT_ADJUSTMENTS));
+}
+
+const PRESET_COMPARE_KEYS = [
+  "luminance", "contrast", "temperature", "tint", "vibrance", "saturation", "hue",
+  "highlights", "shadows", "whites", "blacks",
+  "grain", "grainSize", "grainRoughness", "clarity", "dehaze", "texture", "vignette", "blur", "invert"
+];
+
+export function mergePresetAdjustments(currentAdjustments, presetAdjustments = {}) {
+  const defaults = cloneDefaultAdjustments();
+  const geometry = {
+    cropTop: currentAdjustments?.cropTop ?? defaults.cropTop,
+    cropRight: currentAdjustments?.cropRight ?? defaults.cropRight,
+    cropBottom: currentAdjustments?.cropBottom ?? defaults.cropBottom,
+    cropLeft: currentAdjustments?.cropLeft ?? defaults.cropLeft,
+    rotation: currentAdjustments?.rotation ?? defaults.rotation,
+    flipH: currentAdjustments?.flipH ?? defaults.flipH,
+    flipV: currentAdjustments?.flipV ?? defaults.flipV
+  };
+  return {
+    ...defaults,
+    ...presetAdjustments,
+    ...geometry,
+    hsl: normalizeHslAdjustments({
+      ...defaults.hsl,
+      ...(presetAdjustments.hsl || {})
+    }),
+    curves: presetAdjustments.curves
+      ? JSON.parse(JSON.stringify(presetAdjustments.curves))
+      : defaults.curves
+  };
+}
+
+export function adjustmentsMatchPreset(currentAdjustments, presetAdjustments = {}) {
+  const expected = mergePresetAdjustments(currentAdjustments, presetAdjustments);
+  for (const key of PRESET_COMPARE_KEYS) {
+    const current = currentAdjustments?.[key];
+    const target = expected[key];
+    if (typeof target === "boolean") {
+      if (Boolean(current) !== target) return false;
+      continue;
+    }
+    if (Math.abs(Number(current) - Number(target)) > 0.5) return false;
+  }
+  if (JSON.stringify(currentAdjustments?.hsl) !== JSON.stringify(expected.hsl)) return false;
+  if (JSON.stringify(currentAdjustments?.curves) !== JSON.stringify(expected.curves)) return false;
+  return true;
+}
+
+export function findActivePresetId(adjustments, presets = PRESETS) {
+  const match = presets.find(item => adjustmentsMatchPreset(adjustments, item.adjustments));
+  return match?.id || "";
 }
 
 export function isAdjustmentsDefault(adjustments) {

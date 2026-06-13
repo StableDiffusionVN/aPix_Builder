@@ -2,13 +2,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { localizeRuntimeMessage, useI18n } from "../i18n/I18nContext";
 import {
   buildDefaultRhApps,
-  clearLegacySavedRhApps,
   DEFAULT_RH_WEBAPP_ID,
   DEFAULT_RH_WEBAPP_IDS,
   fetchDefaultRhApps,
   fetchSavedRhApps,
   listRhAppOptions,
-  loadLegacySavedRhApps,
   persistSavedRhApps,
   refreshDefaultRhApps,
   removeSavedRhAppFromList,
@@ -21,14 +19,13 @@ import {
   normalizeRhSettings,
   syncPrimaryApiKey
 } from "../lib/rhTokenPool.js";
+import { getSetting, setSetting } from "../lib/appSettings.js";
 
-export const EXECUTION_MODE_KEY = "comfyui-build:execution-mode";
-export const RUNNINGHUB_STORAGE_KEY = "comfyui-build:runninghub:v1";
 export { DEFAULT_RH_WEBAPP_ID } from "../lib/rhSavedApps.js";
 export const DEFAULT_RH_WF_ID = "2064644362323189762";
 
 export function loadExecutionMode() {
-  const stored = localStorage.getItem(EXECUTION_MODE_KEY);
+  const stored = getSetting("execution.mode", "local");
   if (stored === "runninghub") return "runninghub-app";
   if (stored === "runninghub-app" || stored === "runninghub-wf") return stored;
   return "local";
@@ -40,7 +37,7 @@ export function isRunningHubMode(mode) {
 
 export function loadRunningHubSettings() {
   try {
-    const parsed = JSON.parse(localStorage.getItem(RUNNINGHUB_STORAGE_KEY) || "{}");
+    const parsed = getSetting("runningHub", {});
     const normalized = normalizeRhSettings({
       ...parsed,
       webappId: parsed.webappId || DEFAULT_RH_WEBAPP_ID
@@ -100,7 +97,7 @@ export function useRunningHub() {
   }, [savedWebapps]);
 
   useEffect(() => {
-    localStorage.setItem(RUNNINGHUB_STORAGE_KEY, JSON.stringify(settings));
+    setSetting("runningHub", settings);
   }, [settings]);
 
   useEffect(() => {
@@ -145,13 +142,9 @@ export function useRunningHub() {
     (async () => {
       try {
         let apps = await fetchSavedRhApps();
-        const legacy = loadLegacySavedRhApps().filter(app => !isDefaultRhWebapp(app.id));
         const hadDefaultBookmarks = apps.some(app => isDefaultRhWebapp(app.id));
         apps = apps.filter(app => !isDefaultRhWebapp(app.id));
-        if (!apps.length && legacy.length) {
-          apps = await persistSavedRhApps(legacy);
-          clearLegacySavedRhApps();
-        } else if (hadDefaultBookmarks) {
+        if (hadDefaultBookmarks) {
           apps = await persistSavedRhApps(apps);
         }
         if (!cancelled) {

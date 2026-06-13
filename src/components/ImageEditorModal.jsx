@@ -586,33 +586,15 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
       .then(data => {
         if (data && Array.isArray(data.presets)) {
           setCustomPresets(data.presets);
-          try {
-            localStorage.setItem("image-editor-custom-presets", JSON.stringify(data.presets));
-          } catch (e) {
-            console.error("Failed to write presets to localStorage", e);
-          }
         }
       })
       .catch(e => {
-        console.error("Failed to load presets from server, falling back to localStorage", e);
-        try {
-          const saved = localStorage.getItem("image-editor-custom-presets");
-          if (saved) {
-            setCustomPresets(JSON.parse(saved));
-          }
-        } catch (localError) {
-          console.error("Failed to load presets from localStorage", localError);
-        }
+        console.error("Failed to load presets from server", e);
       });
   }, []);
 
   const savePresets = useCallback((updated) => {
     setCustomPresets(updated);
-    try {
-      localStorage.setItem("image-editor-custom-presets", JSON.stringify(updated));
-    } catch (e) {
-      console.error("Failed to write presets to localStorage", e);
-    }
     fetch("/api/presets", {
       method: "POST",
       headers: {
@@ -627,11 +609,6 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
       .then(data => {
         if (data.success && Array.isArray(data.presets)) {
           setCustomPresets(data.presets);
-          try {
-            localStorage.setItem("image-editor-custom-presets", JSON.stringify(data.presets));
-          } catch (e) {
-            console.error("Failed to write updated presets to localStorage", e);
-          }
         }
       })
       .catch(e => {

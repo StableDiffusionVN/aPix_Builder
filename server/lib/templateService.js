@@ -134,7 +134,7 @@ export function createTemplateService({
     const normalizedScope = normalizeScope(scope);
     const templates = await discoverTemplates(normalizedScope);
     if (templates.length === 0 && normalizedScope === TEMPLATE_SCOPES.local) {
-      throw new Error("No templates configured. Add app_build.yaml and api.json inside config/default/<id> or config/templates/<id>.");
+      throw new Error("No templates configured. Check the bundled defaults or add app_build.yaml and api.json inside the user templates folder.");
     }
     const preferredDefaultId = normalizedScope === TEMPLATE_SCOPES.runninghubWf
       ? RH_WF_DEFAULT_TEMPLATE_ID

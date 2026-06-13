@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-const LEGACY_STORAGE_KEY = "comfyui-build:run-log-sessions:v1";
-
 async function fetchRunLogSessions() {
   const response = await fetch("/api/run-log/sessions");
   const data = await response.json();
@@ -33,9 +31,6 @@ export function useRunLogHistory() {
   }, []);
 
   useEffect(() => {
-    try {
-      localStorage.removeItem(LEGACY_STORAGE_KEY);
-    } catch {}
     refreshSessions();
   }, [refreshSessions]);
 

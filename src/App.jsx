@@ -83,29 +83,25 @@ import {
   loadMainFont,
   loadTheme,
   MAIN_FONT_OPTIONS,
-  MAIN_FONT_STORAGE_KEY,
-  THEME_OPTIONS,
-  THEME_STORAGE_KEY
+  THEME_OPTIONS
 } from "./constants/appearance";
+import { getSetting, setSetting } from "./lib/appSettings";
 import { APP_VERSION_LABEL } from "./constants/app";
 import { isTextEntryTarget, isTypingTarget, releaseGlobalShortcutFocus } from "./lib/keyboard";
 
-const SERVER_STORAGE_KEY = "comfyui-build:server:v2";
-const NOTIFY_STORAGE_KEY = "comfyui-build:notify:v1";
-const RH_WF_TEMPLATE_STORAGE_KEY = "comfyui-build:rh-wf-template:v1";
 const DEFAULT_COMFY_SERVER = "http://127.0.0.1:8188";
 
 function loadServerAddress() {
-  const stored = localStorage.getItem(SERVER_STORAGE_KEY) || "";
+  const stored = getSetting("connection.comfyAddress", "");
   return stored || DEFAULT_COMFY_SERVER;
 }
 
 function loadNotifyEnabled() {
-  try { return JSON.parse(localStorage.getItem(NOTIFY_STORAGE_KEY)) === true; } catch { return false; }
+  return getSetting("notifications.enabled", false) === true;
 }
 
 function loadRhWfLastTemplate() {
-  return localStorage.getItem(RH_WF_TEMPLATE_STORAGE_KEY) || "";
+  return getSetting("execution.rhWfSelectedTemplate", "");
 }
 
 function formatDuration(ms) {
@@ -614,27 +610,27 @@ export default function App() {
   // Persist theme
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
-    localStorage.setItem(THEME_STORAGE_KEY, theme);
+    setSetting("appearance.theme", theme);
   }, [theme]);
 
   // Persist font
   useEffect(() => {
     document.documentElement.style.setProperty("--main-font", selectedMainFont.family);
-    localStorage.setItem(MAIN_FONT_STORAGE_KEY, mainFont);
+    setSetting("appearance.mainFont", mainFont);
   }, [mainFont, selectedMainFont.family]);
 
   // Persist server address
   useEffect(() => {
-    if (comfyAddress) localStorage.setItem(SERVER_STORAGE_KEY, comfyAddress);
+    if (comfyAddress) setSetting("connection.comfyAddress", comfyAddress);
   }, [comfyAddress]);
 
   // Persist notification preference
   useEffect(() => {
-    localStorage.setItem(NOTIFY_STORAGE_KEY, JSON.stringify(notifyEnabled));
+    setSetting("notifications.enabled", notifyEnabled);
   }, [notifyEnabled]);
 
   useEffect(() => {
-    localStorage.setItem("comfyui-build:execution-mode", executionMode);
+    setSetting("execution.mode", executionMode);
   }, [executionMode]);
 
   useEffect(() => {
@@ -679,7 +675,7 @@ export default function App() {
   useEffect(() => {
     if (!rhWfSelectedTemplate || !rhWfConfig) return;
     saveValues(rhWfWorkspaceKey(rhWfSelectedTemplate), rhWfValues);
-    localStorage.setItem(RH_WF_TEMPLATE_STORAGE_KEY, rhWfSelectedTemplate);
+    setSetting("execution.rhWfSelectedTemplate", rhWfSelectedTemplate);
   }, [rhWfConfig, rhWfSelectedTemplate, rhWfValues]);
 
   // Close theme menu on outside click
@@ -699,7 +695,23 @@ export default function App() {
     };
   }, [themeMenuOpen]);
 
-  // Info modal shortcut
+  // Settings modal shortcut (Cmd/Ctrl + ,)
+  useEffect(() => {
+    function handleSettingsShortcut(event) {
+      if (event.key !== "," && event.code !== "Comma") return;
+      if (!event.metaKey && !event.ctrlKey) return;
+      if (event.altKey || event.shiftKey) return;
+      if (isTextEntryTarget(event.target)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      setInfoOpen(false);
+      setSettingsOpen(current => !current);
+    }
+    window.addEventListener("keydown", handleSettingsShortcut, true);
+    return () => window.removeEventListener("keydown", handleSettingsShortcut, true);
+  }, []);
+
+  // Info modal shortcut (Cmd/Ctrl + /)
   useEffect(() => {
     function handleInfoShortcut(event) {
       if (event.key === "Escape" && infoOpen) { setInfoOpen(false); return; }
@@ -733,6 +745,21 @@ export default function App() {
       }
     } catch {}
   }, []);
+
+  // Fullscreen shortcut (Cmd/Ctrl + Shift + F)
+  useEffect(() => {
+    function handleFullscreenShortcut(event) {
+      if (event.key.toLowerCase() !== "f") return;
+      if (!event.metaKey && !event.ctrlKey) return;
+      if (!event.shiftKey || event.altKey) return;
+      if (isTextEntryTarget(event.target)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      void toggleFullscreen();
+    }
+    window.addEventListener("keydown", handleFullscreenShortcut, true);
+    return () => window.removeEventListener("keydown", handleFullscreenShortcut, true);
+  }, [toggleFullscreen]);
 
   // Log panel shortcut (` or Ctrl+`; Cmd+` is reserved by macOS window switching)
   useEffect(() => {
@@ -1534,20 +1561,21 @@ export default function App() {
             ) : null}
           </button>
 
-          <button className="appTopBarButton" onClick={() => { setInfoOpen(false); setSettingsOpen(true); }} title={t("settings.open")} aria-label={t("settings.open")}>
+          <button className="appTopBarButton" onClick={() => { setInfoOpen(false); setSettingsOpen(true); }} title={`${t("settings.open")} (Cmd/Ctrl + ,)`} aria-label={t("settings.open")} aria-keyshortcuts="Meta+Comma Control+Comma">
             <Settings2 size={15} />
           </button>
           <button
             type="button"
             className="appTopBarButton"
             onClick={toggleFullscreen}
-            title={isFullscreen ? t("fullscreen.exit") : t("fullscreen.enter")}
+            title={isFullscreen ? `${t("fullscreen.exit")} (Cmd/Ctrl + Shift + F)` : `${t("fullscreen.enter")} (Cmd/Ctrl + Shift + F)`}
             aria-label={isFullscreen ? t("fullscreen.exit") : t("fullscreen.enter")}
             aria-pressed={isFullscreen}
+            aria-keyshortcuts="Meta+Shift+f Control+Shift+f"
           >
             {isFullscreen ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
           </button>
-          <button className="appTopBarButton" onClick={() => { setSettingsOpen(false); setInfoOpen(true); }} title={`${t("info.open")} (Cmd/Ctrl + /)`} aria-label={t("info.open")}>
+          <button className="appTopBarButton" onClick={() => { setSettingsOpen(false); setInfoOpen(true); }} title={`${t("info.open")} (Cmd/Ctrl + /)`} aria-label={t("info.open")} aria-keyshortcuts="Meta+/ Control+/">
             <Info size={15} />
           </button>
         </div>
@@ -1950,8 +1978,10 @@ export default function App() {
                   <h3>{t("info.shortcutsGeneral")}</h3>
                   <p>{t("info.shortcutsGeneralDesc")}</p>
                   <div className="shortcutList">
-                    <ShortcutRow label={t("info.shortcutRun")} keys={["Cmd/Ctrl", "Enter"]} />
+                    <ShortcutRow label={t("info.shortcutSettings")} keys={["Cmd/Ctrl", ","]} />
                     <ShortcutRow label={t("info.shortcutHelp")} keys={["Cmd/Ctrl", "/"]} />
+                    <ShortcutRow label={t("info.shortcutFullscreen")} keys={["Cmd/Ctrl", "Shift", "F"]} />
+                    <ShortcutRow label={t("info.shortcutRun")} keys={["Cmd/Ctrl", "Enter"]} />
                     <ShortcutRow label={t("info.shortcutLog")} keys={["F1"]} />
                     <ShortcutRow label={t("info.shortcutClose")} keys={["Esc"]} />
                     <ShortcutRow label={t("info.shortcutResetZoom")} keys={["Space"]} />

@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { extraMessages } from "./extraMessages.js";
+import { getSetting, setSetting } from "../lib/appSettings.js";
 
-const LANGUAGE_STORAGE_KEY = "comfyui-build:language:v1";
 const SUPPORTED_PREFERENCES = new Set(["auto", "vi", "en"]);
 
 const messages = {
@@ -125,12 +125,12 @@ const messages = {
     "rh.saveApp": "Lưu app vào danh sách",
     "rh.removeApp": "Gỡ app khỏi danh sách",
     "rh.saveAppNeedReload": "Tải lại thông tin app trước khi lưu",
-    "rh.appSaved": "Đã lưu app vào config/templates-rh",
+    "rh.appSaved": "Đã lưu app vào thư mục templates-rh của người dùng",
     "rh.defaultAppNoBookmark": "App mặc định hệ thống không thể lưu bookmark",
     "rh.appRemoved": "Đã gỡ app khỏi danh sách",
     "rh.appStorageLoading": "Đang tải danh sách app...",
-    "rh.appStorageUnavailable": "Không tải được danh sách app từ config/templates-rh — hãy chạy server",
-    "rh.appSaveFailed": "Không lưu được app — kiểm tra server và thư mục config/templates-rh",
+    "rh.appStorageUnavailable": "Không tải được danh sách app từ thư mục templates-rh của người dùng — hãy chạy server",
+    "rh.appSaveFailed": "Không lưu được app — kiểm tra server và thư mục config người dùng",
     "rh.fetching": "Đang tải thông tin ứng dụng từ RunningHub...",
     "rh.empty": "Nhập API Key trong Settings rồi bấm \"Tải lại node\".",
     "rh.unnamedApp": "RunningHub App",
@@ -420,12 +420,12 @@ const messages = {
     "rh.saveApp": "Save app to list",
     "rh.removeApp": "Remove app from list",
     "rh.saveAppNeedReload": "Reload app info before saving",
-    "rh.appSaved": "App saved to config/templates-rh",
+    "rh.appSaved": "App saved to the user templates-rh folder",
     "rh.defaultAppNoBookmark": "Built-in apps cannot be bookmarked",
     "rh.appRemoved": "App removed from list",
     "rh.appStorageLoading": "Loading saved apps...",
-    "rh.appStorageUnavailable": "Could not load saved apps from config/templates-rh — start the server",
-    "rh.appSaveFailed": "Could not save app — check server and config/templates-rh folder",
+    "rh.appStorageUnavailable": "Could not load saved apps from the user templates-rh folder — start the server",
+    "rh.appSaveFailed": "Could not save app — check the server and user config folder",
     "rh.fetching": "Loading app info from RunningHub...",
     "rh.empty": "Enter an API Key in Settings, then select \"Reload\".",
     "rh.unnamedApp": "RunningHub App",
@@ -603,7 +603,7 @@ function systemLocale() {
 }
 
 function loadPreference() {
-  const stored = localStorage.getItem(LANGUAGE_STORAGE_KEY) || "auto";
+  const stored = getSetting("appearance.language", "auto");
   return SUPPORTED_PREFERENCES.has(stored) ? stored : "auto";
 }
 
@@ -674,7 +674,7 @@ export function I18nProvider({ children }) {
   }, []);
 
   useEffect(() => {
-    localStorage.setItem(LANGUAGE_STORAGE_KEY, preference);
+    setSetting("appearance.language", preference);
   }, [preference]);
 
   useEffect(() => {

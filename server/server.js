@@ -1,7 +1,7 @@
 import http from "node:http";
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { access, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { access, chmod, cp, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -66,23 +66,40 @@ import {
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
-const configDir = path.join(root, "config");
-const defaultTemplateDir = path.join(configDir, "default");
-const userTemplatesDir = path.join(configDir, "templates");
-const defaultRhDir = path.join(configDir, "default-rh");
-const templatesRhDir = path.join(configDir, "templates-rh");
-const uploadDir = path.join(root, "uploads");
-const inputDir = path.join(root, "input");
-const outputDir = path.join(root, "output");
-const outputHistoryPath = path.join(outputDir, "history.json");
-const presetsDir = path.join(root, "presets");
-const presetsFilePath = path.join(presetsDir, "presets.json");
-const workflowPresetsFilePath = path.join(presetsDir, "workflow-presets.json");
-const rhSavedAppsFilePath = path.join(templatesRhDir, "apps.json");
-const rhDefaultAppsFilePath = path.join(defaultRhDir, "apps.json");
-const legacyRhAppsDir = path.join(root, "rh-apps");
+const resourceRoot = path.resolve(process.env.APIX_RESOURCE_ROOT || root);
+const dataRoot = path.resolve(process.env.APIX_DATA_ROOT || root);
+const resourceConfigDir = path.join(resourceRoot, "config");
+const defaultTemplateDir = path.join(resourceConfigDir, "default");
+const defaultRhDir = path.join(resourceConfigDir, "default-rh");
+const resourceRhDefaultAppsFilePath = path.join(defaultRhDir, "apps.json");
+const storageSettingsPath = path.join(dataRoot, "storage-settings.json");
+const sourceMode = resourceRoot === dataRoot;
+const defaultUserDir = path.join(dataRoot, "user");
+const defaultStorageSettings = {
+  inputDir: path.join(defaultUserDir, "input"),
+  outputDir: path.join(defaultUserDir, "output"),
+  configDir: path.join(defaultUserDir, "config"),
+  personalDataDir: defaultUserDir
+};
+let configDir;
+let userTemplatesDir;
+let templatesRhDir;
+let inputDir;
+let outputDir;
+let outputHistoryPath;
+let personalDataDir;
+let rhSavedAppsFilePath;
+let rhDefaultAppsFilePath;
+let templates;
+let appSettingsPath;
+let uploadDir;
+let presetsDir;
+let presetsFilePath;
+let workflowPresetsFilePath;
+const legacyRhAppsDir = path.join(dataRoot, "rh-apps");
 const legacyRhSavedAppsFilePath = path.join(legacyRhAppsDir, "apps.json");
 const legacyRhDefaultAppsFilePath = path.join(legacyRhAppsDir, "defaults.json");
+const frontendDir = path.join(resourceRoot, "dist");
 const RH_DEFAULT_WEBAPP_IDS = [
   "2039924771751731201",
   "2064284416448491522"
@@ -95,6 +112,286 @@ const activeRuns = new Map();
 const activeRhRuns = new Map();
 const pendingSseClients = new Map();
 const runningHubTimeoutMs = Number(process.env.RUNNINGHUB_TIMEOUT_MS || 10 * 60 * 1000);
+
+function resolveStoragePath(value, fallback) {
+  const trimmed = String(value || "").trim();
+  if (!trimmed) return fallback;
+  const expanded = trimmed === "~"
+    ? os.homedir()
+    : trimmed.startsWith("~/")
+      ? path.join(os.homedir(), trimmed.slice(2))
+      : trimmed;
+  return path.resolve(dataRoot, expanded);
+}
+
+function normalizeStorageSettings(settings = {}) {
+  const requestedConfigDir = resolveStoragePath(settings.configDir, defaultStorageSettings.configDir);
+  const configDirValue = path.resolve(requestedConfigDir) === path.resolve(resourceConfigDir)
+    ? defaultStorageSettings.configDir
+    : requestedConfigDir;
+  return {
+    inputDir: resolveStoragePath(settings.inputDir, defaultStorageSettings.inputDir),
+    outputDir: resolveStoragePath(settings.outputDir, defaultStorageSettings.outputDir),
+    configDir: configDirValue,
+    personalDataDir: resolveStoragePath(settings.personalDataDir, defaultStorageSettings.personalDataDir)
+  };
+}
+
+function buildResolvedPaths() {
+  return {
+    appSettings: appSettingsPath,
+    colorPresets: presetsFilePath,
+    workflowPresets: workflowPresetsFilePath,
+    uploads: uploadDir
+  };
+}
+
+async function migratePersonalDataFile(sourcePath, targetPath) {
+  if (path.resolve(sourcePath) === path.resolve(targetPath)) return;
+  try {
+    await access(targetPath);
+    return;
+  } catch {}
+  try {
+    await access(sourcePath);
+  } catch {
+    return;
+  }
+  await mkdir(path.dirname(targetPath), { recursive: true });
+  await cp(sourcePath, targetPath, { errorOnExist: false });
+}
+
+async function migratePersonalDataDir(sourceDir, targetDir) {
+  if (path.resolve(sourceDir) === path.resolve(targetDir)) return;
+  try {
+    await access(sourceDir);
+  } catch {
+    return;
+  }
+  await mkdir(targetDir, { recursive: true });
+  await cp(sourceDir, targetDir, {
+    recursive: true,
+    force: false,
+    errorOnExist: false
+  });
+}
+
+async function migrateLegacyUserFolders(normalized) {
+  if (path.resolve(normalized.inputDir) === path.resolve(defaultStorageSettings.inputDir)) {
+    await migratePersonalDataDir(path.join(dataRoot, "input"), normalized.inputDir);
+  }
+  if (path.resolve(normalized.outputDir) === path.resolve(defaultStorageSettings.outputDir)) {
+    await migratePersonalDataDir(path.join(dataRoot, "output"), normalized.outputDir);
+  }
+  if (path.resolve(normalized.configDir) === path.resolve(defaultStorageSettings.configDir)) {
+    await migratePersonalDataDir(path.join(dataRoot, "user-config"), normalized.configDir);
+    if (!sourceMode) {
+      await migratePersonalDataDir(path.join(dataRoot, "config"), normalized.configDir);
+    }
+  }
+}
+
+async function applyPersonalDataPaths(nextPersonalDataDir, previousPersonalDataDir) {
+  personalDataDir = nextPersonalDataDir;
+  appSettingsPath = path.join(personalDataDir, "app-settings.json");
+  presetsDir = path.join(personalDataDir, "presets");
+  presetsFilePath = path.join(presetsDir, "presets.json");
+  workflowPresetsFilePath = path.join(presetsDir, "workflow-presets.json");
+  uploadDir = path.join(personalDataDir, "uploads");
+
+  await Promise.all([
+    mkdir(personalDataDir, { recursive: true }),
+    mkdir(presetsDir, { recursive: true }),
+    mkdir(uploadDir, { recursive: true })
+  ]);
+
+  if (previousPersonalDataDir && path.resolve(previousPersonalDataDir) !== path.resolve(personalDataDir)) {
+    await migratePersonalDataFile(path.join(previousPersonalDataDir, "app-settings.json"), appSettingsPath);
+    await migratePersonalDataDir(path.join(previousPersonalDataDir, "presets"), presetsDir);
+    await migratePersonalDataDir(path.join(previousPersonalDataDir, "uploads"), uploadDir);
+  }
+
+  if (path.resolve(personalDataDir) === path.resolve(defaultStorageSettings.personalDataDir)) {
+    await migratePersonalDataFile(path.join(dataRoot, "app-settings.json"), appSettingsPath);
+    await migratePersonalDataDir(path.join(dataRoot, "presets"), presetsDir);
+    await migratePersonalDataDir(path.join(dataRoot, "uploads"), uploadDir);
+  }
+}
+
+async function migrateLegacyUserConfig(targetTemplatesDir, targetTemplatesRhDir) {
+  if (!sourceMode) return;
+  const legacyTemplatesDir = path.join(resourceConfigDir, "templates");
+  const legacyTemplatesRhDir = path.join(resourceConfigDir, "templates-rh");
+  await Promise.all([
+    cp(legacyTemplatesDir, targetTemplatesDir, {
+      recursive: true,
+      force: false,
+      errorOnExist: false
+    }).catch(error => {
+      if (error?.code !== "ENOENT") throw error;
+    }),
+    cp(legacyTemplatesRhDir, targetTemplatesRhDir, {
+      recursive: true,
+      force: false,
+      errorOnExist: false
+    }).catch(error => {
+      if (error?.code !== "ENOENT") throw error;
+    })
+  ]);
+}
+
+async function applyStorageSettings(settings) {
+  const normalized = normalizeStorageSettings(settings);
+  const previousPersonalDataDir = personalDataDir;
+  await Promise.all([
+    mkdir(normalized.inputDir, { recursive: true }),
+    mkdir(normalized.outputDir, { recursive: true }),
+    mkdir(normalized.configDir, { recursive: true })
+  ]);
+
+  const nextUserTemplatesDir = path.join(normalized.configDir, "templates");
+  const nextTemplatesRhDir = path.join(normalized.configDir, "templates-rh");
+  await Promise.all([
+    mkdir(nextUserTemplatesDir, { recursive: true }),
+    mkdir(nextTemplatesRhDir, { recursive: true })
+  ]);
+  if (path.resolve(normalized.configDir) === path.resolve(defaultStorageSettings.configDir)) {
+    await migrateLegacyUserFolders(normalized);
+    await migrateLegacyUserConfig(nextUserTemplatesDir, nextTemplatesRhDir);
+  }
+
+  inputDir = normalized.inputDir;
+  outputDir = normalized.outputDir;
+  outputHistoryPath = path.join(outputDir, "history.json");
+  configDir = normalized.configDir;
+  userTemplatesDir = nextUserTemplatesDir;
+  templatesRhDir = nextTemplatesRhDir;
+  rhSavedAppsFilePath = path.join(templatesRhDir, "apps.json");
+  rhDefaultAppsFilePath = path.join(configDir, "runninghub-default-apps.json");
+  await applyPersonalDataPaths(normalized.personalDataDir, previousPersonalDataDir);
+  templates = createTemplateService({
+    configDir,
+    defaultDir: defaultTemplateDir,
+    templatesDir: userTemplatesDir,
+    defaultRhDir,
+    templatesRhDir
+  });
+  return normalized;
+}
+
+async function loadStorageSettings() {
+  try {
+    const raw = await readFile(storageSettingsPath, "utf8");
+    return normalizeStorageSettings(JSON.parse(raw));
+  } catch {
+    return normalizeStorageSettings();
+  }
+}
+
+async function writeStorageSettings(settings) {
+  await mkdir(dataRoot, { recursive: true });
+  await writeFile(storageSettingsPath, JSON.stringify(settings, null, 2), "utf8");
+}
+
+function normalizeAppSettings(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+}
+
+async function readAppSettings() {
+  try {
+    return normalizeAppSettings(JSON.parse(await readFile(appSettingsPath, "utf8")));
+  } catch {
+    return {};
+  }
+}
+
+async function writeAppSettings(settings) {
+  const normalized = normalizeAppSettings(settings);
+  await mkdir(dataRoot, { recursive: true });
+  await writeFile(appSettingsPath, JSON.stringify(normalized, null, 2), {
+    encoding: "utf8",
+    mode: 0o600
+  });
+  await chmod(appSettingsPath, 0o600);
+  return normalized;
+}
+
+async function handleAppSettings(req, res) {
+  if (req.method === "GET") {
+    send(res, 200, { settings: await readAppSettings() });
+    return;
+  }
+  const body = JSON.parse(await readBody(req) || "{}");
+  const settings = await writeAppSettings(body.settings);
+  send(res, 200, { success: true, settings });
+}
+
+async function handleStorageSettings(req, res) {
+  if (req.method === "GET") {
+    send(res, 200, {
+      settings: normalizeStorageSettings({ inputDir, outputDir, configDir, personalDataDir }),
+      defaults: defaultStorageSettings,
+      bundledConfigDir: resourceConfigDir,
+      resolvedPaths: buildResolvedPaths()
+    });
+    return;
+  }
+  if (activeRuns.size || activeRhRuns.size) {
+    send(res, 409, { error: "Không thể đổi thư mục khi workflow đang chạy" });
+    return;
+  }
+  const body = JSON.parse(await readBody(req) || "{}");
+  const settings = await applyStorageSettings(body.settings || body);
+  await writeStorageSettings(settings);
+  send(res, 200, {
+    success: true,
+    settings,
+    defaults: defaultStorageSettings,
+    bundledConfigDir: resourceConfigDir,
+    resolvedPaths: buildResolvedPaths()
+  });
+}
+
+async function openDirectory(directoryPath) {
+  const resolvedPath = resolveStoragePath(directoryPath, "");
+  if (!resolvedPath) throw new Error("Đường dẫn thư mục không hợp lệ");
+  let directoryStat;
+  try {
+    directoryStat = await stat(resolvedPath);
+  } catch {
+    throw new Error("Thư mục không tồn tại");
+  }
+  if (!directoryStat.isDirectory()) throw new Error("Đường dẫn không phải là thư mục");
+
+  const command = process.platform === "win32"
+    ? "explorer.exe"
+    : process.platform === "darwin"
+      ? "open"
+      : "xdg-open";
+  await new Promise((resolve, reject) => {
+    const child = spawn(command, [resolvedPath], {
+      detached: true,
+      stdio: "ignore",
+      windowsHide: true
+    });
+    child.once("error", reject);
+    child.once("spawn", () => {
+      child.unref();
+      resolve();
+    });
+  });
+  return resolvedPath;
+}
+
+async function handleOpenDirectory(req, res) {
+  const body = JSON.parse(await readBody(req) || "{}");
+  try {
+    const openedPath = await openDirectory(body.path);
+    send(res, 200, { success: true, path: openedPath });
+  } catch (error) {
+    send(res, 400, { error: error?.message || "Không thể mở thư mục" });
+  }
+}
 
 function broadcastRunEvent(run, message) {
   if (!run.sseClients?.size) return;
@@ -155,13 +452,7 @@ function closeRhRun(run, runId) {
   }
   activeRhRuns.delete(runId);
 }
-const templates = createTemplateService({
-  configDir,
-  defaultDir: defaultTemplateDir,
-  templatesDir: userTemplatesDir,
-  defaultRhDir,
-  templatesRhDir
-});
+await applyStorageSettings(await loadStorageSettings());
 
 function templateScopeFromUrl(url) {
   return templates.normalizeScope(url.searchParams.get("scope"));
@@ -271,8 +562,12 @@ function buildRhDefaultApps(entries = []) {
 async function readRhDefaultApps() {
   try {
     await migrateRhAppsFile(legacyRhDefaultAppsFilePath, rhDefaultAppsFilePath);
-    await mkdir(defaultRhDir, { recursive: true });
-    const raw = await readFile(rhDefaultAppsFilePath, "utf8");
+    let raw;
+    try {
+      raw = await readFile(rhDefaultAppsFilePath, "utf8");
+    } catch {
+      raw = await readFile(resourceRhDefaultAppsFilePath, "utf8");
+    }
     return buildRhDefaultApps(JSON.parse(raw));
   } catch {
     return buildRhDefaultApps();
@@ -281,7 +576,7 @@ async function readRhDefaultApps() {
 
 async function writeRhDefaultApps(apps) {
   const normalized = buildRhDefaultApps(apps);
-  await mkdir(defaultRhDir, { recursive: true });
+  await mkdir(configDir, { recursive: true });
   await writeFile(rhDefaultAppsFilePath, JSON.stringify(normalized, null, 2), "utf8");
   return normalized;
 }
@@ -1804,15 +2099,68 @@ async function cleanupUploads(maxAgeMs = 24 * 60 * 60 * 1000) {
   }
 }
 
+const staticContentTypes = {
+  ".css": "text/css; charset=utf-8",
+  ".html": "text/html; charset=utf-8",
+  ".ico": "image/x-icon",
+  ".jpeg": "image/jpeg",
+  ".jpg": "image/jpeg",
+  ".js": "text/javascript; charset=utf-8",
+  ".json": "application/json; charset=utf-8",
+  ".png": "image/png",
+  ".svg": "image/svg+xml",
+  ".webp": "image/webp",
+  ".woff": "font/woff",
+  ".woff2": "font/woff2"
+};
+
+async function serveFrontend(req, res, pathname) {
+  const requestedPath = pathname === "/" ? "index.html" : decodeURIComponent(pathname.slice(1));
+  const resolvedPath = path.resolve(frontendDir, requestedPath);
+  const relativePath = path.relative(frontendDir, resolvedPath);
+  if (relativePath.startsWith("..") || path.isAbsolute(relativePath)) return false;
+
+  let filePath = resolvedPath;
+  try {
+    if (!(await stat(filePath)).isFile()) return false;
+  } catch {
+    if (path.extname(requestedPath)) return false;
+    filePath = path.join(frontendDir, "index.html");
+  }
+
+  const data = await readFile(filePath);
+  res.writeHead(200, {
+    "content-type": staticContentTypes[path.extname(filePath).toLowerCase()] || "application/octet-stream",
+    "cache-control": filePath.endsWith("index.html") ? "no-cache" : "public, max-age=31536000, immutable"
+  });
+  if (req.method === "HEAD") res.end();
+  else res.end(data);
+  return true;
+}
+
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://${req.headers.host}`);
-    if ((req.method === "GET" || req.method === "HEAD") && url.pathname === "/") {
+    if (
+      (req.method === "GET" || req.method === "HEAD") &&
+      process.env.APIX_SERVE_FRONTEND === "1" &&
+      !url.pathname.startsWith("/api/") &&
+      !url.pathname.startsWith("/generated/") &&
+      await serveFrontend(req, res, url.pathname)
+    ) {
+      return;
+    } else if ((req.method === "GET" || req.method === "HEAD") && url.pathname === "/") {
       res.writeHead(302, { location: process.env.FRONTEND_URL || "http://localhost:5173/" });
       res.end();
     } else if (req.method === "GET" && url.pathname === "/api/templates") {
       const registry = await templates.loadTemplateRegistry(templateScopeFromUrl(url));
       send(res, 200, registry);
+    } else if ((req.method === "GET" || req.method === "POST") && url.pathname === "/api/storage-settings") {
+      await handleStorageSettings(req, res);
+    } else if (req.method === "POST" && url.pathname === "/api/open-directory") {
+      await handleOpenDirectory(req, res);
+    } else if ((req.method === "GET" || req.method === "POST") && url.pathname === "/api/app-settings") {
+      await handleAppSettings(req, res);
     } else if (req.method === "GET" && url.pathname === "/api/config") {
       const scope = templateScopeFromUrl(url);
       const { config, raw, server: serverConfig, template } = await templates.loadConfig(url.searchParams.get("template"), scope);
@@ -1953,17 +2301,24 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-initRunLogStore()
+export const serverReady = initRunLogStore()
   .then(() => {
-    server.listen(port, "127.0.0.1", () => {
-      console.log(`ComfyUI YAML app server listening on http://127.0.0.1:${port}`);
-      cleanupUploads().catch(console.error);
-      setInterval(() => {
+    return new Promise((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(port, "127.0.0.1", () => {
+        server.off("error", reject);
+        const address = server.address();
+        const activePort = typeof address === "object" && address ? address.port : port;
+        console.log(`ComfyUI YAML app server listening on http://127.0.0.1:${activePort}`);
         cleanupUploads().catch(console.error);
-      }, 6 * 60 * 60 * 1000).unref();
+        setInterval(() => {
+          cleanupUploads().catch(console.error);
+        }, 6 * 60 * 60 * 1000).unref();
+        resolve({ host: "127.0.0.1", port: activePort, server });
+      });
     });
   })
   .catch(error => {
     console.error("Failed to initialize run log store:", error);
-    process.exit(1);
+    throw error;
   });

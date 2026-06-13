@@ -19,8 +19,8 @@ import {
   sumRhCoins
 } from "../lib/runLog";
 import { localizeRuntimeMessage, useI18n } from "../i18n/I18nContext";
+import { getSetting, setSetting } from "../lib/appSettings";
 
-const LOG_HEIGHT_KEY = "comfyui-build:run-log-height";
 const DEFAULT_LOG_HEIGHT = 520;
 const MIN_LOG_HEIGHT = 320;
 const MAX_LOG_HEIGHT = 760;
@@ -45,7 +45,7 @@ function measureMaxLogHeight(dockEl) {
 
 function loadLogHeight() {
   try {
-    const stored = Number(localStorage.getItem(LOG_HEIGHT_KEY));
+    const stored = Number(getSetting("layout.runLogHeight", DEFAULT_LOG_HEIGHT));
     if (Number.isFinite(stored) && stored >= MIN_LOG_HEIGHT && stored <= MAX_LOG_HEIGHT) return stored;
   } catch {}
   return DEFAULT_LOG_HEIGHT;
@@ -464,9 +464,7 @@ export function RunLogPanel({
   }, [open, syncMaxLogHeight]);
 
   useEffect(() => {
-    try {
-      localStorage.setItem(LOG_HEIGHT_KEY, String(popupHeight));
-    } catch {}
+    setSetting("layout.runLogHeight", popupHeight);
   }, [popupHeight]);
 
   function handleResizePointerDown(event) {

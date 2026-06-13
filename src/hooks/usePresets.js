@@ -1,41 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useI18n } from "../i18n/I18nContext";
 
-const PRESETS_KEY = "comfyui-build:presets:v1";
-
-function loadLegacyLocalStorage() {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(PRESETS_KEY) || "{}");
-    return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed) ? parsed : {};
-  } catch {
-    return {};
-  }
-}
-
-function writeLegacyLocalStorage(presets) {
-  try {
-    localStorage.setItem(PRESETS_KEY, JSON.stringify(presets));
-  } catch (error) {
-    console.error("Failed to save workflow presets to localStorage:", error);
-  }
-}
-
-function hasPresetData(presets) {
-  return Object.keys(presets).some(key => Array.isArray(presets[key]) && presets[key].length > 0);
-}
-
-function mergePresetStores(primary, secondary) {
-  const merged = { ...primary };
-  for (const [templateId, list] of Object.entries(secondary || {})) {
-    if (!Array.isArray(list) || !list.length) continue;
-    const existing = merged[templateId] || [];
-    const seen = new Set(existing.map(p => p.id));
-    const extras = list.filter(p => p?.id && !seen.has(p.id));
-    if (extras.length) merged[templateId] = [...existing, ...extras];
-  }
-  return merged;
-}
-
 function sanitizePresetValues(values) {
   const result = {};
   for (const [key, value] of Object.entries(values || {})) {
@@ -72,7 +37,6 @@ export function usePresets() {
   const { t } = useI18n();
   const dataRef = useRef({});
   const persistQueueRef = useRef(Promise.resolve());
-  const serverAvailableRef = useRef(false);
   const [version, setVersion] = useState(0);
   const [ready, setReady] = useState(false);
   const [storageWarning, setStorageWarning] = useState("");
@@ -83,17 +47,15 @@ export function usePresets() {
 
   const queuePersist = useCallback((next) => {
     dataRef.current = next;
-    writeLegacyLocalStorage(next);
     persistQueueRef.current = persistQueueRef.current
       .catch(() => {})
       .then(async () => {
-        if (!serverAvailableRef.current) return;
         await persistWorkflowPresets(next);
         setStorageWarning("");
       })
       .catch(error => {
         console.error("Failed to save workflow presets to server:", error);
-        setStorageWarning(t("preset.localStorage"));
+        setStorageWarning(t("preset.noApi"));
       });
     bump();
   }, [bump, t]);
@@ -102,32 +64,17 @@ export function usePresets() {
     let cancelled = false;
 
     (async () => {
-      const legacy = loadLegacyLocalStorage();
-      let presets = legacy;
-      let serverOk = false;
+      let presets = {};
 
       try {
-        const serverPresets = await fetchWorkflowPresets();
-        serverOk = true;
-        presets = mergePresetStores(serverPresets, legacy);
-
-        if (hasPresetData(presets) && JSON.stringify(presets) !== JSON.stringify(serverPresets)) {
-          await persistWorkflowPresets(presets);
-        }
+        presets = await fetchWorkflowPresets();
       } catch (error) {
         console.error("Failed to load workflow presets from server:", error);
-        presets = legacy;
-        if (hasPresetData(legacy)) {
-          setStorageWarning(t("preset.apiUnavailable"));
-        } else if (error.message?.includes("404")) {
-          setStorageWarning(t("preset.noApi"));
-        }
+        setStorageWarning(t("preset.noApi"));
       }
 
       if (!cancelled) {
-        serverAvailableRef.current = serverOk;
         dataRef.current = presets;
-        if (hasPresetData(presets)) writeLegacyLocalStorage(presets);
         setReady(true);
         bump();
       }

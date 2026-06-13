@@ -4984,6 +4984,225 @@ html[data-theme="light"] .logTaskInspectLine {
   grid-column: 1 / -1;
 }
 
+.storageSettings {
+  display: grid;
+  gap: 16px;
+  font-size: 12px;
+}
+
+.storageSettingsSection {
+  display: grid;
+  gap: 10px;
+}
+
+.storageSettingsSectionHeader {
+  display: grid;
+  gap: 2px;
+}
+
+.storageSettingsSectionHeader h4 {
+  margin: 0;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.storageSettingsSectionHeader p {
+  margin: 0;
+  color: var(--muted-2);
+  font-size: 10.5px;
+  line-height: 1.35;
+}
+
+.storageResolvedPaths {
+  display: grid;
+  gap: 5px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-soft);
+}
+
+.storageResolvedPathRow {
+  display: grid;
+  gap: 2px;
+}
+
+.storageResolvedPathRow > span {
+  color: var(--muted-2);
+  font-size: 10px;
+}
+
+.storageResolvedPathRow code {
+  overflow-wrap: anywhere;
+  color: var(--text);
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.storageSettingsPane {
+  gap: 14px;
+}
+
+.storageSettingsPane .settingsPaneHeader {
+  gap: 3px;
+  padding-bottom: 11px;
+}
+
+.storageSettingsPane .settingsPaneHeader h3 {
+  font-size: 15px;
+}
+
+.storageSettingsPane .settingsPaneHeader p {
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.storageSettingsFields {
+  grid-template-columns: 1fr;
+  gap: 11px;
+}
+
+.storagePathField {
+  gap: 5px;
+}
+
+.storagePathField > span {
+  font-size: 11px !important;
+}
+
+.storagePathField input {
+  width: 100%;
+  min-width: 0;
+  min-height: 31px !important;
+  height: 31px;
+  padding: 5px 35px 5px 9px !important;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px !important;
+}
+
+.storagePathInputWrap {
+  position: relative;
+  display: block;
+  min-width: 0;
+}
+
+.storageOpenFolderButton {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  display: grid;
+  width: 25px;
+  height: 25px;
+  padding: 0;
+  place-items: center;
+  color: var(--muted-2);
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+  transform: translateY(-50%);
+  cursor: pointer;
+}
+
+.storageOpenFolderButton:hover {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+
+.storageOpenFolderButton:focus-visible {
+  color: var(--accent);
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.storagePathField small {
+  color: var(--muted-2);
+  font-size: 10.5px;
+  line-height: 1.35;
+}
+
+.storageSettingsLoading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted-2);
+}
+
+.storageBundledConfigNote {
+  display: grid;
+  gap: 3px;
+  padding: 9px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--muted-2);
+  background: var(--panel-soft);
+  font-size: 10.5px;
+  line-height: 1.35;
+}
+
+.storageBundledConfigNote b {
+  color: var(--text);
+  font-size: 11.5px;
+}
+
+.storageBundledConfigNote code {
+  overflow-wrap: anywhere;
+  color: var(--text);
+  font-size: 10.5px;
+}
+
+.storageSettingsActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.storageSettingsActions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.storageSecondaryButton {
+  color: var(--text);
+  background: var(--panel-soft);
+}
+
+.storagePrimaryButton {
+  color: #fff;
+  border-color: transparent !important;
+  background: var(--accent);
+}
+
+.storageSettingsActions button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.storageSettingsMessage {
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.storageSettingsMessage.success {
+  color: #8ee6b0;
+  background: rgba(35, 150, 85, 0.14);
+}
+
+.storageSettingsMessage.error {
+  color: #ffaaa4;
+  background: rgba(200, 55, 50, 0.14);
+}
+
 .settingsInlineOptions {
   display: flex;
   flex-wrap: wrap;

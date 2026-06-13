@@ -10,8 +10,7 @@ import { EditorRange } from "./ImageAdjustmentControls";
 import { localizeRuntimeMessage, useI18n } from "../i18n/I18nContext";
 import { clearPickedFolderFiles, registerPickedFolderFiles } from "../lib/folderFileCache.js";
 import { isHttpImageUrl, readLocalFolderValue } from "../lib/localImageFolder.js";
-
-const INPUT_FAVORITES_KEY = "comfyui-build:input-image-favorites:v1";
+import { getSetting, setSetting } from "../lib/appSettings.js";
 
 function readImageFieldValue(value) {
   return Array.isArray(value) ? value : value ? [value] : [];
@@ -116,18 +115,6 @@ function fileToDataUrl(file) {
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
-}
-
-function readStoredSet(key) {
-  try {
-    return new Set(JSON.parse(localStorage.getItem(key) || "[]"));
-  } catch {
-    return new Set();
-  }
-}
-
-function writeStoredSet(key, value) {
-  localStorage.setItem(key, JSON.stringify([...value]));
 }
 
 function inferImageDate(image) {
@@ -282,7 +269,7 @@ export function DynamicField({
   const [isDraggingFile, setIsDraggingFile] = useState(false);
   const [libraryTimeFilter, setLibraryTimeFilter] = useState("all");
   const [libraryFavoritesOnly, setLibraryFavoritesOnly] = useState(false);
-  const [favoriteInputImages, setFavoriteInputImages] = useState(() => readStoredSet(INPUT_FAVORITES_KEY));
+  const [favoriteInputImages, setFavoriteInputImages] = useState(() => new Set(getSetting("favorites.inputImages", [])));
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [libraryMultiSelect, setLibraryMultiSelect] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
@@ -633,7 +620,7 @@ export function DynamicField({
       } else {
         next.add(name);
       }
-      writeStoredSet(INPUT_FAVORITES_KEY, next);
+      setSetting("favorites.inputImages", [...next]);
       return next;
     });
   }

@@ -1,5 +1,3 @@
-export const RH_SAVED_APPS_KEY = "comfyui-build:runninghub-saved-apps:v1";
-
 export const DEFAULT_RH_WEBAPP_IDS = [
   "2039924771751731201",
   "2064284416448491522"
@@ -33,21 +31,6 @@ export function normalizeSavedRhApps(raw) {
       seen.add(entry.id);
       return true;
     });
-}
-
-export function loadLegacySavedRhApps() {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(RH_SAVED_APPS_KEY) || "[]");
-    return normalizeSavedRhApps(parsed);
-  } catch {
-    return [];
-  }
-}
-
-export function clearLegacySavedRhApps() {
-  try {
-    localStorage.removeItem(RH_SAVED_APPS_KEY);
-  } catch {}
 }
 
 export function upsertSavedRhAppList(apps, { id, name }) {

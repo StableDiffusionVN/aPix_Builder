@@ -1,10 +1,9 @@
 import { useRef } from "react";
-
-const WORKSPACE_STORAGE_KEY = "comfyui-build:workspace:v1";
+import { getSetting, setSetting } from "../lib/appSettings.js";
 
 function loadStoredWorkspace() {
   try {
-    const parsed = JSON.parse(localStorage.getItem(WORKSPACE_STORAGE_KEY) || "{}");
+    const parsed = getSetting("workspace", {});
     return {
       selectedTemplate: typeof parsed.selectedTemplate === "string" ? parsed.selectedTemplate : "",
       valuesByTemplate: parsed.valuesByTemplate && typeof parsed.valuesByTemplate === "object" ? parsed.valuesByTemplate : {}
@@ -28,7 +27,7 @@ export function sanitizeWorkspaceValues(values = {}) {
 }
 
 function saveStoredWorkspace(workspace) {
-  try { localStorage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify(workspace)); } catch {}
+  setSetting("workspace", workspace);
 }
 
 export function useWorkspace() {

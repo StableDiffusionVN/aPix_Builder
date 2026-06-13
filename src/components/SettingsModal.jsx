@@ -1,5 +1,6 @@
 import {
   ChevronsUpDown,
+  FolderCog,
   Loader2,
   Palette,
   Wifi,
@@ -8,6 +9,7 @@ import {
 } from "lucide-react";
 import { ConnectionPanel, SavedServerList, AddServerForm } from "./ConnectionPanel";
 import { RunningHubSettings } from "./RunningHubSettings";
+import { StorageSettings } from "./StorageSettings";
 import { ComfyUiLogomark } from "./icons/ComfyUiIcon";
 import { RunningHubLogomark } from "./icons/RunningHubIcon";
 import {
@@ -92,6 +94,13 @@ export function SettingsModal({
               <span>
                 <b>{t("settings.appearance")}</b>
                 <small>{t("settings.appearanceHint")}</small>
+              </span>
+            </button>
+            <button type="button" role="tab" aria-selected={settingsTab === "storage"} className={settingsTab === "storage" ? "active" : ""} onClick={() => setSettingsTab("storage")}>
+              <FolderCog size={17} />
+              <span>
+                <b>{t("storage.title")}</b>
+                <small>{t("storage.tabHint")}</small>
               </span>
             </button>
             <button type="button" role="tab" aria-selected={settingsTab === "comfy"} className={`settingsTabComfy ${settingsTab === "comfy" ? "active" : ""}`} onClick={() => setSettingsTab("comfy")}>
@@ -269,6 +278,16 @@ export function SettingsModal({
                   tokenAccounts={rhTokenAccounts}
                   totalCoins={rhTotalCoins}
                 />
+              </section>
+            ) : null}
+
+            {settingsTab === "storage" ? (
+              <section className="settingsPane storageSettingsPane" role="tabpanel">
+                <header className="settingsPaneHeader">
+                  <h3>{t("storage.title")}</h3>
+                  <p>{t("storage.description")}</p>
+                </header>
+                <StorageSettings />
               </section>
             ) : null}
           </div>

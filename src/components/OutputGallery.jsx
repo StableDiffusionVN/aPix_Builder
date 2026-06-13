@@ -1,20 +1,7 @@
 import { useMemo, useState } from "react";
 import { Download, Filter, History, Loader2, Star, Workflow, X } from "lucide-react";
 import { useI18n } from "../i18n/I18nContext";
-
-const HISTORY_FAVORITES_KEY = "comfyui-build:history-favorites:v1";
-
-function readStoredSet(key) {
-  try {
-    return new Set(JSON.parse(localStorage.getItem(key) || "[]"));
-  } catch {
-    return new Set();
-  }
-}
-
-function writeStoredSet(key, value) {
-  localStorage.setItem(key, JSON.stringify([...value]));
-}
+import { getSetting, setSetting } from "../lib/appSettings.js";
 
 function formatTime(value, locale) {
   if (!value) return "";
@@ -73,7 +60,7 @@ export function OutputGallery({
   const [timeFilter, setTimeFilter] = useState("all");
   const [templateFilter, setTemplateFilter] = useState("all");
   const [favoritesOnly, setFavoritesOnly] = useState(false);
-  const [favorites, setFavorites] = useState(() => readStoredSet(HISTORY_FAVORITES_KEY));
+  const [favorites, setFavorites] = useState(() => new Set(getSetting("favorites.history", [])));
   const templateOptions = useMemo(() => {
     const seen = new Map();
     for (const item of history) {
@@ -98,7 +85,7 @@ export function OutputGallery({
       } else {
         next.add(id);
       }
-      writeStoredSet(HISTORY_FAVORITES_KEY, next);
+      setSetting("favorites.history", [...next]);
       return next;
     });
   }

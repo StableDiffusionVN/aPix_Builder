@@ -1,10 +1,9 @@
 import { useRef, useState } from "react";
-
-const SERVERS_KEY = "comfyui-build:servers:v1";
+import { getSetting, setSetting } from "../lib/appSettings.js";
 
 function loadData() {
   try {
-    const parsed = JSON.parse(localStorage.getItem(SERVERS_KEY) || "[]");
+    const parsed = getSetting("connection.servers", []);
     return Array.isArray(parsed) ? parsed : [];
   } catch {
     return [];
@@ -12,7 +11,7 @@ function loadData() {
 }
 
 function persistData(list) {
-  try { localStorage.setItem(SERVERS_KEY, JSON.stringify(list)); } catch {}
+  setSetting("connection.servers", list);
 }
 
 export function useServerList() {

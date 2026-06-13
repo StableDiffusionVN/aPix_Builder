@@ -35,8 +35,6 @@ import {
   snapshotColorAdjustState
 } from "../lib/healingBrush";
 
-const CUSTOM_PRESETS_KEY = "image-editor-custom-presets";
-
 export function useColorAdjustments({
   source,
   onPreviewChange,
@@ -191,11 +189,6 @@ export function useColorAdjustments({
 
   const savePresets = useCallback((updated) => {
     setCustomPresets(updated);
-    try {
-      localStorage.setItem(CUSTOM_PRESETS_KEY, JSON.stringify(updated));
-    } catch (e) {
-      console.error("Failed to write presets to localStorage", e);
-    }
     fetch("/api/presets", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -208,11 +201,6 @@ export function useColorAdjustments({
       .then(data => {
         if (data.success && Array.isArray(data.presets)) {
           setCustomPresets(data.presets);
-          try {
-            localStorage.setItem(CUSTOM_PRESETS_KEY, JSON.stringify(data.presets));
-          } catch (e) {
-            console.error("Failed to write updated presets to localStorage", e);
-          }
         }
       })
       .catch(e => {
@@ -229,20 +217,10 @@ export function useColorAdjustments({
       .then(data => {
         if (data && Array.isArray(data.presets)) {
           setCustomPresets(data.presets);
-          try {
-            localStorage.setItem(CUSTOM_PRESETS_KEY, JSON.stringify(data.presets));
-          } catch (e) {
-            console.error("Failed to write presets to localStorage", e);
-          }
         }
       })
-      .catch(() => {
-        try {
-          const saved = localStorage.getItem(CUSTOM_PRESETS_KEY);
-          if (saved) setCustomPresets(JSON.parse(saved));
-        } catch (localError) {
-          console.error("Failed to load presets from localStorage", localError);
-        }
+      .catch(error => {
+        console.error("Failed to load presets from server", error);
       });
   }, []);
 

@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-
-const STORAGE_KEY = "comfyui-build:sidebar-layout";
+import { getSetting, setSetting } from "../lib/appSettings.js";
 
 export const SIDEBAR_MIN_WIDTH = 320;
 export const SIDEBAR_MAX_WIDTH = 560;
@@ -12,7 +11,7 @@ function clamp(value, min, max) {
 
 function loadLayout() {
   try {
-    const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
+    const raw = getSetting("layout.sidebar", {});
     const side = raw.side === "right" ? "right" : "left";
     const width = Number(raw.width);
     return {
@@ -42,9 +41,7 @@ export function useSidebarLayout() {
   layoutRef.current = layout;
 
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(layout));
-    } catch {}
+    setSetting("layout.sidebar", layout);
   }, [layout]);
 
   useEffect(() => {

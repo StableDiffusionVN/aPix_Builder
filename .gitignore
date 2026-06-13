@@ -1,18 +1,18 @@
 node_modules/
 dist/
-uploads/
 .claude/
-input/
-output/
-config/templates/
-config/templates-rh/
+user/
 aPix_builder_pts/package/
 .DS_Store
 *.log
 .env
 .env.*
 !.env.example
-presets/
+storage-settings.json
+release/
 # Kế hoạch nội bộ — không đồng bộ git
-docs/DEVELOPMENT-ROADMAP.md
-docs/SMOKE-TEST.md
+_local/
+test-results/
+*.blockmap
+# Landing page — repo git riêng (private), không nested trong repo chính
+website/

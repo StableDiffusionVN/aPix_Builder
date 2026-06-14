@@ -2,7 +2,3 @@
 	path = aPix_builder_pts
 	url = https://github.com/StableDiffusionVN/aPix_builder_pts.git
 	branch = dev
-[submodule "aPix_builder_shortcut"]
-	path = aPix_builder_shortcut
-	url = https://github.com/StableDiffusionVN/aPix_builder_shortcut.git
-	branch = dev

@@ -1,11 +1,13 @@
-import { app, BrowserWindow, ipcMain, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { isVersionNewer } from "../shared/version.js";
+import { createSignedRunningHubShortcut, resolveShortcutAssetsDir } from "./runninghub-shortcut.mjs";
 
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const preloadPath = path.join(appRoot, "electron", "preload.mjs");
+const shortcutAssetsDir = resolveShortcutAssetsDir(appRoot);
 const UPDATE_MANIFEST_URL = process.env.APIX_UPDATE_MANIFEST_URL ?? "https://apix.sdvn.vn/releases/latest.json";
 const UPDATE_CHECK_DELAY_MS = 5000;
 
@@ -87,9 +89,20 @@ function scheduleUpdateCheck() {
   }, UPDATE_CHECK_DELAY_MS);
 }
 
+function shortcutFilename(value) {
+  const base = String(value || "RunningHub Shortcut")
+    .normalize("NFKD")
+    .replace(/[^\w\s-]/g, "")
+    .trim()
+    .replace(/\s+/g, "-")
+    .slice(0, 80);
+  return `${base || "RunningHub-Shortcut"}.shortcut`;
+}
+
 async function createWindow() {
   if (!backend) {
     process.env.APIX_RESOURCE_ROOT = appRoot;
+    process.env.APIX_SHORTCUT_ASSETS_DIR = shortcutAssetsDir;
     // Dev / npm run desktop → repo/user/ · Packaged DMG/exe → OS app data folder
     process.env.APIX_DATA_ROOT = app.isPackaged ? app.getPath("userData") : appRoot;
     process.env.APIX_SERVE_FRONTEND = "1";
@@ -144,6 +157,44 @@ function registerIpcHandlers() {
     if (typeof version !== "string" || !version.trim()) return false;
     await writeDismissedUpdateVersion(version.trim());
     return true;
+  });
+
+  ipcMain.handle("runninghub:export-shortcut", async (_event, payload = {}) => {
+    try {
+      if (process.platform !== "darwin") {
+        return { ok: false, error: "Export Shortcut requires macOS." };
+      }
+      const config = payload.config;
+      const apiKey = String(payload.apiKey || "").trim();
+      if (!config || typeof config !== "object" || Array.isArray(config)) {
+        return { ok: false, error: "Missing RunningHub configuration." };
+      }
+      if (!apiKey) return { ok: false, error: "Missing RunningHub API key." };
+
+      const saveResult = await dialog.showSaveDialog(mainWindow, {
+        title: "Export RunningHub Shortcut",
+        defaultPath: path.join(app.getPath("downloads"), shortcutFilename(payload.name)),
+        filters: [{ name: "Apple Shortcut", extensions: ["shortcut"] }],
+        properties: ["createDirectory", "showOverwriteConfirmation"]
+      });
+      if (saveResult.canceled || !saveResult.filePath) return { ok: false, canceled: true };
+      const outputPath = saveResult.filePath.toLowerCase().endsWith(".shortcut")
+        ? saveResult.filePath
+        : `${saveResult.filePath}.shortcut`;
+      const result = await createSignedRunningHubShortcut({
+        config,
+        apiKey,
+        outputPath,
+        assetsDir: shortcutAssetsDir,
+        kind: payload.kind,
+        resourceId: payload.resourceId
+      });
+      await fs.chmod(outputPath, 0o600);
+      return { ok: true, ...result };
+    } catch (error) {
+      console.error("RunningHub Shortcut export failed:", error.message);
+      return { ok: false, error: error.message || "Could not export Shortcut." };
+    }
   });
 }
 

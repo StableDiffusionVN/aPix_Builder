@@ -1,7 +1,7 @@
 {
   "name": "comfyui-yaml-react-app",
   "productName": "aPix Builder",
-  "description": "Desktop workflow builder for ComfyUI and RunningHub",
+  "description": "ComfyUI and RunningHub workflow builder with Apple Shortcut export",
   "author": "StableDiffusionVN",
   "version": "1.0.0",
   "private": true,
@@ -50,6 +50,9 @@
     "appId": "vn.stablediffusion.apixbuilder",
     "productName": "aPix Builder",
     "asar": true,
+    "asarUnpack": [
+      "electron/shortcut-assets/**/*"
+    ],
     "files": [
       "dist/**/*",
       "electron/**/*",

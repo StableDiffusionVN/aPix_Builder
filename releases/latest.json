@@ -1,9 +1,11 @@
 {
   "version": "1.0.0",
   "label": "v1.0",
-  "publishedAt": "2026-06-13T19:42:31.126Z",
+  "publishedAt": "2026-06-14T19:45:21.714Z",
   "notes": [
-    "aPix Builder v1.0"
+    "aPix Builder v1 chính thức (1.0.0)",
+    "Export Apple Shortcut cho RunningHub Workflow/App trên macOS",
+    "ComfyUI local · RunningHub cloud · Image/Mask Editor · Template Editor · Multi-API failover"
   ],
   "downloadUrl": "https://apix.sdvn.vn/releases/aPix%20Builder-1.0.0-arm64.dmg",
   "mandatory": false

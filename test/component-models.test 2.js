@@ -9,7 +9,6 @@ import {
   slugifyTemplateKey,
   workflowNodes
 } from "../src/features/template-editor/templateEditorModel.js";
-import { buildRunningHubAppShortcutConfig } from "../src/lib/runningHubShortcut.js";
 
 describe("DynamicField registry", () => {
   test("maps supported ui types to renderers", () => {
@@ -50,44 +49,5 @@ describe("TemplateEditor model", () => {
     const rows = [{ rowId: "a" }, { rowId: "b" }, { rowId: "c" }];
     expect(moveRow(rows, "b", -1).map(row => row.rowId)).toEqual(["b", "a", "c"]);
     expect(reorderRows(rows, "a", "c").map(row => row.rowId)).toEqual(["b", "c", "a"]);
-  });
-});
-
-describe("RunningHub Shortcut model", () => {
-  test("converts app nodes to app_build-compatible inputs", () => {
-    const config = buildRunningHubAppShortcutConfig({
-      webappId: "123",
-      appName: "Demo App",
-      nodes: [
-        { nodeId: "7", fieldName: "image", fieldType: "IMAGE", description: "Source Image" },
-        { nodeId: "8", fieldName: "steps", fieldType: "INT", fieldValue: "20" },
-        { nodeId: "9", fieldName: "mode", fieldType: "LIST", fieldData: ["fast", "quality"] }
-      ],
-      values: { "8|steps": 30 }
-    });
-    expect(config.runninghub.webappId).toBe("123");
-    expect(Object.values(config.input).map(item => item.ui.type)).toEqual(["image", "int", "menu"]);
-    expect(Object.values(config.input)[1].ui.value).toBe(30);
-  });
-
-  test("preserves RunningHub app menu labels and API values", () => {
-    const config = buildRunningHubAppShortcutConfig({
-      webappId: "123",
-      nodes: [{
-        nodeId: "9",
-        fieldName: "model",
-        fieldType: "LIST",
-        fieldData: [
-          { label: "Product", value: "product.safetensors" },
-          { label: "Architecture", value: "architecture.safetensors" }
-        ]
-      }]
-    });
-    const menu = Object.values(config.input)[0].ui;
-    expect(menu.menuLabelSyntax).toBe(true);
-    expect(menu.choices).toEqual([
-      "Product:product.safetensors",
-      "Architecture:architecture.safetensors"
-    ]);
   });
 });

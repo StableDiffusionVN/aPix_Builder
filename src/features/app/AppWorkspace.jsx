@@ -1,4 +1,4 @@
-import { Suspense, useCallback, useEffect, useMemo, useRef } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   CheckCircle2,
   Coins,
@@ -69,12 +69,14 @@ import {
 } from "../../lib/rhTokenPool.js";
 import { expandFolderImageValues } from "../../lib/localImageFolder.js";
 import { rhWfWorkspaceKey } from "../../lib/runningHubTemplate";
+import { buildRunningHubAppShortcutConfig } from "../../lib/runningHubShortcut";
 import { ExecutionModeToggle, RunningHubPanel } from "../../components/RunningHubPanel";
 import { SidebarLayoutHandles } from "../../components/SidebarLayoutHandles";
 import { SdvnWaterLogo } from "../../components/SdvnWaterLogo";
 import { AppUpdateBanner } from "../../components/AppUpdateBanner";
 import { ComfyUiLogomark } from "../../components/icons/ComfyUiIcon";
 import { RunningHubLogomark } from "../../components/icons/RunningHubIcon";
+import { AppleShortcutsIcon } from "../../components/icons/AppleShortcutsIcon";
 import { localizeRuntimeMessage, useI18n } from "../../i18n/I18nContext";
 import { MAIN_FONT_OPTIONS, THEME_OPTIONS } from "../../constants/appearance";
 import { getSetting, setSetting } from "../../lib/appSettings";
@@ -212,6 +214,7 @@ export function AppWorkspace() {
     nodesError: rhNodesError,
     fetchNodes: fetchRhNodes
   } = useRunningHub();
+  const [shortcutExporting, setShortcutExporting] = useState(false);
   const { history, setHistory, loadOutputHistory, deleteHistoryItem } = useHistory();
   const { inputImages, setInputImages, refreshInputImages } = useInputImages();
   const { workspaceRef, getStoredValues, saveValues, getLastTemplate } = useWorkspace();
@@ -270,6 +273,7 @@ export function AppWorkspace() {
   const isRunningHub = isRunningHubMode(executionMode);
   const isRunningHubApp = executionMode === "runninghub-app";
   const isRunningHubWf = executionMode === "runninghub-wf";
+  const shortcutExportAvailable = !(isDesktop && window.apixDesktop?.platform === "win32");
   const healthStatus = discoveryLoading ? "loading" : discovery ? "online" : "offline";
 
   const inputs = useMemo(() => flattenInputs(config?.input), [config]);
@@ -1377,6 +1381,94 @@ export function AppWorkspace() {
     });
   }
 
+  async function handleExportRunningHubShortcut(kind) {
+    if (!shortcutExportAvailable) {
+      setError(t("rh.exportShortcutWindowsDisabled"));
+      return;
+    }
+    const apiKey = getPrimaryRhApiKey(rhSettings);
+    if (!apiKey) {
+      setError(t("rh.noApiKey"));
+      return;
+    }
+    const isWorkflow = kind === "workflow";
+    const configToExport = isWorkflow
+      ? rhWfConfig
+      : buildRunningHubAppShortcutConfig({
+          webappId: rhSettings.webappId,
+          appName: selectedRunningHubName,
+          nodes: rhNodes,
+          values: rhValues
+        });
+    if (!configToExport || !Object.keys(configToExport.input || {}).length) {
+      setError(isWorkflow ? t("error.rhWfMissingTemplateShort") : t("error.rhMissingAppNodes"));
+      return;
+    }
+
+    setShortcutExporting(true);
+    setError("");
+    setStatus(t("rh.exportShortcutSigning"));
+    try {
+      const payload = {
+        kind,
+        resourceId: isWorkflow
+          ? String(rhWfConfig?.runninghub?.workflowId || "").trim()
+          : String(rhSettings.webappId || "").trim(),
+        name: isWorkflow
+          ? rhWfConfig?.app?.name || rhWfSelectedTemplate
+          : selectedRunningHubName,
+        config: configToExport,
+        apiKey
+      };
+      let response;
+      if (typeof window.apixDesktop?.exportRunningHubShortcut === "function") {
+        response = await window.apixDesktop.exportRunningHubShortcut(payload);
+      } else {
+        const exportResponse = await fetch("/api/runninghub/export-shortcut", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        if (!exportResponse.ok) {
+          const errorBody = await exportResponse.json().catch(() => ({}));
+          throw new Error(errorBody.error || t("rh.exportShortcutFailed"));
+        }
+        const blob = await exportResponse.blob();
+        const disposition = exportResponse.headers.get("content-disposition") || "";
+        const filename = disposition.match(/filename="([^"]+)"/i)?.[1] || `${payload.name || "RunningHub-Shortcut"}.shortcut`;
+        const downloadUrl = URL.createObjectURL(blob);
+        const anchor = document.createElement("a");
+        anchor.href = downloadUrl;
+        anchor.download = filename;
+        anchor.click();
+        URL.revokeObjectURL(downloadUrl);
+        response = {
+          ok: true,
+          kind: exportResponse.headers.get("x-runninghub-shortcut-kind") || kind,
+          resourceId: exportResponse.headers.get("x-runninghub-resource-id") || payload.resourceId,
+          mapping: decodeURIComponent(exportResponse.headers.get("x-runninghub-mapping") || "")
+            .split(",")
+            .filter(Boolean)
+        };
+      }
+      if (response?.canceled) {
+        setStatus(t("rh.exportShortcutCanceled"));
+        return;
+      }
+      if (!response?.ok) throw new Error(response?.error || t("rh.exportShortcutFailed"));
+      setStatus(t("rh.exportShortcutDoneDetail", {
+        kind: response.kind || kind,
+        id: response.resourceId || payload.resourceId,
+        mapping: (response.mapping || []).join(", ")
+      }));
+    } catch (err) {
+      setError(localizeRuntimeMessage(err.message, locale));
+      setStatus(t("rh.exportShortcutFailed"));
+    } finally {
+      setShortcutExporting(false);
+    }
+  }
+
   // Compute progress percentage
   const progressPct = progress?.max > 0 ? Math.round((progress.value / progress.max) * 100) : null;
   // Màn hình chờ chỉ chiếm preview khi đang chạy VÀ người dùng đang xem nó
@@ -1543,6 +1635,9 @@ export function AppWorkspace() {
             nodesLoading={rhNodesLoading}
             nodesError={rhNodesError}
             onRefreshNodes={handleRefreshRhNodes}
+            onExportShortcut={() => handleExportRunningHubShortcut("app")}
+            shortcutExporting={shortcutExporting}
+            shortcutExportAvailable={shortcutExportAvailable && Boolean(rhNodes.length && rhSettings.webappId?.trim() && rhPrimaryApiKey)}
             inputImages={inputImages}
             onRefreshInputImages={refreshInputImages}
             onUpdateInputImages={setInputImages}
@@ -1553,11 +1648,16 @@ export function AppWorkspace() {
               <div className="settingsHeader">
                 <Settings2 size={16} />
                 <h2>RunningHub Workflow</h2>
-                <span className={`healthDot health-${rhWfConfig ? "online" : "offline"}`} title={
-                  rhWfConfig ? t("health.rhWfReady") : t("health.noTemplate")
-                }>
-                  {rhWfConfig ? <Wifi size={10} /> : <WifiOff size={10} />}
-                </span>
+                <button
+                  type="button"
+                  className="rhWebappActionBtn rhExportShortcutBtn"
+                  onClick={() => handleExportRunningHubShortcut("workflow")}
+                  disabled={!shortcutExportAvailable || shortcutExporting || !rhWfConfig || !rhPrimaryApiKey}
+                  title={shortcutExportAvailable ? t("rh.exportShortcut") : t("rh.exportShortcutWindowsDisabled")}
+                  aria-label={t("rh.exportShortcut")}
+                >
+                  {shortcutExporting ? <Loader2 size={14} className="spin" /> : <AppleShortcutsIcon size={16} />}
+                </button>
               </div>
               <TemplateSelector
                 templates={rhWfTemplates}

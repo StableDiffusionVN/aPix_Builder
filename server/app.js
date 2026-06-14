@@ -52,6 +52,10 @@ import {
 import { withRhTokenFailover, resolveRhApiKeys, RH_TOKEN_POLICY } from "./lib/rhTokenFailover.js";
 import { scanLocalImageFolder } from "./lib/localImageFolder.js";
 import {
+  createSignedRunningHubShortcut,
+  resolveShortcutAssetsDir
+} from "../electron/runninghub-shortcut.mjs";
+import {
   appendRunLog,
   clearRunLogSessions,
   deleteRunLogSession,
@@ -98,6 +102,7 @@ const legacyRhAppsDir = path.join(dataRoot, "rh-apps");
 const legacyRhSavedAppsFilePath = path.join(legacyRhAppsDir, "apps.json");
 const legacyRhDefaultAppsFilePath = path.join(legacyRhAppsDir, "defaults.json");
 const frontendDir = path.join(resourceRoot, "dist");
+const shortcutAssetsDir = resolveShortcutAssetsDir(resourceRoot);
 const RH_DEFAULT_WEBAPP_IDS = [
   "2039924771751731201",
   "2064284416448491522"
@@ -2075,6 +2080,61 @@ async function handleRunningHubTaskCheck(req, res) {
   send(res, 200, { detail });
 }
 
+function shortcutDownloadName(value) {
+  const base = String(value || "RunningHub Shortcut")
+    .normalize("NFKD")
+    .replace(/[^\w\s-]/g, "")
+    .trim()
+    .replace(/\s+/g, "-")
+    .slice(0, 80);
+  return `${base || "RunningHub-Shortcut"}.shortcut`;
+}
+
+async function handleRunningHubShortcutExport(req, res) {
+  if (process.platform !== "darwin") {
+    send(res, 400, { error: "Export Shortcut requires macOS." });
+    return;
+  }
+  const body = JSON.parse(await readBody(req) || "{}");
+  const config = body.config;
+  const apiKey = String(body.apiKey || "").trim();
+  if (!config || typeof config !== "object" || Array.isArray(config)) {
+    send(res, 400, { error: "Missing RunningHub configuration." });
+    return;
+  }
+  if (!apiKey) {
+    send(res, 400, { error: "Missing RunningHub API key." });
+    return;
+  }
+
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "apix-shortcut-download-"));
+  const outputPath = path.join(tempDir, shortcutDownloadName(body.name));
+  try {
+    const result = await createSignedRunningHubShortcut({
+      config,
+      apiKey,
+      outputPath,
+      assetsDir: shortcutAssetsDir,
+      kind: body.kind,
+      resourceId: body.resourceId
+    });
+    const data = await readFile(outputPath);
+    res.writeHead(200, {
+      "content-type": "application/octet-stream",
+      "content-disposition": `attachment; filename="${path.basename(outputPath)}"`,
+      "content-length": data.length,
+      "x-runninghub-shortcut-kind": result.kind,
+      "x-runninghub-resource-id": result.resourceId,
+      "x-runninghub-mapping": encodeURIComponent(result.mapping.join(","))
+    });
+    res.end(data);
+  } catch (error) {
+    send(res, 400, { error: error.message || "Could not export Shortcut." });
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+}
+
 export async function cleanupUploads(maxAgeMs = 24 * 60 * 60 * 1000) {
   try {
     const now = Date.now();
@@ -2174,6 +2234,7 @@ export const routeContext = {
   handleRunningHubNodes,
   handleRunningHubRun,
   handleRunningHubTaskCheck,
+  handleRunningHubShortcutExport,
   handleRunningHubWfRun,
   handleRunningHubWfWorkflowJson,
   handleSaveColorAdjust,

@@ -9123,10 +9123,19 @@ html:not([data-theme="dark"]):not([data-theme="light"]) .appShell.is-runninghub 
   margin: 0;
 }
 .rhWebappIdRow {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  display: flex;
   align-items: end;
   gap: 8px;
+}
+.rhWebappIdRow > .field {
+  flex: 1;
+  min-width: 0;
+}
+.rhWebappActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 .rhWebappActionBtn {
@@ -9159,6 +9168,10 @@ html:not([data-theme="dark"]):not([data-theme="light"]) .appShell.is-runninghub 
   border-color: rgba(var(--accent-rgb), 0.42);
   color: var(--accent-hover);
   background: rgba(var(--accent-rgb), 0.1);
+}
+
+.settingsHeader .rhExportShortcutBtn {
+  margin-left: auto;
 }
 
 .rhAppSaveHint {

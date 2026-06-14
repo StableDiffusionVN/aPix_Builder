@@ -1,6 +1,7 @@
 node_modules/
 dist/
 .claude/
+.cursor/
 user/
 aPix_builder_pts/package/
 .DS_Store

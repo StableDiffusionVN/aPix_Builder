@@ -6,6 +6,7 @@ export function createRunningHubRoutes(context) {
     handleRunningHubCancel,
     handleRunningHubNodes,
     handleRunningHubRun,
+    handleRunningHubShortcutExport,
     handleRunningHubTaskCheck,
     handleRunningHubWfRun,
     handleRunningHubWfWorkflowJson,
@@ -41,6 +42,7 @@ export function createRunningHubRoutes(context) {
     const postRoutes = {
       "/api/runninghub/nodes": handleRunningHubNodes,
       "/api/runninghub/account-status": handleRunningHubAccountStatus,
+      "/api/runninghub/export-shortcut": handleRunningHubShortcutExport,
       "/api/runninghub/run": handleRunningHubRun,
       "/api/runninghub-wf/run": handleRunningHubWfRun,
       "/api/runninghub/cancel": handleRunningHubCancel,

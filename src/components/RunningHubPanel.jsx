@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Bookmark, Loader2, Lock, RefreshCcw, Settings2, Wifi, WifiOff } from "lucide-react";
+import { Bookmark, Loader2, Lock, RefreshCcw, Settings2 } from "lucide-react";
 import { RunningHubField } from "./RunningHubField";
 import { ComfyUiLogomark } from "./icons/ComfyUiIcon";
 import { RunningHubLogomark } from "./icons/RunningHubIcon";
+import { AppleShortcutsIcon } from "./icons/AppleShortcutsIcon";
 import { useI18n } from "../i18n/I18nContext";
 import { isDefaultRhWebapp } from "../lib/rhSavedApps.js";
 
@@ -171,14 +172,15 @@ export function RunningHubPanel({
   nodesLoading,
   nodesError,
   onRefreshNodes,
+  onExportShortcut,
+  shortcutExporting = false,
+  shortcutExportAvailable = false,
   inputImages,
   onRefreshInputImages,
   onUpdateInputImages
 }) {
   const { t } = useI18n();
   const [saveHint, setSaveHint] = useState("");
-  const connected = Boolean(nodes.length && !nodesError);
-  const healthStatus = nodesLoading ? "loading" : connected ? "online" : "offline";
   const selectedPresetId = webappOptions.some(app => app.id === settings.webappId)
     ? settings.webappId
     : "custom";
@@ -212,13 +214,16 @@ export function RunningHubPanel({
       <div className="settingsHeader">
         <Settings2 size={16} />
         <h2>{webappInfo?.webappName || "RunningHub App"}</h2>
-        <span className={`healthDot health-${healthStatus}`} title={
-          healthStatus === "online" ? t("rh.connected") :
-          healthStatus === "loading" ? t("rh.loadingNodes") : t("rh.disconnected")
-        }>
-          {healthStatus === "loading" ? <Loader2 size={10} className="spin" /> :
-           healthStatus === "online" ? <Wifi size={10} /> : <WifiOff size={10} />}
-        </span>
+        <button
+          type="button"
+          className="rhWebappActionBtn rhExportShortcutBtn"
+          onClick={onExportShortcut}
+          disabled={!shortcutExportAvailable || shortcutExporting}
+          title={shortcutExportAvailable ? t("rh.exportShortcut") : t("rh.exportShortcutWindowsDisabled")}
+          aria-label={t("rh.exportShortcut")}
+        >
+          {shortcutExporting ? <Loader2 size={14} className="spin" /> : <AppleShortcutsIcon size={16} />}
+        </button>
       </div>
 
       <div className="rhAppPicker">
@@ -251,29 +256,31 @@ export function RunningHubPanel({
             }}
           />
           </label>
-          {!isBuiltinWebapp ? (
+          <div className="rhWebappActions">
+            {!isBuiltinWebapp ? (
+              <button
+                type="button"
+                className={`rhWebappActionBtn${isSavedWebapp ? " isSaved" : ""}`}
+                onClick={handleSaveWebapp}
+                disabled={!canToggleWebapp}
+                title={isSavedWebapp ? t("rh.removeApp") : canSaveWebapp ? t("rh.saveApp") : t("rh.saveAppNeedReload")}
+                aria-label={isSavedWebapp ? t("rh.removeApp") : t("rh.saveApp")}
+                aria-pressed={isSavedWebapp}
+              >
+                <Bookmark size={14} />
+              </button>
+            ) : null}
             <button
               type="button"
-              className={`rhWebappActionBtn${isSavedWebapp ? " isSaved" : ""}`}
-              onClick={handleSaveWebapp}
-              disabled={!canToggleWebapp}
-              title={isSavedWebapp ? t("rh.removeApp") : canSaveWebapp ? t("rh.saveApp") : t("rh.saveAppNeedReload")}
-              aria-label={isSavedWebapp ? t("rh.removeApp") : t("rh.saveApp")}
-              aria-pressed={isSavedWebapp}
+              className="rhWebappActionBtn"
+              onClick={onRefreshNodes}
+              disabled={nodesLoading}
+              title={t("rh.reload")}
+              aria-label={t("rh.reload")}
             >
-              <Bookmark size={14} />
+              {nodesLoading ? <Loader2 size={14} className="spin" /> : <RefreshCcw size={14} />}
             </button>
-          ) : null}
-          <button
-            type="button"
-            className="rhWebappActionBtn"
-            onClick={onRefreshNodes}
-            disabled={nodesLoading}
-            title={t("rh.reload")}
-            aria-label={t("rh.reload")}
-          >
-            {nodesLoading ? <Loader2 size={14} className="spin" /> : <RefreshCcw size={14} />}
-          </button>
+          </div>
         </div>
         {saveHint ? <small className="rhAppSaveHint">{saveHint}</small> : null}
         {savedAppsError ? <small className="rhAppSaveHint rhAppSaveHintError">{savedAppsError}</small> : null}

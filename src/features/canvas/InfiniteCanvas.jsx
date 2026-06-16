@@ -574,16 +574,14 @@ function InfiniteCanvasInner({
   }, [executeNode, updateNodeData, syncLiveToRefs]);
 
   const executeNodeRun = useCallback(async (id) => {
-    if (runLockRef.current) return false;
-    const node = nodesRef.current.find(item => item.id === id);
-    if (!node || node.type !== "step") return false;
-
-    runLockRef.current = true;
     setNodeRunning(true);
     pipelineCancelledRef.current = false;
-    const live = nodesRef.current.map(item => ({ ...item, data: { ...item.data } }));
-
     try {
+      const node = nodesRef.current.find(item => item.id === id);
+      if (!node || node.type !== "step") return false;
+
+      const live = nodesRef.current.map(item => ({ ...item, data: { ...item.data } }));
+
       const missingSources = linkedImageInputsMissingSource(node, live, edgesRef.current);
       const blocked = missingSources.find(item => !item.canAutoRun);
       if (blocked) {
@@ -705,15 +703,9 @@ function InfiniteCanvasInner({
   ]);
 
   const executeGraphRun = useCallback(async () => {
-    if (runLockRef.current) return false;
     const live = nodesRef.current.map(node => ({ ...node, data: { ...node.data } }));
     const order = topoOrder(live, edgesRef.current);
-    const hasRhSteps = live.some(node => node.type === "step" && (
-      node.data.kind === STEP_KINDS.RH_APP || node.data.kind === STEP_KINDS.RH_WF
-    ));
-    if (hasRhSteps && !hasRhApiKey(rhSettings)) return false;
     pipelineCancelledRef.current = false;
-    runLockRef.current = true;
     setGraphRunning(true);
 
     let pipelineIntroLogged = false;
@@ -755,7 +747,6 @@ function InfiniteCanvasInner({
     }
     return true;
   }, [
-    rhSettings,
     runStepInLive,
     applyStepSuccess,
     updateNodeData,
@@ -786,22 +777,35 @@ function InfiniteCanvasInner({
     if (runLockRef.current) return;
     const [job, ...remaining] = runQueueRef.current;
     if (!job) return;
+
+    if (job.type === "graph") {
+      const hasRhSteps = nodesRef.current.some(node => node.type === "step" && (
+        node.data.kind === STEP_KINDS.RH_APP || node.data.kind === STEP_KINDS.RH_WF
+      ));
+      if (hasRhSteps && !hasRhApiKey(rhSettings)) {
+        runQueueRef.current = remaining;
+        setRunQueue(remaining);
+        queueMicrotask(() => drainRunQueueRef.current());
+        return;
+      }
+    }
+
+    runLockRef.current = true;
     runQueueRef.current = remaining;
     setRunQueue(remaining);
 
-    const execution = job.type === "node"
-      ? executeNodeRunRef.current?.(job.nodeId)
-      : executeGraphRunRef.current?.();
-    Promise.resolve(execution).then(started => {
-      if (started === false) queueMicrotask(() => drainRunQueueRef.current());
-    });
-  }, []);
+    if (job.type === "node") {
+      void executeNodeRunRef.current?.(job.nodeId);
+    } else {
+      void executeGraphRunRef.current?.();
+    }
+  }, [rhSettings]);
   drainRunQueueRef.current = drainRunQueue;
 
   const runNode = useCallback((id) => {
     const node = nodesRef.current.find(item => item.id === id);
     if (!node || node.type !== "step") return;
-    if (runLockRef.current) {
+    if (runLockRef.current || runQueueRef.current.length > 0) {
       enqueueRun({
         type: "node",
         nodeId: id,
@@ -809,17 +813,23 @@ function InfiniteCanvasInner({
       });
       return;
     }
+    runLockRef.current = true;
     void executeNodeRunRef.current?.(id);
   }, [enqueueRun]);
 
   const runGraph = useCallback(() => {
     if (!nodesRef.current.some(node => node.type === "step")) return;
-    if (runLockRef.current) {
+    const hasRhSteps = nodesRef.current.some(node => node.type === "step" && (
+      node.data.kind === STEP_KINDS.RH_APP || node.data.kind === STEP_KINDS.RH_WF
+    ));
+    if (hasRhSteps && !hasRhApiKey(rhSettings)) return;
+    if (runLockRef.current || runQueueRef.current.length > 0) {
       enqueueRun({ type: "graph", jobLabel: "Canvas pipeline" });
       return;
     }
+    runLockRef.current = true;
     void executeGraphRunRef.current?.();
-  }, [enqueueRun]);
+  }, [enqueueRun, rhSettings]);
 
   const queuedNodeCounts = useMemo(() => {
     const counts = {};

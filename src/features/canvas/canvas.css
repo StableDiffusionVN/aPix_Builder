@@ -1625,6 +1625,49 @@
   left: 7px;
 }
 
+/* ===== Output preview toolbar ===== */
+
+.canvasPreviewToolbar {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 5;
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transform: translateY(-2px);
+  pointer-events: none;
+  transition: opacity 0.14s ease, transform 0.14s ease;
+}
+
+.canvasNodePreview:hover .canvasPreviewToolbar,
+.canvasNodePreview:focus-within .canvasPreviewToolbar {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.canvasPreviewToolbar button {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  min-height: 0;
+  padding: 0;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  background: rgba(7, 8, 16, 0.76);
+  color: rgba(255, 255, 255, 0.82);
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+}
+
+.canvasPreviewToolbar button:hover {
+  border-color: rgba(var(--accent-rgb), 0.68);
+  color: #fff;
+  background: rgba(var(--accent-rgb), 0.32);
+}
+
 /* ===== Handles ===== */
 
 .canvasWorkspace .react-flow__node {
@@ -1710,7 +1753,7 @@
 .canvasHandle.type-choice { background: #06b6d4; }
 .canvasHandle.type-any { background: #94a3b8; }
 
-.canvasInputRow .react-flow__handle-left { left: 0; }
+.canvasInputRow .react-flow__handle-left { left: 0; top: calc(50% + 8.5px); }
 
 .canvasContextMenu {
   position: fixed;

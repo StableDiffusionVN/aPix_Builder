@@ -175,6 +175,8 @@ export function useExecution({ onComplete, runLog } = {}) {
       const [nextJob, ...remaining] = runQueueRef.current;
       setQueue(remaining);
       if (nextJob) {
+        activeRunIdRef.current = nextJob.runId;
+        setActiveRunId(nextJob.runId);
         setStatus(t("exec.nextRequest", { count: remaining.length }));
         appendLog("info", t("exec.movingToNext", { job: describeJob(nextJob) }), { runId: nextJob.runId });
         executeRun(nextJob);
@@ -216,7 +218,7 @@ export function useExecution({ onComplete, runLog } = {}) {
   }
 
   function runWorkflow(job) {
-    if (activeRunIdRef.current) {
+    if (activeRunIdRef.current || runQueueRef.current.length > 0) {
       setQueue([...runQueueRef.current, job]);
       const queueSize = runQueueRef.current.length;
       setStatus(t("exec.addedToQueue", { count: queueSize }));
@@ -224,6 +226,8 @@ export function useExecution({ onComplete, runLog } = {}) {
       appendLog("queue", t("exec.queueAdded", { job: describeJob(job), position: queueSize }), { runId: job.runId });
       return;
     }
+    activeRunIdRef.current = job.runId;
+    setActiveRunId(job.runId);
     runLog?.startSession?.(job, { provider: "local", status: "running" });
     executeRun(job);
   }

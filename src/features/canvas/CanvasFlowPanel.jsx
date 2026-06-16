@@ -60,17 +60,32 @@ export function CanvasFlowPanel({
 
   useEffect(() => {
     function handleKeyDown(event) {
-      if (event.key !== "1" || event.repeat || isTypingTarget(event.target)) return;
+      if (event.repeat || isTypingTarget(event.target)) return;
       if (event.metaKey || event.ctrlKey || event.altKey) return;
       if (event.target instanceof Element && event.target.closest(
         "[role='dialog'], .imageEditorModal, .inputLibraryModal, .imageLightbox, .maskEditorModal"
       )) return;
-      event.preventDefault();
-      fitWorkflowView();
+
+      if (event.key === "1") {
+        event.preventDefault();
+        fitWorkflowView();
+        return;
+      }
+
+      const key = event.key.toLowerCase();
+      if (key === "v") {
+        event.preventDefault();
+        onToolChange?.("select");
+        return;
+      }
+      if (key === "h") {
+        event.preventDefault();
+        onToolChange?.("hand");
+      }
     }
     window.addEventListener("keydown", handleKeyDown, true);
     return () => window.removeEventListener("keydown", handleKeyDown, true);
-  }, [fitWorkflowView]);
+  }, [fitWorkflowView, onToolChange]);
 
   return (
     <Panel position="bottom-right" className="canvasFlowPanel">
@@ -89,7 +104,7 @@ export function CanvasFlowPanel({
           type="button"
           className={`canvasZoomBtn${activeTool === "select" ? " active" : ""}`}
           onClick={() => onToolChange?.("select")}
-          title={`Select - kéo nền để pan, Shift-kéo để chọn vùng${spaceHeld ? " (tạm thời qua Space)" : ""}`}
+          title={`Select (V) — kéo nền để pan, Shift-kéo để chọn vùng${spaceHeld ? " (tạm thời qua Space)" : ""}`}
           aria-label="Công cụ Select"
           aria-pressed={selectedTool === "select"}
         >
@@ -99,7 +114,7 @@ export function CanvasFlowPanel({
           type="button"
           className={`canvasZoomBtn${activeTool === "hand" ? " active" : ""}`}
           onClick={() => onToolChange?.("hand")}
-          title={`Hand${spaceHeld ? " (tạm thời qua Space)" : ""}`}
+          title={`Hand (H)${spaceHeld ? " (tạm thời qua Space)" : ""}`}
           aria-label="Công cụ Hand"
           aria-pressed={selectedTool === "hand"}
         >

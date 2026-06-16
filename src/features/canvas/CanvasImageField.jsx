@@ -1,6 +1,6 @@
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Eye, Images, Link, Loader2, Pencil, Scissors, Upload, X } from "lucide-react";
+import { Eye, Images, Link, Loader2, Pencil, PenTool, Scissors, Upload, X } from "lucide-react";
 import { InputLibraryModal } from "../../components/InputLibraryModal.jsx";
 import { ImageLightboxOverlay } from "../../components/ImageLightboxOverlay.jsx";
 import { ImageEditorModal } from "../../components/lazyModals.js";
@@ -310,7 +310,7 @@ export function CanvasImageField({ label, value, onChange, onContextMenu }) {
                   }}
                   title={imageHasMask ? t("field.editMask") : t("field.paintMask")}
                 >
-                  <Scissors size={13} />
+                  <PenTool size={13} />
                 </button>
               ) : null}
               <button

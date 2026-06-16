@@ -1,5 +1,9 @@
-import { useCallback, useState } from "react";
+import { Suspense, useCallback, useState } from "react";
+import { createPortal } from "react-dom";
 import { useViewport } from "@xyflow/react";
+import { Maximize2, Wand2 } from "lucide-react";
+import { ImageLightboxOverlay } from "../../components/ImageLightboxOverlay.jsx";
+import { ImageEditorModal } from "../../components/lazyModals.js";
 
 function PreviewImage({ src, alt, className = "", onSize }) {
   return (
@@ -38,10 +42,22 @@ function SizeBadge({ label, size, side, timingLabel = "" }) {
   );
 }
 
+async function saveOutputToInputLibrary(dataUrl) {
+  try {
+    await fetch("/api/input-images", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ filename: `output_edited_${Date.now()}.png`, dataUrl })
+    });
+  } catch {}
+}
+
 export function CanvasNodeComparePreview({ inputUrl, outputUrl, outputTimingLabel = "", onContextMenu }) {
   const [comparePosition, setComparePosition] = useState(50);
   const [isHovering, setIsHovering] = useState(false);
   const [imageSizes, setImageSizes] = useState({});
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [editorOpen, setEditorOpen] = useState(false);
   const { zoom } = useViewport();
 
   const canCompare = Boolean(inputUrl && outputUrl);
@@ -98,7 +114,43 @@ export function CanvasNodeComparePreview({ inputUrl, outputUrl, outputTimingLabe
         <div className="canvasNodePreviewStage">
           <PreviewImage src={outputUrl} alt="output" onSize={rememberImageSize} />
           <SizeBadge label="Output" size={outputSize} side="output" timingLabel={outputTimingLabel} />
+          <div className="canvasPreviewToolbar nodrag">
+            <button
+              type="button"
+              onClick={event => { event.preventDefault(); event.stopPropagation(); setLightboxOpen(true); }}
+              title="View full size"
+            >
+              <Maximize2 size={12} />
+            </button>
+            <button
+              type="button"
+              onClick={event => { event.preventDefault(); event.stopPropagation(); setEditorOpen(true); }}
+              title="Open in Image Editor"
+            >
+              <Wand2 size={12} />
+            </button>
+          </div>
         </div>
+        <ImageLightboxOverlay
+          open={lightboxOpen}
+          image={lightboxOpen ? { url: outputUrl, name: "Output" } : null}
+          title="Output"
+          onClose={() => setLightboxOpen(false)}
+        />
+        {editorOpen ? createPortal(
+          <Suspense fallback={null}>
+            <ImageEditorModal
+              source={outputUrl}
+              title="Output — Image Editor"
+              onClose={() => setEditorOpen(false)}
+              onSave={async dataUrl => {
+                await saveOutputToInputLibrary(dataUrl);
+                setEditorOpen(false);
+              }}
+            />
+          </Suspense>,
+          document.body
+        ) : null}
       </div>
     );
   }
@@ -138,7 +190,45 @@ export function CanvasNodeComparePreview({ inputUrl, outputUrl, outputTimingLabe
         </div>
         <SizeBadge label="Output" size={outputSize} side="output" timingLabel={outputTimingLabel} />
         {isHovering ? <SizeBadge label="Input" size={inputSize} side="input" /> : null}
+        {!isHovering ? (
+          <div className="canvasPreviewToolbar nodrag">
+            <button
+              type="button"
+              onClick={event => { event.preventDefault(); event.stopPropagation(); setLightboxOpen(true); }}
+              title="View full size"
+            >
+              <Maximize2 size={12} />
+            </button>
+            <button
+              type="button"
+              onClick={event => { event.preventDefault(); event.stopPropagation(); setEditorOpen(true); }}
+              title="Open in Image Editor"
+            >
+              <Wand2 size={12} />
+            </button>
+          </div>
+        ) : null}
       </div>
+      <ImageLightboxOverlay
+        open={lightboxOpen}
+        image={lightboxOpen ? { url: outputUrl, name: "Output" } : null}
+        title="Output"
+        onClose={() => setLightboxOpen(false)}
+      />
+      {editorOpen ? createPortal(
+        <Suspense fallback={null}>
+          <ImageEditorModal
+            source={outputUrl}
+            title="Output — Image Editor"
+            onClose={() => setEditorOpen(false)}
+            onSave={async dataUrl => {
+              await saveOutputToInputLibrary(dataUrl);
+              setEditorOpen(false);
+            }}
+          />
+        </Suspense>,
+        document.body
+      ) : null}
     </div>
   );
 }

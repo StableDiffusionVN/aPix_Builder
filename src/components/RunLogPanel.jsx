@@ -29,6 +29,8 @@ const LOG_BUTTON_HEIGHT = 34;
 const LOG_DOCK_GAP = 8;
 const LOG_DOCK_TOP_MARGIN = 8;
 const LOG_DOCK_CHROME = LOG_DOCK_BOTTOM + LOG_BUTTON_HEIGHT + LOG_DOCK_GAP + LOG_DOCK_TOP_MARGIN;
+const LOG_CANVAS_ZOOM_BAR = 38;
+const LOG_CANVAS_DOCK_CHROME = LOG_DOCK_BOTTOM + LOG_CANVAS_ZOOM_BAR + LOG_DOCK_GAP + LOG_DOCK_TOP_MARGIN;
 const LOG_ROW_HEIGHT = 22;
 const LOG_OVERSCAN = 8;
 
@@ -37,9 +39,12 @@ function clampLogHeight(height, maxHeight = MAX_LOG_HEIGHT) {
 }
 
 function measureMaxLogHeight(dockEl) {
-  const container = dockEl?.closest(".previewArea");
+  const container = dockEl?.closest(".previewArea") || dockEl?.closest(".canvasStage");
   if (!container) return MAX_LOG_HEIGHT;
-  const available = container.clientHeight - LOG_DOCK_CHROME;
+  const chrome = dockEl?.classList.contains("outputLogDockNoToggle")
+    ? LOG_CANVAS_DOCK_CHROME
+    : LOG_DOCK_CHROME;
+  const available = container.clientHeight - chrome;
   return Math.max(MIN_LOG_HEIGHT, Math.min(MAX_LOG_HEIGHT, available));
 }
 
@@ -365,7 +370,8 @@ export function RunLogPanel({
   activeRunId = "",
   status = "",
   running = false,
-  rhApiKey = ""
+  rhApiKey = "",
+  hideToggleButton = false
 }) {
   const { t } = useI18n();
   const panelRef = useRef(null);
@@ -619,7 +625,7 @@ export function RunLogPanel({
   return (
     <div
       ref={dockRef}
-      className="outputLogDock"
+      className={`outputLogDock${hideToggleButton ? " outputLogDockNoToggle" : ""}`}
       onWheel={(event) => event.stopPropagation()}
       onPointerDown={(event) => event.stopPropagation()}
     >
@@ -758,19 +764,21 @@ export function RunLogPanel({
         </section>
       ) : null}
 
-      <button
-        type="button"
-        className={`outputLogButton ${hasActivity ? "hasActivity" : ""} ${open ? "active" : ""}`}
-        onClick={onToggle}
-        title="run.log (`)"
-        aria-expanded={open}
-        aria-keyshortcuts="Backquote"
-      >
-        <ScrollText size={15} />
-        {(running || queueCount > 0) ? (
-          <span className="outputLogBadge">{queueCount + (running ? 1 : 0)}</span>
-        ) : null}
-      </button>
+      {hideToggleButton ? null : (
+        <button
+          type="button"
+          className={`outputLogButton ${hasActivity ? "hasActivity" : ""} ${open ? "active" : ""}`}
+          onClick={onToggle}
+          title="run.log (`)"
+          aria-expanded={open}
+          aria-keyshortcuts="Backquote"
+        >
+          <ScrollText size={15} />
+          {(running || queueCount > 0) ? (
+            <span className="outputLogBadge">{queueCount + (running ? 1 : 0)}</span>
+          ) : null}
+        </button>
+      )}
     </div>
   );
 }

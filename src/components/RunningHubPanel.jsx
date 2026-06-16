@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Bookmark, Loader2, Lock, RefreshCcw, Settings2 } from "lucide-react";
+import { Bookmark, Loader2, Lock, RefreshCcw, Settings2, Workflow } from "lucide-react";
 import { RunningHubField } from "./RunningHubField";
 import { ComfyUiLogomark } from "./icons/ComfyUiIcon";
 import { RunningHubLogomark } from "./icons/RunningHubIcon";
@@ -80,15 +80,16 @@ const EXECUTION_MODE_OPTIONS = [
   { id: "runninghub-app", label: "RH App", title: "RunningHub App (Alt/Option+3)", icon: RunningHubLogomark, iconTitle: "RunningHub", shortcut: "Alt+3" }
 ];
 
-export function ExecutionModeToggle({ mode, onChange }) {
+export function ExecutionModeToggle({ mode, onChange, canvasActive = false, onCanvasToggle }) {
   const { locale } = useI18n();
   const trackRef = useRef(null);
   const buttonRefs = useRef({});
+  const indicatorKey = canvasActive ? "canvas" : mode;
   const [indicator, setIndicator] = useState({ left: 0, width: 0, ready: false });
 
   const syncIndicator = useCallback(() => {
     const track = trackRef.current;
-    const button = buttonRefs.current[mode];
+    const button = buttonRefs.current[indicatorKey];
     if (!track || !button) return;
     const trackRect = track.getBoundingClientRect();
     const buttonRect = button.getBoundingClientRect();
@@ -97,7 +98,7 @@ export function ExecutionModeToggle({ mode, onChange }) {
       width: buttonRect.width,
       ready: true
     });
-  }, [mode]);
+  }, [indicatorKey]);
 
   useLayoutEffect(() => {
     syncIndicator();
@@ -116,7 +117,11 @@ export function ExecutionModeToggle({ mode, onChange }) {
   }, [syncIndicator]);
 
   return (
-    <div className={`executionModeToggle mode-${mode}`} role="tablist" aria-label={locale === "vi" ? "Chế độ thực thi" : "Execution mode"}>
+    <div
+      className={`executionModeToggle ${canvasActive ? "mode-canvas" : `mode-${mode}`}`}
+      role="tablist"
+      aria-label={locale === "vi" ? "Chế độ thực thi" : "Execution mode"}
+    >
       <div className="executionModeTrack" ref={trackRef}>
         <span
           className={`executionModeIndicator ${indicator.ready ? "is-ready" : ""}`}
@@ -126,8 +131,23 @@ export function ExecutionModeToggle({ mode, onChange }) {
           }}
           aria-hidden="true"
         />
+        <button
+          type="button"
+          role="tab"
+          ref={node => {
+            buttonRefs.current.canvas = node;
+          }}
+          aria-selected={canvasActive}
+          className={`${canvasActive ? "active" : ""} hasModeIcon`}
+          title={locale === "vi" ? "Chế độ Infinite Canvas" : "Infinite Canvas mode"}
+          onClick={() => onCanvasToggle?.()}
+        >
+          <Workflow size={12} className="executionModeIcon" aria-hidden="true" />
+          Canvas
+        </button>
         {EXECUTION_MODE_OPTIONS.map(option => {
           const Icon = option.icon;
+          const isActive = !canvasActive && mode === option.id;
           return (
           <button
             key={option.id}
@@ -136,8 +156,8 @@ export function ExecutionModeToggle({ mode, onChange }) {
             ref={node => {
               buttonRefs.current[option.id] = node;
             }}
-            aria-selected={mode === option.id}
-            className={`${mode === option.id ? "active" : ""}${Icon ? " hasModeIcon" : ""}`}
+            aria-selected={isActive}
+            className={`${isActive ? "active" : ""}${Icon ? " hasModeIcon" : ""}`}
             title={option.title}
             aria-keyshortcuts={option.shortcut}
             onClick={() => onChange(option.id)}

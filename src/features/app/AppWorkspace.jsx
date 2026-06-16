@@ -1,4 +1,4 @@
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   CheckCircle2,
   Coins,
@@ -95,6 +95,8 @@ import {
 } from "../../providers/SettingsModalProvider.jsx";
 import { useTemplateWorkspaceActions } from "../templates/useTemplateWorkspaceActions.js";
 
+const InfiniteCanvas = lazy(() => import("../canvas/InfiniteCanvas.jsx").then(module => ({ default: module.InfiniteCanvas })));
+
 function loadRhWfLastTemplate() {
   return getSetting("execution.rhWfSelectedTemplate", "");
 }
@@ -165,8 +167,10 @@ export function AppWorkspace() {
     outputEditorOpen, setOutputEditorOpen,
     theme, setTheme,
     notifyEnabled, setNotifyEnabled,
-    addServerOpen, setAddServerOpen
+    addServerOpen, setAddServerOpen,
+    workspaceView, setWorkspaceView
   } = useWorkspaceLayoutContext();
+  const isCanvasView = workspaceView === "canvas";
   const {
     executionMode, setExecutionMode,
     rhValues, setRhValues,
@@ -682,6 +686,10 @@ export function AppWorkspace() {
   useEffect(() => {
     setSetting("execution.mode", executionMode);
   }, [executionMode]);
+
+  useEffect(() => {
+    setSetting("workspace.view", workspaceView);
+  }, [workspaceView]);
 
   useEffect(() => {
     if (executionMode !== "runninghub-app" || !hasRhApiKey(rhSettings)) return;
@@ -1538,7 +1546,15 @@ export function AppWorkspace() {
             <h1 className="title-font">aPix Builder</h1>
           </div>
 
-          <ExecutionModeToggle mode={executionMode} onChange={setExecutionMode} />
+          <ExecutionModeToggle
+            mode={executionMode}
+            onChange={(nextMode) => {
+              setExecutionMode(nextMode);
+              if (isCanvasView) setWorkspaceView("form");
+            }}
+            canvasActive={isCanvasView}
+            onCanvasToggle={() => setWorkspaceView(isCanvasView ? "form" : "canvas")}
+          />
         </div>
 
         <div className="appTopBarActions">
@@ -1613,6 +1629,31 @@ export function AppWorkspace() {
         onDismiss={dismissUpdate}
       />
 
+      {isCanvasView ? (
+        <Suspense fallback={<div className="canvasView" />}>
+          <InfiniteCanvas
+            rhSettings={rhSettings}
+            inputImages={inputImages}
+            refreshInputImages={refreshInputImages}
+            updateInputImages={setInputImages}
+            outputHistory={history}
+            refreshOutputHistory={loadOutputHistory}
+            runLogSessions={runLogHistory.sessions}
+            refreshRunLogSessions={refreshRunLogSessions}
+            runLogStartSession={runLogHistory.startSession}
+            runLogAppendLog={runLogHistory.appendLog}
+            runLogEndSession={runLogHistory.endSession}
+            runLogClearHistory={clearRunLogHistory}
+            runLogOpen={runLogOpen}
+            setRunLogOpen={setRunLogOpen}
+            deleteRunLogSession={deleteRunLogSession}
+            updateRunLogSession={updateRunLogSession}
+            restoreHistory={restoreHistory}
+            logRhApiKey={rhPrimaryApiKey}
+          />
+        </Suspense>
+      ) : (
+      <>
       <aside className="sidebar">
         <SidebarLayoutHandles onMoveStart={startSidebarMove} onResizeStart={startSidebarResize} />
 
@@ -1896,6 +1937,8 @@ export function AppWorkspace() {
           onShowWaiting={() => setShowWaitScreen(true)}
         />
       </section>
+      </>
+      )}
 
       <SettingsModalProvider value={{
         open: settingsOpen,

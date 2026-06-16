@@ -11,7 +11,8 @@ html[data-theme="light"] {
 html[data-theme="dark"] .appShell,
 html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .appShell,
 html[data-theme="light"] .appShell {
-  gap: var(--space-2);
+  column-gap: var(--space-2);
+  row-gap: 0;
   padding: var(--space-3);
 }
 

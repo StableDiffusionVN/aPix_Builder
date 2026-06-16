@@ -94,6 +94,8 @@ let rhSavedAppsFilePath;
 let rhDefaultAppsFilePath;
 let templates;
 let appSettingsPath;
+let canvasProjectPath;
+let canvasProjectsPath;
 let uploadDir;
 let presetsDir;
 let presetsFilePath;
@@ -197,6 +199,8 @@ async function migrateLegacyUserFolders(normalized) {
 async function applyPersonalDataPaths(nextPersonalDataDir, previousPersonalDataDir) {
   personalDataDir = nextPersonalDataDir;
   appSettingsPath = path.join(personalDataDir, "app-settings.json");
+  canvasProjectPath = path.join(personalDataDir, "canvas-project.json");
+  canvasProjectsPath = path.join(personalDataDir, "canvas-projects.json");
   presetsDir = path.join(personalDataDir, "presets");
   presetsFilePath = path.join(presetsDir, "presets.json");
   workflowPresetsFilePath = path.join(presetsDir, "workflow-presets.json");
@@ -310,6 +314,7 @@ async function readAppSettings() {
 
 async function writeAppSettings(settings) {
   const normalized = normalizeAppSettings(settings);
+  delete normalized.canvas;
   await mkdir(dataRoot, { recursive: true });
   await writeFile(appSettingsPath, JSON.stringify(normalized, null, 2), {
     encoding: "utf8",
@@ -327,6 +332,200 @@ async function handleAppSettings(req, res) {
   const body = JSON.parse(await readBody(req) || "{}");
   const settings = await writeAppSettings(body.settings);
   send(res, 200, { success: true, settings });
+}
+
+async function readCanvasProjectsStore() {
+  try {
+    const parsed = JSON.parse(await readFile(canvasProjectsPath, "utf8"));
+    const store = normalizeCanvasProjectsStore(parsed);
+    if (!Object.keys(store.projects).length) throw new Error("empty store");
+    return store;
+  } catch {
+    let legacy = { nodes: [], edges: [] };
+    try {
+      legacy = JSON.parse(await readFile(canvasProjectPath, "utf8"));
+    } catch {}
+    const store = {
+      activeId: "p_default",
+      projects: {
+        p_default: {
+          id: "p_default",
+          name: "Project 1",
+          updatedAt: new Date().toISOString(),
+          nodes: Array.isArray(legacy?.nodes) ? legacy.nodes : [],
+          edges: Array.isArray(legacy?.edges) ? legacy.edges : []
+        }
+      }
+    };
+    await writeCanvasProjectsStore(store);
+    return store;
+  }
+}
+
+function normalizeCanvasProjectsStore(raw = {}) {
+  const projects = raw.projects && typeof raw.projects === "object" ? raw.projects : {};
+  const activeId = raw.activeId && projects[raw.activeId]
+    ? raw.activeId
+    : Object.keys(projects)[0] || "p_default";
+  return { activeId, projects };
+}
+
+function summarizeCanvasProjects(store) {
+  return Object.values(store.projects || {})
+    .map(project => ({
+      id: project.id,
+      name: project.name || project.id,
+      updatedAt: project.updatedAt || null,
+      nodeCount: Array.isArray(project.nodes) ? project.nodes.length : 0,
+      edgeCount: Array.isArray(project.edges) ? project.edges.length : 0
+    }))
+    .sort((a, b) => String(b.updatedAt || "").localeCompare(String(a.updatedAt || "")));
+}
+
+async function writeCanvasProjectsStore(store) {
+  const payload = normalizeCanvasProjectsStore(store);
+  await mkdir(personalDataDir, { recursive: true });
+  await writeFile(canvasProjectsPath, JSON.stringify(payload, null, 2), {
+    encoding: "utf8",
+    mode: 0o600
+  });
+  await chmod(canvasProjectsPath, 0o600);
+  return payload;
+}
+
+async function handleCanvasProject(req, res, url) {
+  const pathname = url?.pathname || "/api/canvas-project";
+
+  if (pathname === "/api/canvas-project") {
+    if (req.method === "GET") {
+      const store = await readCanvasProjectsStore();
+      const active = store.projects[store.activeId] || { nodes: [], edges: [], name: "Project" };
+      send(res, 200, {
+        activeId: store.activeId,
+        name: active.name || "Project",
+        nodes: Array.isArray(active.nodes) ? active.nodes : [],
+        edges: Array.isArray(active.edges) ? active.edges : [],
+        projects: summarizeCanvasProjects(store)
+      });
+      return;
+    }
+    if (req.method === "POST") {
+      const body = JSON.parse(await readBody(req) || "{}");
+      const store = await readCanvasProjectsStore();
+      const active = store.projects[store.activeId];
+      if (!active) {
+        send(res, 404, { error: "Không tìm thấy project đang mở" });
+        return;
+      }
+      active.nodes = Array.isArray(body.nodes) ? body.nodes : [];
+      active.edges = Array.isArray(body.edges) ? body.edges : [];
+      active.updatedAt = new Date().toISOString();
+      await writeCanvasProjectsStore(store);
+      send(res, 200, {
+        success: true,
+        activeId: store.activeId,
+        projects: summarizeCanvasProjects(store)
+      });
+      return;
+    }
+    send(res, 405, { error: "Method not allowed" });
+    return;
+  }
+
+  if (req.method !== "POST") {
+    send(res, 405, { error: "Method not allowed" });
+    return;
+  }
+
+  const body = JSON.parse(await readBody(req) || "{}");
+  const store = await readCanvasProjectsStore();
+
+  if (pathname === "/api/canvas-project/switch") {
+    const id = String(body.id || "").trim();
+    if (!id || !store.projects[id]) {
+      send(res, 404, { error: "Không tìm thấy project" });
+      return;
+    }
+    store.activeId = id;
+    await writeCanvasProjectsStore(store);
+    const active = store.projects[id];
+    send(res, 200, {
+      success: true,
+      activeId: id,
+      name: active.name,
+      nodes: active.nodes || [],
+      edges: active.edges || [],
+      projects: summarizeCanvasProjects(store)
+    });
+    return;
+  }
+
+  if (pathname === "/api/canvas-project/create") {
+    const name = String(body.name || "Project mới").trim() || "Project mới";
+    const id = `p_${randomUUID().slice(0, 8)}`;
+    store.projects[id] = {
+      id,
+      name,
+      updatedAt: new Date().toISOString(),
+      nodes: [],
+      edges: []
+    };
+    store.activeId = id;
+    await writeCanvasProjectsStore(store);
+    send(res, 200, {
+      success: true,
+      activeId: id,
+      name,
+      nodes: [],
+      edges: [],
+      projects: summarizeCanvasProjects(store)
+    });
+    return;
+  }
+
+  if (pathname === "/api/canvas-project/rename") {
+    const id = String(body.id || store.activeId).trim();
+    const name = String(body.name || "").trim();
+    const project = store.projects[id];
+    if (!project || !name) {
+      send(res, 400, { error: "Thiếu tên project" });
+      return;
+    }
+    project.name = name;
+    project.updatedAt = new Date().toISOString();
+    await writeCanvasProjectsStore(store);
+    send(res, 200, { success: true, projects: summarizeCanvasProjects(store) });
+    return;
+  }
+
+  if (pathname === "/api/canvas-project/delete") {
+    const id = String(body.id || "").trim();
+    if (!id || !store.projects[id]) {
+      send(res, 404, { error: "Không tìm thấy project" });
+      return;
+    }
+    if (Object.keys(store.projects).length <= 1) {
+      send(res, 400, { error: "Không thể xóa project cuối cùng" });
+      return;
+    }
+    delete store.projects[id];
+    if (store.activeId === id) {
+      store.activeId = Object.keys(store.projects)[0];
+    }
+    await writeCanvasProjectsStore(store);
+    const active = store.projects[store.activeId];
+    send(res, 200, {
+      success: true,
+      activeId: store.activeId,
+      name: active?.name,
+      nodes: active?.nodes || [],
+      edges: active?.edges || [],
+      projects: summarizeCanvasProjects(store)
+    });
+    return;
+  }
+
+  send(res, 404, { error: "Not found" });
 }
 
 async function handleStorageSettings(req, res) {
@@ -1008,6 +1207,35 @@ async function handleInputFromUrl(req, res) {
   }
 }
 
+function imageContentType(filename) {
+  const ext = path.extname(filename).toLowerCase();
+  if (ext === ".jpg" || ext === ".jpeg") return "image/jpeg";
+  if (ext === ".webp") return "image/webp";
+  if (ext === ".gif") return "image/gif";
+  return "image/png";
+}
+
+async function serveLocalImageFile(req, res, filePath, filename) {
+  let fileStat;
+  try {
+    fileStat = await stat(filePath);
+    if (!fileStat.isFile()) throw new Error("not a file");
+  } catch {
+    send(res, 404, { error: "Image not found" });
+    return;
+  }
+  res.writeHead(200, {
+    "content-type": imageContentType(filename),
+    "cache-control": "no-store",
+    "content-length": fileStat.size
+  });
+  if (req.method === "HEAD") {
+    res.end();
+    return;
+  }
+  res.end(await readFile(filePath));
+}
+
 async function handleInputImage(req, res, url) {
   const filename = safeInputName(url.searchParams.get("name"));
   if (!filename) {
@@ -1019,17 +1247,7 @@ async function handleInputImage(req, res, url) {
     send(res, 400, { error: "Invalid image path" });
     return;
   }
-  const data = await readFile(filePath);
-  const ext = path.extname(filename).toLowerCase();
-  const contentType = ext === ".jpg" || ext === ".jpeg"
-    ? "image/jpeg"
-    : ext === ".webp"
-      ? "image/webp"
-      : ext === ".gif"
-        ? "image/gif"
-        : "image/png";
-  res.writeHead(200, { "content-type": contentType, "cache-control": "no-store" });
-  res.end(data);
+  await serveLocalImageFile(req, res, filePath, filename);
 }
 
 async function handleDeleteInputImage(req, res) {
@@ -1193,17 +1411,7 @@ async function handleOutputImage(req, res, url) {
     send(res, 400, { error: "Invalid output image path" });
     return;
   }
-  const data = await readFile(filePath);
-  const ext = path.extname(filename).toLowerCase();
-  const contentType = ext === ".jpg" || ext === ".jpeg"
-    ? "image/jpeg"
-    : ext === ".webp"
-      ? "image/webp"
-      : ext === ".gif"
-        ? "image/gif"
-        : "image/png";
-  res.writeHead(200, { "content-type": contentType, "cache-control": "no-store" });
-  res.end(data);
+  await serveLocalImageFile(req, res, filePath, filename);
 }
 
 async function handleDeleteOutputHistory(req, res) {
@@ -1804,6 +2012,7 @@ async function handleRunningHubRun(req, res) {
       emitRhStatus("upload", "Đang upload dữ liệu lên RunningHub...");
       const nodeInfoList = await prepareNodeInfoList(apiKey, body.nodes, {
         inputDir,
+        outputDir,
         signal: abortController.signal,
         onProgress: ({ label }) => emitRhStatus("upload", label || "Đang upload dữ liệu...")
       });
@@ -1941,15 +2150,23 @@ async function handleRunningHubWfRun(req, res) {
 
       const coinsBefore = await fetchAccountRemainCoins(apiKey, abortController.signal);
       emitRhStatus("upload", "Đang chuẩn bị dữ liệu workflow...");
+      const emitPrepareProgress = ({ type, status, label } = {}) => {
+        if (!label) return;
+        emitRhStatus(type || status || "upload", label);
+      };
+      const mappedFieldCount = Object.keys(request).length;
       let submitData;
       if (useSavedWorkflowJson) {
         if (!template.workflowPath) {
           throw new Error("Template bật lưu JSON nhưng thiếu file api.json");
         }
+        emitRhStatus("upload", `Đang đọc api.json và patch ${mappedFieldCount} input...`);
         const workflow = structuredClone(JSON.parse(await readFile(template.workflowPath, "utf8")));
         const patchedWorkflow = await buildPatchedRunningHubWorkflow(workflow, request, apiKey, {
           inputDir,
-          signal: abortController.signal
+          outputDir,
+          signal: abortController.signal,
+          onProgress: emitPrepareProgress
         });
         emitRhStatus("submit", "Đang gửi workflow lên RunningHub...");
         submitData = await submitRhTaskWhenReady(
@@ -1962,11 +2179,14 @@ async function handleRunningHubWfRun(req, res) {
           { signal: abortController.signal, onWait: onTokenWait }
         );
       } else {
+        emitRhStatus("upload", `Đang chuẩn bị ${mappedFieldCount} input cho workflow...`);
         const nodeInfoList = await buildRunningHubNodeInfoList(request, apiKey, {
           inputDir,
-          signal: abortController.signal
+          outputDir,
+          signal: abortController.signal,
+          onProgress: emitPrepareProgress
         });
-        emitRhStatus("submit", "Đang gửi workflow lên RunningHub...");
+        emitRhStatus("submit", `Đang gửi workflow lên RunningHub (${nodeInfoList.length} field)...`);
         submitData = await submitRhTaskWhenReady(
           apiKey,
           () => submitWorkflowTask(apiKey, {
@@ -2209,6 +2429,7 @@ export const routeContext = {
   deleteRunLogSession,
   endRunLogSession,
   handleAppSettings,
+  handleCanvasProject,
   handleCancel,
   handleComfyDiscovery,
   handleComfyHealth,

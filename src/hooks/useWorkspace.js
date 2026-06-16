@@ -27,7 +27,10 @@ export function sanitizeWorkspaceValues(values = {}) {
 }
 
 function saveStoredWorkspace(workspace) {
-  setSetting("workspace", workspace);
+  setSetting("workspace", {
+    ...getSetting("workspace", {}),
+    ...workspace
+  });
 }
 
 export function useWorkspace() {

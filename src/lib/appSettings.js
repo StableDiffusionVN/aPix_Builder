@@ -18,7 +18,8 @@ const DEFAULT_SETTINGS = {
   runningHub: {},
   workspace: {
     selectedTemplate: "",
-    valuesByTemplate: {}
+    valuesByTemplate: {},
+    view: "form"
   },
   layout: {
     sidebar: { side: "left", width: 430 },
@@ -34,8 +35,23 @@ const DEFAULT_SETTINGS = {
   }
 };
 
-let settings = structuredClone(DEFAULT_SETTINGS);
-let persistQueue = Promise.resolve();
+function createSettingsStore() {
+  if (import.meta.hot?.data?.apixSettingsStore) {
+    return import.meta.hot.data.apixSettingsStore;
+  }
+  const store = {
+    settings: structuredClone(DEFAULT_SETTINGS),
+    ready: false,
+    loadedFromServer: false,
+    persistQueue: Promise.resolve()
+  };
+  if (import.meta.hot) {
+    import.meta.hot.data.apixSettingsStore = store;
+  }
+  return store;
+}
+
+const store = createSettingsStore();
 
 function isObject(value) {
   return value && typeof value === "object" && !Array.isArray(value);
@@ -170,9 +186,26 @@ async function migrateLegacyFileStores() {
   });
 }
 
+async function migrateCanvasProjectOffSettings(project) {
+  if (!project || typeof project !== "object") return;
+  const nodes = Array.isArray(project.nodes) ? project.nodes : [];
+  const edges = Array.isArray(project.edges) ? project.edges : [];
+  if (!nodes.length && !edges.length) return;
+  try {
+    await fetch("/api/canvas-project", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ nodes, edges })
+    });
+  } catch (error) {
+    console.warn("Could not migrate canvas project out of app-settings:", error);
+  }
+}
+
 async function persistSettings() {
-  const snapshot = structuredClone(settings);
-  persistQueue = persistQueue
+  if (!store.ready || !store.loadedFromServer) return store.persistQueue;
+  const snapshot = structuredClone(store.settings);
+  store.persistQueue = store.persistQueue
     .catch(() => {})
     .then(async () => {
       const response = await fetch("/api/app-settings", {
@@ -183,38 +216,62 @@ async function persistSettings() {
       if (!response.ok) throw new Error(`Could not save app settings: HTTP ${response.status}`);
     })
     .catch(error => console.error(error));
-  return persistQueue;
+  return store.persistQueue;
+}
+
+export function isSettingsReady() {
+  return store.ready && store.loadedFromServer;
 }
 
 export async function initializeAppSettings() {
+  let strippedCanvasKey = false;
   try {
     const response = await fetch("/api/app-settings");
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
-    settings = mergeDeep(DEFAULT_SETTINGS, data.settings || {});
+    let serverSettings = data.settings && typeof data.settings === "object" ? data.settings : {};
+    if (serverSettings.canvas?.project) {
+      strippedCanvasKey = true;
+      await migrateCanvasProjectOffSettings(serverSettings.canvas.project);
+      const { canvas, ...rest } = serverSettings;
+      serverSettings = rest;
+    }
+    store.settings = mergeDeep(DEFAULT_SETTINGS, serverSettings);
+    store.loadedFromServer = true;
   } catch (error) {
     console.error("Could not load app settings:", error);
-    settings = structuredClone(DEFAULT_SETTINGS);
+    if (!store.loadedFromServer) {
+      store.settings = mergeDeep(DEFAULT_SETTINGS, store.settings);
+    }
   }
 
-  if (!settings.migration?.localStorageImported) {
-    settings = mergeDeep(settings, legacySettingsSnapshot());
+  store.ready = true;
+
+  if (strippedCanvasKey && store.loadedFromServer) {
     await persistSettings();
+  }
+
+  if (!store.settings.migration?.localStorageImported) {
+    store.settings = mergeDeep(store.settings, legacySettingsSnapshot());
+    if (store.loadedFromServer) await persistSettings();
     try {
       await migrateLegacyFileStores();
-      settings.migration = { ...settings.migration, localStorageImported: true };
-      await persistSettings();
+      store.settings = {
+        ...store.settings,
+        migration: { ...store.settings.migration, localStorageImported: true }
+      };
+      if (store.loadedFromServer) await persistSettings();
       window.localStorage.clear();
     } catch (error) {
       console.error("Could not migrate legacy browser data:", error);
     }
   }
-  if (settings.migration?.localStorageImported) window.localStorage.clear();
+  if (store.settings.migration?.localStorageImported) window.localStorage.clear();
 }
 
 export function getSetting(path, fallback) {
   const keys = String(path).split(".");
-  let value = settings;
+  let value = store.settings;
   for (const key of keys) {
     if (!isObject(value) && !Array.isArray(value)) return fallback;
     value = value[key];
@@ -224,13 +281,13 @@ export function getSetting(path, fallback) {
 
 export function setSetting(path, value) {
   const keys = String(path).split(".");
-  const next = structuredClone(settings);
+  const next = structuredClone(store.settings);
   let target = next;
   for (const key of keys.slice(0, -1)) {
     if (!isObject(target[key])) target[key] = {};
     target = target[key];
   }
   target[keys.at(-1)] = value;
-  settings = next;
+  store.settings = next;
   void persistSettings();
 }

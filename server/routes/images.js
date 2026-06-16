@@ -39,7 +39,7 @@ export function createImagesRoutes(context) {
       await inputPostRoutes[url.pathname](req, res);
       return true;
     }
-    if (req.method === "GET" && url.pathname === "/api/input-image") {
+    if ((req.method === "GET" || req.method === "HEAD") && url.pathname === "/api/input-image") {
       await handleInputImage(req, res, url);
       return true;
     }
@@ -57,7 +57,7 @@ export function createImagesRoutes(context) {
       await outputPostRoutes[url.pathname](req, res);
       return true;
     }
-    if (req.method === "GET" && url.pathname === "/api/output-image") {
+    if ((req.method === "GET" || req.method === "HEAD") && url.pathname === "/api/output-image") {
       await handleOutputImage(req, res, url);
       return true;
     }

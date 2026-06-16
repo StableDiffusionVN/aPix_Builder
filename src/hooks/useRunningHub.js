@@ -19,7 +19,7 @@ import {
   normalizeRhSettings,
   syncPrimaryApiKey
 } from "../lib/rhTokenPool.js";
-import { getSetting, setSetting } from "../lib/appSettings.js";
+import { getSetting, isSettingsReady, setSetting } from "../lib/appSettings.js";
 
 export { DEFAULT_RH_WEBAPP_ID } from "../lib/rhSavedApps.js";
 export const DEFAULT_RH_WF_ID = "2064644362323189762";
@@ -96,7 +96,13 @@ export function useRunningHub() {
     savedWebappsRef.current = savedWebapps;
   }, [savedWebapps]);
 
+  const skipRhPersistRef = useRef(true);
   useEffect(() => {
+    if (skipRhPersistRef.current) {
+      skipRhPersistRef.current = false;
+      return;
+    }
+    if (!isSettingsReady()) return;
     setSetting("runningHub", settings);
   }, [settings]);
 

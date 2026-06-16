@@ -14,6 +14,10 @@ function loadNotifyEnabled() {
   return getSetting("notifications.enabled", false) === true;
 }
 
+function loadWorkspaceView() {
+  return getSetting("workspace.view", "form") === "canvas" ? "canvas" : "form";
+}
+
 export { DEFAULT_COMFY_SERVER, useWorkspaceLayoutContext };
 
 export function WorkspaceLayoutProvider({ children }) {
@@ -38,6 +42,7 @@ export function WorkspaceLayoutProvider({ children }) {
   const [theme, setTheme] = useState(loadTheme);
   const [notifyEnabled, setNotifyEnabled] = useState(loadNotifyEnabled);
   const [addServerOpen, setAddServerOpen] = useState(false);
+  const [workspaceView, setWorkspaceView] = useState(loadWorkspaceView);
 
   const value = useMemo(() => ({
     config, setConfig,
@@ -60,13 +65,14 @@ export function WorkspaceLayoutProvider({ children }) {
     outputEditorOpen, setOutputEditorOpen,
     theme, setTheme,
     notifyEnabled, setNotifyEnabled,
-    addServerOpen, setAddServerOpen
+    addServerOpen, setAddServerOpen,
+    workspaceView, setWorkspaceView
   }), [
     addServerOpen, comfyAddress, config, infoOpen, isFullscreen, mainFont,
     notifyEnabled, outputEditorOpen, rhWfConfig, rhWfSelectedTemplate,
     rhWfTemplateEditorOpen, rhWfTemplates, selectedTemplate, settingsOpen,
     settingsTab, showServerDetails, templateEditorOpen, templates, theme,
-    themeMenuOpen, values
+    themeMenuOpen, values, workspaceView
   ]);
 
   return <WorkspaceLayoutContext.Provider value={value}>{children}</WorkspaceLayoutContext.Provider>;

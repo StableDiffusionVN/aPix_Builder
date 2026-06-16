@@ -24,6 +24,7 @@
     "dist:win": "npm run sync:brand && npm run build && node scripts/build-win-portable.mjs"
   },
   "dependencies": {
+    "@xyflow/react": "^12.11.0",
     "jimp": "^1.6.1",
     "potrace": "^2.1.8",
     "ws": "^8.21.0",

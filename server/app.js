@@ -1085,13 +1085,41 @@ async function runGalleryDl(sourceUrl, destinationDir) {
   return lastResult || { ok: false, stderr: "Không tìm thấy Python/gallery-dl" };
 }
 
-async function listInputImages() {
+let inputImagesListCache = null;
+
+async function listInputImages({ bypassCache = false } = {}) {
+  if (!bypassCache && inputImagesListCache) {
+    return inputImagesListCache;
+  }
+
   await mkdir(inputDir, { recursive: true });
   const entries = await readdir(inputDir, { withFileTypes: true });
-  const images = await Promise.all(entries
-    .filter(entry => entry.isFile() && /\.(png|jpe?g|webp|gif)$/i.test(entry.name))
-    .map(async entry => {
-      const fileStat = await stat(path.join(inputDir, entry.name));
+  const fileEntries = entries.filter(entry => (
+    entry.isFile() && /\.(png|jpe?g|webp|gif)$/i.test(entry.name)
+  ));
+
+  const images = [];
+  const needsStat = [];
+
+  for (const entry of fileEntries) {
+    const timestampMatch = /(\d{13})/.exec(entry.name);
+    if (timestampMatch) {
+      const createdAt = new Date(Number(timestampMatch[1])).toISOString();
+      images.push({
+        name: entry.name,
+        url: inputImageUrl(entry.name),
+        createdAt,
+        modifiedAt: createdAt
+      });
+      continue;
+    }
+    needsStat.push(entry);
+  }
+
+  if (needsStat.length) {
+    const statResults = await Promise.all(needsStat.map(async entry => {
+      const filePath = path.join(inputDir, entry.name);
+      const fileStat = await stat(filePath);
       const createdAt = fileStat.birthtimeMs > 0 ? fileStat.birthtime : fileStat.mtime;
       return {
         name: entry.name,
@@ -1100,7 +1128,18 @@ async function listInputImages() {
         modifiedAt: fileStat.mtime.toISOString()
       };
     }));
-  return images.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    images.push(...statResults);
+  }
+
+  const sorted = images.sort((a, b) => (
+    new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  ));
+  inputImagesListCache = sorted;
+  return sorted;
+}
+
+function invalidateInputImagesCache() {
+  inputImagesListCache = null;
 }
 
 async function handleInputUpload(req, res) {
@@ -1112,6 +1151,7 @@ async function handleInputUpload(req, res) {
   }
   const extension = imageExtensionFromMime(parsed.mimeType) || "png";
   const image = await saveInputImageBuffer(parsed.buffer, body.filename || `input.${extension}`, parsed.mimeType);
+  invalidateInputImagesCache();
   send(res, 200, {
     image,
     images: await listInputImages()
@@ -1165,6 +1205,7 @@ async function handleInputFromUrl(req, res) {
       const buffer = Buffer.from(await response.arrayBuffer());
       const ext = imageExtensionFromMime(contentType) || path.extname(parsedUrl.pathname).replace(/^\./, "") || "png";
       const image = await saveInputImageBuffer(buffer, sourceFilenameFromUrl(sourceUrl, ext), contentType);
+      invalidateInputImagesCache();
       send(res, 200, {
         image,
         images: await listInputImages(),
@@ -1198,6 +1239,7 @@ async function handleInputFromUrl(req, res) {
       return;
     }
     const image = await saveInputImageBuffer(buffer, path.basename(firstFile), imageMimeFromExt(firstFile));
+    invalidateInputImagesCache();
     send(res, 200, {
       image,
       images: await listInputImages(),
@@ -1265,6 +1307,7 @@ async function handleDeleteInputImage(req, res) {
     return;
   }
   await rm(filePath, { force: true });
+  invalidateInputImagesCache();
   send(res, 200, { images: await listInputImages() });
 }
 

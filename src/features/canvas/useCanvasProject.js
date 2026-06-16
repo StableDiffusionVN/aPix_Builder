@@ -3,7 +3,7 @@ import { applyEdgeChanges, applyNodeChanges, addEdge } from "@xyflow/react";
 import { clearNodeRunCachePatch, stripRhDefaultImages, getNodeRunCache, buildNodeRunCache, deriveStepPorts, portTypeForUi } from "./canvasModel.js";
 import { resolveFieldValueForSource, resolveOutputValueForSource } from "./canvasMenuHelpers.js";
 import { CANVAS_NODE_DEFAULT_WIDTH } from "./CanvasNodeResizeHandles.jsx";
-import { compactStepNodeSize, isStepOutputDetached, normalizeOutputSplitNodes, restoreOutputPassthroughOnRemove } from "./canvasNodeLayout.js";
+import { compactStepNodeSize, growStepNodesToFit, isStepOutputDetached, normalizeOutputSplitNodes, reconcileOutputSplitOnEdgeRemove, restoreInputSourceOnRemove, restoreOutputPassthroughOnRemove } from "./canvasNodeLayout.js";
 
 /** Strip transient runtime fields before persisting a node; keep runCache. */
 function serializeNode(node) {
@@ -109,6 +109,13 @@ export function useCanvasProject() {
   useEffect(() => { nodesRef.current = nodes; }, [nodes]);
   useEffect(() => { edgesRef.current = edges; }, [edges]);
 
+  // Auto-grow fixed-height step nodes when their content (image input, output
+  // preview, split state, error row…) needs more room than the current height.
+  useEffect(() => {
+    const { nodes: grown, changed } = growStepNodesToFit(nodes, edges);
+    if (changed) setNodes(grown);
+  }, [nodes, edges]);
+
   const loadProject = useCallback(async () => {
     const response = await fetch("/api/canvas-project");
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -170,11 +177,74 @@ export function useCanvasProject() {
   }, [nodes, edges, loaded]);
 
   const onNodesChange = useCallback((changes) => {
-    setNodes(current => applyNodeChanges(changes, current));
+    const currentNodes = nodesRef.current;
+
+    const removedNodes = changes
+      .filter(change => change.type === "remove")
+      .map(change => currentNodes.find(node => node.id === change.id))
+      .filter(Boolean);
+
+    const removedOutputIds = removedNodes
+      .filter(node => node.type === "source" && node.data?.passthroughFromOutput)
+      .map(node => node.id);
+
+    const removedInputIds = removedNodes
+      .filter(node => node.type === "source" && node.data?.passthroughFromInput)
+      .map(node => node.id);
+
+    if (!removedOutputIds.length && !removedInputIds.length) {
+      setNodes(current => applyNodeChanges(changes, current));
+      return;
+    }
+
+    // Deterministically restore passthrough source nodes before React Flow
+    // processes the deletion, ensuring correct state for both output and input splits.
+    let nodesAcc = currentNodes;
+    let edgesAcc = edgesRef.current;
+
+    for (const passthroughId of removedOutputIds) {
+      const restored = restoreOutputPassthroughOnRemove(nodesAcc, edgesAcc, passthroughId);
+      if (restored) {
+        nodesAcc = restored.nodes;
+        edgesAcc = restored.edges;
+      }
+    }
+
+    for (const sourceId of removedInputIds) {
+      const restored = restoreInputSourceOnRemove(nodesAcc, edgesAcc, sourceId);
+      if (restored) {
+        nodesAcc = restored.nodes;
+        edgesAcc = restored.edges;
+      }
+    }
+
+    const handledIds = new Set([...removedOutputIds, ...removedInputIds]);
+    const remainingChanges = changes.filter(change => !(
+      change.type === "remove" && handledIds.has(change.id)
+    ));
+    setNodes(applyNodeChanges(remainingChanges, nodesAcc));
+    setEdges(edgesAcc);
   }, []);
 
   const onEdgesChange = useCallback((changes) => {
-    setEdges(current => applyEdgeChanges(changes, current));
+    const currentEdges = edgesRef.current;
+    const currentNodes = nodesRef.current;
+    let nextEdges = applyEdgeChanges(changes, currentEdges);
+    let nextNodes = currentNodes;
+
+    const removals = changes.filter(change => change.type === "remove");
+    for (const change of removals) {
+      const removedEdge = currentEdges.find(edge => edge.id === change.id);
+      if (!removedEdge) continue;
+      const restored = reconcileOutputSplitOnEdgeRemove(nextNodes, nextEdges, removedEdge);
+      if (restored) {
+        nextNodes = restored.nodes;
+        nextEdges = restored.edges;
+      }
+    }
+
+    if (nextNodes !== currentNodes) setNodes(nextNodes);
+    setEdges(nextEdges);
   }, []);
 
   const onConnect = useCallback((connection) => {
@@ -215,10 +285,16 @@ export function useCanvasProject() {
   }, []);
 
   const removeNode = useCallback((id) => {
-    const restored = restoreOutputPassthroughOnRemove(nodesRef.current, edgesRef.current, id);
-    if (restored) {
-      setNodes(restored.nodes);
-      setEdges(restored.edges);
+    const restoredOutput = restoreOutputPassthroughOnRemove(nodesRef.current, edgesRef.current, id);
+    if (restoredOutput) {
+      setNodes(restoredOutput.nodes);
+      setEdges(restoredOutput.edges);
+      return;
+    }
+    const restoredInput = restoreInputSourceOnRemove(nodesRef.current, edgesRef.current, id);
+    if (restoredInput) {
+      setNodes(restoredInput.nodes);
+      setEdges(restoredInput.edges);
       return;
     }
     setNodes(current => current.filter(node => node.id !== id));
@@ -266,7 +342,10 @@ export function useCanvasProject() {
         sourceType,
         name: label,
         port,
-        values: { main: value }
+        values: { main: value },
+        passthroughFromInput: true,
+        passthroughTargetNodeId: nodeId,
+        passthroughInputValueKey: valueKey
       }
     };
 
@@ -307,8 +386,9 @@ export function useCanvasProject() {
     if (!node || node.type !== "step") return;
     if (isStepOutputDetached(nodeId, outputKey, currentNodes, currentEdges)) return;
 
-    const { sourceType, value, imageUrl, label, port } = resolveOutputValueForSource(node, outputKey);
-    if (sourceType === "image" ? !imageUrl : (value === undefined || value === "")) return;
+    const { sourceType, value, label, port } = resolveOutputValueForSource(node, outputKey);
+    const outputs = node.data?.ports?.outputs || [];
+    if (!outputs.some(item => item.key === outputKey)) return;
 
     const width = node.data?.size?.width || CANVAS_NODE_DEFAULT_WIDTH;
     const sourceHandle = `out:${outputKey}`;

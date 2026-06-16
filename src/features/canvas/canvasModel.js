@@ -203,6 +203,15 @@ export function resolveEffectiveImageSource(nodeId, sourceHandle, nodes, edges, 
     return null;
   }
 
+  // Traverse through passthrough output nodes so callers always receive the
+  // real upstream step node — enabling correct upstream-run detection and
+  // "missing source" checks when an output has been detached to a source node.
+  if (node.type === "source" && node.data?.passthroughFromOutput && node.data?.passthroughSourceNodeId) {
+    const upstreamId = node.data.passthroughSourceNodeId;
+    const outputKey = node.data.passthroughOutputKey || "main";
+    return resolveEffectiveImageSource(upstreamId, `out:${outputKey}`, nodes, edges, visited);
+  }
+
   return { node, sourceHandle };
 }
 

@@ -74,6 +74,12 @@ function StepNodeComponent({ id, data, selected }) {
   });
   const queuedCount = queuedNodeCounts?.[id] || 0;
 
+  const handleOutputSplit = (event, outputKey) => {
+    event.preventDefault();
+    event.stopPropagation();
+    convertOutputToSource(id, outputKey);
+  };
+
   const menuActions = {
     node,
     edges: edges || [],
@@ -131,7 +137,7 @@ function StepNodeComponent({ id, data, selected }) {
                 type="target"
                 position={Position.Left}
                 id={`in:${port.valueKey}`}
-                className={`canvasHandle in type-${port.type}`}
+                className={`canvasHandle in nodrag nopan type-${port.type}`}
                 isConnectable
                 title={`Nháy đúp để tách "${port.label}" thành node riêng`}
                 onDoubleClick={event => {
@@ -157,19 +163,22 @@ function StepNodeComponent({ id, data, selected }) {
                 }))}
               />
               {showOutput ? (
-                <Handle
-                  type="source"
-                  position={Position.Right}
-                  id={`out:${outputPort.key}`}
-                  className="canvasHandle out"
-                  isConnectable
-                  title={`Nháy đúp để tách "${outputPort.label}" thành node riêng`}
-                  onDoubleClick={event => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    convertOutputToSource(id, outputPort.key);
-                  }}
-                />
+                <>
+                  <Handle
+                    type="source"
+                    position={Position.Right}
+                    id={`out:${outputPort.key}`}
+                    className="canvasHandle out nodrag nopan"
+                    isConnectable
+                    title={`Nháy đúp để tách "${outputPort.label}" thành node riêng`}
+                    onDoubleClick={event => handleOutputSplit(event, outputPort.key)}
+                  />
+                  <span
+                    className="canvasOutputHandleHit nodrag nopan"
+                    title={`Nháy đúp để tách "${outputPort.label}" thành node riêng`}
+                    onDoubleClick={event => handleOutputSplit(event, outputPort.key)}
+                  />
+                </>
               ) : null}
             </div>
           );
@@ -185,16 +194,17 @@ function StepNodeComponent({ id, data, selected }) {
                 type="source"
                 position={Position.Right}
                 id={`out:${port.key}`}
-                className="canvasHandle out"
+                className="canvasHandle out nodrag nopan"
                 isConnectable
                 title={`Nháy đúp để tách "${port.label}" thành node riêng`}
-                onDoubleClick={event => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  convertOutputToSource(id, port.key);
-                }}
+                onDoubleClick={event => handleOutputSplit(event, port.key)}
               />
             ))}
+            <span
+              className="canvasOutputHandleHit nodrag nopan"
+              title={`Nháy đúp để tách "${outputs[0].label}" thành node riêng`}
+              onDoubleClick={event => handleOutputSplit(event, outputs[0].key)}
+            />
           </div>
         ) : null}
         {!inputs.length && !outputs.length ? <p className="canvasNodeEmpty">Không có input</p> : null}

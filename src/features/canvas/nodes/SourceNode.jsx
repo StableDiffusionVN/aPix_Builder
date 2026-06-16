@@ -4,7 +4,7 @@ import { Binary, CheckSquare, Database, Hash, Image as ImageIcon, List, Trash2, 
 import { NodeField } from "../NodeField.jsx";
 import { CanvasNodeFrame } from "../CanvasNodeFrame.jsx";
 import { buildNodeContextMenuItems } from "../canvasMenuHelpers.js";
-import { resolveEffectiveNodeOutputUrl, withImageCacheBust } from "../canvasModel.js";
+import { resolveEffectiveNodeOutputUrl, getNodeRunCache, withImageCacheBust } from "../canvasModel.js";
 import { useCanvasActions } from "../canvasContext.js";
 
 const SOURCE_META = {
@@ -49,12 +49,14 @@ function SourceNodeComponent({ id, data, selected }) {
   const value = data.values?.main;
   const node = nodes?.find(item => item.id === id);
   const incoming = (edges || []).find(edge => edge.target === id && edge.targetHandle === "in:main");
+  const upstream = incoming ? nodes?.find(item => item.id === incoming.source) : null;
+  const upstreamCache = upstream ? getNodeRunCache(upstream) : null;
   const upstreamPreviewUrl = isPassthrough && incoming
     ? resolveEffectiveNodeOutputUrl(incoming.source, incoming.sourceHandle, nodes || [], edges || [])
     : "";
   const [previewSize, setPreviewSize] = useState(null);
   const previewUrl = upstreamPreviewUrl
-    ? withImageCacheBust(upstreamPreviewUrl, upstreamPreviewUrl)
+    ? withImageCacheBust(upstreamPreviewUrl, upstreamCache?.runAt || upstreamPreviewUrl)
     : "";
   const fieldPort = {
     label: data.name || meta.label,

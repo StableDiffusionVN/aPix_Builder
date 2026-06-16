@@ -10,6 +10,7 @@ import { localizeRuntimeMessage, useI18n } from "../i18n/I18nContext";
 import { clearPickedFolderFiles, registerPickedFolderFiles } from "../lib/folderFileCache.js";
 import { isHttpImageUrl, readLocalFolderValue } from "../lib/localImageFolder.js";
 import { getSetting, setSetting } from "../lib/appSettings.js";
+import { isInputImagesCacheFresh } from "../lib/inputImagesCache.js";
 import { StaticFieldBlock } from "../features/fields/StaticFieldBlock.jsx";
 import { renderBasicField } from "../features/fields/basicFieldRegistry.jsx";
 import { InputLibraryModal } from "./InputLibraryModal.jsx";
@@ -193,18 +194,23 @@ export function DynamicField({
     }
   };
 
-  const refreshInputImages = async () => {
+  const refreshInputImages = async (options = {}) => {
     if (onRefreshInputImages) {
-      await onRefreshInputImages();
+      await onRefreshInputImages(options);
     }
   };
 
   useEffect(() => {
     if (!isImageField) return undefined;
     let cancelled = false;
-    setInputLibraryReady(false);
+    const hasCached = inputImages.length > 0;
+    if (hasCached) {
+      setInputLibraryReady(true);
+    } else {
+      setInputLibraryReady(false);
+    }
     (async () => {
-      await refreshInputImages();
+      await refreshInputImages(hasCached && isInputImagesCacheFresh() ? { force: false } : {});
       if (!cancelled) setInputLibraryReady(true);
     })();
     return () => {
@@ -431,9 +437,13 @@ export function DynamicField({
   async function openInputLibrary() {
     setLibraryMultiSelect(false);
     setLibraryOpen(true);
+    if (inputImages.length > 0) {
+      void refreshInputImages({ force: false });
+      return;
+    }
     setLibraryLoading(true);
     try {
-      await refreshInputImages();
+      await refreshInputImages({ force: true });
     } finally {
       setLibraryLoading(false);
     }

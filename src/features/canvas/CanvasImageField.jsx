@@ -9,6 +9,7 @@ import { useI18n } from "../../i18n/I18nContext.jsx";
 import { getSetting, setSetting } from "../../lib/appSettings.js";
 import { isHttpImageUrl } from "../../lib/localImageFolder.js";
 import { getInputImageUrl } from "../../lib/inputImageUtils.js";
+import { isInputImagesCacheFresh } from "../../lib/inputImagesCache.js";
 import { imageDisplayUrl } from "./canvasModel.js";
 import { useCanvasActions } from "./canvasContext.js";
 
@@ -87,14 +88,17 @@ export function CanvasImageField({ label, value, onChange, onContextMenu }) {
     setPreviewSize(null);
   }, [value]);
 
-  const reloadInputLibrary = useCallback(async () => {
+  const reloadInputLibrary = useCallback(async ({ force = false } = {}) => {
+    if (!force && inputImages.length > 0 && isInputImagesCacheFresh()) {
+      return inputImages;
+    }
     setLibraryLoading(true);
     try {
-      await refreshInputImages?.();
+      return await refreshInputImages?.({ force });
     } finally {
       setLibraryLoading(false);
     }
-  }, [refreshInputImages]);
+  }, [inputImages, refreshInputImages]);
 
   async function commitImage(next) {
     onChange(next || "");
@@ -165,7 +169,11 @@ export function CanvasImageField({ label, value, onChange, onContextMenu }) {
 
   async function openInputLibrary() {
     setLibraryOpen(true);
-    await reloadInputLibrary();
+    if (inputImages.length > 0) {
+      void reloadInputLibrary({ force: false });
+      return;
+    }
+    await reloadInputLibrary({ force: true });
   }
 
   function toggleInputFavorite(name) {

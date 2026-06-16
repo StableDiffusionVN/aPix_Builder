@@ -954,7 +954,8 @@
 
 .canvasNode.hasCustomHeight {
   min-height: 100px;
-  overflow: hidden;
+  overflow: clip;
+  overflow-clip-margin: 8px;
 }
 
 .canvasNode.is-bypassed {
@@ -1038,12 +1039,15 @@
   align-items: center;
   gap: 6px;
   padding: 7px 8px;
-  border-bottom: 1px solid var(--border-subtle);
+  background: var(--surface-3);
+  border-bottom: 1px solid var(--border);
+  border-radius: 9px 9px 0 0;
 }
 
 .canvasKindBadge {
   display: inline-flex;
   align-items: center;
+  flex: 0 0 auto;
   gap: 4px;
   padding: 2px 6px;
   border-radius: 5px;
@@ -1051,17 +1055,26 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.03em;
+  line-height: 1;
+  white-space: nowrap;
   background: var(--panel-soft);
   color: var(--muted);
 }
 
 .canvasKindBadge.kind-local { color: var(--comfy-brand); background: rgba(var(--comfy-brand-rgb), 0.12); }
+.canvasKindBadge.kind-rhwf {
+  padding-inline: 4px;
+  font-size: 8px;
+  letter-spacing: 0.01em;
+}
+
 .canvasKindBadge.kind-rhwf,
 .canvasKindBadge.kind-rhapp { color: var(--rh-brand); background: rgba(var(--rh-brand-rgb), 0.12); }
 .canvasKindBadge.kind-source { color: var(--accent); background: var(--accent-muted); }
 
 .canvasNodeTitle {
-  flex: 1 1 auto;
+  flex: 1 1 0;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1082,14 +1095,18 @@
   place-items: center;
   width: 24px;
   height: 24px;
-  border: 1px solid var(--border);
+  padding: 0;
+  border: 1px solid transparent;
   border-radius: 6px;
   background: var(--surface-2);
   color: var(--muted);
   cursor: pointer;
+  outline: none;
+  flex-shrink: 0;
+  line-height: 0;
 }
 
-.canvasNodeBtn:hover { color: var(--text); }
+.canvasNodeBtn:hover { color: var(--text); border-color: rgba(var(--accent-rgb), 0.5); }
 .canvasNodeBtn.hasQueue {
   color: var(--accent);
   border-color: rgba(var(--accent-rgb), 0.5);
@@ -1200,6 +1217,16 @@
   top: 7px;
   right: 0;
   transform: translate(50%, -50%);
+}
+
+.canvasOutputHandleHit {
+  position: absolute;
+  top: 0;
+  right: -6px;
+  z-index: 11;
+  width: 22px;
+  height: 28px;
+  cursor: crosshair;
 }
 
 .canvasInputRow.hasOutputHandle > .canvasHandle.react-flow__handle-right.out:hover,

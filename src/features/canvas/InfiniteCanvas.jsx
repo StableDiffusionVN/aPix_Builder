@@ -14,7 +14,7 @@ import { CanvasActionsContext } from "./canvasContext.js";
 import { useCanvasProject } from "./useCanvasProject.js";
 import { loadStepDefinition, useStepLibrary } from "./useStepLibrary.js";
 import { runCanvasNode, bypassCanvasNode } from "./canvasRunner.js";
-import { buildCanvasNodeDefaults, arePortsCompatible, STEP_KINDS, topoOrder, upstreamStepsNeedingRunAsync, upstreamStepsWithStaleFilesAsync, linkedImageInputsMissingSource, beginNodeExecutionPatch, nodeRunCachePatch, clearNodeRunCachePatch, isNodeRunCacheReady } from "./canvasModel.js";
+import { buildCanvasNodeDefaults, arePortsCompatible, STEP_KINDS, topoOrder, upstreamStepsNeedingRunAsync, upstreamStepsWithStaleFilesAsync, linkedImageInputsMissingSource, beginNodeExecutionPatch, nodeRunCachePatch, clearNodeRunCachePatch } from "./canvasModel.js";
 import { buildDefaults, flattenInputs } from "../../lib/template.js";
 import { buildRhRunAuth, getPrimaryRhApiKey, hasRhApiKey } from "../../lib/rhTokenPool.js";
 import { fitCanvasWorkflowView } from "./canvasFitView.js";
@@ -717,33 +717,12 @@ function InfiniteCanvasInner({
     setGraphRunning(true);
 
     let pipelineIntroLogged = false;
-    let pipelineSkipLogged = false;
     try {
       for (const id of order) {
         if (pipelineCancelledRef.current) break;
         const index = live.findIndex(node => node.id === id);
         if (index < 0 || live[index].type !== "step") continue;
         try {
-          if (!live[index].data?.bypassed && await isNodeRunCacheReady(live[index])) {
-            if (!pipelineSkipLogged) {
-              const runId = crypto.randomUUID();
-              const provider = runLogProvider(live[index].data.kind);
-              const job = buildCanvasRunJob(live[index], runId);
-              const stepCount = order.filter(stepId => live.find(item => item.id === stepId)?.type === "step").length;
-              runLogStartSession?.(job, { provider, status: "success" });
-              runLogAppendLog?.(
-                runId,
-                "info",
-                `Pipeline: ${stepCount} node theo thứ tự topo; bỏ qua node đã có cache output`,
-                { provider }
-              );
-              runLogEndSession?.(runId, "success");
-              pipelineSkipLogged = true;
-              pipelineIntroLogged = true;
-            }
-            updateNodeData(id, { status: "done", error: "" });
-            continue;
-          }
           const pipelineIntro = !pipelineIntroLogged
             ? `Pipeline: ${order.filter(stepId => live.find(item => item.id === stepId)?.type === "step").length} node theo thứ tự topo`
             : "";
@@ -1006,6 +985,7 @@ function InfiniteCanvasInner({
               isValidConnection={isValidConnection}
               minZoom={0.1}
               maxZoom={10}
+              doubleClickZoom={false}
               connectionRadius={24}
               panOnDrag
               selectionOnDrag={false}

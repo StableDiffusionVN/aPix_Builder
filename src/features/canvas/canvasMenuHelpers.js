@@ -50,14 +50,12 @@ export function buildNodeContextMenuItems({
       label: node.data?.bypassed ? "Bỏ bypass" : "Bypass node",
       onClick: () => toggleNodeBypass?.(node.id)
     });
-    const outputResolved = resolveOutputValueForSource(node, "main");
-    if ((outputResolved.imageUrl || outputResolved.value)
-      && !isStepOutputDetached(node.id, "main", nodes, edges || [])) {
+    const outputs = node.data?.ports?.outputs || [];
+    if (outputs.length && !isStepOutputDetached(node.id, outputs[0].key, nodes, edges || [])) {
       items.push({
         id: "convert-output-source",
         label: "Tách thành node Ảnh",
-        disabled: !outputResolved.imageUrl,
-        onClick: () => convertOutputToSource?.(node.id, "main")
+        onClick: () => convertOutputToSource?.(node.id, outputs[0].key)
       });
     }
   }
@@ -185,7 +183,7 @@ export function buildPreviewContextMenuItems({
   }, {
     id: "convert-output-source",
     label: "Tách thành node Ảnh",
-    disabled: !imageUrl || isStepOutputDetached(node.id, outputKey, nodes, edges || []),
+    disabled: isStepOutputDetached(node.id, outputKey, nodes, edges || []),
     onClick: () => convertOutputToSource?.(node.id, outputKey)
   }];
 

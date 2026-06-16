@@ -7,19 +7,25 @@ import {
   findNodeInputImageUrl,
   getNodeRunCache,
   isNodeRunCacheReady,
+  linkedImageInputsMissingSource,
   nodeOutputUrl,
   nodeOutputValue,
   portTypeForUi,
+  resolveEffectiveImageSource,
   resolveEffectiveNodeOutputUrl,
-  serverImageFileExists
+  serverImageFileExists,
+  upstreamStepsNeedingRun
 } from "../src/features/canvas/canvasModel.js";
 import { resolveFieldValueForSource, resolveOutputValueForSource } from "../src/features/canvas/canvasMenuHelpers.js";
 import {
   estimateOutputPreviewBlockHeight,
   estimateStepNodeMinHeight,
+  growStepNodesToFit,
   isStepOutputDetached,
   normalizeOutputSplitNodes,
   OUTPUT_PREVIEW_STAGE_MIN_HEIGHT,
+  reconcileOutputSplitOnEdgeRemove,
+  restoreInputSourceOnRemove,
   restoreOutputPassthroughOnRemove,
   stepOutputPreviewIsVisible
 } from "../src/features/canvas/canvasNodeLayout.js";
@@ -296,9 +302,9 @@ describe("canvas step node layout", () => {
     ];
 
     const height = estimateStepNodeMinHeight(node, edges, [node]);
-    // linked image row + 2-row textarea + chrome
-    expect(height).toBeGreaterThanOrEqual(170);
-    expect(height).toBeLessThan(210);
+    // linked image row + textarea + chrome
+    expect(height).toBeGreaterThanOrEqual(160);
+    expect(height).toBeLessThan(190);
   });
 
   test("estimates taller height for local image input preview", () => {
@@ -421,8 +427,134 @@ describe("canvas step node layout", () => {
     const result = restoreOutputPassthroughOnRemove(nodes, edges, "split-1");
     expect(result.nodes.map(node => node.id)).toEqual(["step-1", "step-2"]);
     expect(result.nodes[0].data.detachedOutputs).toBeUndefined();
+    // Fixed height is preserved so growStepNodesToFit can expand it to fit the
+    // returning output preview.
+    expect(result.nodes[0].data.size).toEqual({ width: 236, height: 200 });
+    expect(result.edges).toEqual([
+      {
+        id: "e-step-1-step-2-0",
+        source: "step-1",
+        target: "step-2",
+        sourceHandle: "out:main",
+        targetHandle: "in:image",
+        type: "default",
+        animated: false
+      }
+    ]);
+  });
+
+  test("grows a fixed-height step node when an image input no longer fits", () => {
+    const node = {
+      id: "step-1",
+      type: "step",
+      data: {
+        size: { width: 236, height: 120 },
+        ports: {
+          inputs: [{ key: "image", valueKey: "image", type: "image", uiType: "image" }],
+          outputs: [{ key: "main", label: "Output", type: "image" }]
+        },
+        values: { image: "/api/input-image?name=test.png" }
+      }
+    };
+
+    const minHeight = estimateStepNodeMinHeight(node, [], [node]);
+    const { nodes, changed } = growStepNodesToFit([node], []);
+    expect(changed).toBe(true);
+    expect(nodes[0].data.size.height).toBe(minHeight);
+    expect(nodes[0].data.size.width).toBe(236);
+  });
+
+  test("grows a fixed-height step node when an output preview appears", () => {
+    const node = {
+      id: "step-1",
+      type: "step",
+      data: {
+        size: { width: 236, height: 130 },
+        ports: {
+          inputs: [{ key: "value", valueKey: "value", type: "text", uiType: "string" }],
+          outputs: [{ key: "main", label: "Output", type: "image" }]
+        },
+        values: { value: "hi" },
+        runCache: {
+          outputs: [{ url: "/api/output-image?name=out.png", key: "main" }],
+          primary: { url: "/api/output-image?name=out.png", key: "main" }
+        }
+      }
+    };
+
+    const minHeight = estimateStepNodeMinHeight(node, [], [node]);
+    const { nodes, changed } = growStepNodesToFit([node], []);
+    expect(changed).toBe(true);
+    expect(nodes[0].data.size.height).toBe(minHeight);
+  });
+
+  test("never shrinks a step node taller than its content, leaves auto-fit nodes alone", () => {
+    const tall = {
+      id: "tall",
+      type: "step",
+      data: {
+        size: { width: 236, height: 600 },
+        ports: {
+          inputs: [{ key: "value", valueKey: "value", type: "text", uiType: "string" }],
+          outputs: [{ key: "main", label: "Output", type: "image" }]
+        },
+        values: { value: "hi" }
+      }
+    };
+    const autoFit = {
+      id: "auto",
+      type: "step",
+      data: {
+        size: { width: 236 },
+        ports: { inputs: [{ key: "value", valueKey: "value", type: "text", uiType: "string" }] },
+        values: { value: "hi" }
+      }
+    };
+
+    const result = growStepNodesToFit([tall, autoFit], []);
+    expect(result.changed).toBe(false);
+    expect(result.nodes[0]).toBe(tall);
+    expect(result.nodes[1]).toBe(autoFit);
+  });
+
+  test("undoes output split when passthrough input edge is removed", () => {
+    const nodes = [
+      {
+        id: "step-1",
+        type: "step",
+        data: {
+          size: { width: 236 },
+          ports: {
+            inputs: [{ key: "value", valueKey: "value", type: "text", uiType: "string" }],
+            outputs: [{ key: "main", label: "Output", type: "image" }]
+          },
+          runCache: {
+            outputs: [{ url: "/api/output-image?name=out.png", key: "main" }],
+            primary: { url: "/api/output-image?name=out.png", key: "main" }
+          }
+        }
+      },
+      {
+        id: "split-1",
+        type: "source",
+        data: {
+          passthroughFromOutput: true,
+          passthroughSourceNodeId: "step-1",
+          passthroughOutputKey: "main"
+        }
+      },
+      { id: "step-2", type: "step", data: {} }
+    ];
+    const edges = [
+      { id: "e-in", source: "step-1", target: "split-1", sourceHandle: "out:main", targetHandle: "in:main" },
+      { id: "e-out", source: "split-1", target: "step-2", sourceHandle: "out:main", targetHandle: "in:image" }
+    ];
+    const removedEdge = edges[0];
+    const edgesAfter = edges.filter(edge => edge.id !== removedEdge.id);
+
+    const result = reconcileOutputSplitOnEdgeRemove(nodes, edgesAfter, removedEdge);
+    expect(result.nodes.map(node => node.id)).toEqual(["step-1", "step-2"]);
     expect(result.nodes[0].data.size).toEqual({ width: 236 });
-    expect(result.nodes[0].data.size?.height).toBeUndefined();
     expect(result.edges).toEqual([
       {
         id: "e-step-1-step-2-0",
@@ -481,5 +613,147 @@ describe("canvas bypass pass-through", () => {
     expect(findNodeInputImageUrl(nodes[2], nodes, edges))
       .toBe("/api/output-image?name=upstream.png");
     expect(findLinkedImageSource(nodes[2], nodes, edges)?.id).toBe("a");
+  });
+});
+
+describe("restoreInputSourceOnRemove", () => {
+  const makeGraph = () => {
+    const nodes = [
+      {
+        id: "step-1",
+        type: "step",
+        data: {
+          size: { width: 236, height: 300 },
+          ports: {
+            inputs: [{ key: "image", valueKey: "image", type: "image", uiType: "image" }],
+            outputs: [{ key: "main", label: "Output", type: "image" }]
+          },
+          values: { image: "" }
+        }
+      },
+      {
+        id: "src-1",
+        type: "source",
+        data: {
+          sourceType: "image",
+          name: "Input Image",
+          values: { main: "/api/input-image?name=photo.png" },
+          passthroughFromInput: true,
+          passthroughTargetNodeId: "step-1",
+          passthroughInputValueKey: "image"
+        }
+      }
+    ];
+    const edges = [
+      { id: "e-src-step", source: "src-1", target: "step-1", sourceHandle: "out:main", targetHandle: "in:image" }
+    ];
+    return { nodes, edges };
+  };
+
+  test("restores input value to step and removes source node + edge", () => {
+    const { nodes, edges } = makeGraph();
+    const result = restoreInputSourceOnRemove(nodes, edges, "src-1");
+    expect(result).not.toBeNull();
+    expect(result.nodes.map(n => n.id)).toEqual(["step-1"]);
+    expect(result.nodes[0].data.values.image).toBe("/api/input-image?name=photo.png");
+    expect(result.edges).toHaveLength(0);
+  });
+
+  test("returns null for non-passthrough source nodes", () => {
+    const { nodes, edges } = makeGraph();
+    const plainSource = { id: "src-plain", type: "source", data: { values: { main: "/api/input-image?name=other.png" } } };
+    const result = restoreInputSourceOnRemove([...nodes, plainSource], edges, "src-plain");
+    expect(result).toBeNull();
+  });
+
+  test("returns null when source id is not found", () => {
+    const { nodes, edges } = makeGraph();
+    const result = restoreInputSourceOnRemove(nodes, edges, "nonexistent");
+    expect(result).toBeNull();
+  });
+
+  test("normalizeOutputSplitNodes strips stale passthroughFromInput flag", () => {
+    const { nodes } = makeGraph();
+    // No edges → source is no longer connected → flag should be stripped
+    const normalized = normalizeOutputSplitNodes(nodes, []);
+    const src = normalized.find(n => n.id === "src-1");
+    expect(src.data.passthroughFromInput).toBeUndefined();
+    expect(src.data.passthroughTargetNodeId).toBeUndefined();
+    expect(src.data.passthroughInputValueKey).toBeUndefined();
+  });
+
+  test("normalizeOutputSplitNodes keeps flag when edge is present", () => {
+    const { nodes, edges } = makeGraph();
+    const normalized = normalizeOutputSplitNodes(nodes, edges);
+    const src = normalized.find(n => n.id === "src-1");
+    expect(src.data.passthroughFromInput).toBe(true);
+  });
+});
+
+describe("resolveEffectiveImageSource traverses passthrough output nodes", () => {
+  const stepWithOutput = {
+    id: "step-1",
+    type: "step",
+    data: {
+      ports: { outputs: [{ key: "main", type: "image" }] },
+      runCache: {
+        outputs: [{ url: "/api/output-image?name=out.png", key: "main" }],
+        primary: { url: "/api/output-image?name=out.png", key: "main" }
+      }
+    }
+  };
+  const passthrough = {
+    id: "pt-1",
+    type: "source",
+    data: {
+      passthroughFromOutput: true,
+      passthroughSourceNodeId: "step-1",
+      passthroughOutputKey: "main",
+      values: { main: "" }
+    }
+  };
+  const downstream = {
+    id: "step-2",
+    type: "step",
+    data: {
+      ports: { inputs: [{ key: "image", valueKey: "image", type: "image", uiType: "image" }] }
+    }
+  };
+  const nodes = [stepWithOutput, passthrough, downstream];
+  const edges = [
+    { id: "e1", source: "step-1", target: "pt-1", sourceHandle: "out:main", targetHandle: "in:main" },
+    { id: "e2", source: "pt-1", target: "step-2", sourceHandle: "out:main", targetHandle: "in:image" }
+  ];
+
+  test("resolveEffectiveImageSource resolves passthrough to upstream step", () => {
+    const result = resolveEffectiveImageSource("pt-1", "out:main", nodes, edges);
+    expect(result?.node.id).toBe("step-1");
+    expect(result?.sourceHandle).toBe("out:main");
+  });
+
+  test("resolveEffectiveNodeOutputUrl returns step output URL via passthrough", () => {
+    const url = resolveEffectiveNodeOutputUrl("pt-1", "out:main", nodes, edges);
+    expect(url).toBe("/api/output-image?name=out.png");
+  });
+
+  test("upstreamStepsNeedingRun identifies upstream step when passthrough has no cache", () => {
+    const noCache = { ...stepWithOutput, data: { ...stepWithOutput.data, runCache: null } };
+    const nodesNoCache = [noCache, passthrough, downstream];
+    const result = upstreamStepsNeedingRun("step-2", nodesNoCache, edges);
+    expect(result).toContain("step-1");
+  });
+
+  test("upstreamStepsNeedingRun skips upstream step when passthrough has cache", () => {
+    const result = upstreamStepsNeedingRun("step-2", nodes, edges);
+    expect(result).not.toContain("step-1");
+  });
+
+  test("linkedImageInputsMissingSource marks canAutoRun true for passthrough pointing to step", () => {
+    const noCache = { ...stepWithOutput, data: { ...stepWithOutput.data, runCache: null } };
+    const nodesNoCache = [noCache, passthrough, downstream];
+    const missing = linkedImageInputsMissingSource(downstream, nodesNoCache, edges);
+    expect(missing).toHaveLength(1);
+    expect(missing[0].source.id).toBe("step-1");
+    expect(missing[0].canAutoRun).toBe(true);
   });
 });

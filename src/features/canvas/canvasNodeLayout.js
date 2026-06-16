@@ -18,6 +18,7 @@ const UPLOAD_BTN_HEIGHT = 30;
 const URL_FORM_HEIGHT = 28;
 const IMAGE_FIELD_GAP = 6;
 const TEXTAREA_HEIGHT = 48;
+const OUTPUT_PREVIEW_BORDER = 1;
 const INPUT_CONTROL_HEIGHT = 26;
 const EMPTY_BODY_HEIGHT = 24;
 const ERROR_ROW_HEIGHT = 27;
@@ -77,18 +78,26 @@ function estimateInputFieldHeight(port, value, linked, nodeWidth) {
 
 export function stepOutputPreviewIsVisible(node, nodes = [], edges = []) {
   if (!node || node.type !== "step") return false;
-  const outputs = node.data?.ports?.outputs || [];
-  if (!outputs.length) return false;
 
-  if (outputs.every(port => isStepOutputDetached(node.id, port.key, nodes, edges))) {
-    return false;
-  }
-
+  // Check the run cache first — it is the source of truth for whether there
+  // is an output image to display. We do NOT require ports.outputs to be
+  // populated because old saved nodes or RH-app nodes may not have it set,
+  // yet still carry a valid runCache from a previous run.
   const cache = getNodeRunCache(node);
-  return Boolean(
+  const hasOutput = Boolean(
     coerceImageRef(cache?.primary?.url)
     || cache?.outputs?.some(output => coerceImageRef(output?.url))
   );
+  if (!hasOutput) return false;
+
+  // If every declared output port has been detached to a passthrough node,
+  // the preview is shown there instead of on the step.
+  const outputs = node.data?.ports?.outputs || [];
+  if (outputs.length > 0 && outputs.every(port => isStepOutputDetached(node.id, port.key, nodes, edges))) {
+    return false;
+  }
+
+  return true;
 }
 
 /** Estimate output compare-preview block height when output is shown on the step node. */
@@ -97,7 +106,7 @@ export function estimateOutputPreviewBlockHeight(node, nodeWidth = CANVAS_NODE_D
 
   const innerWidth = Math.max(nodeWidth - 16, 100);
   const stageHeight = Math.max(OUTPUT_PREVIEW_STAGE_MIN_HEIGHT, innerWidth);
-  return OUTPUT_PREVIEW_PADDING_Y + stageHeight;
+  return OUTPUT_PREVIEW_PADDING_Y + stageHeight + OUTPUT_PREVIEW_BORDER;
 }
 
 /**
@@ -146,6 +155,39 @@ export function compactStepNodeSize(width = CANVAS_NODE_DEFAULT_WIDTH) {
   return { width };
 }
 
+/**
+ * Grow step nodes whose fixed (custom) height is now smaller than their content
+ * requires — e.g. after adding an image input, receiving an output preview, or
+ * splitting a node. Nodes without a fixed height auto-fit via flex and are left
+ * untouched. Heights are only ever increased, so a user's larger manual size is
+ * preserved.
+ */
+export function growStepNodesToFit(nodes, edges = []) {
+  const list = Array.isArray(nodes) ? nodes : [];
+  const edgeList = Array.isArray(edges) ? edges : [];
+  let changed = false;
+
+  const next = list.map(node => {
+    if (node?.type !== "step") return node;
+    const height = node.data?.size?.height;
+    if (!Number.isFinite(height) || height <= 0) return node;
+
+    const minHeight = estimateStepNodeMinHeight(node, edgeList, list);
+    if (height >= minHeight) return node;
+
+    changed = true;
+    return {
+      ...node,
+      data: {
+        ...node.data,
+        size: { ...node.data.size, height: minHeight }
+      }
+    };
+  });
+
+  return changed ? { nodes: next, changed } : { nodes: list, changed: false };
+}
+
 /** Minimum height clamp for canvas node resize handles. */
 export function estimateCanvasNodeMinHeight(node, edges = [], nodes = []) {
   if (node?.type === "step") return estimateStepNodeMinHeight(node, edges, nodes);
@@ -171,8 +213,63 @@ export function normalizeOutputSplitNodes(nodes, edges) {
         next = { ...node, data: rest };
       }
     }
+    if (node.type === "source" && node.data?.passthroughFromInput) {
+      const { stepId, valueKey } = {
+        stepId: node.data.passthroughTargetNodeId,
+        valueKey: node.data.passthroughInputValueKey
+      };
+      const linked = stepId && valueKey && edgeList.some(edge => (
+        edge.source === node.id && edge.target === stepId && edge.targetHandle === `in:${valueKey}`
+      ));
+      if (!linked) {
+        const { passthroughFromInput: _p, passthroughTargetNodeId: _t, passthroughInputValueKey: _v, ...rest } = node.data;
+        next = { ...node, data: rest };
+      }
+    }
     return next;
   });
+}
+
+/** Undo input split when the source node is deleted — restores the value to the step's input field. */
+export function restoreInputSourceOnRemove(nodes, edges, sourceId) {
+  const source = nodes.find(node => node.id === sourceId);
+  if (!source?.data?.passthroughFromInput) return null;
+
+  const stepId = source.data.passthroughTargetNodeId;
+  const valueKey = source.data.passthroughInputValueKey;
+  if (!stepId || !valueKey) return null;
+
+  const value = source.data?.values?.main ?? "";
+
+  const nextEdges = edges.filter(edge => edge.source !== sourceId && edge.target !== sourceId);
+  const nextNodes = nodes
+    .filter(node => node.id !== sourceId)
+    .map(node => {
+      if (node.id !== stepId) return node;
+      return {
+        ...node,
+        data: {
+          ...node.data,
+          values: { ...(node.data?.values || {}), [valueKey]: value }
+        }
+      };
+    });
+
+  return { nodes: nextNodes, edges: nextEdges };
+}
+
+/** Undo output split when the passthrough input edge is removed. */
+export function reconcileOutputSplitOnEdgeRemove(nodes, edges, removedEdge) {
+  if (!removedEdge?.sourceHandle?.startsWith("out:")) return null;
+  if (removedEdge.targetHandle !== "in:main") return null;
+
+  const outputKey = removedEdge.sourceHandle.slice(4);
+  const passthrough = nodes.find(node => node.id === removedEdge.target);
+  if (!passthrough?.data?.passthroughFromOutput) return null;
+  if (passthrough.data.passthroughSourceNodeId !== removedEdge.source) return null;
+  if ((passthrough.data.passthroughOutputKey || "main") !== outputKey) return null;
+
+  return restoreOutputPassthroughOnRemove(nodes, edges, passthrough.id);
 }
 
 /** Undo output split when a passthrough source node is deleted. */
@@ -208,11 +305,16 @@ export function restoreOutputPassthroughOnRemove(nodes, edges, passthroughId) {
   const nextNodes = withoutPassthrough.map(node => {
     if (node.id !== stepId) return node;
     const width = node.data?.size?.width || CANVAS_NODE_DEFAULT_WIDTH;
+    const height = node.data?.size?.height;
+    // Preserve any existing fixed height so growStepNodesToFit can expand it to
+    // fit the returning output preview (+ any input image already set).
+    // Auto-fit nodes (height undefined/0) remain auto-fit; CSS flex handles them.
+    const size = (Number.isFinite(height) && height > 0) ? { width, height } : { width };
     return {
       ...node,
       data: {
         ...node.data,
-        size: compactStepNodeSize(width)
+        size
       }
     };
   });

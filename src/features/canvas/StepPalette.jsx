@@ -3,21 +3,29 @@ import { CheckSquare, Database, Hash, Image as ImageIcon, List, Loader2, Plus, R
 import { ComfyUiLogomark } from "../../components/icons/ComfyUiIcon.jsx";
 import { RunningHubLogomark } from "../../components/icons/RunningHubIcon.jsx";
 import { STEP_KINDS } from "./canvasModel.js";
+import { usePaletteDragHandlers } from "./canvasPaletteDrag.js";
 
-function PaletteGroup({ title, icon, items, onAdd, addingRef }) {
+function PaletteGroup({ title, icon, items, onAdd, addingRef, bindStepItem, shouldSkipClick }) {
   if (!items.length) return null;
   return (
     <div className="canvasPaletteGroup">
       <h4 className="canvasPaletteGroupTitle">{icon}{title}</h4>
       <ul className="canvasPaletteList">
         {items.map(item => (
-          <li key={`${item.kind}:${item.ref}`}>
+          <li
+            key={`${item.kind}:${item.ref}`}
+            draggable={addingRef !== item.ref}
+            {...bindStepItem(item)}
+          >
             <button
               type="button"
               className="canvasPaletteItem"
               disabled={addingRef === item.ref}
-              onClick={() => onAdd(item)}
-              title={item.name}
+              onClick={() => {
+                if (shouldSkipClick()) return;
+                onAdd(item);
+              }}
+              title={`${item.name} — kéo thả lên canvas hoặc bấm để thêm`}
             >
               <span className="canvasPaletteItemName">{item.name}</span>
               {addingRef === item.ref ? <Loader2 size={13} className="spin" /> : <Plus size={13} />}
@@ -29,8 +37,20 @@ function PaletteGroup({ title, icon, items, onAdd, addingRef }) {
   );
 }
 
+const SOURCE_BUTTONS = [
+  { id: "image", label: "Node ảnh", icon: ImageIcon },
+  { id: "text", label: "Node text", icon: Type },
+  { id: "int", label: "Node int", icon: Hash },
+  { id: "float", label: "Node float", icon: Hash },
+  { id: "boolean", label: "Node boolean", icon: CheckSquare },
+  { id: "menu", label: "Node menu", icon: List },
+  { id: "checkpoint", label: "Node checkpoint", icon: Database },
+  { id: "lora", label: "Node lora", icon: Database }
+];
+
 export function StepPalette({ library, loading, error, onReload, onAddStep, onAddSource, addingRef }) {
   const [query, setQuery] = useState("");
+  const { bindStepItem, bindSource, shouldSkipClick } = usePaletteDragHandlers();
 
   const filtered = useMemo(() => {
     const match = (list, kind) => (list || [])
@@ -59,31 +79,24 @@ export function StepPalette({ library, loading, error, onReload, onAddStep, onAd
         </button>
       </div>
 
+      <p className="canvasPaletteHint">Kéo node từ thư viện và thả lên canvas để đặt đúng vị trí.</p>
+
       <div className="canvasPaletteSources">
-        <button type="button" className="canvasSourceBtn" onClick={() => onAddSource("image")}>
-          <ImageIcon size={13} /> Node ảnh
-        </button>
-        <button type="button" className="canvasSourceBtn" onClick={() => onAddSource("text")}>
-          <Type size={13} /> Node text
-        </button>
-        <button type="button" className="canvasSourceBtn" onClick={() => onAddSource("int")}>
-          <Hash size={13} /> Node int
-        </button>
-        <button type="button" className="canvasSourceBtn" onClick={() => onAddSource("float")}>
-          <Hash size={13} /> Node float
-        </button>
-        <button type="button" className="canvasSourceBtn" onClick={() => onAddSource("boolean")}>
-          <CheckSquare size={13} /> Node boolean
-        </button>
-        <button type="button" className="canvasSourceBtn" onClick={() => onAddSource("menu")}>
-          <List size={13} /> Node menu
-        </button>
-        <button type="button" className="canvasSourceBtn" onClick={() => onAddSource("checkpoint")}>
-          <Database size={13} /> Node checkpoint
-        </button>
-        <button type="button" className="canvasSourceBtn" onClick={() => onAddSource("lora")}>
-          <Database size={13} /> Node lora
-        </button>
+        {SOURCE_BUTTONS.map(({ id, label, icon: Icon }) => (
+          <button
+            key={id}
+            type="button"
+            className="canvasSourceBtn"
+            {...bindSource(id)}
+            onClick={() => {
+              if (shouldSkipClick()) return;
+              onAddSource(id);
+            }}
+            title={`${label} — kéo thả lên canvas hoặc bấm để thêm`}
+          >
+            <Icon size={13} /> {label}
+          </button>
+        ))}
       </div>
 
       <div className="canvasPaletteScroll">
@@ -94,6 +107,8 @@ export function StepPalette({ library, loading, error, onReload, onAddStep, onAd
           items={filtered.local}
           onAdd={onAddStep}
           addingRef={addingRef}
+          bindStepItem={bindStepItem}
+          shouldSkipClick={shouldSkipClick}
         />
         <PaletteGroup
           title="RunningHub Workflow"
@@ -101,6 +116,8 @@ export function StepPalette({ library, loading, error, onReload, onAddStep, onAd
           items={filtered.rhWf}
           onAdd={onAddStep}
           addingRef={addingRef}
+          bindStepItem={bindStepItem}
+          shouldSkipClick={shouldSkipClick}
         />
         <PaletteGroup
           title="RunningHub App"
@@ -108,6 +125,8 @@ export function StepPalette({ library, loading, error, onReload, onAddStep, onAd
           items={filtered.rhApp}
           onAdd={onAddStep}
           addingRef={addingRef}
+          bindStepItem={bindStepItem}
+          shouldSkipClick={shouldSkipClick}
         />
         {!loading && !filtered.local.length && !filtered.rhWf.length && !filtered.rhApp.length ? (
           <p className="canvasPaletteEmpty">Không có template hoặc app nào.</p>

@@ -1,5 +1,15 @@
-import { imageDisplayUrl, incomingEdgesByInput, nodeOutputUrl, portTypeForUi } from "./canvasModel.js";
+import {
+  coerceImageRef,
+  imageDisplayUrl,
+  incomingEdgesByInput,
+  nodeOutputUrl,
+  nodeOutputValue,
+  resolveEffectiveImageSource,
+  resolveEffectiveNodeOutputUrl,
+  portTypeForUi
+} from "./canvasModel.js";
 import { downloadImage } from "../../lib/download.js";
+import { isStepOutputDetached } from "./canvasNodeLayout.js";
 
 function imageFilename(url, fallback) {
   if (!url) return fallback;
@@ -16,11 +26,13 @@ function imageFilename(url, fallback) {
 
 export function buildNodeContextMenuItems({
   node,
+  nodes = [],
   edges,
   runNode,
   removeNode,
   toggleNodeBypass,
-  removeEdge
+  removeEdge,
+  convertOutputToSource
 }) {
   if (!node) return [];
 
@@ -38,6 +50,16 @@ export function buildNodeContextMenuItems({
       label: node.data?.bypassed ? "Bỏ bypass" : "Bypass node",
       onClick: () => toggleNodeBypass?.(node.id)
     });
+    const outputResolved = resolveOutputValueForSource(node, "main");
+    if ((outputResolved.imageUrl || outputResolved.value)
+      && !isStepOutputDetached(node.id, "main", nodes, edges || [])) {
+      items.push({
+        id: "convert-output-source",
+        label: "Tách thành node Ảnh",
+        disabled: !outputResolved.imageUrl,
+        onClick: () => convertOutputToSource?.(node.id, "main")
+      });
+    }
   }
 
   if (node.type === "source") {
@@ -85,7 +107,7 @@ export function buildFieldContextMenuItems({
       ? nodes?.find(item => item.id === incoming.source)
       : null;
     const imageUrl = incoming
-      ? nodeOutputUrl(source, incoming.sourceHandle)
+      ? resolveEffectiveNodeOutputUrl(incoming.source, incoming.sourceHandle, nodes, edges)
       : imageDisplayUrl(value);
 
     if (imageUrl) {
@@ -135,11 +157,14 @@ export function buildFieldContextMenuItems({
 
 export function buildPreviewContextMenuItems({
   node,
+  nodes = [],
   disconnectTargetPort,
   edges,
   imageUrl,
   outputFilename = "",
-  inputImageUrl = ""
+  inputImageUrl = "",
+  convertOutputToSource,
+  outputKey = "main"
 }) {
   if (!node || node.type !== "step") return [];
 
@@ -157,6 +182,11 @@ export function buildPreviewContextMenuItems({
         console.error("Could not save canvas image:", error);
       }
     }
+  }, {
+    id: "convert-output-source",
+    label: "Tách thành node Ảnh",
+    disabled: !imageUrl || isStepOutputDetached(node.id, outputKey, nodes, edges || []),
+    onClick: () => convertOutputToSource?.(node.id, outputKey)
   }];
 
   if (inputImageUrl && inputImageUrl !== imageUrl) {
@@ -199,6 +229,33 @@ export function buildEdgeContextMenuItems({ edge, removeEdge }) {
   }];
 }
 
+export function resolveOutputValueForSource(node, outputKey = "main") {
+  const port = (node.data?.ports?.outputs || []).find(item => item.key === outputKey);
+  if (!port) return { sourceType: "image", value: "", imageUrl: "", label: "Output", port: { type: "image" } };
+
+  const sourceType = port.type || portTypeForUi(port.uiType) || "image";
+  const rawValue = nodeOutputValue(node, `out:${outputKey}`);
+  const coerced = coerceImageRef(rawValue);
+  const imageUrl = sourceType === "image" ? (imageDisplayUrl(coerced) || coerced) : "";
+  const value = sourceType === "image" ? (coerced || "") : rawValue;
+
+  return {
+    sourceType,
+    value,
+    imageUrl,
+    label: port.label || "Output",
+    port: {
+      type: sourceType,
+      uiType: port.uiType,
+      choices: port.choices,
+      menuLabelSyntax: port.menuLabelSyntax,
+      minimum: port.minimum,
+      maximum: port.maximum,
+      step: port.step
+    }
+  };
+}
+
 export function resolveFieldValueForSource(node, valueKey, nodes, edges) {
   const port = (node.data?.ports?.inputs || []).find(item => item.valueKey === valueKey);
   if (!port) return { sourceType: "image", value: "" };
@@ -208,11 +265,12 @@ export function resolveFieldValueForSource(node, valueKey, nodes, edges) {
   let value = node.data?.values?.[valueKey] ?? "";
 
   if (incoming) {
-    const upstream = nodes.find(item => item.id === incoming.source);
+    const resolved = resolveEffectiveImageSource(incoming.source, incoming.sourceHandle, nodes, edges);
+    const upstream = resolved?.node || nodes.find(item => item.id === incoming.source);
     if (upstream?.type === "source") {
       value = upstream.data?.values?.main ?? value;
     } else {
-      value = nodeOutputUrl(upstream, incoming.sourceHandle) || value;
+      value = nodeOutputUrl(upstream, resolved?.sourceHandle || incoming.sourceHandle) || value;
     }
   } else {
     value = imageDisplayUrl(value) || value;

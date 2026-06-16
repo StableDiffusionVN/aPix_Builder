@@ -1,4 +1,5 @@
 import { useReactFlow } from "@xyflow/react";
+import { CANVAS_NODE_DEFAULT_WIDTH } from "./CanvasNodeResizeHandles.jsx";
 import { AlertCircle, CheckCircle2, Image as ImageIcon, Loader2, Play, Trash2, Type } from "lucide-react";
 import { STEP_KINDS } from "./canvasModel.js";
 
@@ -31,7 +32,7 @@ export function CanvasNodesPanel({ nodes, onRunNode, onRemoveNode }) {
   const { setCenter } = useReactFlow();
 
   function focusNode(node) {
-    const width = 248;
+    const width = CANVAS_NODE_DEFAULT_WIDTH;
     const height = 120;
     setCenter(node.position.x + width / 2, node.position.y + height / 2, { zoom: 1.05, duration: 280 });
   }

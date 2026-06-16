@@ -76,6 +76,9 @@ export function startRunLogSession(job, meta = {}) {
     template: job.template || "",
     templateId: job.templateId || "",
     webappId: job.webappId || "",
+    canvasNodeId: meta.canvasNodeId || "",
+    canvasProjectId: meta.canvasProjectId || "",
+    runKind: meta.runKind || "",
     error: "",
     logs: []
   };
@@ -91,6 +94,12 @@ export function updateRunLogSession(runId, patch = {}) {
 
 export function appendRunLog(runId, level, message, meta = {}) {
   if (!runId) return snapshot();
+  const existing = sessions.find(session => session.runId === runId);
+  const last = existing?.logs?.[existing.logs.length - 1];
+  if (last && last.message === message && last.level === level) {
+    const lastAt = new Date(last.timestamp).getTime();
+    if (Date.now() - lastAt < 2500) return snapshot();
+  }
   const entry = createLogEntry(level, message, { runId, ...meta });
   const exists = sessions.some(session => session.runId === runId);
   if (exists) {
@@ -118,9 +127,22 @@ export function appendRunLog(runId, level, message, meta = {}) {
     template: "",
     templateId: "",
     webappId: "",
+    canvasNodeId: "",
+    canvasProjectId: "",
+    runKind: "",
     error: "",
     logs: [entry]
   }, ...sessions]);
+}
+
+export function appendRunLogs(entries = []) {
+  if (!Array.isArray(entries) || !entries.length) return snapshot();
+  let next = snapshot();
+  for (const entry of entries) {
+    if (!entry?.runId) continue;
+    next = appendRunLog(entry.runId, entry.level, entry.message, entry.meta || {});
+  }
+  return next;
 }
 
 export function endRunLogSession(runId, status, meta = {}) {

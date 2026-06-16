@@ -361,8 +361,15 @@ html[data-theme="dark"] .inputLibraryActions button,
 html[data-theme="dark"] .inputLibraryButton,
 html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .inputLibraryActions button,
 html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .inputLibraryButton,
-html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .inputLibraryButton,
 html[data-theme="light"] .inputLibraryActions button,
+html[data-theme="light"] .inputLibraryButton {
+  border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(7, 8, 16, 0.76);
+  color: rgba(255, 255, 255, 0.82);
+}
+
+html[data-theme="dark"] .inputLibraryButton,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .inputLibraryButton,
 html[data-theme="light"] .inputLibraryButton {
   border-color: var(--border-subtle);
   border-radius: var(--radius);
@@ -376,8 +383,15 @@ html[data-theme="dark"] .inputLibraryActions button:hover,
 html[data-theme="dark"] .inputLibraryButton:hover,
 html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .inputLibraryActions button:hover,
 html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .inputLibraryButton:hover,
-html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .inputLibraryButton:hover,
 html[data-theme="light"] .inputLibraryActions button:hover,
+html[data-theme="light"] .inputLibraryButton:hover {
+  border-color: rgba(var(--accent-rgb), 0.68);
+  color: #fff;
+  background: rgba(var(--accent-rgb), 0.32);
+}
+
+html[data-theme="dark"] .inputLibraryButton:hover,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .inputLibraryButton:hover,
 html[data-theme="light"] .inputLibraryButton:hover {
   border-color: var(--border-default);
   background: var(--surface-3);

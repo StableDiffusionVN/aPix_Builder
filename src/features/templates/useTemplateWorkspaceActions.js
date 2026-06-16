@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { buildDefaults, flattenInputs } from "../../lib/template.js";
 import { rhWfWorkspaceKey } from "../../lib/runningHubTemplate.js";
 import { localizeRuntimeMessage } from "../../i18n/I18nContext.jsx";
@@ -24,8 +24,10 @@ export function useTemplateWorkspaceActions({
   setStatus,
   setTemplates,
   setValues,
-  defaultComfyServer
+  defaultComfyServer,
+  skipInitialConfigLoad = false
 }) {
+  const formWorkspaceInitializedRef = useRef(false);
   const loadTemplateConfig = useCallback(async (templateId) => {
     const suffix = templateId ? `?template=${encodeURIComponent(templateId)}` : "";
     const response = await fetch(`/api/config${suffix}`);
@@ -165,18 +167,22 @@ export function useTemplateWorkspaceActions({
     setTemplates, t
   ]);
 
+  const initializeFormWorkspace = useCallback(async () => {
+    if (formWorkspaceInitializedRef.current) return;
+    formWorkspaceInitializedRef.current = true;
+    const data = await loadTemplateRegistry();
+    setTemplates(data.templates || []);
+    const storedTemplate = getLastTemplate();
+    const hasStoredTemplate = (data.templates || []).some(item => item.id === storedTemplate);
+    await loadConfig(hasStoredTemplate ? storedTemplate : data.default);
+  }, [getLastTemplate, loadConfig, loadTemplateRegistry, setTemplates]);
+
   useEffect(() => {
     loadOutputHistory();
     refreshInputImages();
-    loadTemplateRegistry()
-      .then(data => {
-        setTemplates(data.templates || []);
-        const storedTemplate = getLastTemplate();
-        const hasStoredTemplate = (data.templates || []).some(item => item.id === storedTemplate);
-        return loadConfig(hasStoredTemplate ? storedTemplate : data.default);
-      })
-      .catch(() => loadConfig(""));
-  }, []);
+    if (skipInitialConfigLoad) return;
+    initializeFormWorkspace().catch(() => loadConfig(""));
+  }, [initializeFormWorkspace, loadConfig, loadOutputHistory, refreshInputImages, skipInitialConfigLoad]);
 
   return {
     deleteTemplate,
@@ -184,6 +190,7 @@ export function useTemplateWorkspaceActions({
     loadRhWfConfig,
     loadRhWfTemplateRegistry,
     reloadRhWfTemplates,
-    reloadTemplates
+    reloadTemplates,
+    initializeFormWorkspace
   };
 }

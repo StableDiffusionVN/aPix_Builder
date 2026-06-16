@@ -1,9 +1,10 @@
-import { memo } from "react";
+import { memo, useState } from "react";
 import { Handle, Position } from "@xyflow/react";
 import { Binary, CheckSquare, Database, Hash, Image as ImageIcon, List, Trash2, Type } from "lucide-react";
 import { NodeField } from "../NodeField.jsx";
 import { CanvasNodeFrame } from "../CanvasNodeFrame.jsx";
 import { buildNodeContextMenuItems } from "../canvasMenuHelpers.js";
+import { resolveEffectiveNodeOutputUrl, withImageCacheBust } from "../canvasModel.js";
 import { useCanvasActions } from "../canvasContext.js";
 
 const SOURCE_META = {
@@ -31,7 +32,10 @@ function SourceNodeComponent({ id, data, selected }) {
   const Icon = hasChoices ? List : (uiType === "checkpoints" || uiType === "checkpoint" || uiType === "loras" || uiType === "lora")
     ? Database
     : meta.Icon;
-  const badgeLabel = hasChoices
+  const isPassthrough = Boolean(data.passthroughFromOutput);
+  const badgeLabel = isPassthrough
+    ? "Output"
+    : hasChoices
     ? "Menu"
     : uiType === "checkpoints" || uiType === "checkpoint"
       ? "Checkpoint"
@@ -44,6 +48,14 @@ function SourceNodeComponent({ id, data, selected }) {
             : meta.label;
   const value = data.values?.main;
   const node = nodes?.find(item => item.id === id);
+  const incoming = (edges || []).find(edge => edge.target === id && edge.targetHandle === "in:main");
+  const upstreamPreviewUrl = isPassthrough && incoming
+    ? resolveEffectiveNodeOutputUrl(incoming.source, incoming.sourceHandle, nodes || [], edges || [])
+    : "";
+  const [previewSize, setPreviewSize] = useState(null);
+  const previewUrl = upstreamPreviewUrl
+    ? withImageCacheBust(upstreamPreviewUrl, upstreamPreviewUrl)
+    : "";
   const fieldPort = {
     label: data.name || meta.label,
     type: sourceType,
@@ -80,22 +92,69 @@ function SourceNodeComponent({ id, data, selected }) {
       </header>
 
       <div className="canvasNodeBody nowheel">
-        <NodeField
-          port={fieldPort}
-          value={value}
-          onChange={next => updateNodeValues(id, { main: next })}
-        />
-      </div>
-
-      <div className="canvasOutputRow source">
-        <span className="canvasPortLabel">Output</span>
-        <Handle
-          type="source"
-          position={Position.Right}
-          id="out:main"
-          className={`canvasHandle out type-${sourceType}`}
-          isConnectable
-        />
+        {isPassthrough ? (
+          <div className="canvasInputRow hasHandle hasOutputHandle">
+            <Handle
+              type="target"
+              position={Position.Left}
+              id="in:main"
+              className={`canvasHandle in type-${sourceType}`}
+              isConnectable
+            />
+            <div className="canvasField">
+              <span className="canvasFieldLabel">{data.name || meta.label}</span>
+              {previewUrl ? (
+                <div className="canvasImageThumb">
+                  <img
+                    src={previewUrl}
+                    alt={data.name || meta.label}
+                    draggable="false"
+                    onLoad={event => {
+                      const { naturalWidth, naturalHeight } = event.currentTarget;
+                      setPreviewSize(naturalWidth && naturalHeight
+                        ? { width: naturalWidth, height: naturalHeight }
+                        : null);
+                    }}
+                  />
+                  {previewSize ? (
+                    <div
+                      className="imageSizeBadge"
+                      title={`${data.name || meta.label}: ${previewSize.width} x ${previewSize.height}`}
+                    >
+                      {previewSize.width} x {previewSize.height}
+                    </div>
+                  ) : null}
+                </div>
+              ) : (
+                <div className="canvasImageLinked">
+                  <span>Chờ output từ node trước</span>
+                </div>
+              )}
+            </div>
+            <Handle
+              type="source"
+              position={Position.Right}
+              id="out:main"
+              className={`canvasHandle out type-${sourceType}`}
+              isConnectable
+            />
+          </div>
+        ) : (
+          <div className="canvasInputRow hasOutputHandle">
+            <NodeField
+              port={fieldPort}
+              value={value}
+              onChange={next => updateNodeValues(id, { main: next })}
+            />
+            <Handle
+              type="source"
+              position={Position.Right}
+              id="out:main"
+              className={`canvasHandle out type-${sourceType}`}
+              isConnectable
+            />
+          </div>
+        )}
       </div>
     </CanvasNodeFrame>
   );

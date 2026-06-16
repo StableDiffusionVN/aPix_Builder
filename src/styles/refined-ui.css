@@ -381,32 +381,20 @@ html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .thumbAction
   box-shadow: none;
 }
 
-html[data-theme="dark"] .inputLibraryActions,
-html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .inputLibraryActions,
-html[data-theme="light"] .inputLibraryActions {
-  border-color: var(--border-subtle);
-  background: var(--surface-1);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.24);
-}
-
-html[data-theme="light"] .inputLibraryActions {
-  box-shadow: 0 4px 14px rgba(15, 15, 18, 0.12);
-}
-
 html[data-theme="dark"] .inputLibraryActions button,
 html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .inputLibraryActions button,
 html[data-theme="light"] .inputLibraryActions button {
-  border-color: var(--border-subtle);
-  background: var(--surface-2);
-  color: var(--text-secondary);
+  border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(7, 8, 16, 0.76);
+  color: rgba(255, 255, 255, 0.82);
 }
 
 html[data-theme="dark"] .inputLibraryActions button:hover,
 html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .inputLibraryActions button:hover,
 html[data-theme="light"] .inputLibraryActions button:hover {
-  border-color: var(--border-default);
-  background: var(--surface-3);
-  color: var(--text-primary);
+  border-color: rgba(var(--accent-rgb), 0.68);
+  color: #fff;
+  background: rgba(var(--accent-rgb), 0.32);
 }
 
 html[data-theme="light"] .saveTemplateButton,

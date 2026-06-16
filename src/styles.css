@@ -17,8 +17,9 @@
   --success: #7dd3a8;
   --shadow: 0 20px 45px rgba(var(--accent-rgb), 0.16);
   --radius: 16px;
-  --canvas-bg: rgba(2, 3, 11, 0.56);
-  --canvas-checker: rgba(255, 255, 255, 0.045);
+  --canvas-bg: rgba(26, 26, 26, 0.92);
+  --canvas-checker: rgba(255, 255, 255, 0.035);
+  --canvas-dot: #383838;
   --cursor-color-pick: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none'%3E%3Cpath d='M12 2v9.5' stroke='%23fff' stroke-width='3.5' stroke-linecap='round'/%3E%3Cpath d='M12 2v9.5' stroke='%23111827' stroke-width='1.75' stroke-linecap='round'/%3E%3Cpath d='M18 4.5 9 13.5' stroke='%23fff' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M18 4.5 9 13.5' stroke='%23111827' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M9 13.5 4 18.5' stroke='%23fff' stroke-width='3.5' stroke-linecap='round'/%3E%3Cpath d='M9 13.5 4 18.5' stroke='%23111827' stroke-width='1.75' stroke-linecap='round'/%3E%3Ccircle cx='12' cy='19' r='2.5' stroke='%23fff' stroke-width='3.5'/%3E%3Ccircle cx='12' cy='19' r='2.5' stroke='%23111827' stroke-width='1.75'/%3E%3C/svg%3E") 4 20, crosshair;
   --main-font: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI";
   font-family: var(--main-font), sans-serif;
@@ -374,6 +375,17 @@ p {
 
 .appTopBarStatus.health-loading {
   background: var(--accent);
+}
+
+.appTopBarStatus.health-running {
+  background: var(--accent);
+  box-shadow: 0 0 0 2px rgba(var(--accent-rgb), 0.14);
+  animation: appTopBarStatusPulse 1.15s ease-in-out infinite;
+}
+
+@keyframes appTopBarStatusPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.45; transform: scale(0.92); }
 }
 
 .appTopBarStatus.health-offline {
@@ -3277,6 +3289,27 @@ html[data-theme="light"] .curvesCanvasWrapper {
   object-fit: cover;
 }
 
+.inputLibraryThumb.isBroken {
+  display: grid;
+  place-items: center;
+}
+
+.inputLibraryThumbFallback {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  color: var(--muted);
+  font-size: 22px;
+  font-weight: 700;
+  text-transform: uppercase;
+  user-select: none;
+}
+
+.canvasInputLibraryModal {
+  z-index: 1200;
+}
+
 .inputLibraryMeta {
   display: none;
 }
@@ -3293,33 +3326,34 @@ html[data-theme="light"] .curvesCanvasWrapper {
   position: absolute;
   top: 6px;
   right: 6px;
-  left: 6px;
   z-index: 3;
   display: flex;
   justify-content: flex-end;
   gap: 4px;
-  padding: 4px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius, 6px);
-  background: var(--panel);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
   opacity: 0;
-  transform: translateY(-4px);
-  transition: opacity 0.16s ease, transform 0.16s ease;
+  transform: translateY(-2px);
+  transition: opacity 0.14s ease, transform 0.14s ease;
   pointer-events: none;
 }
 
 .inputLibraryActions button {
   display: grid;
-  width: 28px;
-  height: 28px;
+  width: 25px;
+  height: 25px;
   min-height: 0;
+  padding: 0;
   place-items: center;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm, 4px);
-  background: var(--panel-soft);
-  color: var(--text-secondary);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 7px;
+  background: rgba(7, 8, 16, 0.76);
+  color: rgba(255, 255, 255, 0.82);
   cursor: pointer;
+  backdrop-filter: blur(8px);
 }
 
 .inputLibraryItem:hover .inputLibraryActions,
@@ -3330,9 +3364,9 @@ html[data-theme="light"] .curvesCanvasWrapper {
 }
 
 .inputLibraryActions button:hover {
-  border-color: var(--border-strong);
-  color: var(--text-primary);
-  background: var(--surface-3, var(--panel-strong));
+  border-color: rgba(var(--accent-rgb), 0.68);
+  color: #fff;
+  background: rgba(var(--accent-rgb), 0.32);
 }
 
 .inputLibraryButton:hover {
@@ -3342,15 +3376,15 @@ html[data-theme="light"] .curvesCanvasWrapper {
 }
 
 .inputLibraryActions button.isFavorite {
-  border-color: rgba(var(--accent-rgb), 0.42);
-  color: #ffffff;
+  border-color: rgba(var(--accent-rgb), 0.72);
+  color: #fff;
   background: var(--accent);
   box-shadow: none;
 }
 
 .inputLibraryActions button.isFavorite:hover {
-  border-color: rgba(var(--accent-rgb), 0.55);
-  color: #ffffff;
+  border-color: rgba(var(--accent-rgb), 0.85);
+  color: #fff;
   background: var(--accent-hover);
 }
 
@@ -8826,6 +8860,18 @@ html:not([data-theme="dark"]):not([data-theme="light"]) .appShell.is-runninghub 
 
 .executionModeToggle.mode-canvas {
   --execution-brand-rgb: var(--accent-rgb);
+}
+
+.executionModeToggle.is-canvas-only .executionModeTrack {
+  min-width: 0;
+}
+
+.executionModeToggle.is-form-mode .executionModeCanvasToggle:not(.active) {
+  color: var(--muted);
+}
+
+.executionModeToggle.is-form-mode .executionModeCanvasToggle:not(.active):hover {
+  color: var(--text);
 }
 
 .executionModeToggle.mode-local {

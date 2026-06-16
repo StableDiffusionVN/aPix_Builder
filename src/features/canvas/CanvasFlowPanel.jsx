@@ -1,14 +1,32 @@
 import { MiniMap, Panel, useReactFlow, useViewport } from "@xyflow/react";
+import { useCallback, useEffect } from "react";
 import { Hand, Map, Maximize2, Minus, MousePointer2, Plus, ScrollText } from "lucide-react";
+import { RunControls } from "../../components/RunControls.jsx";
+import { isTypingTarget } from "../../lib/keyboard.js";
+import { fitCanvasWorkflowView } from "./canvasFitView.js";
 
 const ZOOM_EPSILON = 0.001;
 
+function readCanvasThemeVar(name, fallback) {
+  if (typeof document === "undefined") return fallback;
+  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return value || fallback;
+}
+
 function minimapNodeColor(node) {
-  if (node.type === "source") return "rgba(148, 163, 184, 0.7)";
-  if (node.data?.status === "done") return "rgba(96, 165, 250, 0.9)";
-  if (node.data?.status === "running") return "rgba(250, 204, 21, 0.9)";
-  if (node.data?.status === "error") return "rgba(248, 113, 113, 0.9)";
-  return "rgba(96, 165, 250, 0.6)";
+  if (node.type === "source") {
+    return readCanvasThemeVar("--canvas-minimap-node-source", "rgba(148, 163, 184, 0.7)");
+  }
+  if (node.data?.status === "done") {
+    return readCanvasThemeVar("--canvas-minimap-node-done", "rgba(96, 165, 250, 0.9)");
+  }
+  if (node.data?.status === "running") {
+    return readCanvasThemeVar("--canvas-minimap-node-running", "rgba(250, 204, 21, 0.9)");
+  }
+  if (node.data?.status === "error") {
+    return readCanvasThemeVar("--canvas-minimap-node-error", "rgba(248, 113, 113, 0.9)");
+  }
+  return readCanvasThemeVar("--canvas-minimap-node-default", "rgba(96, 165, 250, 0.6)");
 }
 
 export function CanvasFlowPanel({
@@ -23,11 +41,36 @@ export function CanvasFlowPanel({
   selectedTool = "select",
   activeTool = selectedTool,
   onToolChange,
-  spaceHeld = false
+  spaceHeld = false,
+  running = false,
+  canRun = false,
+  canCancel = false,
+  queueCount = 0,
+  onRun,
+  onCancel
 }) {
   const { zoomIn, zoomOut, fitView } = useReactFlow();
   const { zoom } = useViewport();
   const zoomPercent = Math.round(zoom * 100);
+
+  const fitWorkflowView = useCallback(() => {
+    const viewport = document.querySelector(".canvasWorkspace .react-flow");
+    fitCanvasWorkflowView(fitView, viewport);
+  }, [fitView]);
+
+  useEffect(() => {
+    function handleKeyDown(event) {
+      if (event.key !== "1" || event.repeat || isTypingTarget(event.target)) return;
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      if (event.target instanceof Element && event.target.closest(
+        "[role='dialog'], .imageEditorModal, .inputLibraryModal, .imageLightbox, .maskEditorModal"
+      )) return;
+      event.preventDefault();
+      fitWorkflowView();
+    }
+    window.addEventListener("keydown", handleKeyDown, true);
+    return () => window.removeEventListener("keydown", handleKeyDown, true);
+  }, [fitWorkflowView]);
 
   return (
     <Panel position="bottom-right" className="canvasFlowPanel">
@@ -39,9 +82,6 @@ export function CanvasFlowPanel({
           zoomable
           nodeColor={minimapNodeColor}
           nodeBorderRadius={4}
-          maskColor="rgba(8, 10, 16, 0.65)"
-          maskStrokeColor="rgba(255, 255, 255, 0.18)"
-          bgColor="rgba(10, 12, 18, 0.95)"
         />
       ) : null}
       <div className="canvasZoomBar" role="toolbar" aria-label="Canvas zoom">
@@ -75,9 +115,19 @@ export function CanvasFlowPanel({
         >
           <Plus size={14} />
         </button>
-        <output className="canvasZoomValue" aria-label={`Mức zoom ${zoomPercent}%`}>
+        <button
+          type="button"
+          className="canvasZoomValue canvasZoomValueAction"
+          onContextMenu={event => {
+            event.preventDefault();
+            fitWorkflowView();
+          }}
+          title="Chuột phải hoặc phím 1: vừa khung và căn giữa quy trình"
+          aria-label={`Mức zoom ${zoomPercent}%. Chuột phải hoặc phím 1 để vừa khung.`}
+          aria-keyshortcuts="1"
+        >
           {zoomPercent}%
-        </output>
+        </button>
         <button
           type="button"
           className="canvasZoomBtn"
@@ -87,7 +137,7 @@ export function CanvasFlowPanel({
         >
           <Minus size={14} />
         </button>
-        <button type="button" className="canvasZoomBtn" onClick={() => fitView({ padding: 0.2 })} title="Vừa khung">
+        <button type="button" className="canvasZoomBtn" onClick={fitWorkflowView} title="Vừa khung (1)">
           <Maximize2 size={13} />
         </button>
         <button
@@ -112,6 +162,18 @@ export function CanvasFlowPanel({
             <span className="canvasZoomLogBadge">{logBadgeCount}</span>
           ) : null}
         </button>
+        <span className="canvasZoomDivider" aria-hidden="true" />
+        <RunControls
+          running={running}
+          canRun={canRun}
+          canCancel={canCancel}
+          queueCount={queueCount}
+          onRun={onRun}
+          onCancel={onCancel}
+          runLabel="Run"
+          compact
+          stopInsideRun
+        />
       </div>
     </Panel>
   );

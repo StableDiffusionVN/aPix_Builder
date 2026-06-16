@@ -97,6 +97,15 @@ import { useTemplateWorkspaceActions } from "../templates/useTemplateWorkspaceAc
 
 const InfiniteCanvas = lazy(() => import("../canvas/InfiniteCanvas.jsx").then(module => ({ default: module.InfiniteCanvas })));
 
+const CANVAS_RUNTIME_IDLE = {
+  running: false,
+  queueCount: 0,
+  activeKind: null,
+  activeLabel: null,
+  hasRhNodes: false,
+  hasLocalNodes: false
+};
+
 function loadRhWfLastTemplate() {
   return getSetting("execution.rhWfSelectedTemplate", "");
 }
@@ -171,6 +180,22 @@ export function AppWorkspace() {
     workspaceView, setWorkspaceView
   } = useWorkspaceLayoutContext();
   const isCanvasView = workspaceView === "canvas";
+  const [canvasRuntime, setCanvasRuntime] = useState(CANVAS_RUNTIME_IDLE);
+  const handleCanvasRuntimeChange = useCallback((next) => {
+    setCanvasRuntime(current => {
+      if (
+        current.running === next.running
+        && current.queueCount === next.queueCount
+        && current.activeKind === next.activeKind
+        && current.activeLabel === next.activeLabel
+        && current.hasRhNodes === next.hasRhNodes
+        && current.hasLocalNodes === next.hasLocalNodes
+      ) {
+        return current;
+      }
+      return next;
+    });
+  }, []);
   const {
     executionMode, setExecutionMode,
     rhValues, setRhValues,
@@ -202,7 +227,9 @@ export function AppWorkspace() {
     colorAdjustReloadToken, setColorAdjustReloadToken
   } = useColorAdjustContext();
 
-  const { discovery, discoveryLoading } = useDiscovery(executionMode === "local" ? comfyAddress : "");
+  const { discovery, discoveryLoading } = useDiscovery(
+    !isCanvasView && executionMode === "local" ? comfyAddress : ""
+  );
   const {
     settings: rhSettings,
     updateSettings: updateRhSettings,
@@ -265,14 +292,6 @@ export function AppWorkspace() {
     if (!runLogOpen) return;
     refreshRunLogSessions();
   }, [runLogOpen, refreshRunLogSessions]);
-
-  useEffect(() => {
-    if (!runLogOpen || !running) return;
-    const timer = window.setInterval(() => {
-      refreshRunLogSessions();
-    }, 2500);
-    return () => window.clearInterval(timer);
-  }, [runLogOpen, running, refreshRunLogSessions]);
 
   const isRunningHub = isRunningHubMode(executionMode);
   const isRunningHubApp = executionMode === "runninghub-app";
@@ -347,25 +366,91 @@ export function AppWorkspace() {
     t
   ]);
   const activeServer = getServers().find(server => server.address === comfyAddress);
-  const topBarServerLabel = isRunningHubWf
+  const formTopBarServerLabel = isRunningHubWf
     ? "RunningHub Workflow"
     : isRunningHubApp
       ? selectedRunningHubName
       : activeServer?.label || formatServerName(comfyAddress);
-  const topBarServerStatus = isRunningHub
-    ? !hasRhApiKey(rhSettings)
-      ? "offline"
-      : rhAccountLoading
+  const rhIdleStatus = !hasRhApiKey(rhSettings)
+    ? "offline"
+    : rhAccountLoading
+      ? "loading"
+      : rhAccountError
+        ? "offline"
+        : rhAccount
+          ? "online"
+          : "loading";
+  const formTopBarServerStatus = isRunningHub ? rhIdleStatus : healthStatus;
+  const canvasTopBarRh = canvasRuntime.hasRhNodes
+    || canvasRuntime.activeKind === "runninghub-app"
+    || canvasRuntime.activeKind === "runninghub-wf";
+  const canvasTopBarLocal = canvasRuntime.hasLocalNodes || canvasRuntime.activeKind === "local";
+  const topBarShowsRh = isCanvasView
+    ? canvasRuntime.activeKind === "runninghub-app"
+      || canvasRuntime.activeKind === "runninghub-wf"
+      || (canvasTopBarRh && canvasRuntime.activeKind !== "local")
+    : isRunningHub;
+  const topBarServerLabel = isCanvasView
+    ? (canvasRuntime.running || canvasRuntime.queueCount > 0
+      ? (canvasRuntime.activeLabel || t("canvas.pipeline"))
+      : t("canvas.label"))
+    : formTopBarServerLabel;
+  const topBarServerStatus = isCanvasView
+    ? (canvasRuntime.running
+      ? "running"
+      : canvasRuntime.queueCount > 0
         ? "loading"
-        : rhAccountError
-          ? "offline"
-          : rhAccount
-            ? "online"
-            : "loading"
-    : healthStatus;
+        : canvasTopBarRh && !canvasTopBarLocal
+          ? rhIdleStatus
+          : canvasTopBarLocal && !canvasTopBarRh
+            ? healthStatus
+            : canvasTopBarRh && canvasTopBarLocal
+              ? (rhIdleStatus === "offline" || healthStatus === "offline"
+                ? "offline"
+                : rhIdleStatus === "loading" || healthStatus === "loading"
+                  ? "loading"
+                  : "online")
+              : "")
+    : formTopBarServerStatus;
   const topBarServerTitle = useMemo(() => {
-    if (!isRunningHub) return topBarServerLabel;
-    const parts = [topBarServerLabel];
+    if (isCanvasView) {
+      const parts = [topBarServerLabel];
+      if (canvasRuntime.running) {
+        parts.push(t("canvas.running"));
+      } else if (canvasRuntime.queueCount > 0) {
+        parts.push(t("canvas.queued", { count: canvasRuntime.queueCount }));
+      } else if (canvasTopBarRh && canvasTopBarLocal) {
+        if (rhDisplayCoins != null) {
+          const coinLabel = rhEnabledTokenCount > 1 ? t("rh.totalCoinBalance") : t("rh.coinBalance");
+          parts.push(`${coinLabel}: ${formatRhCoins(rhDisplayCoins)}`);
+        }
+        if (rhAccountError) parts.push(rhAccountError);
+        else if (rhAccount) parts.push(t("canvas.rhReady"));
+        if (healthStatus === "online") parts.push(t("canvas.comfyReady"));
+        else if (healthStatus === "offline") parts.push(t("rh.disconnected"));
+      } else if (canvasTopBarRh) {
+        if (rhDisplayCoins != null) {
+          const coinLabel = rhEnabledTokenCount > 1 ? t("rh.totalCoinBalance") : t("rh.coinBalance");
+          parts.push(`${coinLabel}: ${formatRhCoins(rhDisplayCoins)}`);
+        }
+        if (rhEnabledTokenCount > 1) {
+          parts.push(t("rh.tokenCount", { count: rhEnabledTokenCount }));
+        }
+        if (rhAccountError) parts.push(rhAccountError);
+        else if (rhAccount) parts.push(t("rh.keyValid"));
+        else if (!hasRhApiKey(rhSettings)) parts.push(t("rh.noKey"));
+        else if (rhAccountLoading) parts.push(t("rh.loadingAccount"));
+      } else if (canvasTopBarLocal) {
+        if (healthStatus === "online") parts.push(t("canvas.comfyReady"));
+        else if (healthStatus === "loading") parts.push(t("rh.loadingAccount"));
+        else parts.push(t("rh.disconnected"));
+      } else {
+        parts.push(t("canvas.empty"));
+      }
+      return parts.join(" · ");
+    }
+    if (!isRunningHub) return formTopBarServerLabel;
+    const parts = [formTopBarServerLabel];
     if (rhDisplayCoins != null) {
       const coinLabel = rhEnabledTokenCount > 1 ? t("rh.totalCoinBalance") : t("rh.coinBalance");
       parts.push(`${coinLabel}: ${formatRhCoins(rhDisplayCoins)}`);
@@ -379,6 +464,13 @@ export function AppWorkspace() {
     else if (rhAccountLoading) parts.push(t("rh.loadingAccount"));
     return parts.join(" · ");
   }, [
+    canvasRuntime.queueCount,
+    canvasRuntime.running,
+    canvasTopBarLocal,
+    canvasTopBarRh,
+    formTopBarServerLabel,
+    healthStatus,
+    isCanvasView,
     isRunningHub,
     rhAccount,
     rhAccountError,
@@ -501,7 +593,8 @@ export function AppWorkspace() {
     loadRhWfConfig,
     loadRhWfTemplateRegistry,
     reloadRhWfTemplates,
-    reloadTemplates
+    reloadTemplates,
+    initializeFormWorkspace
   } = useTemplateWorkspaceActions({
     locale,
     t,
@@ -523,7 +616,8 @@ export function AppWorkspace() {
     setStatus,
     setTemplates,
     setValues,
-    defaultComfyServer: DEFAULT_COMFY_SERVER
+    defaultComfyServer: DEFAULT_COMFY_SERVER,
+    skipInitialConfigLoad: isCanvasView
   });
 
   const handleHealingBridgeChange = useCallback((bridge) => {
@@ -692,6 +786,16 @@ export function AppWorkspace() {
   }, [workspaceView]);
 
   useEffect(() => {
+    if (!isCanvasView) setCanvasRuntime(CANVAS_RUNTIME_IDLE);
+  }, [isCanvasView]);
+
+  useEffect(() => {
+    if (isCanvasView) return;
+    initializeFormWorkspace().catch(() => loadConfig(""));
+  }, [isCanvasView, initializeFormWorkspace, loadConfig]);
+
+  useEffect(() => {
+    if (isCanvasView) return;
     if (executionMode !== "runninghub-app" || !hasRhApiKey(rhSettings)) return;
     if (!String(rhSettings.webappId || "").trim()) return;
     const timer = window.setTimeout(() => {
@@ -700,7 +804,7 @@ export function AppWorkspace() {
       });
     }, 500);
     return () => window.clearTimeout(timer);
-  }, [executionMode, rhSettings, rhSettings.webappId, fetchRhNodes]);
+  }, [executionMode, isCanvasView, rhSettings, rhSettings.webappId, fetchRhNodes]);
 
   useEffect(() => {
     if (!settingsOpen || settingsTab !== "runninghub" || !hasRhApiKey(rhSettings)) return;
@@ -709,6 +813,7 @@ export function AppWorkspace() {
   }, [settingsOpen, settingsTab, rhSettings, rhAccount, rhAccountLoading, rhAccountError]);
 
   useEffect(() => {
+    if (isCanvasView) return;
     if (!isRunningHubWf || rhWfTemplates.length) return;
     loadRhWfTemplateRegistry()
       .then(data => {
@@ -722,19 +827,21 @@ export function AppWorkspace() {
         setStatus(t("status.rhWfNoTemplate"));
       })
       .catch(err => setError(localizeRuntimeMessage(err.message, locale)));
-  }, [isRunningHubWf, rhWfTemplates.length]);
+  }, [isCanvasView, isRunningHubWf, rhWfTemplates.length]);
 
   // Persist workspace on every change
   useEffect(() => {
+    if (isCanvasView) return;
     if (!selectedTemplate || !config) return;
     saveValues(selectedTemplate, values);
-  }, [config, selectedTemplate, values]);
+  }, [config, isCanvasView, selectedTemplate, values]);
 
   useEffect(() => {
+    if (isCanvasView) return;
     if (!rhWfSelectedTemplate || !rhWfConfig) return;
     saveValues(rhWfWorkspaceKey(rhWfSelectedTemplate), rhWfValues);
     setSetting("execution.rhWfSelectedTemplate", rhWfSelectedTemplate);
-  }, [rhWfConfig, rhWfSelectedTemplate, rhWfValues]);
+  }, [isCanvasView, rhWfConfig, rhWfSelectedTemplate, rhWfValues]);
 
   // Close theme menu on outside click
   useEffect(() => {
@@ -753,7 +860,7 @@ export function AppWorkspace() {
     };
   }, [themeMenuOpen]);
 
-  // Execution mode shortcuts (Alt/Option + 1/2/3)
+  // Execution mode shortcuts (Alt/Option + 0/1/2/3)
   useEffect(() => {
     const MODE_BY_CODE = {
       Digit1: "local",
@@ -762,20 +869,30 @@ export function AppWorkspace() {
     };
 
     function handleExecutionModeShortcut(event) {
-      const mode = MODE_BY_CODE[event.code];
-      if (!mode) return;
       if (!event.altKey) return;
       if (event.metaKey || event.ctrlKey || event.shiftKey) return;
       if (isTextEntryTarget(event.target)) return;
+
+      if (event.code === "Digit0") {
+        event.preventDefault();
+        event.stopPropagation();
+        releaseGlobalShortcutFocus(event.target);
+        setWorkspaceView(current => (current === "canvas" ? "form" : "canvas"));
+        return;
+      }
+
+      const mode = MODE_BY_CODE[event.code];
+      if (!mode) return;
       event.preventDefault();
       event.stopPropagation();
       releaseGlobalShortcutFocus(event.target);
+      setWorkspaceView("form");
       setExecutionMode(mode);
     }
 
     window.addEventListener("keydown", handleExecutionModeShortcut, true);
     return () => window.removeEventListener("keydown", handleExecutionModeShortcut, true);
-  }, [setExecutionMode]);
+  }, [setExecutionMode, setWorkspaceView]);
 
   // Settings modal shortcut (Cmd/Ctrl + ,)
   useEffect(() => {
@@ -914,6 +1031,7 @@ export function AppWorkspace() {
   // Keyboard: arrow navigate outputs
   useEffect(() => {
     function handleOutputNavigation(event) {
+      if (isCanvasView) return;
       if (!heroImage || resultOutputs.length < 2) return;
       if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
       if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
@@ -925,7 +1043,7 @@ export function AppWorkspace() {
     }
     window.addEventListener("keydown", handleOutputNavigation, true);
     return () => window.removeEventListener("keydown", handleOutputNavigation, true);
-  }, [heroImage, resultOutputs.length]);
+  }, [heroImage, isCanvasView, resultOutputs.length]);
 
   // Reset output index when result changes
   useEffect(() => {
@@ -939,6 +1057,7 @@ export function AppWorkspace() {
 
   // Auto-fill dynamic choices from discovery
   useEffect(() => {
+    if (isCanvasView) return;
     if (!inputs.length) return;
     setValues(current => {
       let changed = false;
@@ -956,7 +1075,7 @@ export function AppWorkspace() {
       }
       return changed ? next : current;
     });
-  }, [inputs, discovery]);
+  }, [inputs, discovery, isCanvasView]);
 
   function selectOutput(index) {
     if (!resultOutputs.length) return;
@@ -1136,7 +1255,10 @@ export function AppWorkspace() {
   }
 
   useEffect(() => {
-    if (!isRunningHub || !hasRhApiKey(rhSettings)) {
+    const needsRhAccount = hasRhApiKey(rhSettings) && (
+      (!isCanvasView && isRunningHub) || (isCanvasView && canvasRuntime.hasRhNodes)
+    );
+    if (!needsRhAccount) {
       setRhAccount(null);
       setRhTokenAccounts([]);
       setRhAccountError("");
@@ -1148,7 +1270,7 @@ export function AppWorkspace() {
       handleRhAccountRefresh();
     }, 5 * 60 * 1000);
     return () => window.clearInterval(timer);
-  }, [isRunningHub, rhSettings]);
+  }, [isRunningHub, isCanvasView, canvasRuntime.hasRhNodes, rhSettings]);
 
   async function handleRhTestConnection() {
     setRhTesting(true);
@@ -1524,6 +1646,7 @@ export function AppWorkspace() {
       if (event.key !== "Enter") return;
       if (!event.metaKey && !event.ctrlKey) return;
       if (event.altKey || event.shiftKey) return;
+      if (isCanvasView) return;
       if (hasBlockingOverlay()) return;
       if (!canRun) return;
       event.preventDefault();
@@ -1532,11 +1655,11 @@ export function AppWorkspace() {
     }
     window.addEventListener("keydown", handleRunShortcut, true);
     return () => window.removeEventListener("keydown", handleRunShortcut, true);
-  }, [canRun]);
+  }, [canRun, isCanvasView]);
 
   return (
     <main
-      className={`appShell ${isRunningHub ? "is-runninghub" : ""}${sidebarSide === "right" ? " sidebar-right" : ""}${availableUpdate ? " hasUpdateBanner" : ""}`}
+      className={`appShell${isCanvasView ? " is-canvas-view" : ""} ${isRunningHub ? "is-runninghub" : ""}${sidebarSide === "right" ? " sidebar-right" : ""}${availableUpdate ? " hasUpdateBanner" : ""}`}
       style={{ "--sidebar-width": `${sidebarWidth}px` }}
     >
       <header className="appTopBar">
@@ -1560,38 +1683,50 @@ export function AppWorkspace() {
         <div className="appTopBarActions">
           <button
             type="button"
-            className={`appTopBarServer${isRunningHub ? " is-runninghub" : ""}`}
+            className={`appTopBarServer${topBarShowsRh ? " is-runninghub" : ""}`}
             onClick={() => {
               setInfoOpen(false);
-              setSettingsTab(isRunningHub ? "runninghub" : "comfy");
+              setSettingsTab(
+                isCanvasView
+                  ? (canvasTopBarLocal && !canvasTopBarRh ? "comfy" : "runninghub")
+                  : (isRunningHub ? "runninghub" : "comfy")
+              );
               setSettingsOpen(true);
             }}
             title={topBarServerTitle}
             aria-label={topBarServerTitle}
           >
-            {isRunningHub
+            {topBarShowsRh
               ? <RunningHubLogomark size={11} aria-hidden="true" />
               : <ComfyUiLogomark size={14} aria-hidden="true" />}
-            <span
-              className={`appTopBarStatus health-${topBarServerStatus}`}
-              title={
-                topBarServerStatus === "online"
-                  ? t("rh.keyValid")
-                  : topBarServerStatus === "loading"
-                    ? t("rh.loadingAccount")
-                    : isRunningHub && rhAccountError
-                      ? rhAccountError
-                      : t("rh.disconnected")
-              }
-              aria-hidden="true"
-            />
+            {topBarServerStatus ? (
+              <span
+                className={`appTopBarStatus health-${topBarServerStatus}`}
+                title={
+                  topBarServerStatus === "running"
+                    ? t("canvas.running")
+                    : topBarServerStatus === "online"
+                      ? (topBarShowsRh ? t("rh.keyValid") : t("canvas.comfyReady"))
+                      : topBarServerStatus === "loading"
+                        ? (canvasRuntime.queueCount > 0 && !canvasRuntime.running
+                          ? t("canvas.queued", { count: canvasRuntime.queueCount })
+                          : t("rh.loadingAccount"))
+                        : isRunningHub && rhAccountError
+                          ? rhAccountError
+                          : t("rh.disconnected")
+                }
+                aria-hidden="true"
+              />
+            ) : (
+              <span className="appTopBarStatus" title={t("canvas.empty")} aria-hidden="true" />
+            )}
             <span className="appTopBarServerLabel">{topBarServerLabel}</span>
-            {isRunningHub ? (
-              rhAccountLoading && hasRhApiKey(rhSettings) ? (
+            {topBarShowsRh ? (
+              rhAccountLoading && hasRhApiKey(rhSettings) && !canvasRuntime.running ? (
                 <span className="appTopBarCoinBadge isLoading" aria-hidden="true">
                   <Loader2 size={10} className="spin" />
                 </span>
-              ) : rhDisplayCoins != null ? (
+              ) : rhDisplayCoins != null && !canvasRuntime.running ? (
                 <span
                   className="appTopBarCoinBadge"
                   title={rhEnabledTokenCount > 1 ? t("rh.totalCoinBalance") : t("rh.coinBalance")}
@@ -1650,6 +1785,7 @@ export function AppWorkspace() {
             updateRunLogSession={updateRunLogSession}
             restoreHistory={restoreHistory}
             logRhApiKey={rhPrimaryApiKey}
+            onRuntimeStateChange={handleCanvasRuntimeChange}
           />
         </Suspense>
       ) : (

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Bookmark, Loader2, Lock, RefreshCcw, Settings2, Workflow } from "lucide-react";
+import { Bookmark, LayoutTemplate, Loader2, Lock, RefreshCcw, Settings2, Workflow } from "lucide-react";
 import { RunningHubField } from "./RunningHubField";
 import { ComfyUiLogomark } from "./icons/ComfyUiIcon";
 import { RunningHubLogomark } from "./icons/RunningHubIcon";
@@ -86,6 +86,7 @@ export function ExecutionModeToggle({ mode, onChange, canvasActive = false, onCa
   const buttonRefs = useRef({});
   const indicatorKey = canvasActive ? "canvas" : mode;
   const [indicator, setIndicator] = useState({ left: 0, width: 0, ready: false });
+  const isVi = locale === "vi";
 
   const syncIndicator = useCallback(() => {
     const track = trackRef.current;
@@ -102,7 +103,7 @@ export function ExecutionModeToggle({ mode, onChange, canvasActive = false, onCa
 
   useLayoutEffect(() => {
     syncIndicator();
-  }, [syncIndicator]);
+  }, [syncIndicator, canvasActive]);
 
   useEffect(() => {
     const track = trackRef.current;
@@ -118,9 +119,9 @@ export function ExecutionModeToggle({ mode, onChange, canvasActive = false, onCa
 
   return (
     <div
-      className={`executionModeToggle ${canvasActive ? "mode-canvas" : `mode-${mode}`}`}
+      className={`executionModeToggle ${canvasActive ? "mode-canvas is-canvas-only" : `mode-${mode} is-form-mode`}`}
       role="tablist"
-      aria-label={locale === "vi" ? "Chế độ thực thi" : "Execution mode"}
+      aria-label={isVi ? "Chế độ làm việc" : "Workspace mode"}
     >
       <div className="executionModeTrack" ref={trackRef}>
         <span
@@ -138,16 +139,25 @@ export function ExecutionModeToggle({ mode, onChange, canvasActive = false, onCa
             buttonRefs.current.canvas = node;
           }}
           aria-selected={canvasActive}
-          className={`${canvasActive ? "active" : ""} hasModeIcon`}
-          title={locale === "vi" ? "Chế độ Infinite Canvas" : "Infinite Canvas mode"}
+          className={`executionModeCanvasToggle${canvasActive ? " active" : ""} hasModeIcon`}
+          title={
+            canvasActive
+              ? (isVi ? "Quay lại Form (Alt/Option+0)" : "Back to Form (Alt/Option+0)")
+              : (isVi ? "Chuyển sang Canvas (Alt/Option+0)" : "Switch to Canvas (Alt/Option+0)")
+          }
+          aria-keyshortcuts="Alt+0"
           onClick={() => onCanvasToggle?.()}
         >
-          <Workflow size={12} className="executionModeIcon" aria-hidden="true" />
-          Canvas
+          {canvasActive ? (
+            <LayoutTemplate size={12} className="executionModeIcon" aria-hidden="true" />
+          ) : (
+            <Workflow size={12} className="executionModeIcon" aria-hidden="true" />
+          )}
+          {canvasActive ? "Form" : "Canvas"}
         </button>
-        {EXECUTION_MODE_OPTIONS.map(option => {
+        {!canvasActive ? EXECUTION_MODE_OPTIONS.map(option => {
           const Icon = option.icon;
-          const isActive = !canvasActive && mode === option.id;
+          const isActive = mode === option.id;
           return (
           <button
             key={option.id}
@@ -172,7 +182,7 @@ export function ExecutionModeToggle({ mode, onChange, canvasActive = false, onCa
             {option.label}
           </button>
           );
-        })}
+        }) : null}
       </div>
     </div>
   );

@@ -178,6 +178,77 @@ export function incomingEdgesByInput(nodeId, edges) {
   return map;
 }
 
+function isBypassedStep(node) {
+  return node?.type === "step" && Boolean(node.data?.bypassed);
+}
+
+/**
+ * Walk through bypassed step nodes to the real image source for a linked input.
+ */
+export function resolveEffectiveImageSource(nodeId, sourceHandle, nodes, edges, visited = new Set()) {
+  if (!nodeId || visited.has(nodeId)) return null;
+  visited.add(nodeId);
+  const node = nodes.find(item => item.id === nodeId);
+  if (!node) return null;
+
+  if (isBypassedStep(node)) {
+    const incoming = incomingEdgesByInput(nodeId, edges);
+    for (const port of node.data?.ports?.inputs || []) {
+      const type = port.type || portTypeForUi(port.uiType);
+      if (type !== "image") continue;
+      const edge = incoming[port.valueKey];
+      if (!edge) continue;
+      return resolveEffectiveImageSource(edge.source, edge.sourceHandle, nodes, edges, visited);
+    }
+    return null;
+  }
+
+  return { node, sourceHandle };
+}
+
+/** Resolve upstream output, skipping bypassed step nodes (pass-through). */
+export function resolveEffectiveNodeOutputValue(targetPort, edge, nodes, edges, visited = new Set()) {
+  if (!edge) return undefined;
+  const sourceId = edge.source;
+  if (visited.has(sourceId)) return undefined;
+  visited.add(sourceId);
+  const source = nodes.find(item => item.id === sourceId);
+  if (!source) return undefined;
+
+  if (isBypassedStep(source)) {
+    const incoming = incomingEdgesByInput(sourceId, edges);
+    const targetType = targetPort?.type || portTypeForUi(targetPort?.uiType);
+    for (const port of source.data?.ports?.inputs || []) {
+      const type = port.type || portTypeForUi(port.uiType);
+      if (targetType && type !== targetType) continue;
+      const upEdge = incoming[port.valueKey];
+      if (!upEdge) continue;
+      return resolveEffectiveNodeOutputValue(port, upEdge, nodes, edges, visited);
+    }
+    if (targetType === "image") {
+      for (const port of source.data?.ports?.inputs || []) {
+        if ((port.type || portTypeForUi(port.uiType)) !== "image") continue;
+        const upEdge = incoming[port.valueKey];
+        if (!upEdge) continue;
+        return resolveEffectiveNodeOutputValue(port, upEdge, nodes, edges, visited);
+      }
+    }
+    return undefined;
+  }
+
+  return nodeOutputValue(source, edge.sourceHandle, nodes);
+}
+
+export function resolveEffectiveNodeOutputUrl(nodeId, sourceHandle, nodes, edges, visited = new Set()) {
+  const resolved = resolveEffectiveImageSource(nodeId, sourceHandle, nodes, edges, visited);
+  if (!resolved) return "";
+  return nodeOutputUrl(resolved.node, resolved.sourceHandle, nodes);
+}
+
+export function effectiveHasNodeImageOutput(nodeId, sourceHandle, nodes, edges, visited = new Set()) {
+  return Boolean(resolveEffectiveNodeOutputUrl(nodeId, sourceHandle, nodes, edges, visited));
+}
+
 /** Resolve a displayable image URL from a node field value. */
 export function imageDisplayUrl(value) {
   if (!value) return "";
@@ -285,9 +356,16 @@ export function beginNodeExecutionPatch() {
 }
 
 /** Read an upstream node's cached output URL from a source handle id. */
-export function nodeOutputUrl(node, sourceHandle) {
+export function nodeOutputUrl(node, sourceHandle, nodes) {
   if (!node) return "";
   if (node.type === "source") {
+    if (node.data?.passthroughFromOutput && node.data?.passthroughSourceNodeId && nodes) {
+      const upstream = nodes.find(item => item.id === node.data.passthroughSourceNodeId);
+      if (upstream) {
+        const key = node.data.passthroughOutputKey || "main";
+        return nodeOutputUrl(upstream, `out:${key}`, nodes);
+      }
+    }
     return coerceImageRef(node.data?.values?.main);
   }
   const cache = getNodeRunCache(node);
@@ -302,10 +380,19 @@ export function nodeOutputUrl(node, sourceHandle) {
 }
 
 /** Read a typed output value. Step outputs remain image URLs; source outputs preserve their raw value. */
-export function nodeOutputValue(node, sourceHandle) {
+export function nodeOutputValue(node, sourceHandle, nodes) {
   if (!node) return undefined;
-  if (node.type === "source") return node.data?.values?.main;
-  return nodeOutputUrl(node, sourceHandle) || undefined;
+  if (node.type === "source") {
+    if (node.data?.passthroughFromOutput && node.data?.passthroughSourceNodeId && nodes) {
+      const upstream = nodes.find(item => item.id === node.data.passthroughSourceNodeId);
+      if (upstream) {
+        const key = node.data.passthroughOutputKey || "main";
+        return nodeOutputValue(upstream, `out:${key}`, nodes);
+      }
+    }
+    return node.data?.values?.main;
+  }
+  return nodeOutputUrl(node, sourceHandle, nodes) || undefined;
 }
 
 export function hasNodeImageOutput(node, sourceHandle) {
@@ -411,7 +498,8 @@ export function findLinkedImageSource(node, nodes, edges) {
     if (type !== "image") continue;
     const edge = incoming[port.valueKey];
     if (!edge) continue;
-    return nodes.find(item => item.id === edge.source) || null;
+    const resolved = resolveEffectiveImageSource(edge.source, edge.sourceHandle, nodes, edges);
+    return resolved?.node || null;
   }
   return null;
 }
@@ -427,8 +515,7 @@ export function findNodeInputImageUrl(node, nodes, edges) {
   for (const port of imagePorts) {
     const edge = incoming[port.valueKey];
     if (!edge) continue;
-    const source = nodes.find(item => item.id === edge.source);
-    const url = nodeOutputUrl(source, edge.sourceHandle);
+    const url = resolveEffectiveNodeOutputUrl(edge.source, edge.sourceHandle, nodes, edges);
     if (url) return url;
   }
 
@@ -482,10 +569,11 @@ export async function upstreamStepsWithStaleFilesAsync(targetId, nodes, edges, v
     if (type !== "image") continue;
     const edge = incoming[port.valueKey];
     if (!edge) continue;
-    const source = nodes.find(item => item.id === edge.source);
-    if (!source || source.type !== "step") continue;
-    if (!hasNodeImageOutput(source, edge.sourceHandle)) continue;
-    if (await isNodeCacheReady(source, edge.sourceHandle)) continue;
+    const resolved = resolveEffectiveImageSource(edge.source, edge.sourceHandle, nodes, edges);
+    if (!resolved || resolved.node.type !== "step") continue;
+    const source = resolved.node;
+    if (!hasNodeImageOutput(source, resolved.sourceHandle)) continue;
+    if (await isNodeCacheReady(source, resolved.sourceHandle)) continue;
     if (visited.has(source.id)) continue;
     visited.add(source.id);
     ordered.push(...await upstreamStepsWithStaleFilesAsync(source.id, nodes, edges, visited));
@@ -506,9 +594,10 @@ export function upstreamStepsNeedingRun(targetId, nodes, edges, visited = new Se
     if (type !== "image") continue;
     const edge = incoming[port.valueKey];
     if (!edge) continue;
-    const source = nodes.find(item => item.id === edge.source);
-    if (!source || source.type !== "step") continue;
-    if (hasNodeImageOutput(source, edge.sourceHandle)) continue;
+    const resolved = resolveEffectiveImageSource(edge.source, edge.sourceHandle, nodes, edges);
+    if (!resolved || resolved.node.type !== "step") continue;
+    const source = resolved.node;
+    if (hasNodeImageOutput(source, resolved.sourceHandle)) continue;
     if (visited.has(source.id)) continue;
     visited.add(source.id);
     ordered.push(...upstreamStepsNeedingRun(source.id, nodes, edges, visited));
@@ -532,9 +621,11 @@ export function linkedImageInputsMissingSource(node, nodes, edges) {
     if (type !== "image") continue;
     const edge = incoming[port.valueKey];
     if (!edge) continue;
-    const source = nodes.find(item => item.id === edge.source);
+    const resolved = resolveEffectiveImageSource(edge.source, edge.sourceHandle, nodes, edges);
+    const source = resolved?.node || nodes.find(item => item.id === edge.source);
     if (!source) continue;
-    if (hasNodeImageOutput(source, edge.sourceHandle)) continue;
+    const sourceHandle = resolved?.sourceHandle || edge.sourceHandle;
+    if (hasNodeImageOutput(source, sourceHandle)) continue;
     missing.push({
       port,
       source,

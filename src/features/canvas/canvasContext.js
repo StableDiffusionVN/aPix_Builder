@@ -13,6 +13,7 @@ export const CanvasActionsContext = createContext({
   disconnectTargetPort: () => {},
   toggleNodeBypass: () => {},
   convertInputToSource: () => {},
+  convertOutputToSource: () => {},
   openContextMenu: () => {},
   closeContextMenu: () => {},
   connectedInputs: () => ({}),

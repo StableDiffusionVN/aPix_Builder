@@ -1,6 +1,6 @@
 import { flattenInputs, requestPayload } from "../../lib/template.js";
 import { buildRunningHubJob, buildRunningHubWfJob } from "../../hooks/useRunningHubExecution.js";
-import { incomingEdgesByInput, nodeOutputValue, coerceImageRef, STEP_KINDS, portTypeForUi, toServerImagePath, serverImageFileExists } from "./canvasModel.js";
+import { incomingEdgesByInput, resolveEffectiveNodeOutputValue, resolveEffectiveImageSource, coerceImageRef, STEP_KINDS, portTypeForUi, toServerImagePath, serverImageFileExists } from "./canvasModel.js";
 import { nodeFieldKey } from "../../hooks/useRunningHub.js";
 
 function previewValue(value) {
@@ -102,12 +102,14 @@ async function resolveInputValues(node, nodes, edges, onLog) {
     }
     const port = (node.data?.ports?.inputs || []).find(item => item.valueKey === valueKey);
     const type = port?.type || portTypeForUi(port?.uiType);
-    const upstreamValue = nodeOutputValue(source, edge.sourceHandle);
+    const upstreamValue = resolveEffectiveNodeOutputValue(port, edge, nodes, edges);
     const valueMissing = upstreamValue === undefined || upstreamValue === null || upstreamValue === "";
     if (valueMissing) {
-      const sourceName = source.data?.name || source.id;
+      const effective = resolveEffectiveImageSource(edge.source, edge.sourceHandle, nodes, edges);
+      const labelSource = effective?.node || source;
+      const sourceName = labelSource.data?.name || labelSource.id;
       if (type === "image") {
-        const hint = source.type === "step"
+        const hint = labelSource.type === "step"
           ? ` — chạy node "${sourceName}" trước hoặc chạy pipeline`
           : ` — node nguồn "${sourceName}" chưa có ảnh`;
         throw new Error(`Input ảnh "${port?.label || valueKey}" thiếu ảnh từ "${sourceName}"${hint}`);
@@ -115,7 +117,9 @@ async function resolveInputValues(node, nodes, edges, onLog) {
       onLog?.("warn", `Input "${valueKey}": node "${sourceName}" chưa có output`);
       continue;
     }
-    onLog?.("info", `Input "${valueKey}" ← "${source.data?.name || source.id}": ${previewValue(upstreamValue)}`);
+    const effective = resolveEffectiveImageSource(edge.source, edge.sourceHandle, nodes, edges);
+    const labelSource = effective?.node || source;
+    onLog?.("info", `Input "${valueKey}" ← "${labelSource.data?.name || labelSource.id}": ${previewValue(upstreamValue)}`);
     if (type !== "image") {
       values[valueKey] = upstreamValue;
       continue;

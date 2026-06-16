@@ -6,10 +6,15 @@ export function useInputImages() {
   async function refreshInputImages() {
     try {
       const res = await fetch("/api/input-images");
-      if (!res.ok) return;
+      if (!res.ok) return [];
       const data = await res.json();
-      setInputImages(data.images || []);
-    } catch { setInputImages([]); }
+      const images = data.images || [];
+      setInputImages(images);
+      return images;
+    } catch {
+      setInputImages([]);
+      return [];
+    }
   }
 
   return { inputImages, setInputImages, refreshInputImages };

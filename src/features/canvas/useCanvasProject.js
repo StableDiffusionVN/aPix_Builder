@@ -1,17 +1,32 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { applyEdgeChanges, applyNodeChanges, addEdge } from "@xyflow/react";
-import { stripRhDefaultImages, getNodeRunCache, buildNodeRunCache, deriveStepPorts, portTypeForUi } from "./canvasModel.js";
-import { resolveFieldValueForSource } from "./canvasMenuHelpers.js";
+import { clearNodeRunCachePatch, stripRhDefaultImages, getNodeRunCache, buildNodeRunCache, deriveStepPorts, portTypeForUi } from "./canvasModel.js";
+import { resolveFieldValueForSource, resolveOutputValueForSource } from "./canvasMenuHelpers.js";
+import { CANVAS_NODE_DEFAULT_WIDTH } from "./CanvasNodeResizeHandles.jsx";
+import { compactStepNodeSize, isStepOutputDetached, normalizeOutputSplitNodes, restoreOutputPassthroughOnRemove } from "./canvasNodeLayout.js";
 
 /** Strip transient runtime fields before persisting a node; keep runCache. */
 function serializeNode(node) {
   const data = { ...(node.data || {}) };
   if (data.status === "running") data.status = "idle";
+  delete data.detachedOutputs;
   return {
     id: node.id,
     type: node.type,
     position: node.position,
     data
+  };
+}
+
+function normalizeNodeRuntime(node) {
+  if (node.type !== "step" || !node.data || node.data.status !== "running") return node;
+  return {
+    ...node,
+    data: {
+      ...node.data,
+      status: "idle",
+      error: node.data.error || ""
+    }
   };
 }
 
@@ -64,13 +79,18 @@ async function postCanvasProject(path, body) {
 }
 
 function applyProjectPayload(data, setState) {
+  const edges = Array.isArray(data.edges) ? data.edges : [];
+  const nodes = normalizeOutputSplitNodes(
+    (Array.isArray(data.nodes) ? data.nodes : [])
+      .map(node => normalizeNodeRuntime(normalizeNodePorts(normalizeNodeRunCache(stripRhDefaultImages(node))))),
+    edges
+  );
   setState({
     activeId: data.activeId || "",
     activeName: data.name || "Project",
     projects: Array.isArray(data.projects) ? data.projects : [],
-    nodes: (Array.isArray(data.nodes) ? data.nodes : [])
-      .map(node => normalizeNodePorts(normalizeNodeRunCache(stripRhDefaultImages(node)))),
-    edges: Array.isArray(data.edges) ? data.edges : []
+    nodes,
+    edges
   });
 }
 
@@ -195,6 +215,12 @@ export function useCanvasProject() {
   }, []);
 
   const removeNode = useCallback((id) => {
+    const restored = restoreOutputPassthroughOnRemove(nodesRef.current, edgesRef.current, id);
+    if (restored) {
+      setNodes(restored.nodes);
+      setEdges(restored.edges);
+      return;
+    }
     setNodes(current => current.filter(node => node.id !== id));
     setEdges(current => current.filter(edge => edge.source !== id && edge.target !== id));
   }, []);
@@ -210,7 +236,10 @@ export function useCanvasProject() {
   }, []);
 
   const toggleNodeBypass = useCallback((id) => {
-    updateNodeData(id, prev => ({ bypassed: !prev.bypassed }));
+    updateNodeData(id, prev => ({
+      bypassed: !prev.bypassed,
+      ...(!prev.bypassed ? { ...clearNodeRunCachePatch(), status: "idle", error: "" } : {})
+    }));
   }, [updateNodeData]);
 
   const convertInputToSource = useCallback((nodeId, valueKey) => {
@@ -271,6 +300,77 @@ export function useCanvasProject() {
     ]);
   }, []);
 
+  const convertOutputToSource = useCallback((nodeId, outputKey = "main") => {
+    const currentNodes = nodesRef.current;
+    const currentEdges = edgesRef.current;
+    const node = currentNodes.find(item => item.id === nodeId);
+    if (!node || node.type !== "step") return;
+    if (isStepOutputDetached(nodeId, outputKey, currentNodes, currentEdges)) return;
+
+    const { sourceType, value, imageUrl, label, port } = resolveOutputValueForSource(node, outputKey);
+    if (sourceType === "image" ? !imageUrl : (value === undefined || value === "")) return;
+
+    const width = node.data?.size?.width || CANVAS_NODE_DEFAULT_WIDTH;
+    const sourceHandle = `out:${outputKey}`;
+    const outgoing = currentEdges.filter(edge => (
+      edge.source === nodeId && edge.sourceHandle === sourceHandle
+    ));
+
+    const newId = `source-${crypto.randomUUID().slice(0, 8)}`;
+    const newNode = {
+      id: newId,
+      type: "source",
+      position: {
+        x: (node.position?.x || 0) + width + 40,
+        y: (node.position?.y || 0) + 20
+      },
+      data: {
+        sourceType,
+        name: label,
+        port,
+        passthroughFromOutput: true,
+        passthroughSourceNodeId: nodeId,
+        passthroughOutputKey: outputKey,
+        values: { main: "" }
+      }
+    };
+
+    const nextEdges = [
+      ...currentEdges.filter(edge => !(edge.source === nodeId && edge.sourceHandle === sourceHandle)),
+      {
+        id: `e-${nodeId}-${newId}`,
+        source: nodeId,
+        target: newId,
+        sourceHandle,
+        targetHandle: "in:main",
+        type: "default",
+        animated: false
+      },
+      ...outgoing.map((edge, index) => ({
+        id: `e-${newId}-${edge.target}-${index}`,
+        source: newId,
+        target: edge.target,
+        sourceHandle: "out:main",
+        targetHandle: edge.targetHandle,
+        type: edge.type || "default",
+        animated: edge.animated ?? false
+      }))
+    ];
+    setNodes(currentNodes.map(item => (
+      item.id === nodeId
+        ? {
+          ...item,
+          data: {
+            ...item.data,
+            size: compactStepNodeSize(width)
+          }
+        }
+        : item
+    )).concat(newNode));
+
+    setEdges(nextEdges);
+  }, []);
+
   const clearProject = useCallback(() => {
     setNodes([]);
     setEdges([]);
@@ -327,7 +427,7 @@ export function useCanvasProject() {
     setNodes, setEdges,
     onNodesChange, onEdgesChange, onConnect,
     addNode, updateNodeData, updateNodeSize, removeNode, removeEdge,
-    disconnectTargetPort, toggleNodeBypass, convertInputToSource, clearProject,
+    disconnectTargetPort, toggleNodeBypass, convertInputToSource, convertOutputToSource, clearProject,
     switchProject, createProject, renameProject, deleteProject
   };
 }

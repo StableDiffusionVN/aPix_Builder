@@ -8,7 +8,6 @@ import "./styles.css";
 import "./styles/tokens.css";
 import "./styles/refined-ui.css";
 import "./styles/modals.css";
-import "./features/canvas/canvas.css";
 
 async function bootstrap() {
   initFieldTooltips();

@@ -57,6 +57,7 @@ import {
 } from "../electron/runninghub-shortcut.mjs";
 import {
   appendRunLog,
+  appendRunLogs,
   clearRunLogSessions,
   deleteRunLogSession,
   endRunLogSession,
@@ -2274,6 +2275,46 @@ async function handleRunningHubCancel(req, res) {
   send(res, 200, { cancelled: true, message: "Đã hủy task RunningHub đang chờ" });
 }
 
+function listActiveRuns(activeRuns, activeRhRuns, getRunLogSessions) {
+  const logByRunId = new Map(getRunLogSessions().map(session => [session.runId, session]));
+  const runs = [];
+  for (const [runId, run] of activeRuns) {
+    const session = logByRunId.get(runId);
+    runs.push({
+      runId,
+      provider: "local",
+      promptId: run.promptId || "",
+      template: session?.template || "",
+      templateId: session?.templateId || "",
+      webappId: session?.webappId || "",
+      canvasNodeId: session?.canvasNodeId || "",
+      canvasProjectId: session?.canvasProjectId || "",
+      runKind: session?.runKind || "",
+      startedAt: session?.startedAt || ""
+    });
+  }
+  for (const [runId, run] of activeRhRuns) {
+    const session = logByRunId.get(runId);
+    runs.push({
+      runId,
+      provider: "runninghub",
+      taskId: run.taskId || session?.taskId || "",
+      template: session?.template || "",
+      templateId: session?.templateId || "",
+      webappId: session?.webappId || "",
+      canvasNodeId: session?.canvasNodeId || "",
+      canvasProjectId: session?.canvasProjectId || "",
+      runKind: session?.runKind || "",
+      startedAt: session?.startedAt || ""
+    });
+  }
+  return runs;
+}
+
+function handleActiveRuns(_req, res) {
+  send(res, 200, { runs: listActiveRuns(activeRuns, activeRhRuns, getRunLogSessions) });
+}
+
 function handleRunLogSessions(_req, res) {
   send(res, 200, { sessions: getRunLogSessions() });
 }
@@ -2423,6 +2464,7 @@ export async function initializeServerRuntime() {
 export const routeContext = {
   TEMPLATE_SCOPES,
   appendRunLog,
+  appendRunLogs,
   assertTemplateWorkflow,
   cancelQueueItems,
   clearRunLogSessions,
@@ -2449,6 +2491,7 @@ export const routeContext = {
   handleRun,
   handleRunEvents,
   handleRunLogMutate,
+  handleActiveRuns,
   handleRunLogSessions,
   handleRunningHubAccountStatus,
   handleRunningHubCancel,

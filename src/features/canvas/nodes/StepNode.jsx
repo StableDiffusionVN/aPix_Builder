@@ -10,6 +10,7 @@ import {
 import { NodeField } from "../NodeField.jsx";
 import { CanvasNodeComparePreview } from "../CanvasNodeComparePreview.jsx";
 import { CanvasNodeFrame } from "../CanvasNodeFrame.jsx";
+import { isStepOutputDetached } from "../canvasNodeLayout.js";
 import { buildFieldContextMenuItems, buildNodeContextMenuItems, buildPreviewContextMenuItems } from "../canvasMenuHelpers.js";
 import { useCanvasActions } from "../canvasContext.js";
 import { formatOutputTimingLabel } from "../../../lib/runLog.js";
@@ -36,6 +37,7 @@ function StepNodeComponent({ id, data, selected }) {
     disconnectTargetPort,
     toggleNodeBypass,
     convertInputToSource,
+    convertOutputToSource,
     openContextMenu,
     connectedInputs,
     graphRunning,
@@ -49,6 +51,8 @@ function StepNodeComponent({ id, data, selected }) {
   const inputs = data.ports?.inputs || [];
   const outputs = data.ports?.outputs || [];
   const values = data.values || {};
+  const primaryOutputKey = outputs[0]?.key || "main";
+  const outputDetached = isStepOutputDetached(id, primaryOutputKey, nodes || [], edges || []);
   const runCache = getNodeRunCache({ id, data, type: "step" });
   const outputUrl = runCache?.primary?.url || runCache?.outputs?.[0]?.url || "";
   const node = nodes?.find(item => item.id === id);
@@ -78,7 +82,8 @@ function StepNodeComponent({ id, data, selected }) {
     toggleNodeBypass,
     removeEdge,
     convertInputToSource,
-    disconnectTargetPort
+    disconnectTargetPort,
+    convertOutputToSource
   };
 
   return (
@@ -88,7 +93,10 @@ function StepNodeComponent({ id, data, selected }) {
       selected={selected}
       bypassed={Boolean(data.bypassed)}
       className={`status-${data.status || "idle"}`}
-      onContextMenu={event => openContextMenu?.(event, buildNodeContextMenuItems(menuActions))}
+      onContextMenu={event => openContextMenu?.(event, buildNodeContextMenuItems({
+        ...menuActions,
+        nodes: nodes || []
+      }))}
     >
       <header className="canvasNodeHeader">
         <span className={`canvasKindBadge ${badge.className}`}>{badge.label}</span>
@@ -109,29 +117,14 @@ function StepNodeComponent({ id, data, selected }) {
         </button>
       </header>
 
-      {outputs.length ? (
-        <div className="canvasOutputs">
-          {outputs.map(port => (
-            <div className="canvasOutputRow" key={port.key}>
-              <span className="canvasPortLabel">{port.label}</span>
-              <Handle
-                type="source"
-                position={Position.Right}
-                id={`out:${port.key}`}
-                className="canvasHandle out"
-                isConnectable
-              />
-            </div>
-          ))}
-        </div>
-      ) : null}
-
       <div className="canvasNodeBody nowheel">
-        {inputs.map(port => {
+        {inputs.map((port, index) => {
           const isLinked = Boolean(connected[port.valueKey]);
+          const showOutput = index === 0 && outputs.length > 0;
+          const outputPort = outputs[0];
           return (
             <div
-              className="canvasInputRow hasHandle"
+              className={`canvasInputRow hasHandle${showOutput ? " hasOutputHandle" : ""}`}
               key={port.key}
             >
               <Handle
@@ -163,23 +156,64 @@ function StepNodeComponent({ id, data, selected }) {
                   disconnectTargetPort
                 }))}
               />
+              {showOutput ? (
+                <Handle
+                  type="source"
+                  position={Position.Right}
+                  id={`out:${outputPort.key}`}
+                  className="canvasHandle out"
+                  isConnectable
+                  title={`Nháy đúp để tách "${outputPort.label}" thành node riêng`}
+                  onDoubleClick={event => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    convertOutputToSource(id, outputPort.key);
+                  }}
+                />
+              ) : null}
             </div>
           );
         })}
-        {!inputs.length ? <p className="canvasNodeEmpty">Không có input</p> : null}
+        {!inputs.length && outputs.length ? (
+          <div className="canvasInputRow hasOutputHandle">
+            <div className="canvasField">
+              <span className="canvasFieldLabel">{outputs[0].label}</span>
+            </div>
+            {outputs.map(port => (
+              <Handle
+                key={port.key}
+                type="source"
+                position={Position.Right}
+                id={`out:${port.key}`}
+                className="canvasHandle out"
+                isConnectable
+                title={`Nháy đúp để tách "${port.label}" thành node riêng`}
+                onDoubleClick={event => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  convertOutputToSource(id, port.key);
+                }}
+              />
+            ))}
+          </div>
+        ) : null}
+        {!inputs.length && !outputs.length ? <p className="canvasNodeEmpty">Không có input</p> : null}
       </div>
 
       <CanvasNodeComparePreview
         inputUrl={inputPreviewUrl}
-        outputUrl={outputPreviewUrl}
+        outputUrl={outputDetached ? "" : outputPreviewUrl}
         outputTimingLabel={outputTimingLabel}
         onContextMenu={event => openContextMenu?.(event, buildPreviewContextMenuItems({
           node,
+          nodes: nodes || [],
           edges: edges || [],
           disconnectTargetPort,
           imageUrl: outputPreviewUrl,
           outputFilename: runCache?.primary?.filename || "",
-          inputImageUrl: inputPreviewUrl
+          inputImageUrl: inputPreviewUrl,
+          convertOutputToSource,
+          outputKey: primaryOutputKey
         }))}
       />
       {data.error ? <p className="canvasNodeError" title={data.error}>{data.error}</p> : null}

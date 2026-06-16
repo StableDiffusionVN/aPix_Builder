@@ -1,7 +1,14 @@
-import { useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Images, Link, Loader2, Upload, X } from "lucide-react";
+import { Eye, Images, Link, Loader2, Pencil, Scissors, Upload, X } from "lucide-react";
+import { InputLibraryModal } from "../../components/InputLibraryModal.jsx";
+import { ImageLightboxOverlay } from "../../components/ImageLightboxOverlay.jsx";
+import { ImageEditorModal } from "../../components/lazyModals.js";
+import { MaskEditorModal } from "../../components/MaskEditorModal.jsx";
+import { useI18n } from "../../i18n/I18nContext.jsx";
+import { getSetting, setSetting } from "../../lib/appSettings.js";
 import { isHttpImageUrl } from "../../lib/localImageFolder.js";
+import { getInputImageUrl } from "../../lib/inputImageUtils.js";
 import { imageDisplayUrl } from "./canvasModel.js";
 import { useCanvasActions } from "./canvasContext.js";
 
@@ -47,6 +54,7 @@ async function loadUrlToInputLibrary(sourceUrl, updateInputImages) {
 }
 
 export function CanvasImageField({ label, value, onChange, onContextMenu }) {
+  const { t } = useI18n();
   const { inputImages, refreshInputImages, updateInputImages } = useCanvasActions();
   const fileRef = useRef(null);
   const [dragging, setDragging] = useState(false);
@@ -54,18 +62,38 @@ export function CanvasImageField({ label, value, onChange, onContextMenu }) {
   const [urlLoading, setUrlLoading] = useState(false);
   const [urlError, setUrlError] = useState("");
   const [libraryOpen, setLibraryOpen] = useState(false);
+  const [libraryLoading, setLibraryLoading] = useState(false);
+  const [libraryTimeFilter, setLibraryTimeFilter] = useState("all");
+  const [libraryFavoritesOnly, setLibraryFavoritesOnly] = useState(false);
+  const [favoriteInputImages, setFavoriteInputImages] = useState(
+    () => new Set(getSetting("favorites.inputImages", []))
+  );
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [lightboxImage, setLightboxImage] = useState(null);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [maskEditorOpen, setMaskEditorOpen] = useState(false);
   const [previewBroken, setPreviewBroken] = useState(false);
   const [previewSize, setPreviewSize] = useState(null);
 
   const preview = previewBroken ? "" : imageDisplayUrl(value);
+  const inputImageValue = value?.kind === "input-image" ? value : null;
+  const selectedImages = inputImageValue ? [inputImageValue] : [];
+  const imageHasMask = Boolean(inputImageValue?.maskDataUrl);
+  const selectedInputName = inputImageValue?.name || "";
+  const maskDataUrl = inputImageValue?.maskDataUrl || "";
 
   useEffect(() => {
     setPreviewBroken(false);
     setPreviewSize(null);
   }, [value]);
 
-  useEffect(() => {
-    refreshInputImages?.();
+  const reloadInputLibrary = useCallback(async () => {
+    setLibraryLoading(true);
+    try {
+      await refreshInputImages?.();
+    } finally {
+      setLibraryLoading(false);
+    }
   }, [refreshInputImages]);
 
   async function commitImage(next) {
@@ -85,7 +113,7 @@ export function CanvasImageField({ label, value, onChange, onContextMenu }) {
     const source = urlInput.trim();
     if (!source) return;
     if (!isHttpImageUrl(source)) {
-      setUrlError("URL phải bắt đầu bằng http:// hoặc https://");
+      setUrlError(t("field.urlOnlyRequired"));
       return;
     }
     setUrlLoading(true);
@@ -95,7 +123,7 @@ export function CanvasImageField({ label, value, onChange, onContextMenu }) {
       await commitImage(next);
       setUrlInput("");
     } catch (error) {
-      setUrlError(error.message || "Không tải được URL");
+      setUrlError(error.message || t("field.urlError"));
     } finally {
       setUrlLoading(false);
     }
@@ -119,7 +147,7 @@ export function CanvasImageField({ label, value, onChange, onContextMenu }) {
         await commitImage(next);
         setUrlInput("");
       } catch (error) {
-        setUrlError(error.message || "Không tải được URL");
+        setUrlError(error.message || t("field.urlError"));
       } finally {
         setUrlLoading(false);
       }
@@ -131,8 +159,83 @@ export function CanvasImageField({ label, value, onChange, onContextMenu }) {
   function selectInputImage(name) {
     const image = inputImages.find(item => item.name === name);
     if (!image) return;
-    commitImage({ kind: "input-image", ...image });
+    commitImage({ kind: "input-image", ...image, url: getInputImageUrl(image) });
     setLibraryOpen(false);
+  }
+
+  async function openInputLibrary() {
+    setLibraryOpen(true);
+    await reloadInputLibrary();
+  }
+
+  function toggleInputFavorite(name) {
+    if (!name) return;
+    setFavoriteInputImages(current => {
+      const next = new Set(current);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      setSetting("favorites.inputImages", [...next]);
+      return next;
+    });
+  }
+
+  async function handleDeleteInputImage(image) {
+    if (!image?.name) return;
+    const response = await fetch("/api/input-images/delete", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: image.name })
+    });
+    if (!response.ok) return;
+    const data = await response.json();
+    updateInputImages?.(data.images || []);
+    if (inputImageValue?.name === image.name) commitImage("");
+  }
+
+  function openLightboxFromLibrary(image) {
+    if (!image) return;
+    const url = getInputImageUrl(image);
+    if (!url) return;
+    setLightboxImage({ name: image.name || label, url });
+    setLightboxOpen(true);
+  }
+
+  function openPreviewLightbox() {
+    if (!preview) return;
+    setLightboxImage({ name: inputImageValue?.name || label, url: preview });
+    setLightboxOpen(true);
+  }
+
+  async function handleSaveEditedInput(dataUrl) {
+    try {
+      const baseName = selectedInputName
+        ? selectedInputName.replace(/(\.[^.]+)?$/, "_edited.png")
+        : "edited.png";
+      const response = await fetch("/api/input-images", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ filename: baseName, dataUrl })
+      });
+      if (response.ok) {
+        const data = await response.json();
+        updateInputImages?.(data.images || []);
+        if (data.image) {
+          commitImage({ kind: "input-image", ...data.image, url: getInputImageUrl(data.image) });
+          return;
+        }
+      }
+    } catch {}
+    commitImage(dataUrl);
+  }
+
+  function handleSaveMask(nextMaskDataUrl) {
+    if (!inputImageValue) return;
+    if (nextMaskDataUrl) {
+      commitImage({ ...inputImageValue, maskDataUrl: nextMaskDataUrl });
+      return;
+    }
+    const { maskDataUrl: _omit, ...rest } = inputImageValue;
+    commitImage(rest);
   }
 
   return (
@@ -168,20 +271,69 @@ export function CanvasImageField({ label, value, onChange, onContextMenu }) {
               }}
             />
             {previewSize ? (
-              <span
-                className="canvasImageSizeBadge"
-                title={`${label}: ${previewSize.width} x ${previewSize.height}`}
-              >
+              <div className="imageSizeBadge" title={`${label}: ${previewSize.width} x ${previewSize.height}`}>
                 {previewSize.width} x {previewSize.height}
-              </span>
+              </div>
             ) : null}
-            <button type="button" className="canvasImageClear" onClick={() => commitImage("")} title="Xóa">
-              <X size={11} />
-            </button>
+            {imageHasMask ? (
+              <span className="multiImageMask" title={t("field.hasMask")}><Scissors size={11} /></span>
+            ) : null}
+            <div className="multiImageActions">
+              <button
+                type="button"
+                className="nodrag"
+                onClick={event => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  openPreviewLightbox();
+                }}
+                title={t("field.openFull")}
+              >
+                <Eye size={13} />
+              </button>
+              {inputImageValue ? (
+                <button
+                  type="button"
+                  className="nodrag"
+                  onClick={event => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    setMaskEditorOpen(true);
+                  }}
+                  title={imageHasMask ? t("field.editMask") : t("field.paintMask")}
+                >
+                  <Scissors size={13} />
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className="nodrag"
+                onClick={event => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  setEditorOpen(true);
+                }}
+                title="Image Editor"
+              >
+                <Pencil size={13} />
+              </button>
+              <button
+                type="button"
+                className="nodrag"
+                onClick={event => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  commitImage("");
+                }}
+                title={t("field.removeUpload")}
+              >
+                <X size={13} />
+              </button>
+            </div>
           </div>
         ) : (
           <button type="button" className="canvasUploadBtn" onClick={() => fileRef.current?.click()}>
-            <Upload size={12} /> {dragging ? "Thả ảnh vào đây" : "Kéo thả hoặc tải ảnh"}
+            <Upload size={12} /> {dragging ? t("field.drop") : t("field.uploadHint")}
           </button>
         )}
 
@@ -191,20 +343,20 @@ export function CanvasImageField({ label, value, onChange, onContextMenu }) {
             type="text"
             className="canvasImageUrlInput"
             value={urlInput}
-            placeholder="URL ảnh (http…)"
+            placeholder={t("field.urlPlaceholder")}
             onChange={event => {
               setUrlInput(event.target.value);
               if (urlError) setUrlError("");
             }}
           />
-          <button type="submit" className="canvasImageUrlBtn" disabled={urlLoading || !urlInput.trim()} title="Tải từ URL">
+          <button type="submit" className="canvasImageUrlBtn" disabled={urlLoading || !urlInput.trim()} title={t("field.loadUrl")}>
             {urlLoading ? <Loader2 size={12} className="spin" /> : <Upload size={12} />}
           </button>
           <button
             type="button"
             className="canvasImageUrlBtn library"
-            onClick={() => { refreshInputImages?.(); setLibraryOpen(true); }}
-            title="Chọn từ Input"
+            onClick={() => { void openInputLibrary(); }}
+            title={t("field.chooseInput")}
           >
             <Images size={12} />
             <span>Input</span>
@@ -224,44 +376,60 @@ export function CanvasImageField({ label, value, onChange, onContextMenu }) {
         />
       </div>
 
-      {libraryOpen ? createPortal(
-        <div className="inputLibraryModal" role="presentation" onMouseDown={() => setLibraryOpen(false)}>
-          <section
-            className="inputLibraryPanel"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Thư viện Input"
-            onMouseDown={event => event.stopPropagation()}
-          >
-            <div className="inputLibraryHeader">
-              <div>
-                <h3>Thư viện Input</h3>
-                <p>{inputImages.length} ảnh</p>
-              </div>
-              <button type="button" className="imageLightboxClose inPanel" onClick={() => setLibraryOpen(false)} title="Đóng">
-                <X size={18} />
-              </button>
-            </div>
-            {inputImages.length ? (
-              <div className="inputLibraryGrid">
-                {inputImages.map(image => (
-                  <article key={image.name} className="inputLibraryItem">
-                    <button
-                      type="button"
-                      className="inputLibraryThumb"
-                      onClick={() => selectInputImage(image.name)}
-                      title={image.name}
-                    >
-                      <img src={image.url} alt={image.name} />
-                    </button>
-                  </article>
-                ))}
-              </div>
-            ) : (
-              <p className="canvasImageLibraryEmpty">Chưa có ảnh trong Input. Tải ảnh lên hoặc chạy workflow trước.</p>
-            )}
-          </section>
-        </div>,
+      <InputLibraryModal
+        open={libraryOpen}
+        onClose={() => setLibraryOpen(false)}
+        loading={libraryLoading}
+        inputImages={inputImages}
+        favoriteInputImages={favoriteInputImages}
+        timeFilter={libraryTimeFilter}
+        onTimeFilterChange={setLibraryTimeFilter}
+        favoritesOnly={libraryFavoritesOnly}
+        onFavoritesOnlyChange={setLibraryFavoritesOnly}
+        selectedImages={selectedImages}
+        onSelectImage={selectInputImage}
+        onToggleFavorite={toggleInputFavorite}
+        onViewImage={openLightboxFromLibrary}
+        onDeleteImage={handleDeleteInputImage}
+        overlayClassName="canvasInputLibraryModal"
+      />
+
+      <ImageLightboxOverlay
+        open={lightboxOpen}
+        image={lightboxImage}
+        title={label}
+        onClose={() => {
+          setLightboxOpen(false);
+          setLightboxImage(null);
+        }}
+      />
+
+      {editorOpen && preview ? createPortal(
+        <Suspense fallback={null}>
+          <ImageEditorModal
+            source={preview}
+            title={`${label} - Image Editor`}
+            onClose={() => setEditorOpen(false)}
+            onSave={async dataUrl => {
+              await handleSaveEditedInput(dataUrl);
+              setEditorOpen(false);
+            }}
+          />
+        </Suspense>,
+        document.body
+      ) : null}
+
+      {maskEditorOpen && preview ? createPortal(
+        <MaskEditorModal
+          source={preview}
+          initialMask={maskDataUrl}
+          title={`${label} - ${t("mask.title")}`}
+          onClose={() => setMaskEditorOpen(false)}
+          onSave={nextMask => {
+            handleSaveMask(nextMask);
+            setMaskEditorOpen(false);
+          }}
+        />,
         document.body
       ) : null}
     </div>

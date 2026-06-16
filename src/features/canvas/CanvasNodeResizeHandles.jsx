@@ -1,13 +1,14 @@
 import { useCallback, useRef } from "react";
 import { useReactFlow } from "@xyflow/react";
 import { useCanvasActions } from "./canvasContext.js";
+import { estimateCanvasNodeMinHeight } from "./canvasNodeLayout.js";
 
-export const CANVAS_NODE_DEFAULT_WIDTH = 248;
+export const CANVAS_NODE_DEFAULT_WIDTH = 348;
 export const CANVAS_NODE_MIN_WIDTH = 180;
 export const CANVAS_NODE_MIN_HEIGHT = 100;
 
 export function CanvasNodeResizeHandles({ nodeId, size, position, nodeRef }) {
-  const { updateNodeSize } = useCanvasActions();
+  const { updateNodeSize, nodes, edges } = useCanvasActions();
   const { getZoom } = useReactFlow();
   const dragRef = useRef(null);
 
@@ -16,7 +17,9 @@ export function CanvasNodeResizeHandles({ nodeId, size, position, nodeRef }) {
     event.stopPropagation();
 
     const el = nodeRef?.current;
-    const measuredHeight = el?.offsetHeight || CANVAS_NODE_MIN_HEIGHT;
+    const node = nodes?.find(item => item.id === nodeId);
+    const minHeight = estimateCanvasNodeMinHeight(node, edges || [], nodes || []);
+    const measuredHeight = el?.offsetHeight || minHeight;
     const start = {
       corner,
       startX: event.clientX,
@@ -38,10 +41,10 @@ export function CanvasNodeResizeHandles({ nodeId, size, position, nodeRef }) {
 
       if (start.corner === "se") {
         width = Math.max(CANVAS_NODE_MIN_WIDTH, start.startWidth + dx);
-        height = Math.max(CANVAS_NODE_MIN_HEIGHT, start.startHeight + dy);
+        height = Math.max(minHeight, start.startHeight + dy);
       } else {
         width = Math.max(CANVAS_NODE_MIN_WIDTH, start.startWidth - dx);
-        height = Math.max(CANVAS_NODE_MIN_HEIGHT, start.startHeight + dy);
+        height = Math.max(minHeight, start.startHeight + dy);
         posX = start.startPosX + (start.startWidth - width);
       }
 
@@ -64,7 +67,7 @@ export function CanvasNodeResizeHandles({ nodeId, size, position, nodeRef }) {
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
     window.addEventListener("pointercancel", onUp);
-  }, [getZoom, nodeId, nodeRef, position, size, updateNodeSize]);
+  }, [edges, getZoom, nodeId, nodeRef, nodes, position, size, updateNodeSize]);
 
   return (
     <>

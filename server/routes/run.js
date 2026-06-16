@@ -1,6 +1,7 @@
 export function createRunRoutes(context) {
   const {
     cancelQueueItems,
+    handleActiveRuns,
     handleCancel,
     handleComfyDiscovery,
     handleComfyHealth,
@@ -20,6 +21,10 @@ export function createRunRoutes(context) {
     }
     if (req.method === "POST" && url.pathname === "/api/cancel") {
       await handleCancel(req, res);
+      return true;
+    }
+    if (req.method === "GET" && url.pathname === "/api/active-runs") {
+      handleActiveRuns(req, res);
       return true;
     }
     if (req.method === "GET" && url.pathname === "/api/run-events") {

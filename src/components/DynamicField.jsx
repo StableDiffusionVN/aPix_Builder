@@ -1,6 +1,6 @@
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Check, Eye, Filter, Folder, Images, Link, ListChecks, Loader2, Pencil, Scissors, Star, Trash2, Upload, X } from "lucide-react";
+import { Eye, Folder, Images, Link, Loader2, Pencil, Scissors, Upload, X } from "lucide-react";
 import { ImageEditorModal } from "./lazyModals";
 import { MaskEditorModal } from "./MaskEditorModal";
 import { defaultValue, getActiveSubInputs, isMenuSub, normalizeId } from "../lib/template";
@@ -12,6 +12,8 @@ import { isHttpImageUrl, readLocalFolderValue } from "../lib/localImageFolder.js
 import { getSetting, setSetting } from "../lib/appSettings.js";
 import { StaticFieldBlock } from "../features/fields/StaticFieldBlock.jsx";
 import { renderBasicField } from "../features/fields/basicFieldRegistry.jsx";
+import { InputLibraryModal } from "./InputLibraryModal.jsx";
+import { ImageLightboxOverlay } from "./ImageLightboxOverlay.jsx";
 
 function readImageFieldValue(value) {
   return Array.isArray(value) ? value : value ? [value] : [];
@@ -118,33 +120,6 @@ function fileToDataUrl(file) {
   });
 }
 
-function inferImageDate(image) {
-  if (image?.createdAt) return new Date(image.createdAt);
-  const match = /(\d{13})/.exec(image?.name || "");
-  if (match) return new Date(Number(match[1]));
-  return null;
-}
-
-function matchesTimeFilter(value, filter) {
-  if (filter === "all") return true;
-  const date = value instanceof Date && Number.isFinite(value.getTime()) ? value : null;
-  if (!date) return false;
-  const now = new Date();
-  if (filter === "day") {
-    return date.getFullYear() === now.getFullYear()
-      && date.getMonth() === now.getMonth()
-      && date.getDate() === now.getDate();
-  }
-  if (filter === "month") {
-    return date.getFullYear() === now.getFullYear()
-      && date.getMonth() === now.getMonth();
-  }
-  if (filter === "year") {
-    return date.getFullYear() === now.getFullYear();
-  }
-  return true;
-}
-
 export { StaticFieldBlock as StaticBlock };
 
 export function DynamicField({
@@ -169,6 +144,7 @@ export function DynamicField({
   const [libraryFavoritesOnly, setLibraryFavoritesOnly] = useState(false);
   const [favoriteInputImages, setFavoriteInputImages] = useState(() => new Set(getSetting("favorites.inputImages", [])));
   const [libraryOpen, setLibraryOpen] = useState(false);
+  const [libraryLoading, setLibraryLoading] = useState(false);
   const [libraryMultiSelect, setLibraryMultiSelect] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
   const [maskEditorOpen, setMaskEditorOpen] = useState(false);
@@ -280,15 +256,6 @@ export function DynamicField({
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [lightboxOpen, lightboxImage?.url]);
-
-  useEffect(() => {
-    if (!libraryOpen) return undefined;
-    function handleKeyDown(event) {
-      if (event.key === "Escape") setLibraryOpen(false);
-    }
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [libraryOpen]);
 
   function commitSelectedImages(images) {
     const next = images.filter(Boolean);
@@ -461,10 +428,15 @@ export function DynamicField({
     await handlePickedFiles(event.dataTransfer.files);
   }
 
-  function openInputLibrary() {
-    refreshInputImages();
+  async function openInputLibrary() {
     setLibraryMultiSelect(false);
     setLibraryOpen(true);
+    setLibraryLoading(true);
+    try {
+      await refreshInputImages();
+    } finally {
+      setLibraryLoading(false);
+    }
   }
 
   function handleInputImageSelect(name) {
@@ -686,10 +658,6 @@ export function DynamicField({
   if (basicField) return basicField;
   if (ui.type === "image" || ui.type === "image_mask" || ui.type === "file") {
     const acceptsImageUrl = ui.type === "image" || ui.type === "image_mask";
-    const visibleInputImages = inputImages.filter(image => {
-      if (libraryFavoritesOnly && !favoriteInputImages.has(image.name)) return false;
-      return matchesTimeFilter(inferImageDate(image), libraryTimeFilter);
-    });
 
     return (
       <>
@@ -992,107 +960,25 @@ export function DynamicField({
             </button>
           ) : null}
         </label>
-        {libraryOpen ? createPortal(
-          <div className="inputLibraryModal" role="presentation" onMouseDown={() => setLibraryOpen(false)}>
-            <section className="inputLibraryPanel" role="dialog" aria-modal="true" aria-label={t("field.inputLibrary")} onMouseDown={event => event.stopPropagation()}>
-              <div className="inputLibraryHeader">
-                <div>
-                  <h3>{t("field.inputLibrary")}</h3>
-                  <p>{t("field.imageCount", { visible: visibleInputImages.length, total: inputImages.length })}</p>
-                </div>
-                <div className="inputLibraryHeaderTools">
-                  <label className={`historyIconFilter ${libraryTimeFilter !== "all" ? "active" : ""}`} title={t("history.filterTime")}>
-                    <Filter size={14} />
-                    <select value={libraryTimeFilter} onChange={event => setLibraryTimeFilter(event.target.value)} aria-label={t("history.filterTime")}>
-                      <option value="all">{t("history.allTime")}</option>
-                      <option value="day">{t("history.today")}</option>
-                      <option value="month">{t("history.month")}</option>
-                      <option value="year">{t("history.year")}</option>
-                    </select>
-                  </label>
-                  <button
-                    type="button"
-                    className={`historyIconButton ${libraryFavoritesOnly ? "active" : ""}`}
-                    onClick={() => setLibraryFavoritesOnly(current => !current)}
-                    title={t("history.favoritesOnly")}
-                  >
-                    <Star size={14} />
-                  </button>
-                  {supportsMultipleImages ? (
-                    <button
-                      type="button"
-                      className={`historyIconButton ${libraryMultiSelect ? "active" : ""}`}
-                      onClick={() => setLibraryMultiSelect(current => !current)}
-                      title={libraryMultiSelect ? t("field.multiSelectOff") : t("field.multiSelectOn")}
-                      aria-pressed={libraryMultiSelect}
-                    >
-                      <ListChecks size={14} />
-                    </button>
-                  ) : null}
-                  <button type="button" className="imageLightboxClose inPanel" onClick={() => setLibraryOpen(false)} title={t("common.close")}>
-                    <X size={18} />
-                  </button>
-                </div>
-              </div>
-              {visibleInputImages.length > 0 ? (
-                <div className="inputLibraryGrid">
-                  {visibleInputImages.map(image => {
-                    const isLibrarySelected = selectedImages.some(
-                      item => item?.kind === "input-image" && item.name === image.name
-                    );
-                    return (
-                    <article
-                      key={image.name}
-                      className={`inputLibraryItem${
-                        isLibrarySelected ? " isSelected" : ""
-                      }${libraryMultiSelect ? " isMultiSelectMode" : ""}`}
-                    >
-                      <button
-                        type="button"
-                        className="inputLibraryThumb"
-                        onClick={() => handleInputImageSelect(image.name)}
-                        title={libraryMultiSelect ? t("field.toggleImage") : t("field.chooseImage")}
-                      >
-                        <img src={image.url} alt={image.name} />
-                      </button>
-                      {libraryMultiSelect && isLibrarySelected ? (
-                        <span className="inputLibrarySelectedBadge" aria-hidden="true">
-                          <Check size={14} strokeWidth={2.8} />
-                        </span>
-                      ) : null}
-                      <div className="inputLibraryActions">
-                        <button
-                          type="button"
-                          className={favoriteInputImages.has(image.name) ? "isFavorite" : ""}
-                          onClick={() => toggleInputFavorite(image.name)}
-                          title={favoriteInputImages.has(image.name) ? t("history.unfavorite") : t("history.favorite")}
-                        >
-                          <Star size={15} />
-                        </button>
-                        <button type="button" onClick={() => handleInputImageSelect(image.name)} title={t("field.select")}>
-                          <Check size={15} />
-                        </button>
-                        <button type="button" onClick={() => openLightbox(image)} title={t("field.viewImage")}>
-                          <Eye size={15} />
-                        </button>
-                        <button type="button" onClick={() => handleDeleteInputImage(image)} title={t("field.deleteImage")}>
-                          <Trash2 size={15} />
-                        </button>
-                      </div>
-                    </article>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="inputLibraryEmpty">
-                  <Images size={34} />
-                  <strong>{inputImages.length ? t("field.noMatchingImages") : t("field.noInputImages")}</strong>
-                </div>
-              )}
-            </section>
-          </div>,
-          document.body
-        ) : null}
+        <InputLibraryModal
+          open={libraryOpen}
+          onClose={() => setLibraryOpen(false)}
+          loading={libraryLoading}
+          inputImages={inputImages}
+          favoriteInputImages={favoriteInputImages}
+          timeFilter={libraryTimeFilter}
+          onTimeFilterChange={setLibraryTimeFilter}
+          favoritesOnly={libraryFavoritesOnly}
+          onFavoritesOnlyChange={setLibraryFavoritesOnly}
+          supportsMultipleImages={supportsMultipleImages}
+          multiSelect={libraryMultiSelect}
+          onMultiSelectChange={setLibraryMultiSelect}
+          selectedImages={selectedImages}
+          onSelectImage={handleInputImageSelect}
+          onToggleFavorite={toggleInputFavorite}
+          onViewImage={openLightbox}
+          onDeleteImage={handleDeleteInputImage}
+        />
         {lightboxOpen && lightboxImage?.url ? createPortal(
           <div className="imageLightbox" role="presentation" onClick={event => {
             if (event.target === event.currentTarget) setLightboxOpen(false);

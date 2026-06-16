@@ -15,7 +15,8 @@ function loadNotifyEnabled() {
 }
 
 function loadWorkspaceView() {
-  return getSetting("workspace.view", "form") === "canvas" ? "canvas" : "form";
+  const saved = getSetting("workspace.view", null);
+  return saved === "canvas" ? "canvas" : "form";
 }
 
 export { DEFAULT_COMFY_SERVER, useWorkspaceLayoutContext };

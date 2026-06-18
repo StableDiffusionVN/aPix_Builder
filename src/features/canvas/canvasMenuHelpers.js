@@ -101,9 +101,6 @@ export function buildFieldContextMenuItems({
   const type = port.type || portTypeForUi(port.uiType);
 
   if (type === "image") {
-    const source = incoming
-      ? nodes?.find(item => item.id === incoming.source)
-      : null;
     const imageUrl = incoming
       ? resolveEffectiveNodeOutputUrl(incoming.source, incoming.sourceHandle, nodes, edges)
       : imageDisplayUrl(value);

@@ -63,9 +63,11 @@ export function InputLibraryModal({
   overlayClassName = ""
 }) {
   const { t } = useI18n();
-  const favorites = favoriteInputImages instanceof Set
-    ? favoriteInputImages
-    : new Set(favoriteInputImages || []);
+  const favorites = useMemo(() => (
+    favoriteInputImages instanceof Set
+      ? favoriteInputImages
+      : new Set(favoriteInputImages || [])
+  ), [favoriteInputImages]);
 
   const visibleInputImages = useMemo(
     () => filterInputLibraryImages(inputImages, {

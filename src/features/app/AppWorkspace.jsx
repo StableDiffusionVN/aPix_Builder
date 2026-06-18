@@ -48,7 +48,7 @@ import { useHistory } from "../../hooks/useHistory";
 import { useInputImages } from "../../hooks/useInputImages";
 import { usePresets } from "../../hooks/usePresets";
 import { useServerList } from "../../hooks/useServerList";
-import { useWorkspace, sanitizeWorkspaceValues } from "../../hooks/useWorkspace";
+import { useWorkspace } from "../../hooks/useWorkspace";
 import { useImageViewer } from "../../hooks/useImageViewer";
 import { useRunOrchestration } from "../../hooks/useRunOrchestration";
 import { useSidebarLayout } from "../../hooks/useSidebarLayout";
@@ -108,14 +108,6 @@ const CANVAS_RUNTIME_IDLE = {
 
 function loadRhWfLastTemplate() {
   return getSetting("execution.rhWfSelectedTemplate", "");
-}
-
-function formatDuration(ms) {
-  if (!Number.isFinite(ms)) return "";
-  const seconds = Math.max(0, Math.round(ms / 1000));
-  const minutes = Math.floor(seconds / 60);
-  const rest = seconds % 60;
-  return minutes ? `${minutes}m ${rest}s` : `${rest}s`;
 }
 
 function formatBytes(bytes) {
@@ -248,7 +240,7 @@ export function AppWorkspace() {
   const [shortcutExporting, setShortcutExporting] = useState(false);
   const { history, setHistory, loadOutputHistory, deleteHistoryItem } = useHistory();
   const { inputImages, setInputImages, refreshInputImages } = useInputImages();
-  const { workspaceRef, getStoredValues, saveValues, getLastTemplate } = useWorkspace();
+  const { getStoredValues, saveValues, getLastTemplate } = useWorkspace();
   const { getPresets, savePreset, updatePreset, deletePreset, presetsVersion, presetsStorageWarning } = usePresets();
   const { getServers, addServer, removeServer } = useServerList();
 
@@ -273,10 +265,10 @@ export function AppWorkspace() {
   };
 
   const {
-    running, activeRunId, activeJob, activeTaskId, taskStatus, runQueue,
+    running, activeRunId, runQueue,
     status, setStatus, error, setError,
     result, setResult, progress,
-    runWorkflow, cancelWorkflow, clearQueue, stopAllWorkflow, runStep,
+    cancelWorkflow, clearQueue, stopAllWorkflow, runStep,
     localExecution, rhExecution
   } = useRunOrchestration({ onComplete: onRunComplete, runLog: runLogHistory, executionMode });
 
@@ -306,9 +298,15 @@ export function AppWorkspace() {
   const inputs = useMemo(() => flattenInputs(config?.input), [config]);
   const rhWfInputs = useMemo(() => flattenInputs(rhWfConfig?.input), [rhWfConfig]);
   const outputs = useMemo(() => Object.values(config?.output || {}), [config]);
-  const currentPresets = useMemo(() => getPresets(selectedTemplate), [getPresets, selectedTemplate, presetsVersion]);
+  const currentPresets = useMemo(() => {
+    void presetsVersion;
+    return getPresets(selectedTemplate);
+  }, [getPresets, selectedTemplate, presetsVersion]);
   const rhWfPresets = useMemo(
-    () => getPresets(rhWfWorkspaceKey(rhWfSelectedTemplate)),
+    () => {
+      void presetsVersion;
+      return getPresets(rhWfWorkspaceKey(rhWfSelectedTemplate));
+    },
     [getPresets, rhWfSelectedTemplate, presetsVersion]
   );
   const app = config?.app || {};
@@ -522,7 +520,7 @@ export function AppWorkspace() {
       }
     }
     return getOutputColorAdjust(selectedOutput);
-  }, [colorAdjustTarget, history, selectedOutput]);
+  }, [colorAdjustCacheRef, colorAdjustTarget, history, selectedOutput]);
   const colorSyncTargetCount = useMemo(() => {
     if (!activeHistoryId) return selectedHistoryIds.size;
     return [...selectedHistoryIds].filter(id => id !== activeHistoryId).length;
@@ -634,7 +632,7 @@ export function AppWorkspace() {
 
   const handleHealingBridgeChange = useCallback((bridge) => {
     setHealingBridge(bridge);
-  }, []);
+  }, [setHealingBridge]);
   const healingBridgeRef = useRef(healingBridge);
   useEffect(() => {
     healingBridgeRef.current = healingBridge;
@@ -685,7 +683,7 @@ export function AppWorkspace() {
         return { ...current, outputs };
       });
     }
-  }, [history, result?.runId]);
+  }, [colorAdjustCacheRef, history, result?.runId, setHistory, setResult]);
 
   const handleColorAdjustPersist = useCallback((colorAdjust) => {
     const { historyId, outputIndex } = colorAdjustTarget;
@@ -708,12 +706,12 @@ export function AppWorkspace() {
         if (Array.isArray(data.history)) setHistory(data.history);
       })
       .catch(() => {});
-  }, [applyColorAdjustState, colorAdjustTarget]);
+  }, [applyColorAdjustState, colorAdjustTarget, setHistory]);
 
   const handleOpenColorSync = useCallback((sourceState) => {
     pendingColorSyncSourceRef.current = sourceState;
     setColorSyncOpen(true);
-  }, []);
+  }, [pendingColorSyncSourceRef, setColorSyncOpen]);
 
   const handleConfirmColorSync = useCallback(async (groups) => {
     const sourceState = pendingColorSyncSourceRef.current;
@@ -762,6 +760,12 @@ export function AppWorkspace() {
     history,
     locale,
     selectedHistoryIds,
+    colorAdjustCacheRef,
+    pendingColorSyncSourceRef,
+    setColorAdjustReloadToken,
+    setColorSyncOpen,
+    setColorSyncing,
+    setHistory,
     setError,
     setStatus,
     t
@@ -816,12 +820,15 @@ export function AppWorkspace() {
       });
     }, 500);
     return () => window.clearTimeout(timer);
-  }, [executionMode, isCanvasView, rhSettings, rhSettings.webappId, fetchRhNodes]);
+  }, [executionMode, isCanvasView, rhSettings, rhSettings.webappId, fetchRhNodes, setRhValues]);
 
   useEffect(() => {
     if (!settingsOpen || settingsTab !== "runninghub" || !hasRhApiKey(rhSettings)) return;
     if (rhAccount || rhAccountLoading || rhAccountError) return;
     handleRhAccountRefresh();
+  // handleRhAccountRefresh intentionally reads the latest token pool and is
+  // recreated with account state; depending on it would refetch in a loop.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settingsOpen, settingsTab, rhSettings, rhAccount, rhAccountLoading, rhAccountError]);
 
   useEffect(() => {
@@ -839,21 +846,21 @@ export function AppWorkspace() {
         setStatus(t("status.rhWfNoTemplate"));
       })
       .catch(err => setError(localizeRuntimeMessage(err.message, locale)));
-  }, [isCanvasView, isRunningHubWf, rhWfTemplates.length]);
+  }, [isCanvasView, isRunningHubWf, rhWfTemplates.length, loadRhWfConfig, loadRhWfTemplateRegistry, locale, setError, setRhWfConfig, setRhWfTemplates, setRhWfValues, setStatus, t]);
 
   // Persist workspace on every change
   useEffect(() => {
     if (isCanvasView) return;
     if (!selectedTemplate || !config) return;
     saveValues(selectedTemplate, values);
-  }, [config, isCanvasView, selectedTemplate, values]);
+  }, [config, isCanvasView, selectedTemplate, values, saveValues]);
 
   useEffect(() => {
     if (isCanvasView) return;
     if (!rhWfSelectedTemplate || !rhWfConfig) return;
     saveValues(rhWfWorkspaceKey(rhWfSelectedTemplate), rhWfValues);
     setSetting("execution.rhWfSelectedTemplate", rhWfSelectedTemplate);
-  }, [isCanvasView, rhWfConfig, rhWfSelectedTemplate, rhWfValues]);
+  }, [isCanvasView, rhWfConfig, rhWfSelectedTemplate, rhWfValues, saveValues]);
 
   // Close theme menu on outside click
   useEffect(() => {
@@ -870,7 +877,7 @@ export function AppWorkspace() {
       window.removeEventListener("pointerdown", handlePointerDown);
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [themeMenuOpen]);
+  }, [themeMenuOpen, setThemeMenuOpen]);
 
   // Execution mode shortcuts (Alt/Option + 0/1/2/3)
   useEffect(() => {
@@ -920,7 +927,7 @@ export function AppWorkspace() {
     }
     window.addEventListener("keydown", handleSettingsShortcut, true);
     return () => window.removeEventListener("keydown", handleSettingsShortcut, true);
-  }, []);
+  }, [setInfoOpen, setSettingsOpen]);
 
   // Info modal shortcut (Cmd/Ctrl + /)
   useEffect(() => {
@@ -937,7 +944,7 @@ export function AppWorkspace() {
     }
     window.addEventListener("keydown", handleInfoShortcut, true);
     return () => window.removeEventListener("keydown", handleInfoShortcut, true);
-  }, [infoOpen]);
+  }, [infoOpen, setInfoOpen, setSettingsOpen]);
 
   useEffect(() => {
     function handleFullscreenChange() {
@@ -945,7 +952,7 @@ export function AppWorkspace() {
     }
     document.addEventListener("fullscreenchange", handleFullscreenChange);
     return () => document.removeEventListener("fullscreenchange", handleFullscreenChange);
-  }, []);
+  }, [setIsFullscreen]);
 
   const toggleFullscreen = useCallback(async () => {
     try {
@@ -987,7 +994,7 @@ export function AppWorkspace() {
     }
     window.addEventListener("keydown", handleLogShortcut, true);
     return () => window.removeEventListener("keydown", handleLogShortcut, true);
-  }, []);
+  }, [setRunLogOpen]);
 
   // Keyboard: space reset, S compare
   useEffect(() => {
@@ -1038,7 +1045,7 @@ export function AppWorkspace() {
       window.removeEventListener("keyup", handleSpaceKeyUp, true);
       window.removeEventListener("keyup", preventSpaceClick, true);
     };
-  }, [canCompare, heroImage]);
+  }, [canCompare, heroImage, resetImageView, setCompareMode]);
 
   // Keyboard: arrow navigate outputs
   useEffect(() => {
@@ -1055,17 +1062,20 @@ export function AppWorkspace() {
     }
     window.addEventListener("keydown", handleOutputNavigation, true);
     return () => window.removeEventListener("keydown", handleOutputNavigation, true);
+  // stepOutput is a render-local helper; the listener is refreshed whenever
+  // its output collection changes, which is the state it reads.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [heroImage, isCanvasView, resultOutputs.length]);
 
   // Reset output index when result changes
   useEffect(() => {
     if (selectedOutputIndex >= resultOutputs.length) setSelectedOutputIndex(0);
-  }, [resultOutputs.length, selectedOutputIndex]);
+  }, [resultOutputs.length, selectedOutputIndex, setSelectedOutputIndex]);
 
   // Khi không còn chạy và hết hàng chờ, tắt màn hình chờ để xem được ảnh
   useEffect(() => {
     if (!running && !formQueueCount) setShowWaitScreen(false);
-  }, [running, formQueueCount]);
+  }, [running, formQueueCount, setShowWaitScreen]);
 
   // Auto-fill dynamic choices from discovery
   useEffect(() => {
@@ -1087,7 +1097,7 @@ export function AppWorkspace() {
       }
       return changed ? next : current;
     });
-  }, [inputs, discovery, isCanvasView]);
+  }, [inputs, discovery, isCanvasView, setValues]);
 
   function selectOutput(index) {
     if (!resultOutputs.length) return;
@@ -1282,7 +1292,10 @@ export function AppWorkspace() {
       handleRhAccountRefresh();
     }, 5 * 60 * 1000);
     return () => window.clearInterval(timer);
-  }, [isRunningHub, isCanvasView, canvasRuntime.hasRhNodes, rhSettings]);
+  // handleRhAccountRefresh mutates the account state it reads; keeping this
+  // interval keyed to mode/settings avoids a refresh loop.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isRunningHub, isCanvasView, canvasRuntime.hasRhNodes, rhSettings, setRhAccount, setRhAccountError, setRhAccountLoading, setRhTokenAccounts]);
 
   async function handleRhTestConnection() {
     setRhTesting(true);

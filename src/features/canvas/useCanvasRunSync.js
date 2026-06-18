@@ -66,7 +66,7 @@ export function useCanvasRunSync({
     syncRunWatchersRef.current.delete(runId);
   }, []);
 
-  const applyRunningState = useCallback((session, activeRun) => {
+  const applyRunningState = useCallback((session) => {
     const nodeId = matchCanvasNodeForSession(nodesRef.current, session);
     if (nodeId && nodesRef.current.find(node => node.id === nodeId)?.data?.status !== "running") {
       updateNodeData(nodeId, beginNodeExecutionPatch());
@@ -206,7 +206,7 @@ export function useCanvasRunSync({
         }
 
         if (activeRunIds.has(session.runId)) {
-          applyRunningState(session, activeRunById.get(session.runId));
+          applyRunningState(session);
           attachWatcher(session);
           const nodeId = matchCanvasNodeForSession(nodesRef.current, session);
           if (nodeId) activeNodeIds.add(nodeId);
@@ -274,6 +274,7 @@ export function useCanvasRunSync({
     attachWatcher,
     cleanupWatcher,
     completeFromHistory,
+    isLocalRun,
     nodesRef,
     reconciledStaleRunIdsRef,
     runLogAppendLog,
@@ -303,11 +304,12 @@ export function useCanvasRunSync({
       }, hasRunning ? SYNC_POLL_MS : SYNC_POLL_IDLE_MS);
     };
     schedule();
+    const watchers = syncRunWatchersRef.current;
     return () => {
       window.clearTimeout(timer);
       if (syncTimerRef.current) window.clearTimeout(syncTimerRef.current);
-      for (const cleanup of syncRunWatchersRef.current.values()) cleanup();
-      syncRunWatchersRef.current.clear();
+      for (const cleanup of watchers.values()) cleanup();
+      watchers.clear();
     };
   }, [syncWithBackend, activeId]);
 

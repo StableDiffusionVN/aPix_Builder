@@ -7,7 +7,6 @@ import {
   clamp,
   cloneDefaultAdjustments,
   computeHistogram,
-  DEFAULT_CURVES,
   adjustmentsMatchPreset,
   drawCurvesCanvas,
   drawHistogram,
@@ -401,7 +400,7 @@ export function useColorAdjustments({
 
   const updateAdjustment = useCallback((key, value) => {
     setAdjustments(current => ({ ...current, [key]: value }));
-  }, []);
+  }, [setAdjustments]);
 
   const updateHsl = useCallback((channel, key, value) => {
     setAdjustments(current => ({
@@ -414,7 +413,7 @@ export function useColorAdjustments({
         }
       }
     }));
-  }, []);
+  }, [setAdjustments]);
 
   const applyPreset = useCallback((preset) => {
     const next = mergePresetAdjustments(adjustmentsRef.current, preset.adjustments);
@@ -806,7 +805,7 @@ export function useColorAdjustments({
         e.currentTarget.setPointerCapture(e.pointerId);
       }
     }
-  }, [adjustments.curves, activeCurveChannel, beginSliderDrag]);
+  }, [adjustments.curves, activeCurveChannel, beginSliderDrag, setAdjustments]);
 
   const handleCurvesPointerMove = useCallback((e) => {
     if (!draggingCurvePointRef.current || !adjustments.curves) return;
@@ -835,7 +834,7 @@ export function useColorAdjustments({
         [activeCurveChannel]: nextPoints
       }
     }));
-  }, [adjustments.curves, activeCurveChannel]);
+  }, [adjustments.curves, activeCurveChannel, setAdjustments]);
 
   const handleCurvesPointerUp = useCallback((e) => {
     if (draggingCurvePointRef.current) {

@@ -34,7 +34,6 @@ import { buildPatchedRunningHubWorkflow, buildRunningHubNodeInfoList } from "./l
 import { TEMPLATE_SCOPES } from "./lib/templateService.js";
 import {
   getWebappCallDemo,
-  getWebappNodes,
   getWorkflowJson,
   parsePromptTips,
   prepareNodeInfoList,
@@ -387,10 +386,24 @@ function summarizeCanvasProjects(store) {
     .sort((a, b) => String(b.updatedAt || "").localeCompare(String(a.updatedAt || "")));
 }
 
+function normalizeCanvasViewport(value) {
+  if (!value || typeof value !== "object") return null;
+  const x = Number(value.x);
+  const y = Number(value.y);
+  const zoom = Number(value.zoom);
+  if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(zoom)) return null;
+  if (zoom <= 0) return null;
+  return { x, y, zoom };
+}
+
+function projectViewport(project) {
+  return normalizeCanvasViewport(project?.viewport) || null;
+}
+
 async function writeCanvasProjectsStore(store) {
   const payload = normalizeCanvasProjectsStore(store);
   await mkdir(personalDataDir, { recursive: true });
-  await writeFile(canvasProjectsPath, JSON.stringify(payload, null, 2), {
+  await writeFile(canvasProjectsPath, JSON.stringify(payload), {
     encoding: "utf8",
     mode: 0o600
   });
@@ -410,6 +423,7 @@ async function handleCanvasProject(req, res, url) {
         name: active.name || "Project",
         nodes: Array.isArray(active.nodes) ? active.nodes : [],
         edges: Array.isArray(active.edges) ? active.edges : [],
+        viewport: projectViewport(active),
         projects: summarizeCanvasProjects(store)
       });
       return;
@@ -424,6 +438,9 @@ async function handleCanvasProject(req, res, url) {
       }
       active.nodes = Array.isArray(body.nodes) ? body.nodes : [];
       active.edges = Array.isArray(body.edges) ? body.edges : [];
+      if (body.viewport !== undefined) {
+        active.viewport = normalizeCanvasViewport(body.viewport);
+      }
       active.updatedAt = new Date().toISOString();
       await writeCanvasProjectsStore(store);
       send(res, 200, {
@@ -460,6 +477,7 @@ async function handleCanvasProject(req, res, url) {
       name: active.name,
       nodes: active.nodes || [],
       edges: active.edges || [],
+      viewport: projectViewport(active),
       projects: summarizeCanvasProjects(store)
     });
     return;
@@ -483,6 +501,7 @@ async function handleCanvasProject(req, res, url) {
       name,
       nodes: [],
       edges: [],
+      viewport: null,
       projects: summarizeCanvasProjects(store)
     });
     return;
@@ -525,6 +544,7 @@ async function handleCanvasProject(req, res, url) {
       name: active?.name,
       nodes: active?.nodes || [],
       edges: active?.edges || [],
+      viewport: projectViewport(active),
       projects: summarizeCanvasProjects(store)
     });
     return;
@@ -816,9 +836,20 @@ function clearQueuedBackendRuns(filter = null) {
   return removed.length;
 }
 
+function getRunLogSessionByRunId(runId) {
+  if (!runId) return null;
+  return getRunLogSessions().find(session => session.runId === runId) || null;
+}
+
+function isBackendQueueAlreadyLogged(runId) {
+  const session = getRunLogSessionByRunId(runId);
+  if (!session) return false;
+  return session.status === "queued" || session.status === "running";
+}
+
 function ensureBackendQueueLogSession(job, status = "queued") {
   if (!job?.runId) return;
-  const existing = getRunLogSessions().find(session => session.runId === job.runId);
+  const existing = getRunLogSessionByRunId(job.runId);
   if (!existing) {
     startRunLogSession(queuedJobLogJob(job), queuedJobLogMeta(job, status));
     return;
@@ -838,6 +869,7 @@ function reconcileBackendRunLogState() {
     ensureBackendQueueLogSession(backendRunQueueCurrent, "running");
   }
   for (const job of backendRunQueue) {
+    if (isBackendQueueAlreadyLogged(job.runId)) continue;
     ensureBackendQueueLogSession(job, "queued");
   }
 
@@ -877,11 +909,13 @@ async function handleRunQueueSubmit(req, res) {
       meta,
       queuedAt
     };
-    ensureBackendQueueLogSession(queued, "queued");
-    appendRunLog(runId, "queue", `Đã gửi vào hàng chờ backend: ${endpoint}`, {
-      provider: queuedJobProvider(endpoint, meta)
-    });
     backendRunQueue.push(queued);
+    if (!isBackendQueueAlreadyLogged(runId)) {
+      ensureBackendQueueLogSession(queued, "queued");
+      appendRunLog(runId, "queue", `Đã gửi vào hàng chờ backend: ${endpoint}`, {
+        provider: queuedJobProvider(endpoint, meta)
+      });
+    }
     accepted.push(queuedRunSummary(queued));
   }
   drainBackendRunQueue();
@@ -2735,7 +2769,7 @@ export async function cleanupUploads(maxAgeMs = 24 * 60 * 60 * 1000) {
     if (count > 0) {
       console.log(`[Cleanup] Cleaned up ${count} old upload file(s) in /uploads`);
     }
-  } catch (error) {
+  } catch (_error) {
     // Ignore error if directory doesn't exist yet
   }
 }

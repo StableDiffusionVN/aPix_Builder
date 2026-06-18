@@ -53,16 +53,25 @@ export function CanvasFlowPanel({
   onRun,
   onCancel,
   onClearQueue,
-  onStopAll
+  onStopAll,
+  onViewportGestureStart,
+  onViewportGestureEnd
 }) {
-  const { zoomIn, zoomOut, fitView } = useReactFlow();
+  const { zoomIn, zoomOut, fitView, getViewport } = useReactFlow();
   const { zoom } = useViewport();
   const zoomPercent = Math.round(zoom * 100);
 
-  const fitWorkflowView = useCallback(() => {
+  const fitWorkflowView = useCallback(async () => {
     const viewport = document.querySelector(".canvasWorkspace .react-flow");
-    fitCanvasWorkflowView(fitView, viewport);
-  }, [fitView]);
+    onViewportGestureStart?.();
+    try {
+      await fitCanvasWorkflowView(fitView, viewport);
+      onViewportGestureEnd?.(getViewport());
+    } catch (error) {
+      console.warn("Could not fit canvas view:", error);
+      onViewportGestureEnd?.();
+    }
+  }, [fitView, getViewport, onViewportGestureEnd, onViewportGestureStart]);
 
   useEffect(() => {
     function handleKeyDown(event) {

@@ -1,10 +1,10 @@
 import { useRef } from "react";
-import { useCanvasActions } from "./canvasContext.js";
+import { useCanvasGraph } from "./canvasContext.js";
 import { CANVAS_NODE_DEFAULT_WIDTH, CanvasNodeResizeHandles } from "./CanvasNodeResizeHandles.jsx";
 
 export function CanvasNodeFrame({ id, data, selected, className = "", bypassed = false, onContextMenu, children }) {
   const nodeRef = useRef(null);
-  const { nodes } = useCanvasActions();
+  const { nodes } = useCanvasGraph();
   const node = nodes?.find(item => item.id === id);
   const size = data?.size;
   const width = size?.width || CANVAS_NODE_DEFAULT_WIDTH;

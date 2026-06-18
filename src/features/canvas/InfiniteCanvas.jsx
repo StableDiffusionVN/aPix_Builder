@@ -10,14 +10,14 @@ import "./canvas.css";
 import { StepNode } from "./nodes/StepNode.jsx";
 import { SourceNode } from "./nodes/SourceNode.jsx";
 import { StepPalette } from "./StepPalette.jsx";
-import { CanvasActionsContext } from "./canvasContext.js";
+import { CanvasActionsContext, CanvasGraphContext } from "./canvasContext.js";
 import { useCanvasProject } from "./useCanvasProject.js";
 import { loadStepDefinition, useStepLibrary } from "./useStepLibrary.js";
 import { runCanvasNode, bypassCanvasNode, prepareCanvasNodeRunRequest } from "./canvasRunner.js";
 import { buildCanvasNodeDefaults, arePortsCompatible, STEP_KINDS, topoOrder, upstreamStepsNeedingRunAsync, upstreamStepsWithStaleFilesAsync, linkedImageInputsMissingSource, beginNodeExecutionPatch, nodeRunCachePatch, clearNodeRunCachePatch } from "./canvasModel.js";
 import { buildDefaults, flattenInputs } from "../../lib/template.js";
-import { buildRhRunAuth, getPrimaryRhApiKey, hasRhApiKey } from "../../lib/rhTokenPool.js";
-import { fitCanvasWorkflowView } from "./canvasFitView.js";
+import { getPrimaryRhApiKey, hasRhApiKey } from "../../lib/rhTokenPool.js";
+import { normalizeCanvasViewport } from "./canvasViewport.js";
 import { getSetting, setSetting } from "../../lib/appSettings.js";
 import { isTypingTarget } from "../../lib/keyboard.js";
 import { RunLogPanel } from "../../components/lazyModals.js";
@@ -28,10 +28,7 @@ import { CanvasHistoryPanel } from "./CanvasHistoryPanel.jsx";
 import { CanvasFlowPanel } from "./CanvasFlowPanel.jsx";
 import { CanvasContextMenu } from "./CanvasContextMenu.jsx";
 import {
-  buildEdgeContextMenuItems,
-  buildFieldContextMenuItems,
-  buildNodeContextMenuItems,
-  buildPreviewContextMenuItems
+  buildEdgeContextMenuItems
 } from "./canvasMenuHelpers.js";
 import { readCanvasDragPayload, shouldAcceptCanvasDrop, isCanvasDragEvent } from "./canvasDrag.js";
 import {
@@ -47,6 +44,9 @@ import {
 import { expandCanvasRunJobImageBatches } from "./canvasBatchImages.js";
 
 const nodeTypes = { step: StepNode, source: SourceNode };
+const EMPTY_INPUT_IMAGES = [];
+const NOOP = () => {};
+const NOOP_ASYNC = async () => {};
 
 function portTypeFromHandle(node, handle, direction) {
   if (!node || !handle) return null;
@@ -110,13 +110,13 @@ function InfiniteCanvasInner({
   const { library, loading, error, reload } = useStepLibrary();
   const {
     nodes, edges,
-    projects, activeId, activeName,
+    projects, activeId, activeName, viewport,
     canUndo, canRedo,
     onNodesChange, onEdgesChange, onConnect, setEdges,
-    addNode, updateNodeData, updateNodeSize, removeNode, removeEdge,
-    disconnectTargetPort, toggleNodeBypass, convertInputToSource, convertOutputToSource, clearProject,
+    addNode, updateNodeData, updateNodeSize, commitNodeResize, removeNode, removeEdge,
+    disconnectTargetPort, toggleNodeBypass, convertInputToSource, convertOutputToSource,
     switchProject, createProject, renameProject, deleteProject,
-    undoCanvas, redoCanvas
+    undoCanvas, redoCanvas, reportViewport
   } = useCanvasProject();
 
   const [activePanel, setActivePanel] = useState(null);
@@ -130,11 +130,13 @@ function InfiniteCanvasInner({
   const [spaceHeld, setSpaceHeld] = useState(false);
   const [contextMenu, setContextMenu] = useState(null);
   const [paletteDropActive, setPaletteDropActive] = useState(false);
+  const [canvasInteracting, setCanvasInteracting] = useState(false);
 
   const nodesRef = useRef(nodes);
   const edgesRef = useRef(edges);
   const reactFlowRef = useRef(null);
   const canvasWorkspaceRef = useRef(null);
+  const suppressViewportReportRef = useRef(false);
   const runLockRef = useRef(false);
   const activeRunIdRef = useRef("");
   const activeRunKindRef = useRef(null);
@@ -205,6 +207,34 @@ function InfiniteCanvasInner({
   useEffect(() => {
     setSetting("canvas.tool", canvasTool);
   }, [canvasTool]);
+
+  const applyStoredViewport = useCallback((instance, nextViewport) => {
+    const normalized = normalizeCanvasViewport(nextViewport);
+    if (!instance || !normalized) return;
+    suppressViewportReportRef.current = true;
+    instance.setViewport(normalized, { duration: 0 });
+    window.requestAnimationFrame(() => {
+      suppressViewportReportRef.current = false;
+    });
+  }, []);
+
+  useEffect(() => {
+    applyStoredViewport(reactFlowRef.current, viewport);
+  }, [activeId, applyStoredViewport, viewport]);
+
+  const handleViewportChange = useCallback((nextViewport) => {
+    if (suppressViewportReportRef.current) return;
+    reportViewport(nextViewport);
+  }, [reportViewport]);
+
+  const beginViewportGesture = useCallback(() => {
+    suppressViewportReportRef.current = true;
+  }, []);
+
+  const endViewportGesture = useCallback((nextViewport) => {
+    suppressViewportReportRef.current = false;
+    if (nextViewport) reportViewport(nextViewport);
+  }, [reportViewport]);
 
   useEffect(() => {
     function handleUndoRedo(event) {
@@ -282,7 +312,6 @@ function InfiniteCanvasInner({
     refreshRunLogSessions?.();
   }, [runLogOpen, refreshRunLogSessions]);
 
-  const rhAuth = useMemo(() => buildRhRunAuth(rhSettings), [rhSettings]);
   const rhApiKey = useMemo(() => getPrimaryRhApiKey(rhSettings), [rhSettings]);
 
   const makeRunLogger = useCallback((runId, provider) => (level, message) => {
@@ -836,9 +865,6 @@ function InfiniteCanvasInner({
     runStepInLive,
     applyStepSuccess,
     updateNodeData,
-    runLogStartSession,
-    runLogAppendLog,
-    runLogEndSession,
     refreshOutputHistory,
     syncLiveToRefs,
     resetRunningNodes
@@ -1081,6 +1107,33 @@ function InfiniteCanvasInner({
       }])
   ), [outputHistory]);
 
+  // React Flow creates a new node object on every drag frame. Keep the graph
+  // context identity stable while only positions/selection change so memoized
+  // custom nodes that are not being dragged do not render again.
+  const graphContextRef = useRef({ nodes, edges, nodeData: new Map() });
+  const previousGraph = graphContextRef.current;
+  const graphDataChanged = previousGraph.edges !== edges
+    || previousGraph.nodes.length !== nodes.length
+    || nodes.some(node => previousGraph.nodeData.get(node.id) !== node.data);
+  if (graphDataChanged) {
+    graphContextRef.current = {
+      nodes,
+      edges,
+      nodeData: new Map(nodes.map(node => [node.id, node.data]))
+    };
+  } else {
+    // Consumers that render for their own React Flow prop change still read
+    // the latest positions without broadcasting a context update to all nodes.
+    previousGraph.nodes = nodes;
+  }
+  const graphContextValue = graphContextRef.current;
+
+  const renderedEdges = useMemo(() => edges.map(edge => (
+    edge.type === "default" && edge.animated === false
+      ? edge
+      : { ...edge, type: "default", animated: false }
+  )), [edges]);
+
   const connectedInputs = useCallback((id) => {
     const map = {};
     for (const edge of edgesRef.current) {
@@ -1104,6 +1157,7 @@ function InfiniteCanvasInner({
   const actions = useMemo(() => ({
     updateNodeValues,
     updateNodeSize,
+    commitNodeResize,
     runNode,
     removeNode,
     removeEdge,
@@ -1117,23 +1171,21 @@ function InfiniteCanvasInner({
     graphRunning: canvasRunning,
     queuedNodeCounts,
     outputMetadataByRunId,
-    nodes,
-    edges,
-    inputImages: inputImages || [],
-    refreshInputImages: refreshInputImages || (async () => {}),
-    updateInputImages: updateInputImages || (() => {})
+    inputImages: inputImages || EMPTY_INPUT_IMAGES,
+    refreshInputImages: refreshInputImages || NOOP_ASYNC,
+    updateInputImages: updateInputImages || NOOP
   }), [
-    updateNodeValues, updateNodeSize, runNode, removeNode, removeEdge,
+    updateNodeValues, updateNodeSize, commitNodeResize, runNode, removeNode, removeEdge,
     disconnectTargetPort, toggleNodeBypass, convertInputToSource, convertOutputToSource,
     openContextMenu, closeContextMenu, connectedInputs, canvasRunning, queuedNodeCounts,
-    outputMetadataByRunId, nodes, edges,
+    outputMetadataByRunId,
     inputImages, refreshInputImages, updateInputImages
   ]);
 
   const flyoutTitle = activePanel ? CANVAS_PANELS[activePanel]?.label : "";
 
   return (
-    <div className="canvasView">
+    <div className={`canvasView${canvasInteracting ? " is-interacting" : ""}`}>
       <div className="canvasStage">
         <div
           ref={canvasWorkspaceRef}
@@ -1191,23 +1243,19 @@ function InfiniteCanvasInner({
           ) : null}
 
           <CanvasActionsContext.Provider value={actions}>
+            <CanvasGraphContext.Provider value={graphContextValue}>
             <ReactFlow
               className={`canvasTool-${activeCanvasTool}`}
               nodes={nodes}
-              edges={edges.map(edge => ({ ...edge, type: "default", animated: false }))}
+              edges={renderedEdges}
               nodeTypes={nodeTypes}
               onInit={instance => {
                 reactFlowRef.current = instance;
-                requestAnimationFrame(() => {
-                  requestAnimationFrame(() => {
-                    fitCanvasWorkflowView(
-                      instance.fitView.bind(instance),
-                      canvasWorkspaceRef.current
-                    );
-                  });
-                });
+                applyStoredViewport(instance, viewport);
               }}
               onNodesChange={onNodesChange}
+              onNodeDragStart={() => setCanvasInteracting(true)}
+              onNodeDragStop={() => setCanvasInteracting(false)}
               onEdgesChange={onEdgesChange}
               onConnect={onConnect}
               onReconnect={(oldEdge, newConnection) => {
@@ -1222,11 +1270,14 @@ function InfiniteCanvasInner({
                 removeEdge(edge.id);
               }}
               onPaneClick={closeContextMenu}
+              onViewportChange={handleViewportChange}
+              onMoveStart={() => setCanvasInteracting(true)}
+              onMoveEnd={() => setCanvasInteracting(false)}
               isValidConnection={isValidConnection}
               minZoom={0.1}
               maxZoom={30}
               zoomOnScroll
-              doubleClickZoom={false}
+              zoomOnDoubleClick={false}
               connectionRadius={24}
               panOnDrag
               selectionOnDrag={false}
@@ -1281,8 +1332,11 @@ function InfiniteCanvasInner({
                 onCancel={cancelCanvasRun}
                 onClearQueue={clearCanvasQueue}
                 onStopAll={stopAllCanvasRuns}
+                onViewportGestureStart={beginViewportGesture}
+                onViewportGestureEnd={endViewportGesture}
               />
             </ReactFlow>
+            </CanvasGraphContext.Provider>
           </CanvasActionsContext.Provider>
         </div>
 

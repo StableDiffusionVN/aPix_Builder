@@ -1,6 +1,6 @@
 import { useCallback, useRef } from "react";
 import { useReactFlow } from "@xyflow/react";
-import { useCanvasActions } from "./canvasContext.js";
+import { useCanvasActions, useCanvasGraph } from "./canvasContext.js";
 import { estimateCanvasNodeMinHeight } from "./canvasNodeLayout.js";
 
 export const CANVAS_NODE_DEFAULT_WIDTH = 348;
@@ -8,7 +8,8 @@ export const CANVAS_NODE_MIN_WIDTH = 180;
 export const CANVAS_NODE_MIN_HEIGHT = 100;
 
 export function CanvasNodeResizeHandles({ nodeId, size, position, nodeRef }) {
-  const { updateNodeSize, nodes, edges } = useCanvasActions();
+  const { updateNodeSize, commitNodeResize } = useCanvasActions();
+  const { nodes, edges } = useCanvasGraph();
   const { getZoom } = useReactFlow();
   const dragRef = useRef(null);
 
@@ -60,6 +61,7 @@ export function CanvasNodeResizeHandles({ nodeId, size, position, nodeRef }) {
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onUp);
       dragRef.current = null;
+      commitNodeResize?.();
     }
 
     dragRef.current = { onMove, onUp };
@@ -67,7 +69,7 @@ export function CanvasNodeResizeHandles({ nodeId, size, position, nodeRef }) {
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
     window.addEventListener("pointercancel", onUp);
-  }, [edges, getZoom, nodeId, nodeRef, nodes, position, size, updateNodeSize]);
+  }, [commitNodeResize, edges, getZoom, nodeId, nodeRef, nodes, position, size, updateNodeSize]);
 
   return (
     <>

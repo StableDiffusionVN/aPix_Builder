@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Eye, Folder, Images, Link, Loader2, Pencil, Scissors, Upload, X } from "lucide-react";
 import { ImageEditorModal } from "./lazyModals";
@@ -188,11 +188,11 @@ export function DynamicField({
     }
   };
 
-  const refreshInputImages = async (options = {}) => {
+  const refreshInputImages = useCallback(async (options = {}) => {
     if (onRefreshInputImages) {
       await onRefreshInputImages(options);
     }
-  };
+  }, [onRefreshInputImages]);
 
   useEffect(() => {
     if (!isImageField) return undefined;
@@ -210,7 +210,7 @@ export function DynamicField({
     return () => {
       cancelled = true;
     };
-  }, [isImageField]);
+  }, [inputImages.length, isImageField, refreshInputImages]);
 
   useEffect(() => {
     if (!inputLibraryReady || !isImageField) return;
@@ -238,7 +238,7 @@ export function DynamicField({
     if (!choices.length) return;
     const defaultChoice = choices.includes(ui.value) ? ui.value : choices[0];
     if (!choices.includes(value)) onChange(defaultChoice);
-  }, [isDynamicList, dynamicKind, discovery, ui.value, value]);
+  }, [isDynamicList, dynamicKind, discovery, ui.value, value, onChange]);
 
   useEffect(() => {
     if (activeImageIndex >= selectedImages.length) {

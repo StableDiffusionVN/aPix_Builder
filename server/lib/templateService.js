@@ -170,7 +170,14 @@ export function createTemplateService({
     return {
       scope: normalizedScope,
       default: defaultTemplate?.id || "",
-      templates: templates.map(({ yamlPath, workflowPath, baseDir, scope: templateScope, ...template }) => template)
+      templates: templates.map(template => {
+        const publicTemplate = { ...template };
+        delete publicTemplate.yamlPath;
+        delete publicTemplate.workflowPath;
+        delete publicTemplate.baseDir;
+        delete publicTemplate.scope;
+        return publicTemplate;
+      })
     };
   }
 

@@ -13,7 +13,7 @@ import {
 import { useI18n } from "../i18n/I18nContext";
 import { COLOR_CHANNELS, getCurvePoint, PRESET_GROUPS, PRESETS } from "../lib/imageAdjustments";
 import { isTextEntryTarget, preventToolbarFocus } from "../lib/keyboard";
-import { ColorPickButton, ColorPickCursorOverlay } from "./colorPickUi";
+import { ColorPickButton } from "./colorPickUi";
 
 export { ColorPickButton, ColorPickCursorOverlay } from "./colorPickUi";
 

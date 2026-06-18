@@ -1,4 +1,4 @@
-import { STEP_KINDS, beginNodeExecutionPatch, nodeRunCachePatch } from "./canvasModel.js";
+import { STEP_KINDS, nodeRunCachePatch } from "./canvasModel.js";
 
 export const ACTIVE_RUN_LOG_STATUSES = new Set(["running", "queued"]);
 

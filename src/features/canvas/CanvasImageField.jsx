@@ -1,10 +1,8 @@
-import { Suspense, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Eye, Folder, Images, Link, Loader2, Pencil, Scissors, Upload, X } from "lucide-react";
-import { InputLibraryModal } from "../../components/InputLibraryModal.jsx";
 import { ImageLightboxOverlay } from "../../components/ImageLightboxOverlay.jsx";
 import { ImageEditorModal } from "../../components/lazyModals.js";
-import { MaskEditorModal } from "../../components/MaskEditorModal.jsx";
 import { ImageMaskOverlay } from "../../components/ImageMaskOverlay.jsx";
 import { useI18n } from "../../i18n/I18nContext.jsx";
 import { clearPickedFolderFiles, registerPickedFolderFiles } from "../../lib/folderFileCache.js";
@@ -21,7 +19,12 @@ import { useInputImageField } from "../../hooks/useInputImageField.js";
 import { imageDisplayUrl } from "./canvasModel.js";
 import { useCanvasActions } from "./canvasContext.js";
 
-export { imageDisplayUrl };
+const InputLibraryModal = lazy(() => import("../../components/InputLibraryModal.jsx").then(module => ({
+  default: module.InputLibraryModal
+})));
+const MaskEditorModal = lazy(() => import("../../components/MaskEditorModal.jsx").then(module => ({
+  default: module.MaskEditorModal
+})));
 
 function readCanvasImageValues(value) {
   if (readLocalFolderValue(value)) return [];
@@ -340,6 +343,8 @@ export function CanvasImageField({ label, value, onChange, onContextMenu }) {
               src={preview}
               alt={label}
               draggable="false"
+              loading="lazy"
+              decoding="async"
               onLoad={event => {
                 const { naturalWidth, naturalHeight } = event.currentTarget;
                 setPreviewSize(naturalWidth && naturalHeight
@@ -464,7 +469,7 @@ export function CanvasImageField({ label, value, onChange, onContextMenu }) {
                   title={`${index + 1}. ${imageName || t("field.chooseImage")}`}
                   aria-pressed={index === activeImageIndex}
                 >
-                  <img src={imageUrl} alt="" draggable="false" />
+                  <img src={imageUrl} alt="" draggable="false" loading="lazy" decoding="async" />
                   <span>{index + 1}</span>
                 </button>
               );
@@ -536,26 +541,30 @@ export function CanvasImageField({ label, value, onChange, onContextMenu }) {
         />
       </div>
 
-      <InputLibraryModal
-        open={libraryOpen}
-        onClose={closeInputLibrary}
-        loading={libraryLoading}
-        inputImages={inputImages}
-        favoriteInputImages={favoriteInputImages}
-        timeFilter={libraryTimeFilter}
-        onTimeFilterChange={setLibraryTimeFilter}
-        favoritesOnly={libraryFavoritesOnly}
-        onFavoritesOnlyChange={setLibraryFavoritesOnly}
-        supportsMultipleImages
-        multiSelect={libraryMultiSelect}
-        onMultiSelectChange={setLibraryMultiSelect}
-        selectedImages={selectedImages}
-        onSelectImage={selectInputImage}
-        onToggleFavorite={toggleInputFavorite}
-        onViewImage={openLightboxFromLibrary}
-        onDeleteImage={handleDeleteInputImage}
-        overlayClassName="canvasInputLibraryModal"
-      />
+      {libraryOpen ? (
+        <Suspense fallback={null}>
+          <InputLibraryModal
+            open
+            onClose={closeInputLibrary}
+            loading={libraryLoading}
+            inputImages={inputImages}
+            favoriteInputImages={favoriteInputImages}
+            timeFilter={libraryTimeFilter}
+            onTimeFilterChange={setLibraryTimeFilter}
+            favoritesOnly={libraryFavoritesOnly}
+            onFavoritesOnlyChange={setLibraryFavoritesOnly}
+            supportsMultipleImages
+            multiSelect={libraryMultiSelect}
+            onMultiSelectChange={setLibraryMultiSelect}
+            selectedImages={selectedImages}
+            onSelectImage={selectInputImage}
+            onToggleFavorite={toggleInputFavorite}
+            onViewImage={openLightboxFromLibrary}
+            onDeleteImage={handleDeleteInputImage}
+            overlayClassName="canvasInputLibraryModal"
+          />
+        </Suspense>
+      ) : null}
 
       <ImageLightboxOverlay
         open={lightboxOpen}
@@ -582,16 +591,18 @@ export function CanvasImageField({ label, value, onChange, onContextMenu }) {
       ) : null}
 
       {maskEditorOpen && preview ? createPortal(
-        <MaskEditorModal
-          source={preview}
-          initialMask={maskDataUrl}
-          title={`${label} - ${t("mask.title")}`}
-          onClose={() => setMaskEditorOpen(false)}
-          onSave={nextMask => {
-            handleSaveMask(nextMask);
-            setMaskEditorOpen(false);
-          }}
-        />,
+        <Suspense fallback={null}>
+          <MaskEditorModal
+            source={preview}
+            initialMask={maskDataUrl}
+            title={`${label} - ${t("mask.title")}`}
+            onClose={() => setMaskEditorOpen(false)}
+            onSave={nextMask => {
+              handleSaveMask(nextMask);
+              setMaskEditorOpen(false);
+            }}
+          />
+        </Suspense>,
         document.body
       ) : null}
     </div>

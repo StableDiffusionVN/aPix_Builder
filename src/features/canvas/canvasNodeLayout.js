@@ -201,7 +201,8 @@ export function normalizeOutputSplitNodes(nodes, edges) {
   return list.map(node => {
     let next = node;
     if (node.type === "step" && node.data?.detachedOutputs) {
-      const { detachedOutputs: _omit, ...rest } = node.data;
+      const rest = { ...node.data };
+      delete rest.detachedOutputs;
       next = { ...node, data: rest };
     }
     if (node.type === "source" && node.data?.passthroughFromOutput) {
@@ -209,7 +210,10 @@ export function normalizeOutputSplitNodes(nodes, edges) {
       const outputKey = node.data.passthroughOutputKey || "main";
       const linked = stepId && isStepOutputDetached(stepId, outputKey, list, edgeList);
       if (!linked || findOutputPassthroughNode(stepId, outputKey, list, edgeList)?.id !== node.id) {
-        const { passthroughFromOutput: _p, passthroughSourceNodeId: _s, passthroughOutputKey: _k, ...rest } = node.data;
+        const rest = { ...node.data };
+        delete rest.passthroughFromOutput;
+        delete rest.passthroughSourceNodeId;
+        delete rest.passthroughOutputKey;
         next = { ...node, data: rest };
       }
     }
@@ -222,7 +226,10 @@ export function normalizeOutputSplitNodes(nodes, edges) {
         edge.source === node.id && edge.target === stepId && edge.targetHandle === `in:${valueKey}`
       ));
       if (!linked) {
-        const { passthroughFromInput: _p, passthroughTargetNodeId: _t, passthroughInputValueKey: _v, ...rest } = node.data;
+        const rest = { ...node.data };
+        delete rest.passthroughFromInput;
+        delete rest.passthroughTargetNodeId;
+        delete rest.passthroughInputValueKey;
         next = { ...node, data: rest };
       }
     }

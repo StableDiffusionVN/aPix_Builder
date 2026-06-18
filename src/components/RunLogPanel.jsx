@@ -404,10 +404,15 @@ export function RunLogPanel({
     return map;
   }, [outputHistory]);
 
-  const filteredSessions = useMemo(
-    () => filterRunLogSessions(sessions, { query: searchQuery, status: statusFilter, provider: providerFilter }),
-    [sessions, searchQuery, statusFilter, providerFilter]
-  );
+  const filteredSessions = useMemo(() => {
+    const filtered = filterRunLogSessions(sessions, {
+      query: searchQuery,
+      status: statusFilter,
+      provider: providerFilter
+    });
+    if (statusFilter === "queued") return filtered;
+    return filtered.filter(session => session.status !== "queued");
+  }, [sessions, searchQuery, statusFilter, providerFilter]);
 
   const totalRhCoins = useMemo(() => sumRhCoins(sessions), [sessions]);
 
@@ -663,6 +668,7 @@ export function RunLogPanel({
     [queueRunKind, sessions]
   );
   const queueCount = queueEntries.length;
+  const showQueuePanel = queueCount > 0 && statusFilter !== "queued";
   const hasLiveRunning = running || runningSessions.length > 0;
   const liveRunId = activeRunId || runningSessions[0]?.runId || "";
   const liveStatus = running
@@ -773,7 +779,7 @@ export function RunLogPanel({
             {liveRunId ? <span className="logLiveMeta">run={formatRunId(liveRunId)}</span> : null}
           </div>
 
-          {queueCount ? (
+          {showQueuePanel ? (
             <div className="logQueue">
               {queueEntries.map((entry, index) => (
                 <div key={entry.id || `${index}`} className="logQueueLine">

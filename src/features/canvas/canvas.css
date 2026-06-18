@@ -973,6 +973,20 @@
   color: var(--text);
 }
 
+/* Expensive paint effects are visually irrelevant while the viewport or a
+   node is moving. Removing them during interaction keeps compositor work low. */
+.canvasView.is-interacting .canvasNode,
+.canvasView.is-interacting .react-flow__edge-path {
+  box-shadow: none;
+  filter: none;
+}
+
+.canvasView.is-interacting .canvasDock,
+.canvasView.is-interacting .canvasFlowPanel {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
 .canvasNode.hasCustomHeight {
   min-height: 100px;
   overflow: clip;
@@ -1418,6 +1432,10 @@
   background: var(--surface-2);
 }
 
+.canvasImageThumb:has(.canvasNodePreview.isEmbedded) {
+  border-radius: 0;
+}
+
 .canvasImageThumb:hover .multiImageActions,
 .canvasImageThumb:focus-within .multiImageActions {
   opacity: 1;
@@ -1561,6 +1579,7 @@
   max-height: 100%;
   width: auto;
   height: auto;
+  border-radius: 0;
 }
 
 .canvasImageSizeBadge {
@@ -1653,7 +1672,7 @@
   width: auto;
   height: auto;
   object-fit: contain;
-  border-radius: 6px;
+  border-radius: 0;
 }
 
 .canvasNode:not(.hasCustomHeight) .canvasNodePreviewStage {

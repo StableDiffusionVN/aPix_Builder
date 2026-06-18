@@ -11,6 +11,8 @@ function PreviewImage({ src, alt, className = "", onSize }) {
       src={src}
       alt={alt}
       draggable="false"
+      loading="lazy"
+      decoding="async"
       className={className}
       onLoad={event => {
         const { naturalWidth, naturalHeight } = event.currentTarget;

@@ -7,6 +7,7 @@ import { createContext, useContext } from "react";
 export const CanvasActionsContext = createContext({
   updateNodeValues: () => {},
   updateNodeSize: () => {},
+  commitNodeResize: () => {},
   runNode: () => {},
   removeNode: () => {},
   removeEdge: () => {},
@@ -20,13 +21,17 @@ export const CanvasActionsContext = createContext({
   graphRunning: false,
   queuedNodeCounts: {},
   outputMetadataByRunId: {},
-  nodes: [],
-  edges: [],
   inputImages: [],
   refreshInputImages: async () => {},
   updateInputImages: () => {}
 });
 
+export const CanvasGraphContext = createContext({ nodes: [], edges: [] });
+
 export function useCanvasActions() {
   return useContext(CanvasActionsContext);
+}
+
+export function useCanvasGraph() {
+  return useContext(CanvasGraphContext);
 }

@@ -233,6 +233,9 @@ export function MaskEditorModal({ source, initialMask, title = "Tô Mask", onClo
     img.onerror = () => setReady(true);
     img.src = source;
     return () => { cancelled = true; };
+  // Initialization must only follow a source/mask change. resetHistory and
+  // maskColor are deliberately sampled when that image finishes loading.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [source, initialMask]);
 
   useEffect(() => {
@@ -304,6 +307,9 @@ export function MaskEditorModal({ source, initialMask, title = "Tô Mask", onClo
       window.removeEventListener("keydown", onKeyDown, true);
       window.removeEventListener("keyup", onKeyUp, true);
     };
+  // Keyboard handlers intentionally capture the current editor state; helper
+  // functions are recreated each render and would force listener churn.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [historyIndex, maskColor, onClose, penAnchors, penClosed]);
 
 
@@ -502,14 +508,6 @@ export function MaskEditorModal({ source, initialMask, title = "Tô Mask", onClo
     ctx.fill();
     ctx.restore();
     commitHistory();
-  }
-
-  function updatePenAnchor(index, updater) {
-    setPenAnchors(current => {
-      const next = cloneAnchors(current);
-      next[index] = updater(next[index], next);
-      return next;
-    });
   }
 
   function handlePenPointerDown(event) {

@@ -4,6 +4,7 @@ import { clearNodeRunCachePatch, stripRhDefaultImages, getNodeRunCache, buildNod
 import { resolveFieldValueForSource, resolveOutputValueForSource } from "./canvasMenuHelpers.js";
 import { CANVAS_NODE_DEFAULT_WIDTH } from "./CanvasNodeResizeHandles.jsx";
 import { compactStepNodeSize, growStepNodesToFit, isStepOutputDetached, normalizeOutputSplitNodes, reconcileOutputSplitOnEdgeRemove, restoreInputSourceOnRemove, restoreOutputPassthroughOnRemove } from "./canvasNodeLayout.js";
+import { canvasViewportsEqual, normalizeCanvasViewport } from "./canvasViewport.js";
 
 const CANVAS_HISTORY_LIMIT = 80;
 
@@ -92,19 +93,20 @@ async function postCanvasProject(path, body) {
   return data;
 }
 
-function applyProjectPayload(data, setState) {
+function applyProjectPayload(data, applyState) {
   const edges = Array.isArray(data.edges) ? data.edges : [];
   const nodes = normalizeOutputSplitNodes(
     (Array.isArray(data.nodes) ? data.nodes : [])
       .map(node => normalizeNodeRuntime(normalizeNodePorts(normalizeNodeRunCache(stripRhDefaultImages(node))))),
     edges
   );
-  setState({
+  applyState({
     activeId: data.activeId || "",
     activeName: data.name || "Project",
     projects: Array.isArray(data.projects) ? data.projects : [],
     nodes,
-    edges
+    edges,
+    viewport: normalizeCanvasViewport(data.viewport)
   });
 }
 
@@ -114,14 +116,18 @@ export function useCanvasProject() {
   const [projects, setProjects] = useState([]);
   const [activeId, setActiveId] = useState("");
   const [activeName, setActiveName] = useState("Project");
+  const [viewport, setViewport] = useState(null);
   const [loaded, setLoaded] = useState(false);
   const [historyAvailability, setHistoryAvailability] = useState({ canUndo: false, canRedo: false });
   const persistTimer = useRef(null);
   const persistEnabled = useRef(false);
+  const viewportRef = useRef(null);
   const nodesRef = useRef(nodes);
   const edgesRef = useRef(edges);
   const historyRef = useRef({ past: [], future: [] });
   const dragStartSnapshotRef = useRef(null);
+  const resizeStartSnapshotRef = useRef(null);
+  const interactionActiveRef = useRef(false);
 
   useEffect(() => { nodesRef.current = nodes; }, [nodes]);
   useEffect(() => { edgesRef.current = edges; }, [edges]);
@@ -137,6 +143,8 @@ export function useCanvasProject() {
   const resetHistory = useCallback(() => {
     historyRef.current = { past: [], future: [] };
     dragStartSnapshotRef.current = null;
+    resizeStartSnapshotRef.current = null;
+    interactionActiveRef.current = false;
     publishHistoryAvailability();
   }, [publishHistoryAvailability]);
 
@@ -211,6 +219,7 @@ export function useCanvasProject() {
   // Auto-grow fixed-height step nodes when their content (image input, output
   // preview, split state, error row…) needs more room than the current height.
   useEffect(() => {
+    if (interactionActiveRef.current) return;
     const { nodes: grown, changed } = growStepNodesToFit(nodes, edges);
     if (changed) setNodes(grown, { history: false });
   }, [nodes, edges, setNodes]);
@@ -219,10 +228,12 @@ export function useCanvasProject() {
     const response = await fetch("/api/canvas-project");
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
-    applyProjectPayload(data, ({ activeId: id, activeName: name, projects: list, nodes: nextNodes, edges: nextEdges }) => {
+    applyProjectPayload(data, ({ activeId: id, activeName: name, projects: list, nodes: nextNodes, edges: nextEdges, viewport: nextViewport }) => {
       setActiveId(id);
       setActiveName(name);
       setProjects(list);
+      viewportRef.current = nextViewport;
+      setViewport(nextViewport);
       applyCanvasState(nextNodes, nextEdges, { history: false });
       resetHistory();
     });
@@ -254,12 +265,14 @@ export function useCanvasProject() {
     if (!loaded || !persistEnabled.current) return undefined;
     if (persistTimer.current) window.clearTimeout(persistTimer.current);
     persistTimer.current = window.setTimeout(() => {
+      if (interactionActiveRef.current) return;
       fetch("/api/canvas-project", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           nodes: nodes.map(serializeNode),
-          edges
+          edges,
+          viewport: viewportRef.current
         })
       })
         .then(res => res.json())
@@ -273,13 +286,22 @@ export function useCanvasProject() {
     return () => {
       if (persistTimer.current) window.clearTimeout(persistTimer.current);
     };
-  }, [nodes, edges, loaded]);
+  }, [nodes, edges, viewport, loaded]);
+
+  const reportViewport = useCallback((nextViewport) => {
+    const normalized = normalizeCanvasViewport(nextViewport);
+    if (canvasViewportsEqual(viewportRef.current, normalized)) return;
+    viewportRef.current = normalized;
+    setViewport(normalized);
+  }, []);
 
   const onNodesChange = useCallback((changes) => {
     const currentNodes = nodesRef.current;
     const hasUndoableChange = changes.some(change => change.type !== "select" && change.type !== "dimensions");
     const hasDraggingPosition = changes.some(change => change.type === "position" && change.dragging);
     const hasDragEndPosition = changes.some(change => change.type === "position" && change.dragging === false);
+
+    if (hasDraggingPosition) interactionActiveRef.current = true;
 
     if (hasDraggingPosition && !dragStartSnapshotRef.current) {
       dragStartSnapshotRef.current = currentSnapshot();
@@ -301,11 +323,13 @@ export function useCanvasProject() {
     if (!removedOutputIds.length && !removedInputIds.length) {
       const nextNodes = applyNodeChanges(changes, currentNodes);
       if (hasDragEndPosition && dragStartSnapshotRef.current) {
+        interactionActiveRef.current = false;
         pushHistorySnapshot(dragStartSnapshotRef.current);
         dragStartSnapshotRef.current = null;
         applyCanvasState(nextNodes, edgesRef.current, { history: false });
         return;
       }
+      if (hasDragEndPosition) interactionActiveRef.current = false;
       applyCanvasState(nextNodes, edgesRef.current, {
         history: hasUndoableChange && !hasDraggingPosition
       });
@@ -387,6 +411,10 @@ export function useCanvasProject() {
   }, [setNodes]);
 
   const updateNodeSize = useCallback((id, { width, height, position }) => {
+    if (!resizeStartSnapshotRef.current) {
+      resizeStartSnapshotRef.current = currentSnapshot();
+    }
+    interactionActiveRef.current = true;
     setNodes(current => current.map(node => {
       if (node.id !== id) return node;
       return {
@@ -399,8 +427,17 @@ export function useCanvasProject() {
           size: { width, height }
         }
       };
-    }));
-  }, [setNodes]);
+    }), { history: false });
+  }, [currentSnapshot, setNodes]);
+
+  const commitNodeResize = useCallback(() => {
+    interactionActiveRef.current = false;
+    if (!resizeStartSnapshotRef.current) return;
+    pushHistorySnapshot(resizeStartSnapshotRef.current);
+    resizeStartSnapshotRef.current = null;
+    // Trigger the debounced persistence effect after the transient resize.
+    rawSetNodes(current => [...current]);
+  }, [pushHistorySnapshot]);
 
   const removeNode = useCallback((id) => {
     const restoredOutput = restoreOutputPassthroughOnRemove(nodesRef.current, edgesRef.current, id);
@@ -572,10 +609,12 @@ export function useCanvasProject() {
   const switchProject = useCallback(async (id) => {
     persistEnabled.current = false;
     const data = await postCanvasProject("/api/canvas-project/switch", { id });
-    applyProjectPayload(data, ({ activeId: nextId, activeName: name, projects: list, nodes: nextNodes, edges: nextEdges }) => {
+    applyProjectPayload(data, ({ activeId: nextId, activeName: name, projects: list, nodes: nextNodes, edges: nextEdges, viewport: nextViewport }) => {
       setActiveId(nextId);
       setActiveName(name);
       setProjects(list);
+      viewportRef.current = nextViewport;
+      setViewport(nextViewport);
       applyCanvasState(nextNodes, nextEdges, { history: false });
       resetHistory();
     });
@@ -585,10 +624,12 @@ export function useCanvasProject() {
   const createProject = useCallback(async (name) => {
     persistEnabled.current = false;
     const data = await postCanvasProject("/api/canvas-project/create", { name });
-    applyProjectPayload(data, ({ activeId: nextId, activeName: nextName, projects: list, nodes: nextNodes, edges: nextEdges }) => {
+    applyProjectPayload(data, ({ activeId: nextId, activeName: nextName, projects: list, nodes: nextNodes, edges: nextEdges, viewport: nextViewport }) => {
       setActiveId(nextId);
       setActiveName(nextName);
       setProjects(list);
+      viewportRef.current = nextViewport;
+      setViewport(nextViewport);
       applyCanvasState(nextNodes, nextEdges, { history: false });
       resetHistory();
     });
@@ -604,10 +645,12 @@ export function useCanvasProject() {
   const deleteProject = useCallback(async (id) => {
     persistEnabled.current = false;
     const data = await postCanvasProject("/api/canvas-project/delete", { id });
-    applyProjectPayload(data, ({ activeId: nextId, activeName: name, projects: list, nodes: nextNodes, edges: nextEdges }) => {
+    applyProjectPayload(data, ({ activeId: nextId, activeName: name, projects: list, nodes: nextNodes, edges: nextEdges, viewport: nextViewport }) => {
       setActiveId(nextId);
       setActiveName(name);
       setProjects(list);
+      viewportRef.current = nextViewport;
+      setViewport(nextViewport);
       applyCanvasState(nextNodes, nextEdges, { history: false });
       resetHistory();
     });
@@ -616,14 +659,15 @@ export function useCanvasProject() {
 
   return {
     nodes, edges, loaded,
-    projects, activeId, activeName,
+    projects, activeId, activeName, viewport,
     canUndo: historyAvailability.canUndo,
     canRedo: historyAvailability.canRedo,
     setNodes, setEdges,
     onNodesChange, onEdgesChange, onConnect,
-    addNode, updateNodeData, updateNodeSize, removeNode, removeEdge,
+    addNode, updateNodeData, updateNodeSize, commitNodeResize, removeNode, removeEdge,
     disconnectTargetPort, toggleNodeBypass, convertInputToSource, convertOutputToSource, clearProject,
     undoCanvas, redoCanvas,
-    switchProject, createProject, renameProject, deleteProject
+    switchProject, createProject, renameProject, deleteProject,
+    reportViewport
   };
 }

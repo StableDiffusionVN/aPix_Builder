@@ -12,7 +12,7 @@ import {
   resolveEffectiveNodeOutputUrl,
   withImageCacheBust
 } from "../canvasModel.js";
-import { useCanvasActions } from "../canvasContext.js";
+import { useCanvasActions, useCanvasGraph } from "../canvasContext.js";
 import { handleNodeBodyWheel } from "../canvasWheel.js";
 import { formatOutputTimingLabel } from "../../../lib/runLog.js";
 
@@ -31,10 +31,9 @@ function SourceNodeComponent({ id, data, selected }) {
     removeNode,
     removeEdge,
     openContextMenu,
-    outputMetadataByRunId,
-    nodes,
-    edges
+    outputMetadataByRunId
   } = useCanvasActions();
+  const { nodes, edges } = useCanvasGraph();
   const sourceType = data.sourceType || data.port?.type || "any";
   const uiType = String(data.port?.uiType || "").toLowerCase();
   const hasChoices = Boolean(data.port?.choices?.length);

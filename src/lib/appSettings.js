@@ -53,6 +53,22 @@ function createSettingsStore() {
 
 const store = createSettingsStore();
 
+function createSensitiveSnapshot() {
+  if (import.meta.hot?.data?.apixSensitiveSnapshot) {
+    return import.meta.hot.data.apixSensitiveSnapshot;
+  }
+  const snapshot = {
+    runningHub: null,
+    connection: null
+  };
+  if (import.meta.hot) {
+    import.meta.hot.data.apixSensitiveSnapshot = snapshot;
+  }
+  return snapshot;
+}
+
+const sensitiveSnapshot = createSensitiveSnapshot();
+
 function isObject(value) {
   return value && typeof value === "object" && !Array.isArray(value);
 }
@@ -186,6 +202,103 @@ async function migrateLegacyFileStores() {
   });
 }
 
+export function hasRhStoredSecrets(runningHub) {
+  if (!runningHub || typeof runningHub !== "object") return false;
+  if (String(runningHub.apiKey || "").trim()) return true;
+  return (runningHub.tokens || []).some(token => String(token?.apiKey || "").trim());
+}
+
+function hasStoredConnectionServers(connection) {
+  return Array.isArray(connection?.servers) && connection.servers.length > 0;
+}
+
+function hasNonDefaultComfyAddress(connection) {
+  const address = String(connection?.comfyAddress || "").trim();
+  return Boolean(address) && address !== DEFAULT_SETTINGS.connection.comfyAddress;
+}
+
+export function preserveRhSecrets(clientRh = {}, referenceRh = {}) {
+  if (hasRhStoredSecrets(clientRh)) return clientRh;
+  if (!hasRhStoredSecrets(referenceRh)) return clientRh;
+
+  const client = structuredClone(clientRh);
+  const reference = referenceRh || {};
+  const refTokensById = new Map((reference.tokens || []).map(token => [token.id, token]));
+  const refTokens = (reference.tokens || []).filter(token => String(token?.apiKey || "").trim());
+
+  client.tokens = (client.tokens || []).map((token, index) => {
+    if (String(token?.apiKey || "").trim()) return token;
+    const refToken = refTokensById.get(token.id) || refTokens[index];
+    if (refToken?.apiKey?.trim()) {
+      return { ...token, apiKey: refToken.apiKey };
+    }
+    return token;
+  });
+
+  if (!hasRhStoredSecrets({ ...client, apiKey: client.apiKey }) && refTokens.length) {
+    client.tokens = structuredClone(refTokens);
+    client.apiKey = String(reference.apiKey || refTokens[0]?.apiKey || "").trim();
+  }
+
+  const refLegacyKey = String(reference.apiKey || "").trim();
+  if (!String(client.apiKey || "").trim() && refLegacyKey) {
+    client.apiKey = refLegacyKey;
+  }
+  return client;
+}
+
+export function preserveConnectionSecrets(clientConn = {}, referenceConn = {}) {
+  const client = structuredClone(clientConn || {});
+  const reference = referenceConn || {};
+  const clientServers = Array.isArray(client.servers) ? client.servers : [];
+  const referenceServers = Array.isArray(reference.servers) ? reference.servers : [];
+
+  if (!clientServers.length && referenceServers.length) {
+    client.servers = structuredClone(referenceServers);
+  }
+
+  const clientAddr = String(client.comfyAddress || "").trim();
+  const referenceAddr = String(reference.comfyAddress || "").trim();
+  const clientIsDefault = !clientAddr || clientAddr === DEFAULT_SETTINGS.connection.comfyAddress;
+
+  if (clientIsDefault && referenceAddr && referenceAddr !== DEFAULT_SETTINGS.connection.comfyAddress) {
+    client.comfyAddress = referenceAddr;
+  }
+
+  return client;
+}
+
+function rememberSensitiveSettings(settings) {
+  if (!settings || typeof settings !== "object") return;
+  if (hasRhStoredSecrets(settings.runningHub)) {
+    sensitiveSnapshot.runningHub = structuredClone(settings.runningHub);
+  }
+  if (hasStoredConnectionServers(settings.connection) || hasNonDefaultComfyAddress(settings.connection)) {
+    sensitiveSnapshot.connection = structuredClone(settings.connection);
+  }
+}
+
+function applySensitivePreserve(snapshot) {
+  const preservedRh = sensitiveSnapshot.runningHub
+    ? preserveRhSecrets(snapshot.runningHub, sensitiveSnapshot.runningHub)
+    : snapshot.runningHub;
+  const preservedConn = sensitiveSnapshot.connection
+    ? preserveConnectionSecrets(snapshot.connection, sensitiveSnapshot.connection)
+    : snapshot.connection;
+
+  const rhChanged = preservedRh !== snapshot.runningHub;
+  const connChanged = preservedConn !== snapshot.connection;
+  if (!rhChanged && !connChanged) return false;
+
+  snapshot.runningHub = preservedRh;
+  snapshot.connection = preservedConn;
+  store.settings = mergeDeep(store.settings, {
+    runningHub: preservedRh,
+    connection: preservedConn
+  });
+  return true;
+}
+
 async function migrateCanvasProjectOffSettings(project) {
   if (!project || typeof project !== "object") return;
   const nodes = Array.isArray(project.nodes) ? project.nodes : [];
@@ -205,6 +318,7 @@ async function migrateCanvasProjectOffSettings(project) {
 async function persistSettings() {
   if (!store.ready || !store.loadedFromServer) return store.persistQueue;
   const snapshot = structuredClone(store.settings);
+  applySensitivePreserve(snapshot);
   store.persistQueue = store.persistQueue
     .catch(() => {})
     .then(async () => {
@@ -214,6 +328,7 @@ async function persistSettings() {
         body: JSON.stringify({ settings: snapshot })
       });
       if (!response.ok) throw new Error(`Could not save app settings: HTTP ${response.status}`);
+      rememberSensitiveSettings(snapshot);
     })
     .catch(error => console.error(error));
   return store.persistQueue;
@@ -233,11 +348,12 @@ export async function initializeAppSettings() {
     if (serverSettings.canvas?.project) {
       strippedCanvasKey = true;
       await migrateCanvasProjectOffSettings(serverSettings.canvas.project);
-      const { canvas, ...rest } = serverSettings;
-      serverSettings = rest;
+      serverSettings = { ...serverSettings };
+      delete serverSettings.canvas;
     }
     store.settings = mergeDeep(DEFAULT_SETTINGS, serverSettings);
     store.loadedFromServer = true;
+    rememberSensitiveSettings(store.settings);
   } catch (error) {
     console.error("Could not load app settings:", error);
     if (!store.loadedFromServer) {
@@ -289,5 +405,6 @@ export function setSetting(path, value) {
   }
   target[keys.at(-1)] = value;
   store.settings = next;
+  rememberSensitiveSettings(store.settings);
   void persistSettings();
 }

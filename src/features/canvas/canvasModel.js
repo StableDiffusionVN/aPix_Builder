@@ -151,9 +151,11 @@ export function topoOrder(nodes, edges) {
   }
   const queue = ids.filter(id => (indegree.get(id) || 0) === 0);
   const ordered = [];
-  while (queue.length) {
-    const id = queue.shift();
+  const orderedSet = new Set();
+  for (let queueIndex = 0; queueIndex < queue.length; queueIndex += 1) {
+    const id = queue[queueIndex];
     ordered.push(id);
+    orderedSet.add(id);
     for (const next of adjacency.get(id) || []) {
       indegree.set(next, indegree.get(next) - 1);
       if (indegree.get(next) === 0) queue.push(next);
@@ -161,7 +163,7 @@ export function topoOrder(nodes, edges) {
   }
   // Append any nodes left out due to cycles, preserving order.
   for (const id of ids) {
-    if (!ordered.includes(id)) ordered.push(id);
+    if (!orderedSet.has(id)) ordered.push(id);
   }
   return ordered;
 }
@@ -539,17 +541,23 @@ export function findNodeInputImageUrl(node, nodes, edges) {
 /** All step node ids downstream of a source (BFS). */
 export function downstreamStepIds(sourceId, edges, nodes) {
   const stepIds = new Set(nodes.filter(node => node.type === "step").map(node => node.id));
+  const outgoingBySource = new Map();
+  for (const edge of edges) {
+    const outgoing = outgoingBySource.get(edge.source);
+    if (outgoing) outgoing.push(edge.target);
+    else outgoingBySource.set(edge.source, [edge.target]);
+  }
   const visited = new Set();
   const queue = [sourceId];
   const result = [];
-  while (queue.length) {
-    const id = queue.shift();
+  for (let queueIndex = 0; queueIndex < queue.length; queueIndex += 1) {
+    const id = queue[queueIndex];
     if (visited.has(id)) continue;
     visited.add(id);
-    for (const edge of edges) {
-      if (edge.source !== id || !stepIds.has(edge.target) || visited.has(edge.target)) continue;
-      result.push(edge.target);
-      queue.push(edge.target);
+    for (const target of outgoingBySource.get(id) || []) {
+      if (!stepIds.has(target) || visited.has(target)) continue;
+      result.push(target);
+      queue.push(target);
     }
   }
   return result;

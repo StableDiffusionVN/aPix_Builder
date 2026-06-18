@@ -96,15 +96,15 @@ export function useRunningHub() {
     savedWebappsRef.current = savedWebapps;
   }, [savedWebapps]);
 
-  const skipRhPersistRef = useRef(true);
-  useEffect(() => {
-    if (skipRhPersistRef.current) {
-      skipRhPersistRef.current = false;
-      return;
-    }
-    if (!isSettingsReady()) return;
-    setSetting("runningHub", settings);
-  }, [settings]);
+  const updateSettings = useCallback((patch) => {
+    setSettings(current => {
+      const next = syncPrimaryApiKey({ ...current, ...patch });
+      if (isSettingsReady()) {
+        setSetting("runningHub", next);
+      }
+      return next;
+    });
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -180,10 +180,6 @@ export function useRunningHub() {
     return persisted;
   }, []);
 
-  const updateSettings = useCallback((patch) => {
-    setSettings(current => syncPrimaryApiKey({ ...current, ...patch }));
-  }, []);
-
   const restoreNodes = useCallback((nextNodes = []) => {
     setNodes(Array.isArray(nextNodes) ? nextNodes : []);
     setNodesError("");
@@ -254,7 +250,7 @@ export function useRunningHub() {
     } finally {
       setNodesLoading(false);
     }
-  }, [locale, settings, settings.webappId, t]);
+  }, [locale, settings, t]);
 
   const saveCurrentWebapp = useCallback(async () => {
     if (!savedAppsReady) {

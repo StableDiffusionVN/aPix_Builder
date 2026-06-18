@@ -12,7 +12,7 @@ import { CanvasNodeComparePreview } from "../CanvasNodeComparePreview.jsx";
 import { CanvasNodeFrame } from "../CanvasNodeFrame.jsx";
 import { isStepOutputDetached } from "../canvasNodeLayout.js";
 import { buildFieldContextMenuItems, buildNodeContextMenuItems, buildPreviewContextMenuItems } from "../canvasMenuHelpers.js";
-import { useCanvasActions } from "../canvasContext.js";
+import { useCanvasActions, useCanvasGraph } from "../canvasContext.js";
 import { handleNodeBodyWheel } from "../canvasWheel.js";
 import { formatOutputTimingLabel } from "../../../lib/runLog.js";
 
@@ -43,10 +43,9 @@ function StepNodeComponent({ id, data, selected }) {
     connectedInputs,
     graphRunning,
     queuedNodeCounts,
-    outputMetadataByRunId,
-    nodes,
-    edges
+    outputMetadataByRunId
   } = useCanvasActions();
+  const { nodes, edges } = useCanvasGraph();
   const badge = KIND_BADGE[data.kind] || { label: data.kind, className: "" };
   const connected = connectedInputs(id);
   const inputs = data.ports?.inputs || [];

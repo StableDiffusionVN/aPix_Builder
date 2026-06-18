@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Box,
   Dices,
@@ -285,8 +285,8 @@ function InputDetailPanel({ row, nodes, fieldTypes, onUpdate, onDelete }) {
   );
 }
 
-function SubInputEditor({ subRow, nodes, workflow, fieldTypes, onUpdate, onDelete }) {
-  const { locale, t } = useI18n();  const selectedNode = nodes.find(node => node.id === subRow.nodeId);
+function SubInputEditor({ subRow, nodes, fieldTypes, onUpdate, onDelete }) {
+  const { t } = useI18n();  const selectedNode = nodes.find(node => node.id === subRow.nodeId);
   return (
     <div className="subInputEditorCard">
       <div className="subInputEditorHeader">
@@ -423,7 +423,7 @@ function SubInputEditor({ subRow, nodes, workflow, fieldTypes, onUpdate, onDelet
 }
 
 function MenuSubDetailPanel({ row, nodes, workflow, fieldTypes, onUpdate, onDelete, onUpdateSubInput, onAddSubInput, onDeleteSubInput }) {
-  const { locale, t } = useI18n();  const menuOpts = menuOptsFromRow(row);
+  const { t } = useI18n();  const menuOpts = menuOptsFromRow(row);
   const parsedChoices = parseMenuChoices(parseChoicesText(row.choicesText), menuOpts);
   const [activeChoice, setActiveChoice] = useState(parsedChoices[0]?.value || "");
 
@@ -890,13 +890,12 @@ function templateIdFromFile(file) {
 export function TemplateEditorModal({
   mode = "local",
   selectedTemplate,
-  discovery,
   apiKey = "",
   onClose,
   onSaved
 }) {
   const { locale, t } = useI18n();
-  const l = (vi, en) => locale === "vi" ? vi : en;
+  const l = useCallback((vi, en) => locale === "vi" ? vi : en, [locale]);
   const isRhWf = mode === "runninghub-wf";
   const fieldTypes = editorFieldTypes(mode);
   const apiScope = isRhWf ? "runninghub-wf" : "local";
@@ -965,7 +964,7 @@ export function TemplateEditorModal({
     return () => {
       cancelled = true;
     };
-  }, [selectedTemplate, apiScope, isRhWf]);
+  }, [selectedTemplate, apiScope, isRhWf, l, locale]);
 
   useEffect(() => {
     if (!selectedTemplate) setEditingDefaultTemplate(false);

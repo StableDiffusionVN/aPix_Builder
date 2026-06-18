@@ -218,6 +218,61 @@ export function buildPreviewContextMenuItems({
   return items;
 }
 
+export function buildPassthroughPreviewContextMenuItems({
+  passthroughNode,
+  imageUrl,
+  outputFilename = "",
+  inputImageUrl = "",
+  edges = [],
+  removeEdge
+}) {
+  if (!passthroughNode || passthroughNode.type !== "source") return [];
+
+  const items = [{
+    id: "save-image",
+    label: "Lưu ảnh",
+    disabled: !imageUrl,
+    onClick: async () => {
+      try {
+        await downloadImage({
+          url: imageUrl,
+          filename: outputFilename || imageFilename(imageUrl, `output-${Date.now()}.png`)
+        });
+      } catch (error) {
+        console.error("Could not save canvas passthrough image:", error);
+      }
+    }
+  }];
+
+  if (inputImageUrl && inputImageUrl !== imageUrl) {
+    items.push({
+      id: "save-input-image",
+      label: "Lưu ảnh input",
+      onClick: async () => {
+        try {
+          await downloadImage({
+            url: inputImageUrl,
+            filename: imageFilename(inputImageUrl, `input-${Date.now()}.png`)
+          });
+        } catch (error) {
+          console.error("Could not save canvas input image:", error);
+        }
+      }
+    });
+  }
+
+  const outgoing = (edges || []).filter(edge => edge.source === passthroughNode.id);
+  if (outgoing.length) {
+    items.push({
+      id: "disconnect-out",
+      label: "Ngắt kết nối output",
+      onClick: () => outgoing.forEach(edge => removeEdge?.(edge.id))
+    });
+  }
+
+  return items;
+}
+
 export function buildEdgeContextMenuItems({ edge, removeEdge }) {
   if (!edge) return [];
   return [{

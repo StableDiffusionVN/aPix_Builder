@@ -86,7 +86,7 @@ export function NodeField({ port, value, onChange, linked, onContextMenu }) {
       <label className="canvasField nodrag" onContextMenu={onContextMenu}>
         <span className="canvasFieldLabel">{port.label}</span>
         <textarea
-          className="canvasInput canvasTextarea"
+          className="canvasInput canvasTextarea nowheel"
           rows={2}
           value={value ?? ""}
           onChange={event => onChange(event.target.value)}

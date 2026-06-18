@@ -64,6 +64,7 @@ export function PreviewPanel({
   history,
   deleteRunLogSession,
   clearRunLogHistory,
+  refreshRunLogSessions,
   restoreHistory,
   rhApiKey,
   updateRunLogSession,
@@ -247,6 +248,7 @@ export function PreviewPanel({
               outputHistory={history}
               onDeleteSession={deleteRunLogSession}
               onClearHistory={clearRunLogHistory}
+              onRefresh={refreshRunLogSessions}
               onRestoreOutput={restoreHistory}
               rhApiKey={rhApiKey}
               onRhTaskInspected={(session, detail) => {
@@ -257,6 +259,7 @@ export function PreviewPanel({
                 });
               }}
               runQueue={runQueue}
+              queueRunKind="form"
               activeRunId={activeRunId}
               status={status}
               running={running}

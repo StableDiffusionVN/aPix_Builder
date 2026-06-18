@@ -13,6 +13,17 @@
   grid-row: 3;
 }
 
+.appShell.is-canvas-view .canvasView {
+  margin: 0 calc(-1 * var(--app-shell-padding)) calc(-1 * var(--app-shell-padding));
+}
+
+.appShell.is-canvas-view .canvasStage {
+  border-radius: 0;
+  border-left: none;
+  border-right: none;
+  border-bottom: none;
+}
+
 /* ===== Floating dock + flyout ===== */
 
 .canvasWorkspace {
@@ -43,15 +54,15 @@
 
 .canvasDock {
   position: absolute;
-  left: 12px;
+  left: 10px;
   top: 50%;
   z-index: 14;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 6px;
+  gap: 4px;
+  padding: 4px;
   border: 1px solid var(--canvas-chrome-border);
-  border-radius: 12px;
+  border-radius: 10px;
   background: var(--canvas-chrome-bg);
   backdrop-filter: blur(10px);
   box-shadow: var(--canvas-chrome-shadow);
@@ -62,10 +73,10 @@
   position: relative;
   display: grid;
   place-items: center;
-  width: 38px;
-  height: 38px;
+  width: 32px;
+  height: 32px;
   border: 1px solid transparent;
-  border-radius: 10px;
+  border-radius: 8px;
   background: transparent;
   color: var(--muted);
   cursor: pointer;
@@ -78,31 +89,15 @@
   background: var(--accent-muted);
 }
 
-.canvasDockBadge {
-  position: absolute;
-  top: -4px;
-  right: -4px;
-  min-width: 16px;
-  height: 16px;
-  padding: 0 4px;
-  border-radius: 999px;
-  background: var(--accent);
-  color: #fff;
-  font-size: 9px;
-  font-weight: 700;
-  line-height: 16px;
-  text-align: center;
-}
-
 .canvasFlyout {
   position: absolute;
-  left: 62px;
+  left: 58px;
   top: 10px;
   bottom: 10px;
   z-index: 13;
   display: flex;
   flex-direction: column;
-  width: min(300px, calc(100% - 74px));
+  width: min(300px, calc(100% - 70px));
   border: 1px solid var(--canvas-chrome-border);
   border-radius: 12px;
   background: var(--canvas-chrome-bg-strong);
@@ -604,22 +599,15 @@
 }
 
 .canvasZoomBar .actionRow.rhActionRow.compactActionRow .runButton,
-.canvasZoomBar .actionRow.rhActionRow.compactActionRow .stopButton {
+.canvasZoomBar .actionRow.rhActionRow.compactActionRow .runMenuToggle {
   min-height: 28px;
   height: 28px;
   min-width: 0;
-  padding: 0 8px;
-  border-radius: 8px;
   font-size: 11px;
 }
 
-.canvasZoomBar .runControlStop {
-  width: 28px;
-  min-width: 28px;
-  padding: 0;
-  display: grid;
-  place-items: center;
-  box-shadow: none;
+.canvasZoomBar .actionRow.rhActionRow.compactActionRow .runMenuWrap {
+  grid-template-columns: minmax(0, auto) 24px;
 }
 
 .canvasZoomBar .actionRow.rhActionRow.compactActionRow .runControlRun {
@@ -631,6 +619,17 @@
   gap: 4px;
   padding: 0 6px;
   box-shadow: none;
+  border-radius: 8px 0 0 8px;
+}
+
+.canvasZoomBar .actionRow.rhActionRow.compactActionRow .runMenuToggle {
+  width: 24px;
+  padding: 0;
+  border-radius: 0 8px 8px 0;
+}
+
+.canvasZoomBar .actionRow.rhActionRow.compactActionRow .runMenu {
+  bottom: calc(100% + 8px);
 }
 
 .canvasZoomBar .actionRow.rhActionRow.compactActionRow .runControlRun span {
@@ -865,17 +864,39 @@
 }
 
 .canvasHistoryOutputItem {
+  padding: 0;
   display: grid;
-  grid-template-columns: 48px minmax(0, 1fr);
-  gap: 8px;
-  align-items: center;
-  padding: 6px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--panel-soft);
 }
 
-.canvasHistoryOutputItem img {
+.canvasHistoryOutputButton {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  padding: 6px;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.canvasHistoryOutputButton:hover:not(:disabled),
+.canvasHistoryOutputButton:focus-visible {
+  background: rgba(var(--accent-rgb), 0.12);
+  outline: none;
+}
+
+.canvasHistoryOutputButton:disabled {
+  cursor: default;
+}
+
+.canvasHistoryOutputButton img {
   width: 48px;
   height: 48px;
   object-fit: cover;
@@ -1292,7 +1313,7 @@
 .canvasImageUrlForm {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
   gap: 4px;
   align-items: center;
 }
@@ -1404,11 +1425,77 @@
   pointer-events: auto;
 }
 
-.canvasImageThumb .multiImageMask {
+.canvasMultiImageCount {
   position: absolute;
   left: 6px;
   top: 6px;
   z-index: 2;
+  padding: 3px 7px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 7px;
+  background: rgba(7, 8, 16, 0.74);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 750;
+  line-height: 1.2;
+  backdrop-filter: blur(8px);
+}
+
+.canvasFolderSelection.localFolderSelection {
+  min-height: 92px;
+  border-radius: 6px;
+}
+
+.canvasSelectedImageStrip {
+  display: flex;
+  gap: 6px;
+  max-width: 100%;
+  padding: 2px 1px 4px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.canvasSelectedImageThumb {
+  position: relative;
+  flex: 0 0 48px;
+  width: 48px;
+  height: 48px;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 2px solid transparent;
+  border-radius: 8px;
+  background: var(--panel-soft);
+  cursor: pointer;
+}
+
+.canvasSelectedImageThumb.isActive {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px rgba(var(--accent-rgb), 0.28);
+}
+
+.canvasSelectedImageThumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+}
+
+.canvasSelectedImageThumb span {
+  position: absolute;
+  left: 3px;
+  top: 3px;
+  display: grid;
+  place-items: center;
+  min-width: 16px;
+  height: 16px;
+  border-radius: 5px;
+  background: rgba(7, 8, 16, 0.78);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 1;
 }
 
 .canvasImageThumb img {
@@ -1418,6 +1505,62 @@
   width: auto;
   height: auto;
   object-fit: contain;
+}
+
+.canvasImageThumb .canvasNodePreview.isEmbedded {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  padding: 0;
+  border-top: 0;
+}
+
+.canvasImageThumb .canvasNodePreview.isEmbedded .canvasNodePreviewStage,
+.canvasImageThumb .canvasNodePreview.isEmbedded .canvasNodeCompareStage {
+  position: relative;
+  flex: 1 1 auto;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.canvasImageThumb .canvasNodePreview.isEmbedded .canvasNodePreviewStage:not(.canvasNodeCompareStage) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.canvasImageThumb .canvasNodePreview.isEmbedded .canvasNodeCompareStage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.canvasImageThumb .canvasNodePreview.isEmbedded .canvasCompareImageFrame {
+  position: relative;
+  inset: auto;
+  flex: 0 1 auto;
+  align-self: center;
+  width: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  height: auto;
+  margin: 0;
+  overflow: hidden;
+}
+
+.canvasImageThumb .canvasNodePreview.isEmbedded .canvasNodePreviewStage > img {
+  flex: 0 1 auto;
+  align-self: center;
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
 }
 
 .canvasImageSizeBadge {
@@ -1519,6 +1662,13 @@
   background: transparent;
 }
 
+.canvasNode:not(.hasCustomHeight) .canvasNodeCompareStage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface-2);
+}
+
 .canvasNode:not(.hasCustomHeight) .canvasNodePreviewStage > img {
   width: 100%;
   max-height: none;
@@ -1544,11 +1694,14 @@
 }
 
 .canvasCompareImageFrame {
-  position: absolute;
-  inset: 0;
-  width: auto;
-  height: 100%;
+  position: relative;
+  inset: auto;
+  flex: 0 1 auto;
+  align-self: center;
+  width: 100%;
+  height: auto;
   max-width: 100%;
+  max-height: 100%;
   margin: auto;
   overflow: hidden;
 }
@@ -1563,6 +1716,7 @@
   max-width: none;
   max-height: none;
   object-fit: contain;
+  object-position: center center;
 }
 
 .canvasCompareBase {
@@ -1649,13 +1803,13 @@
 
 .canvasPreviewToolbar button {
   display: grid;
-  width: 24px;
-  height: 24px;
+  width: 25px;
+  height: 25px;
   min-height: 0;
   padding: 0;
   place-items: center;
   border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 6px;
+  border-radius: 7px;
   background: rgba(7, 8, 16, 0.76);
   color: rgba(255, 255, 255, 0.82);
   cursor: pointer;

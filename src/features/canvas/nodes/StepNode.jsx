@@ -13,6 +13,7 @@ import { CanvasNodeFrame } from "../CanvasNodeFrame.jsx";
 import { isStepOutputDetached } from "../canvasNodeLayout.js";
 import { buildFieldContextMenuItems, buildNodeContextMenuItems, buildPreviewContextMenuItems } from "../canvasMenuHelpers.js";
 import { useCanvasActions } from "../canvasContext.js";
+import { handleNodeBodyWheel } from "../canvasWheel.js";
 import { formatOutputTimingLabel } from "../../../lib/runLog.js";
 
 const KIND_BADGE = {
@@ -123,7 +124,7 @@ function StepNodeComponent({ id, data, selected }) {
         </button>
       </header>
 
-      <div className="canvasNodeBody nowheel">
+      <div className="canvasNodeBody" onWheelCapture={handleNodeBodyWheel}>
         {inputs.map((port, index) => {
           const isLinked = Boolean(connected[port.valueKey]);
           const showOutput = index === 0 && outputs.length > 0;
@@ -214,12 +215,12 @@ function StepNodeComponent({ id, data, selected }) {
         inputUrl={inputPreviewUrl}
         outputUrl={outputDetached ? "" : outputPreviewUrl}
         outputTimingLabel={outputTimingLabel}
-        onContextMenu={event => openContextMenu?.(event, buildPreviewContextMenuItems({
+        onContextMenu={(event, target) => openContextMenu?.(event, buildPreviewContextMenuItems({
           node,
           nodes: nodes || [],
           edges: edges || [],
           disconnectTargetPort,
-          imageUrl: outputPreviewUrl,
+          imageUrl: target?.imageUrl || outputPreviewUrl,
           outputFilename: runCache?.primary?.filename || "",
           inputImageUrl: inputPreviewUrl,
           convertOutputToSource,

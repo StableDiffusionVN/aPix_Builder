@@ -2,9 +2,15 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 const APPEND_FLUSH_MS = 1000;
 const REFRESH_POLL_MS = 8000;
+const MAX_CLIENT_LOGS_PER_SESSION = 500;
+
+function trimClientLogs(logs = []) {
+  if (logs.length <= MAX_CLIENT_LOGS_PER_SESSION) return logs;
+  return logs.slice(logs.length - MAX_CLIENT_LOGS_PER_SESSION);
+}
 
 async function fetchRunLogSessions() {
-  const response = await fetch("/api/run-log/sessions");
+  const response = await fetch("/api/run-state");
   const data = await response.json();
   if (!response.ok) throw new Error(data.error || "Không tải được run log");
   return Array.isArray(data.sessions) ? data.sessions : [];
@@ -38,7 +44,24 @@ export function useRunLogHistory() {
   const pendingAppendsRef = useRef([]);
   const flushTimerRef = useRef(null);
   const flushingRef = useRef(false);
+  const refreshingRef = useRef(false);
+  const sessionsRef = useRef([]);
   const recentLogKeysRef = useRef(new Map());
+
+  const sessionsSignature = useCallback((items = []) => (
+    items.map(session => [
+      session.id,
+      session.runId,
+      session.status,
+      session.taskId,
+      session.completedAt,
+      session.durationMs,
+      session.rhCoins,
+      session.error,
+      session.logs?.length || 0,
+      session.logs?.[session.logs.length - 1]?.id || ""
+    ].join("|")).join("::")
+  ), []);
 
   const shouldSkipDuplicate = useCallback((runId, level, message) => {
     const key = `${runId}|${level}|${message}`;
@@ -55,25 +78,49 @@ export function useRunLogHistory() {
   }, []);
 
   const refreshSessions = useCallback(async () => {
+    if (refreshingRef.current) return sessionsRef.current;
+    refreshingRef.current = true;
     try {
-      setSessions(await fetchRunLogSessions());
+      const nextSessions = await fetchRunLogSessions();
+      setSessions(current => (
+        sessionsSignature(current) === sessionsSignature(nextSessions) ? current : nextSessions
+      ));
+      sessionsRef.current = nextSessions;
+      return nextSessions;
     } catch {
-      setSessions([]);
+      return sessionsRef.current;
+    } finally {
+      refreshingRef.current = false;
     }
-  }, []);
+  }, [sessionsSignature]);
+
+  useEffect(() => {
+    sessionsRef.current = sessions;
+  }, [sessions]);
 
   useEffect(() => {
     refreshSessions();
   }, [refreshSessions]);
 
+  useEffect(() => {
+    const hasActiveSessions = sessions.some(session => session.status === "running" || session.status === "queued");
+    if (!hasActiveSessions) return undefined;
+    const timer = window.setInterval(() => {
+      void refreshSessions();
+    }, REFRESH_POLL_MS);
+    return () => window.clearInterval(timer);
+  }, [refreshSessions, sessions]);
+
   const applyServerSessions = useCallback((nextSessions, onEmptySelected) => {
-    setSessions(nextSessions);
+    setSessions(current => (
+      sessionsSignature(current) === sessionsSignature(nextSessions) ? current : nextSessions
+    ));
     if (onEmptySelected) {
       setSelectedSessionId(current => (
         nextSessions.some(session => session.id === current) ? current : null
       ));
     }
-  }, []);
+  }, [sessionsSignature]);
 
   const flushPendingAppends = useCallback(async () => {
     if (flushTimerRef.current) {
@@ -139,7 +186,7 @@ export function useRunLogHistory() {
       if (session.runId !== runId) return session;
       return {
         ...session,
-        logs: [...session.logs, entry]
+        logs: trimClientLogs([...(session.logs || []), entry])
       };
     }));
     pendingAppendsRef.current.push({ runId, level, message, meta });

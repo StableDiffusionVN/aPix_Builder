@@ -1443,8 +1443,26 @@ html[data-theme="light"] .workflowNoteContent a:hover {
   pointer-events: none;
 }
 
-.multiImageOrder,
-.multiImageMask {
+.imageMaskOverlay {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: block;
+  width: 100%;
+  height: 100%;
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.imageMaskOverlay.is-cover {
+  object-fit: cover;
+}
+
+.imageMaskOverlay.is-contain {
+  object-fit: contain;
+}
+
+.multiImageOrder {
   position: absolute;
   z-index: 2;
   display: grid;
@@ -1462,11 +1480,6 @@ html[data-theme="light"] .workflowNoteContent a:hover {
 
 .multiImageOrder {
   top: 6px;
-  left: 6px;
-}
-
-.multiImageMask {
-  bottom: 6px;
   left: 6px;
 }
 
@@ -1810,7 +1823,7 @@ html[data-theme="light"] .workflowNoteContent a:hover {
 .imageLightbox {
   position: fixed;
   inset: 0;
-  z-index: 1000;
+  z-index: 1300;
   display: grid;
   place-items: center;
   padding: 48px 72px;
@@ -1856,11 +1869,17 @@ html[data-theme="light"] .workflowNoteContent a:hover {
   user-select: none;
 }
 
-.imageLightboxClose {
+.imageLightboxActions {
   position: absolute;
   top: -4px;
   right: -56px;
   z-index: 2;
+  display: grid;
+  gap: 8px;
+}
+
+.imageLightboxClose,
+.imageLightboxAction {
   display: grid;
   place-items: center;
   width: 40px;
@@ -1872,20 +1891,23 @@ html[data-theme="light"] .workflowNoteContent a:hover {
   cursor: pointer;
 }
 
-.imageLightboxClose:hover {
+.imageLightboxClose:hover,
+.imageLightboxAction:hover {
   border-color: rgba(var(--accent-rgb), 0.4);
   color: var(--accent-hover);
   background: rgba(var(--accent-rgb), 0.1);
 }
 
-html[data-theme="light"] .imageLightboxClose {
+html[data-theme="light"] .imageLightboxClose,
+html[data-theme="light"] .imageLightboxAction {
   border-color: rgba(23, 23, 23, 0.18);
   background: rgba(255, 255, 255, 0.94);
   color: #171717;
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.2);
 }
 
-html[data-theme="light"] .imageLightboxClose:hover {
+html[data-theme="light"] .imageLightboxClose:hover,
+html[data-theme="light"] .imageLightboxAction:hover {
   border-color: rgba(23, 23, 23, 0.32);
   background: #ffffff;
   color: #000000;
@@ -3376,16 +3398,18 @@ html[data-theme="light"] .curvesCanvasWrapper {
 }
 
 .inputLibraryActions button.isFavorite {
-  border-color: rgba(var(--accent-rgb), 0.72);
-  color: #fff;
-  background: var(--accent);
-  box-shadow: none;
+  border-color: rgba(255, 206, 84, 0.92);
+  color: #151000;
+  background: linear-gradient(135deg, #ffd45a, #f59e0b);
+  box-shadow:
+    0 0 0 1px rgba(255, 212, 90, 0.24),
+    0 4px 12px rgba(245, 158, 11, 0.26);
 }
 
 .inputLibraryActions button.isFavorite:hover {
-  border-color: rgba(var(--accent-rgb), 0.85);
-  color: #fff;
-  background: var(--accent-hover);
+  border-color: rgba(255, 221, 112, 0.98);
+  color: #151000;
+  background: linear-gradient(135deg, #ffe083, #fbbf24);
 }
 
 .inputLibraryEmpty {
@@ -3472,9 +3496,87 @@ html[data-theme="light"] .curvesCanvasWrapper {
 
 .actionRow {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 96px;
+  grid-template-columns: minmax(0, 1fr);
   gap: 6px;
   padding-top: 2px;
+}
+
+.runMenuWrap {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 32px;
+  border-radius: 9px;
+  box-shadow: var(--shadow);
+}
+
+.runMenuWrap .runButton {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+  box-shadow: none;
+}
+
+.runMenuToggle {
+  display: grid;
+  place-items: center;
+  min-height: 36px;
+  border: 1px solid rgba(var(--accent-rgb), 0.42);
+  border-left: 0;
+  border-radius: 0 9px 9px 0;
+  background: linear-gradient(135deg, var(--accent), var(--accent-hover));
+  color: #151000;
+  cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease, color 0.2s ease;
+}
+
+.runMenuToggle:hover:not(:disabled),
+.runMenuWrap.isOpen .runMenuToggle {
+  background: var(--accent-hover);
+}
+
+.runMenu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 6px);
+  z-index: 50;
+  display: grid;
+  min-width: 160px;
+  padding: 5px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--canvas-popover-bg, var(--panel-strong));
+  box-shadow: var(--canvas-popover-shadow, var(--shadow));
+}
+
+.runMenu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.runMenu button:hover:not(:disabled) {
+  background: rgba(var(--accent-rgb), 0.12);
+}
+
+.runMenu button.danger {
+  color: var(--danger-text);
+}
+
+.runMenu button.danger:hover:not(:disabled) {
+  background: var(--danger-muted);
+}
+
+.runMenu button:disabled {
+  cursor: default;
+  opacity: 0.45;
 }
 
 .runButton,
@@ -3511,7 +3613,26 @@ html[data-theme="light"] .runButton {
   box-shadow: 0 10px 22px rgba(0, 0, 0, 0.12);
 }
 
+html[data-theme="light"] .runMenuWrap {
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.12);
+}
+
+html[data-theme="light"] .runMenuWrap .runButton {
+  box-shadow: none;
+}
+
+html[data-theme="light"] .runMenuToggle {
+  border-color: rgba(23, 23, 23, 0.22);
+  background: #171717;
+  color: #ffffff;
+}
+
 html[data-theme="light"] .runButton:hover:not(:disabled) {
+  background: #000000;
+}
+
+html[data-theme="light"] .runMenuToggle:hover:not(:disabled),
+html[data-theme="light"] .runMenuWrap.isOpen .runMenuToggle {
   background: #000000;
 }
 
@@ -7376,9 +7497,10 @@ html[data-theme="light"] .saveTemplateButton:hover:not(:disabled) {
     min-width: 0;
   }
 
-  .imageLightboxClose {
+  .imageLightboxActions {
     top: -44px;
     right: 0;
+    grid-auto-flow: column;
   }
 }
 
@@ -9434,6 +9556,22 @@ html:not([data-theme="dark"]):not([data-theme="light"]) .appShell.is-runninghub 
 .rhActionRow .stopButton {
   min-height: 36px;
   border-radius: var(--radius, 6px);
+}
+
+.rhActionRow .runMenuWrap {
+  grid-template-columns: minmax(0, 1fr) 36px;
+  border-radius: var(--radius, 6px);
+}
+
+.rhActionRow .runMenuWrap .runButton {
+  border-radius: var(--radius, 6px) 0 0 var(--radius, 6px);
+}
+
+.rhActionRow .runMenuToggle {
+  min-height: 36px;
+  border-radius: 0 var(--radius, 6px) var(--radius, 6px) 0;
+  border-color: rgba(var(--accent-rgb), 0.42);
+  border-left-color: rgba(0, 0, 0, 0.16);
 }
 
 .runningHubSettings {

@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
-import { Loader2, RefreshCcw, ScrollText, Trash2 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Loader2, RefreshCcw, ScrollText } from "lucide-react";
+import { ImageLightboxOverlay } from "../../components/ImageLightboxOverlay.jsx";
 
 function formatTime(value) {
   if (!value) return "";
@@ -33,30 +34,31 @@ export function CanvasHistoryPanel({
   const [tab, setTab] = useState("outputs");
   const [loadingOutputs, setLoadingOutputs] = useState(false);
   const [loadingLogs, setLoadingLogs] = useState(false);
+  const [lightboxImage, setLightboxImage] = useState(null);
+  const didAutoRefreshRef = useRef(false);
 
   useEffect(() => {
-    let cancelled = false;
+    if (didAutoRefreshRef.current) return;
+    didAutoRefreshRef.current = true;
+    void onRefreshOutputHistory?.();
+    void onRefreshRunLogs?.();
+  }, [onRefreshOutputHistory, onRefreshRunLogs]);
+
+  function refreshOutputs() {
     setLoadingOutputs(true);
     Promise.resolve(onRefreshOutputHistory?.())
       .finally(() => {
-        if (!cancelled) setLoadingOutputs(false);
+        setLoadingOutputs(false);
       });
-    return () => {
-      cancelled = true;
-    };
-  }, [onRefreshOutputHistory]);
+  }
 
-  useEffect(() => {
-    let cancelled = false;
+  function refreshLogs() {
     setLoadingLogs(true);
     Promise.resolve(onRefreshRunLogs?.())
       .finally(() => {
-        if (!cancelled) setLoadingLogs(false);
+        setLoadingLogs(false);
       });
-    return () => {
-      cancelled = true;
-    };
-  }, [onRefreshRunLogs]);
+  }
 
   return (
     <div className="canvasHistoryPanel">
@@ -77,7 +79,7 @@ export function CanvasHistoryPanel({
         <div className="canvasHistorySection">
           <div className="canvasHistorySectionHeader">
             <span>Ảnh đã tạo</span>
-            <button type="button" className="canvasNodeBtn" onClick={onRefreshOutputHistory} title="Tải lại">
+            <button type="button" className="canvasNodeBtn" onClick={refreshOutputs} title="Tải lại">
               {loadingOutputs ? <Loader2 size={13} className="spin" /> : <RefreshCcw size={13} />}
             </button>
           </div>
@@ -87,13 +89,24 @@ export function CanvasHistoryPanel({
             <ul className="canvasHistoryOutputs">
               {outputHistory.slice(0, 40).map(item => {
                 const thumb = item.outputs?.[0]?.url;
+                const outputName = item.outputs?.[0]?.filename || item.webappId || item.template || item.provider || "Output";
                 return (
                   <li key={item.id} className="canvasHistoryOutputItem">
-                    {thumb ? <img src={thumb} alt="" draggable="false" /> : <div className="canvasHistoryOutputPlaceholder" />}
-                    <div className="canvasHistoryOutputMeta">
-                      <strong>{item.webappId || item.template || item.provider || "Output"}</strong>
-                      <small>{formatTime(item.completedAt || item.submittedAt)}</small>
-                    </div>
+                    <button
+                      type="button"
+                      className="canvasHistoryOutputButton"
+                      onClick={() => {
+                        if (thumb) setLightboxImage({ url: thumb, name: outputName });
+                      }}
+                      disabled={!thumb}
+                      title={thumb ? "Xem ảnh" : "Không có ảnh"}
+                    >
+                      {thumb ? <img src={thumb} alt="" draggable="false" /> : <div className="canvasHistoryOutputPlaceholder" />}
+                      <div className="canvasHistoryOutputMeta">
+                        <strong>{item.webappId || item.template || item.provider || "Output"}</strong>
+                        <small>{formatTime(item.completedAt || item.submittedAt)}</small>
+                      </div>
+                    </button>
                   </li>
                 );
               })}
@@ -106,7 +119,7 @@ export function CanvasHistoryPanel({
         <div className="canvasHistorySection">
           <div className="canvasHistorySectionHeader">
             <span>Phiên chạy</span>
-            <button type="button" className="canvasNodeBtn" onClick={onRefreshRunLogs} title="Tải lại">
+            <button type="button" className="canvasNodeBtn" onClick={refreshLogs} title="Tải lại">
               {loadingLogs ? <Loader2 size={13} className="spin" /> : <RefreshCcw size={13} />}
             </button>
           </div>
@@ -127,6 +140,12 @@ export function CanvasHistoryPanel({
           )}
         </div>
       ) : null}
+      <ImageLightboxOverlay
+        open={Boolean(lightboxImage)}
+        image={lightboxImage}
+        title={lightboxImage?.name || "Output"}
+        onClose={() => setLightboxImage(null)}
+      />
     </div>
   );
 }

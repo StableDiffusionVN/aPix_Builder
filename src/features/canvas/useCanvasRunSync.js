@@ -7,15 +7,16 @@ import {
   fetchOutputHistoryByRunId,
   findStaleRunLogSessions,
   matchCanvasNodeForSession,
-  sessionMatchesProject
+  orphanGraceMsForSession,
+  sessionMatchesProject,
+  sessionStartedPastGrace
 } from "./canvasRuntimeSync.js";
 import { beginNodeExecutionPatch, STEP_KINDS } from "./canvasModel.js";
 
 const SYNC_POLL_MS = 6000;
 const SYNC_POLL_IDLE_MS = 15000;
 const SYNC_MIN_GAP_MS = 4000;
-const ORPHAN_SESSION_GRACE_MS = 15000;
-const HISTORY_LOOKUP_RETRIES = 24;
+const HISTORY_LOOKUP_RETRIES = 32;
 const HISTORY_LOOKUP_DELAY_MS = 750;
 
 async function waitForHistoryItem(runId) {
@@ -28,12 +29,6 @@ async function waitForHistoryItem(runId) {
     }
   }
   return null;
-}
-
-function sessionStartedLongAgo(session) {
-  const startedAt = session?.startedAt ? new Date(session.startedAt).getTime() : 0;
-  if (!startedAt) return true;
-  return Date.now() - startedAt > ORPHAN_SESSION_GRACE_MS;
 }
 
 export function useCanvasRunSync({
@@ -57,6 +52,7 @@ export function useCanvasRunSync({
   const syncingRef = useRef(false);
   const lastSyncAtRef = useRef(0);
   const syncTimerRef = useRef(null);
+  const observedActiveRunIdsRef = useRef(new Set());
   const runLogSessionsRef = useRef(runLogSessions);
   const activeIdRef = useRef(activeId);
   const syncWithBackendRef = useRef(async () => {});
@@ -109,6 +105,7 @@ export function useCanvasRunSync({
         durationMs: historyItem?.durationMs ?? null,
         rhCoins: historyItem?.rhCoins ?? null
       });
+      observedActiveRunIdsRef.current.delete(session.runId);
       if (activeRunIdRef.current === session.runId) {
         activeRunIdRef.current = "";
         activeRunKindRef.current = null;
@@ -181,12 +178,21 @@ export function useCanvasRunSync({
     lastSyncAtRef.current = now;
     try {
       const projectId = activeIdRef.current;
-      const activeRuns = await fetchActiveRuns();
+      const { runs: activeRuns, ok: activeRunsOk } = await fetchActiveRuns();
       const activeRunById = new Map(activeRuns.map(run => [run.runId, run]));
       const activeRunIds = new Set(activeRuns.map(run => run.runId));
 
-      const runningSessions = findStaleRunLogSessions(runLogSessionsRef.current)
+      const trackedSessions = findStaleRunLogSessions(runLogSessionsRef.current)
         .filter(session => sessionMatchesProject(session, projectId));
+      const runningSessions = trackedSessions.filter(session => {
+        const activeRun = activeRunById.get(session.runId);
+        if (activeRun?.status === "queued") return false;
+        if (activeRun) observedActiveRunIdsRef.current.add(session.runId);
+        if (session.status === "queued" && !activeRun && !observedActiveRunIdsRef.current.has(session.runId)) {
+          return false;
+        }
+        return true;
+      });
 
       const needsHistory = runningSessions.some(session => !activeRunIds.has(session.runId));
       const historyByRunId = needsHistory ? await fetchOutputHistoryByRunId() : new Map();
@@ -207,12 +213,21 @@ export function useCanvasRunSync({
           continue;
         }
 
+        // Client still owns this run (in-flight POST) — never orphan/cancel from sync.
+        if (isLocalRun?.(session.runId)) {
+          const nodeId = matchCanvasNodeForSession(nodesRef.current, session);
+          if (nodeId) activeNodeIds.add(nodeId);
+          continue;
+        }
+
         if (await tryCompleteSession(session, historyByRunId)) {
           continue;
         }
 
+        if (!activeRunsOk) continue;
+
         if (reconciledStaleRunIdsRef.current.has(session.runId)) continue;
-        if (!sessionStartedLongAgo(session)) continue;
+        if (!sessionStartedPastGrace(session, orphanGraceMsForSession(session))) continue;
         reconciledStaleRunIdsRef.current.add(session.runId);
         await cancelServerRun(session);
         runLogAppendLog?.(
@@ -222,6 +237,7 @@ export function useCanvasRunSync({
           { provider: session.provider }
         );
         runLogEndSession?.(session.runId, "cancelled", { error: "orphaned_session" });
+        observedActiveRunIdsRef.current.delete(session.runId);
         cleanupWatcher(session.runId);
         if (activeRunIdRef.current === session.runId) {
           activeRunIdRef.current = "";
@@ -277,7 +293,10 @@ export function useCanvasRunSync({
     const schedule = () => {
       window.clearTimeout(timer);
       const hasRunning = findStaleRunLogSessions(runLogSessionsRef.current)
-        .some(session => sessionMatchesProject(session, activeIdRef.current));
+        .some(session => (
+          sessionMatchesProject(session, activeIdRef.current)
+          && (session.status === "running" || observedActiveRunIdsRef.current.has(session.runId))
+        ));
       timer = window.setTimeout(async () => {
         await syncWithBackend();
         schedule();

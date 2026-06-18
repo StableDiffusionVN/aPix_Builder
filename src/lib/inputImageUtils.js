@@ -8,10 +8,18 @@ export function getInputImageUrl(image) {
 }
 
 export function inferInputImageDate(image) {
+  if (image?.modifiedAt) return new Date(image.modifiedAt);
   if (image?.createdAt) return new Date(image.createdAt);
   const match = /(\d{13})/.exec(image?.name || "");
   if (match) return new Date(Number(match[1]));
   return null;
+}
+
+export function compareInputImagesNewestFirst(a, b) {
+  const timeA = inferInputImageDate(a)?.getTime() || 0;
+  const timeB = inferInputImageDate(b)?.getTime() || 0;
+  return (timeB - timeA)
+    || String(a?.name || "").localeCompare(String(b?.name || ""), undefined, { sensitivity: "base" });
 }
 
 export function matchesInputImageTimeFilter(value, filter) {
@@ -36,8 +44,10 @@ export function matchesInputImageTimeFilter(value, filter) {
 
 export function filterInputLibraryImages(images, { favoritesOnly = false, favoriteNames, timeFilter = "all" } = {}) {
   const favorites = favoriteNames instanceof Set ? favoriteNames : new Set(favoriteNames || []);
-  return (images || []).filter(image => {
-    if (favoritesOnly && !favorites.has(image.name)) return false;
-    return matchesInputImageTimeFilter(inferInputImageDate(image), timeFilter);
-  });
+  return (images || [])
+    .filter(image => {
+      if (favoritesOnly && !favorites.has(image.name)) return false;
+      return matchesInputImageTimeFilter(inferInputImageDate(image), timeFilter);
+    })
+    .sort(compareInputImagesNewestFirst);
 }

@@ -5,6 +5,20 @@ import { resolveFieldValueForSource, resolveOutputValueForSource } from "./canva
 import { CANVAS_NODE_DEFAULT_WIDTH } from "./CanvasNodeResizeHandles.jsx";
 import { compactStepNodeSize, growStepNodesToFit, isStepOutputDetached, normalizeOutputSplitNodes, reconcileOutputSplitOnEdgeRemove, restoreInputSourceOnRemove, restoreOutputPassthroughOnRemove } from "./canvasNodeLayout.js";
 
+const CANVAS_HISTORY_LIMIT = 80;
+
+function cloneCanvasState(nodes, edges) {
+  return {
+    nodes: structuredClone(nodes || []),
+    edges: structuredClone(edges || [])
+  };
+}
+
+function canvasSnapshotsEqual(a, b) {
+  if (!a || !b) return false;
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
 /** Strip transient runtime fields before persisting a node; keep runCache. */
 function serializeNode(node) {
   const data = { ...(node.data || {}) };
@@ -95,26 +109,111 @@ function applyProjectPayload(data, setState) {
 }
 
 export function useCanvasProject() {
-  const [nodes, setNodes] = useState([]);
-  const [edges, setEdges] = useState([]);
+  const [nodes, rawSetNodes] = useState([]);
+  const [edges, rawSetEdges] = useState([]);
   const [projects, setProjects] = useState([]);
   const [activeId, setActiveId] = useState("");
   const [activeName, setActiveName] = useState("Project");
   const [loaded, setLoaded] = useState(false);
+  const [historyAvailability, setHistoryAvailability] = useState({ canUndo: false, canRedo: false });
   const persistTimer = useRef(null);
   const persistEnabled = useRef(false);
   const nodesRef = useRef(nodes);
   const edgesRef = useRef(edges);
+  const historyRef = useRef({ past: [], future: [] });
+  const dragStartSnapshotRef = useRef(null);
 
   useEffect(() => { nodesRef.current = nodes; }, [nodes]);
   useEffect(() => { edgesRef.current = edges; }, [edges]);
+
+  const publishHistoryAvailability = useCallback(() => {
+    const { past, future } = historyRef.current;
+    setHistoryAvailability({
+      canUndo: past.length > 0,
+      canRedo: future.length > 0
+    });
+  }, []);
+
+  const resetHistory = useCallback(() => {
+    historyRef.current = { past: [], future: [] };
+    dragStartSnapshotRef.current = null;
+    publishHistoryAvailability();
+  }, [publishHistoryAvailability]);
+
+  const currentSnapshot = useCallback(() => (
+    cloneCanvasState(nodesRef.current, edgesRef.current)
+  ), []);
+
+  const pushHistorySnapshot = useCallback((snapshot = currentSnapshot()) => {
+    const history = historyRef.current;
+    const last = history.past[history.past.length - 1];
+    if (canvasSnapshotsEqual(last, snapshot)) return;
+    historyRef.current = {
+      past: [...history.past, snapshot].slice(-CANVAS_HISTORY_LIMIT),
+      future: []
+    };
+    publishHistoryAvailability();
+  }, [currentSnapshot, publishHistoryAvailability]);
+
+  const applyCanvasSnapshot = useCallback((snapshot) => {
+    nodesRef.current = snapshot.nodes;
+    edgesRef.current = snapshot.edges;
+    rawSetNodes(snapshot.nodes);
+    rawSetEdges(snapshot.edges);
+  }, []);
+
+  const applyCanvasState = useCallback((nextNodes, nextEdges, { history = true } = {}) => {
+    if (history) pushHistorySnapshot();
+    nodesRef.current = nextNodes;
+    edgesRef.current = nextEdges;
+    rawSetNodes(nextNodes);
+    rawSetEdges(nextEdges);
+  }, [pushHistorySnapshot]);
+
+  const setNodes = useCallback((updater, options = {}) => {
+    const nextNodes = typeof updater === "function" ? updater(nodesRef.current) : updater;
+    applyCanvasState(nextNodes, edgesRef.current, options);
+  }, [applyCanvasState]);
+
+  const setEdges = useCallback((updater, options = {}) => {
+    const nextEdges = typeof updater === "function" ? updater(edgesRef.current) : updater;
+    applyCanvasState(nodesRef.current, nextEdges, options);
+  }, [applyCanvasState]);
+
+  const undoCanvas = useCallback(() => {
+    const history = historyRef.current;
+    const previous = history.past[history.past.length - 1];
+    if (!previous) return false;
+    const current = currentSnapshot();
+    historyRef.current = {
+      past: history.past.slice(0, -1),
+      future: [current, ...history.future].slice(0, CANVAS_HISTORY_LIMIT)
+    };
+    applyCanvasSnapshot(previous);
+    publishHistoryAvailability();
+    return true;
+  }, [applyCanvasSnapshot, currentSnapshot, publishHistoryAvailability]);
+
+  const redoCanvas = useCallback(() => {
+    const history = historyRef.current;
+    const next = history.future[0];
+    if (!next) return false;
+    const current = currentSnapshot();
+    historyRef.current = {
+      past: [...history.past, current].slice(-CANVAS_HISTORY_LIMIT),
+      future: history.future.slice(1)
+    };
+    applyCanvasSnapshot(next);
+    publishHistoryAvailability();
+    return true;
+  }, [applyCanvasSnapshot, currentSnapshot, publishHistoryAvailability]);
 
   // Auto-grow fixed-height step nodes when their content (image input, output
   // preview, split state, error row…) needs more room than the current height.
   useEffect(() => {
     const { nodes: grown, changed } = growStepNodesToFit(nodes, edges);
-    if (changed) setNodes(grown);
-  }, [nodes, edges]);
+    if (changed) setNodes(grown, { history: false });
+  }, [nodes, edges, setNodes]);
 
   const loadProject = useCallback(async () => {
     const response = await fetch("/api/canvas-project");
@@ -124,11 +223,11 @@ export function useCanvasProject() {
       setActiveId(id);
       setActiveName(name);
       setProjects(list);
-      setNodes(nextNodes);
-      setEdges(nextEdges);
+      applyCanvasState(nextNodes, nextEdges, { history: false });
+      resetHistory();
     });
     return data;
-  }, []);
+  }, [applyCanvasState, resetHistory]);
 
   useEffect(() => {
     let cancelled = false;
@@ -178,6 +277,13 @@ export function useCanvasProject() {
 
   const onNodesChange = useCallback((changes) => {
     const currentNodes = nodesRef.current;
+    const hasUndoableChange = changes.some(change => change.type !== "select" && change.type !== "dimensions");
+    const hasDraggingPosition = changes.some(change => change.type === "position" && change.dragging);
+    const hasDragEndPosition = changes.some(change => change.type === "position" && change.dragging === false);
+
+    if (hasDraggingPosition && !dragStartSnapshotRef.current) {
+      dragStartSnapshotRef.current = currentSnapshot();
+    }
 
     const removedNodes = changes
       .filter(change => change.type === "remove")
@@ -193,7 +299,16 @@ export function useCanvasProject() {
       .map(node => node.id);
 
     if (!removedOutputIds.length && !removedInputIds.length) {
-      setNodes(current => applyNodeChanges(changes, current));
+      const nextNodes = applyNodeChanges(changes, currentNodes);
+      if (hasDragEndPosition && dragStartSnapshotRef.current) {
+        pushHistorySnapshot(dragStartSnapshotRef.current);
+        dragStartSnapshotRef.current = null;
+        applyCanvasState(nextNodes, edgesRef.current, { history: false });
+        return;
+      }
+      applyCanvasState(nextNodes, edgesRef.current, {
+        history: hasUndoableChange && !hasDraggingPosition
+      });
       return;
     }
 
@@ -222,9 +337,10 @@ export function useCanvasProject() {
     const remainingChanges = changes.filter(change => !(
       change.type === "remove" && handledIds.has(change.id)
     ));
-    setNodes(applyNodeChanges(remainingChanges, nodesAcc));
-    setEdges(edgesAcc);
-  }, []);
+    applyCanvasState(applyNodeChanges(remainingChanges, nodesAcc), edgesAcc, {
+      history: hasUndoableChange
+    });
+  }, [applyCanvasState, currentSnapshot, pushHistorySnapshot]);
 
   const onEdgesChange = useCallback((changes) => {
     const currentEdges = edgesRef.current;
@@ -243,30 +359,32 @@ export function useCanvasProject() {
       }
     }
 
-    if (nextNodes !== currentNodes) setNodes(nextNodes);
-    setEdges(nextEdges);
-  }, []);
+    applyCanvasState(nextNodes, nextEdges, {
+      history: removals.length > 0 || changes.some(change => change.type !== "select")
+    });
+  }, [applyCanvasState]);
 
   const onConnect = useCallback((connection) => {
-    setEdges(current => {
-      const deduped = current.filter(edge => !(
-        edge.target === connection.target && edge.targetHandle === connection.targetHandle
-      ));
-      return addEdge({ ...connection, type: "default", animated: false }, deduped);
-    });
-  }, []);
+    const deduped = edgesRef.current.filter(edge => !(
+      edge.target === connection.target && edge.targetHandle === connection.targetHandle
+    ));
+    applyCanvasState(
+      nodesRef.current,
+      addEdge({ ...connection, type: "default", animated: false }, deduped)
+    );
+  }, [applyCanvasState]);
 
   const addNode = useCallback((node) => {
     setNodes(current => [...current, node]);
-  }, []);
+  }, [setNodes]);
 
-  const updateNodeData = useCallback((id, patch) => {
+  const updateNodeData = useCallback((id, patch, options = { history: false }) => {
     setNodes(current => current.map(node => (
       node.id === id
         ? { ...node, data: { ...node.data, ...(typeof patch === "function" ? patch(node.data) : patch) } }
         : node
-    )));
-  }, []);
+    )), options);
+  }, [setNodes]);
 
   const updateNodeSize = useCallback((id, { width, height, position }) => {
     setNodes(current => current.map(node => {
@@ -282,40 +400,40 @@ export function useCanvasProject() {
         }
       };
     }));
-  }, []);
+  }, [setNodes]);
 
   const removeNode = useCallback((id) => {
     const restoredOutput = restoreOutputPassthroughOnRemove(nodesRef.current, edgesRef.current, id);
     if (restoredOutput) {
-      setNodes(restoredOutput.nodes);
-      setEdges(restoredOutput.edges);
+      applyCanvasState(restoredOutput.nodes, restoredOutput.edges);
       return;
     }
     const restoredInput = restoreInputSourceOnRemove(nodesRef.current, edgesRef.current, id);
     if (restoredInput) {
-      setNodes(restoredInput.nodes);
-      setEdges(restoredInput.edges);
+      applyCanvasState(restoredInput.nodes, restoredInput.edges);
       return;
     }
-    setNodes(current => current.filter(node => node.id !== id));
-    setEdges(current => current.filter(edge => edge.source !== id && edge.target !== id));
-  }, []);
+    applyCanvasState(
+      nodesRef.current.filter(node => node.id !== id),
+      edgesRef.current.filter(edge => edge.source !== id && edge.target !== id)
+    );
+  }, [applyCanvasState]);
 
   const removeEdge = useCallback((edgeId) => {
     setEdges(current => current.filter(edge => edge.id !== edgeId));
-  }, []);
+  }, [setEdges]);
 
   const disconnectTargetPort = useCallback((nodeId, valueKey) => {
     setEdges(current => current.filter(edge => !(
       edge.target === nodeId && edge.targetHandle === `in:${valueKey}`
     )));
-  }, []);
+  }, [setEdges]);
 
   const toggleNodeBypass = useCallback((id) => {
     updateNodeData(id, prev => ({
       bypassed: !prev.bypassed,
       ...(!prev.bypassed ? { ...clearNodeRunCachePatch(), status: "idle", error: "" } : {})
-    }));
+    }), { history: true });
   }, [updateNodeData]);
 
   const convertInputToSource = useCallback((nodeId, valueKey) => {
@@ -349,7 +467,7 @@ export function useCanvasProject() {
       }
     };
 
-    setNodes(currentNodes
+    applyCanvasState(currentNodes
       .map(item => (
         item.id === nodeId
           ? {
@@ -361,9 +479,7 @@ export function useCanvasProject() {
           }
           : item
       ))
-      .concat(newNode));
-
-    setEdges([
+      .concat(newNode), [
       ...currentEdges.filter(edge => !(
         edge.target === nodeId && edge.targetHandle === `in:${valueKey}`
       )),
@@ -377,7 +493,7 @@ export function useCanvasProject() {
         animated: false
       }
     ]);
-  }, []);
+  }, [applyCanvasState]);
 
   const convertOutputToSource = useCallback((nodeId, outputKey = "main") => {
     const currentNodes = nodesRef.current;
@@ -386,7 +502,7 @@ export function useCanvasProject() {
     if (!node || node.type !== "step") return;
     if (isStepOutputDetached(nodeId, outputKey, currentNodes, currentEdges)) return;
 
-    const { sourceType, value, label, port } = resolveOutputValueForSource(node, outputKey);
+    const { sourceType, label, port } = resolveOutputValueForSource(node, outputKey);
     const outputs = node.data?.ports?.outputs || [];
     if (!outputs.some(item => item.key === outputKey)) return;
 
@@ -436,7 +552,7 @@ export function useCanvasProject() {
         animated: edge.animated ?? false
       }))
     ];
-    setNodes(currentNodes.map(item => (
+    applyCanvasState(currentNodes.map(item => (
       item.id === nodeId
         ? {
           ...item,
@@ -446,15 +562,12 @@ export function useCanvasProject() {
           }
         }
         : item
-    )).concat(newNode));
-
-    setEdges(nextEdges);
-  }, []);
+    )).concat(newNode), nextEdges);
+  }, [applyCanvasState]);
 
   const clearProject = useCallback(() => {
-    setNodes([]);
-    setEdges([]);
-  }, []);
+    applyCanvasState([], []);
+  }, [applyCanvasState]);
 
   const switchProject = useCallback(async (id) => {
     persistEnabled.current = false;
@@ -463,11 +576,11 @@ export function useCanvasProject() {
       setActiveId(nextId);
       setActiveName(name);
       setProjects(list);
-      setNodes(nextNodes);
-      setEdges(nextEdges);
+      applyCanvasState(nextNodes, nextEdges, { history: false });
+      resetHistory();
     });
     persistEnabled.current = true;
-  }, []);
+  }, [applyCanvasState, resetHistory]);
 
   const createProject = useCallback(async (name) => {
     persistEnabled.current = false;
@@ -476,11 +589,11 @@ export function useCanvasProject() {
       setActiveId(nextId);
       setActiveName(nextName);
       setProjects(list);
-      setNodes(nextNodes);
-      setEdges(nextEdges);
+      applyCanvasState(nextNodes, nextEdges, { history: false });
+      resetHistory();
     });
     persistEnabled.current = true;
-  }, []);
+  }, [applyCanvasState, resetHistory]);
 
   const renameProject = useCallback(async (id, name) => {
     const data = await postCanvasProject("/api/canvas-project/rename", { id, name });
@@ -495,19 +608,22 @@ export function useCanvasProject() {
       setActiveId(nextId);
       setActiveName(name);
       setProjects(list);
-      setNodes(nextNodes);
-      setEdges(nextEdges);
+      applyCanvasState(nextNodes, nextEdges, { history: false });
+      resetHistory();
     });
     persistEnabled.current = true;
-  }, []);
+  }, [applyCanvasState, resetHistory]);
 
   return {
     nodes, edges, loaded,
     projects, activeId, activeName,
+    canUndo: historyAvailability.canUndo,
+    canRedo: historyAvailability.canRedo,
     setNodes, setEdges,
     onNodesChange, onEdgesChange, onConnect,
     addNode, updateNodeData, updateNodeSize, removeNode, removeEdge,
     disconnectTargetPort, toggleNodeBypass, convertInputToSource, convertOutputToSource, clearProject,
+    undoCanvas, redoCanvas,
     switchProject, createProject, renameProject, deleteProject
   };
 }

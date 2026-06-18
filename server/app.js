@@ -116,6 +116,10 @@ const maxImageBodyBytes = Number(process.env.MAX_IMAGE_BODY_BYTES || 512 * 1024 
 const maxOutputHistoryItems = 500;
 const activeRuns = new Map();
 const activeRhRuns = new Map();
+const backendRunQueue = [];
+let backendRunQueueActive = false;
+let backendRunQueueCurrent = null;
+let backendRunQueueWakeTimer = null;
 const pendingSseClients = new Map();
 const runningHubTimeoutMs = Number(process.env.RUNNINGHUB_TIMEOUT_MS || 10 * 60 * 1000);
 
@@ -654,6 +658,243 @@ function closeRhRun(run, runId) {
     try { client.res.end(); } catch {}
   }
   activeRhRuns.delete(runId);
+  queueMicrotask(drainBackendRunQueue);
+}
+
+const QUEUE_RUN_ENDPOINTS = new Set([
+  "/api/run",
+  "/api/runninghub/run",
+  "/api/runninghub-wf/run"
+]);
+
+function queuedJobProvider(endpoint, meta = {}) {
+  if (meta.provider) return meta.provider;
+  return endpoint === "/api/run" ? "local" : "runninghub";
+}
+
+function queuedJobLogJob(job) {
+  const body = job.body || {};
+  return {
+    runId: body.runId || job.runId,
+    template: body.template || "",
+    templateId: body.templateId || "",
+    webappId: body.webappId || ""
+  };
+}
+
+function queuedJobLogMeta(job, status = "queued") {
+  return {
+    ...(job.meta || {}),
+    provider: queuedJobProvider(job.endpoint, job.meta),
+    status,
+    startedAt: job.queuedAt
+  };
+}
+
+function ensureRunLogSession({ runId, provider = "local", status = "running", job = {}, meta = {} }) {
+  if (!runId) return;
+  const existing = getRunLogSessions().find(session => session.runId === runId);
+  if (!existing) {
+    startRunLogSession({ runId, ...job }, { provider, status, ...meta });
+    return;
+  }
+  updateRunLogSession(runId, {
+    provider: existing.provider || provider,
+    status,
+    completedAt: null,
+    error: "",
+    ...meta,
+    runKind: meta.runKind || existing.runKind || ""
+  });
+}
+
+function queuedRunSummary(job) {
+  const body = job.body || {};
+  return {
+    runId: body.runId || job.runId,
+    provider: queuedJobProvider(job.endpoint, job.meta),
+    promptId: "",
+    taskId: "",
+    template: body.template || "",
+    templateId: body.templateId || "",
+    webappId: body.webappId || "",
+    canvasNodeId: job.meta?.canvasNodeId || "",
+    canvasProjectId: job.meta?.canvasProjectId || "",
+    runKind: job.meta?.runKind || "",
+    startedAt: job.queuedAt || ""
+  };
+}
+
+function queuedJobWaitsForActiveRun(job) {
+  const waitForRunId = String(job.meta?.waitForRunId || "").trim();
+  if (!waitForRunId) return false;
+  const session = getRunLogSessions().find(item => item.runId === waitForRunId);
+  if (session && !["running", "queued"].includes(session.status)) return false;
+  if (activeRuns.has(waitForRunId) || activeRhRuns.has(waitForRunId)) return true;
+
+  // The browser may submit queue jobs milliseconds before /api/run registers
+  // the active request. Hold briefly so queued form jobs do not leapfrog it.
+  const queuedAt = job.queuedAt ? new Date(job.queuedAt).getTime() : 0;
+  return queuedAt > 0 && Date.now() - queuedAt < 10000;
+}
+
+async function executeQueuedBackendRun(job) {
+  const runId = job.body?.runId || job.runId;
+  const provider = queuedJobProvider(job.endpoint, job.meta);
+  backendRunQueueCurrent = job;
+  updateRunLogSession(runId, { status: "running" });
+  appendRunLog(runId, "info", `Backend queue dispatch: ${job.endpoint}`, { provider });
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}${job.endpoint}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(job.body || {})
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || data.msg || `HTTP ${response.status}`);
+    endRunLogSession(runId, "success", {
+      taskId: data.taskId || data.promptId || "",
+      durationMs: data.durationMs ?? data.historyItem?.durationMs,
+      rhCoins: data.rhCoins ?? data.historyItem?.rhCoins
+    });
+  } catch (error) {
+    appendRunLog(runId, "error", error.message || String(error), { provider });
+    endRunLogSession(runId, "error", { error: error.message || String(error) });
+  }
+}
+
+function drainBackendRunQueue() {
+  if (backendRunQueueActive) return;
+  if (activeRuns.size || activeRhRuns.size) return;
+  const job = backendRunQueue[0];
+  if (!job) return;
+  if (queuedJobWaitsForActiveRun(job)) {
+    if (!backendRunQueueWakeTimer) {
+      backendRunQueueWakeTimer = setTimeout(() => {
+        backendRunQueueWakeTimer = null;
+        drainBackendRunQueue();
+      }, 1000);
+    }
+    return;
+  }
+  backendRunQueue.shift();
+  backendRunQueueActive = true;
+  void executeQueuedBackendRun(job)
+    .finally(() => {
+      if (backendRunQueueCurrent?.runId === job.runId) backendRunQueueCurrent = null;
+      backendRunQueueActive = false;
+      queueMicrotask(drainBackendRunQueue);
+    });
+}
+
+function cancelQueuedBackendRun(runId) {
+  if (!runId) return false;
+  const index = backendRunQueue.findIndex(job => job.runId === runId || job.body?.runId === runId);
+  if (index < 0) return false;
+  const [job] = backendRunQueue.splice(index, 1);
+  appendRunLog(runId, "warn", "Đã xóa khỏi hàng chờ backend", {
+    provider: queuedJobProvider(job.endpoint, job.meta)
+  });
+  endRunLogSession(runId, "cancelled");
+  return true;
+}
+
+function clearQueuedBackendRuns(filter = null) {
+  const removed = [];
+  for (let index = backendRunQueue.length - 1; index >= 0; index -= 1) {
+    const job = backendRunQueue[index];
+    if (filter && !filter(job)) continue;
+    removed.unshift(...backendRunQueue.splice(index, 1));
+  }
+  for (const job of removed) {
+    const runId = job.runId || job.body?.runId;
+    appendRunLog(runId, "warn", "Đã xóa khỏi hàng chờ backend", {
+      provider: queuedJobProvider(job.endpoint, job.meta)
+    });
+    endRunLogSession(runId, "cancelled");
+  }
+  return removed.length;
+}
+
+function ensureBackendQueueLogSession(job, status = "queued") {
+  if (!job?.runId) return;
+  const existing = getRunLogSessions().find(session => session.runId === job.runId);
+  if (!existing) {
+    startRunLogSession(queuedJobLogJob(job), queuedJobLogMeta(job, status));
+    return;
+  }
+  if (existing.status !== status) {
+    updateRunLogSession(job.runId, {
+      ...queuedJobLogMeta(job, status),
+      status,
+      completedAt: null,
+      error: ""
+    });
+  }
+}
+
+function reconcileBackendRunLogState() {
+  if (backendRunQueueCurrent) {
+    ensureBackendQueueLogSession(backendRunQueueCurrent, "running");
+  }
+  for (const job of backendRunQueue) {
+    ensureBackendQueueLogSession(job, "queued");
+  }
+
+  const queueRunIds = new Set([
+    ...backendRunQueue.map(job => job.runId),
+    backendRunQueueCurrent?.runId
+  ].filter(Boolean));
+  for (const session of getRunLogSessions()) {
+    const runKind = String(session.runKind || "");
+    const isBackendQueuedKind = runKind === "form" || runKind === "canvas-node";
+    if (!isBackendQueuedKind || session.status !== "queued") continue;
+    if (queueRunIds.has(session.runId)) continue;
+    if (activeRuns.has(session.runId) || activeRhRuns.has(session.runId)) {
+      updateRunLogSession(session.runId, { status: "running", completedAt: null, error: "" });
+      continue;
+    }
+    endRunLogSession(session.runId, "cancelled", { error: "missing_from_backend_queue" });
+  }
+}
+
+async function handleRunQueueSubmit(req, res) {
+  const body = JSON.parse(await readBody(req) || "{}");
+  const jobs = Array.isArray(body.jobs) ? body.jobs : [];
+  const accepted = [];
+  for (const item of jobs) {
+    const endpoint = String(item?.endpoint || "");
+    const jobBody = item?.body && typeof item.body === "object" ? item.body : null;
+    const runId = String(jobBody?.runId || item?.runId || "").trim();
+    if (!QUEUE_RUN_ENDPOINTS.has(endpoint) || !jobBody || !runId) continue;
+    const meta = item.meta && typeof item.meta === "object" ? item.meta : {};
+    const queuedAt = new Date().toISOString();
+    const queued = {
+      id: runId,
+      runId,
+      endpoint,
+      body: { ...jobBody, runId },
+      meta,
+      queuedAt
+    };
+    ensureBackendQueueLogSession(queued, "queued");
+    appendRunLog(runId, "queue", `Đã gửi vào hàng chờ backend: ${endpoint}`, {
+      provider: queuedJobProvider(endpoint, meta)
+    });
+    backendRunQueue.push(queued);
+    accepted.push(queuedRunSummary(queued));
+  }
+  drainBackendRunQueue();
+  send(res, 200, { accepted: accepted.length, jobs: accepted });
+}
+
+async function handleRunQueueClear(req, res) {
+  const body = JSON.parse(await readBody(req) || "{}");
+  const runKind = String(body.runKind || "").trim();
+  const cleared = clearQueuedBackendRuns(runKind
+    ? job => String(job.meta?.runKind || "") === runKind
+    : null);
+  send(res, 200, { cleared });
 }
 await applyStorageSettings(await loadStorageSettings());
 
@@ -841,6 +1082,14 @@ async function handleRun(req, res) {
   };
   pendingSseClients.delete(runId);
   activeRuns.set(runId, run);
+  const existingRunSession = getRunLogSessions().find(session => session.runId === runId);
+  ensureRunLogSession({
+    runId,
+    provider: "local",
+    status: "running",
+    job: { template: body.template || "", queuedAt: body.queuedAt || submittedAt },
+    meta: { runKind: body.runKind || existingRunSession?.runKind || "form" }
+  });
 
   try {
     const { config, server, template } = await templates.loadConfig(body.template);
@@ -916,11 +1165,16 @@ async function handleRun(req, res) {
       try { client.res.end(); } catch {}
     }
     activeRuns.delete(runId);
+    queueMicrotask(drainBackendRunQueue);
   }
 }
 
 async function handleCancel(req, res) {
   const body = JSON.parse(await readBody(req) || "{}");
+  if (cancelQueuedBackendRun(body.runId)) {
+    send(res, 200, { cancelled: true, queued: true, message: "Removed from backend queue" });
+    return;
+  }
   const run = activeRuns.get(body.runId);
   if (!run) {
     send(res, 200, { cancelled: false, message: "Run is not active" });
@@ -1098,41 +1352,21 @@ async function listInputImages({ bypassCache = false } = {}) {
     entry.isFile() && /\.(png|jpe?g|webp|gif)$/i.test(entry.name)
   ));
 
-  const images = [];
-  const needsStat = [];
-
-  for (const entry of fileEntries) {
-    const timestampMatch = /(\d{13})/.exec(entry.name);
-    if (timestampMatch) {
-      const createdAt = new Date(Number(timestampMatch[1])).toISOString();
-      images.push({
-        name: entry.name,
-        url: inputImageUrl(entry.name),
-        createdAt,
-        modifiedAt: createdAt
-      });
-      continue;
-    }
-    needsStat.push(entry);
-  }
-
-  if (needsStat.length) {
-    const statResults = await Promise.all(needsStat.map(async entry => {
-      const filePath = path.join(inputDir, entry.name);
-      const fileStat = await stat(filePath);
-      const createdAt = fileStat.birthtimeMs > 0 ? fileStat.birthtime : fileStat.mtime;
-      return {
-        name: entry.name,
-        url: inputImageUrl(entry.name),
-        createdAt: createdAt.toISOString(),
-        modifiedAt: fileStat.mtime.toISOString()
-      };
-    }));
-    images.push(...statResults);
-  }
+  const images = await Promise.all(fileEntries.map(async entry => {
+    const filePath = path.join(inputDir, entry.name);
+    const fileStat = await stat(filePath);
+    const createdAt = fileStat.birthtimeMs > 0 ? fileStat.birthtime : fileStat.mtime;
+    return {
+      name: entry.name,
+      url: inputImageUrl(entry.name),
+      createdAt: createdAt.toISOString(),
+      modifiedAt: fileStat.mtime.toISOString()
+    };
+  }));
 
   const sorted = images.sort((a, b) => (
-    new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    new Date(b.modifiedAt || b.createdAt).getTime() - new Date(a.modifiedAt || a.createdAt).getTime()
+    || String(a.name || "").localeCompare(String(b.name || ""), undefined, { sensitivity: "base" })
   ));
   inputImagesListCache = sorted;
   return sorted;
@@ -2011,6 +2245,14 @@ async function handleRunningHubRun(req, res) {
   const webappId = String(body.webappId || "").trim();
   const abortController = new AbortController();
   const run = attachRhRun(runId, abortController);
+  const existingRunSession = getRunLogSessions().find(session => session.runId === runId);
+  ensureRunLogSession({
+    runId,
+    provider: "runninghub",
+    status: "running",
+    job: { webappId, queuedAt: body.queuedAt || submittedAt },
+    meta: { runKind: body.runKind || existingRunSession?.runKind || "form" }
+  });
   const emitRhStatus = (status, label, taskId = run.taskId) => {
     broadcastRunEvent(run, {
       type: "rh_task_status",
@@ -2140,6 +2382,14 @@ async function handleRunningHubWfRun(req, res) {
   const templateId = String(body.templateId || "").trim();
   const abortController = new AbortController();
   const run = attachRhRun(runId, abortController);
+  const existingRunSession = getRunLogSessions().find(session => session.runId === runId);
+  ensureRunLogSession({
+    runId,
+    provider: "runninghub",
+    status: "running",
+    job: { templateId, queuedAt: body.queuedAt || submittedAt },
+    meta: { runKind: body.runKind || existingRunSession?.runKind || "form" }
+  });
   const emitRhStatus = (status, label, taskId = run.taskId) => {
     broadcastRunEvent(run, {
       type: "rh_task_status",
@@ -2308,6 +2558,10 @@ async function handleRunningHubWfRun(req, res) {
 
 async function handleRunningHubCancel(req, res) {
   const body = JSON.parse(await readBody(req) || "{}");
+  if (cancelQueuedBackendRun(body.runId)) {
+    send(res, 200, { cancelled: true, queued: true, message: "Removed from backend queue" });
+    return;
+  }
   const run = activeRhRuns.get(body.runId);
   if (!run) {
     send(res, 200, { cancelled: false, message: "Run is not active" });
@@ -2319,8 +2573,24 @@ async function handleRunningHubCancel(req, res) {
 }
 
 function listActiveRuns(activeRuns, activeRhRuns, getRunLogSessions) {
+  reconcileBackendRunLogState();
   const logByRunId = new Map(getRunLogSessions().map(session => [session.runId, session]));
   const runs = [];
+  if (backendRunQueueCurrent && !activeRuns.has(backendRunQueueCurrent.runId) && !activeRhRuns.has(backendRunQueueCurrent.runId)) {
+    runs.push({
+      ...queuedRunSummary(backendRunQueueCurrent),
+      status: "running",
+      startedAt: logByRunId.get(backendRunQueueCurrent.runId)?.startedAt || backendRunQueueCurrent.queuedAt || ""
+    });
+  }
+  for (const job of backendRunQueue) {
+    const summary = queuedRunSummary(job);
+    runs.push({
+      ...summary,
+      status: "queued",
+      startedAt: logByRunId.get(summary.runId)?.startedAt || summary.startedAt
+    });
+  }
   for (const [runId, run] of activeRuns) {
     const session = logByRunId.get(runId);
     runs.push({
@@ -2358,7 +2628,16 @@ function handleActiveRuns(_req, res) {
   send(res, 200, { runs: listActiveRuns(activeRuns, activeRhRuns, getRunLogSessions) });
 }
 
+function handleRunState(_req, res) {
+  reconcileBackendRunLogState();
+  send(res, 200, {
+    runs: listActiveRuns(activeRuns, activeRhRuns, getRunLogSessions),
+    sessions: getRunLogSessions()
+  });
+}
+
 function handleRunLogSessions(_req, res) {
+  reconcileBackendRunLogState();
   send(res, 200, { sessions: getRunLogSessions() });
 }
 
@@ -2533,6 +2812,9 @@ export const routeContext = {
   handleRhDefaultAppsRefresh,
   handleRun,
   handleRunEvents,
+  handleRunQueueClear,
+  handleRunQueueSubmit,
+  handleRunState,
   handleRunLogMutate,
   handleActiveRuns,
   handleRunLogSessions,

@@ -1,11 +1,20 @@
-import { memo, useState } from "react";
+import { memo } from "react";
 import { Handle, Position } from "@xyflow/react";
 import { Binary, CheckSquare, Database, Hash, Image as ImageIcon, List, Trash2, Type } from "lucide-react";
 import { NodeField } from "../NodeField.jsx";
 import { CanvasNodeFrame } from "../CanvasNodeFrame.jsx";
-import { buildNodeContextMenuItems } from "../canvasMenuHelpers.js";
-import { resolveEffectiveNodeOutputUrl, getNodeRunCache, withImageCacheBust } from "../canvasModel.js";
+import { CanvasNodeComparePreview } from "../CanvasNodeComparePreview.jsx";
+import { buildNodeContextMenuItems, buildPassthroughPreviewContextMenuItems } from "../canvasMenuHelpers.js";
+import {
+  findLinkedImageSource,
+  findNodeInputImageUrl,
+  getNodeRunCache,
+  resolveEffectiveNodeOutputUrl,
+  withImageCacheBust
+} from "../canvasModel.js";
 import { useCanvasActions } from "../canvasContext.js";
+import { handleNodeBodyWheel } from "../canvasWheel.js";
+import { formatOutputTimingLabel } from "../../../lib/runLog.js";
 
 const SOURCE_META = {
   image: { label: "Ảnh", title: "Image input", Icon: ImageIcon },
@@ -22,6 +31,7 @@ function SourceNodeComponent({ id, data, selected }) {
     removeNode,
     removeEdge,
     openContextMenu,
+    outputMetadataByRunId,
     nodes,
     edges
   } = useCanvasActions();
@@ -48,16 +58,38 @@ function SourceNodeComponent({ id, data, selected }) {
             : meta.label;
   const value = data.values?.main;
   const node = nodes?.find(item => item.id === id);
-  const incoming = (edges || []).find(edge => edge.target === id && edge.targetHandle === "in:main");
-  const upstream = incoming ? nodes?.find(item => item.id === incoming.source) : null;
-  const upstreamCache = upstream ? getNodeRunCache(upstream) : null;
-  const upstreamPreviewUrl = isPassthrough && incoming
-    ? resolveEffectiveNodeOutputUrl(incoming.source, incoming.sourceHandle, nodes || [], edges || [])
+  const stepNode = isPassthrough
+    ? nodes?.find(item => item.id === data.passthroughSourceNodeId)
+    : null;
+  const outputKey = data.passthroughOutputKey || "main";
+  const stepRunCache = stepNode ? getNodeRunCache(stepNode) : null;
+  const outputUrl = isPassthrough
+    ? resolveEffectiveNodeOutputUrl(
+      data.passthroughSourceNodeId,
+      `out:${outputKey}`,
+      nodes || [],
+      edges || []
+    )
     : "";
-  const [previewSize, setPreviewSize] = useState(null);
-  const previewUrl = upstreamPreviewUrl
-    ? withImageCacheBust(upstreamPreviewUrl, upstreamCache?.runAt || upstreamPreviewUrl)
-    : "";
+  const inputImageUrl = stepNode ? findNodeInputImageUrl(stepNode, nodes || [], edges || []) : "";
+  const linkedSource = stepNode ? findLinkedImageSource(stepNode, nodes || [], edges || []) : null;
+  const linkedCache = linkedSource ? getNodeRunCache(linkedSource) : null;
+  const inputPreviewUrl = withImageCacheBust(
+    inputImageUrl,
+    linkedCache?.runAt || inputImageUrl
+  );
+  const outputPreviewUrl = withImageCacheBust(outputUrl, stepRunCache?.runAt || outputUrl);
+  const historyMetadata = outputMetadataByRunId?.[stepRunCache?.runId] || {};
+  const outputTimingLabel = formatOutputTimingLabel({
+    durationMs: stepRunCache?.durationMs ?? historyMetadata.durationMs,
+    rhCoins: stepRunCache?.rhCoins ?? historyMetadata.rhCoins,
+    provider: stepRunCache?.provider || historyMetadata.provider || (
+      stepNode?.data?.kind === "local" ? "local" : "runninghub"
+    )
+  });
+  const outputFilename = stepRunCache?.outputs?.find(item => item.key === outputKey)?.filename
+    || stepRunCache?.primary?.filename
+    || "";
   const fieldPort = {
     label: data.name || meta.label,
     type: sourceType,
@@ -93,7 +125,7 @@ function SourceNodeComponent({ id, data, selected }) {
         </button>
       </header>
 
-      <div className="canvasNodeBody nowheel">
+      <div className="canvasNodeBody" onWheelCapture={handleNodeBodyWheel}>
         {isPassthrough ? (
           <div className="canvasInputRow hasHandle hasOutputHandle">
             <Handle
@@ -105,27 +137,22 @@ function SourceNodeComponent({ id, data, selected }) {
             />
             <div className="canvasField">
               <span className="canvasFieldLabel">{data.name || meta.label}</span>
-              {previewUrl ? (
+              {outputPreviewUrl ? (
                 <div className="canvasImageThumb">
-                  <img
-                    src={previewUrl}
-                    alt={data.name || meta.label}
-                    draggable="false"
-                    onLoad={event => {
-                      const { naturalWidth, naturalHeight } = event.currentTarget;
-                      setPreviewSize(naturalWidth && naturalHeight
-                        ? { width: naturalWidth, height: naturalHeight }
-                        : null);
-                    }}
+                  <CanvasNodeComparePreview
+                    embedded
+                    inputUrl={inputPreviewUrl}
+                    outputUrl={outputPreviewUrl}
+                    outputTimingLabel={outputTimingLabel}
+                    onContextMenu={(event, target) => openContextMenu?.(event, buildPassthroughPreviewContextMenuItems({
+                      passthroughNode: node,
+                      edges: edges || [],
+                      imageUrl: target?.imageUrl || outputPreviewUrl,
+                      outputFilename,
+                      inputImageUrl: inputPreviewUrl,
+                      removeEdge
+                    }))}
                   />
-                  {previewSize ? (
-                    <div
-                      className="imageSizeBadge"
-                      title={`${data.name || meta.label}: ${previewSize.width} x ${previewSize.height}`}
-                    >
-                      {previewSize.width} x {previewSize.height}
-                    </div>
-                  ) : null}
                 </div>
               ) : (
                 <div className="canvasImageLinked">

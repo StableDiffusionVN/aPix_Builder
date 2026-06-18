@@ -229,6 +229,12 @@ async function postJsonWithEvents(endpoint, body, onLog, signal) {
   }
 }
 
+async function executePreparedCanvasRunRequest({ endpoint, body }, onLog, signal) {
+  const data = await postJsonWithEvents(endpoint, body, onLog, signal);
+  const outputs = parseOutputs(data);
+  return { outputs, raw: data, runId: body.runId };
+}
+
 function summarizeRhAppJob(job) {
   const filled = (job.nodes || [])
     .filter(node => node.fieldValue !== "" && node.fieldValue != null)
@@ -261,11 +267,7 @@ export async function bypassCanvasNode({ node, nodes, edges, onLog }) {
   return { outputs, raw: {}, runId: crypto.randomUUID() };
 }
 
-/**
- * Execute a single canvas node, injecting upstream outputs into image inputs.
- * @returns {Promise<{outputs: Array<{url:string, filename?:string}>, raw:object}>}
- */
-export async function runCanvasNode({ node, nodes, edges, rhAuth, onLog, runId: runIdInput, signal }) {
+export async function prepareCanvasNodeRunRequest({ node, nodes, edges, rhAuth, onLog, runId: runIdInput }) {
   const log = (level, message) => onLog?.(level, message);
   const kind = node.data.kind;
   const name = node.data.name || node.id;
@@ -277,18 +279,19 @@ export async function runCanvasNode({ node, nodes, edges, rhAuth, onLog, runId: 
 
   if (kind === STEP_KINDS.LOCAL) {
     const items = flattenInputs(node.data.config?.input || {});
-    const payload = {
+    const body = {
       runId,
       template: node.data.ref,
       address: node.data.serverAddress || values.__address || undefined,
       values: requestPayload(items, values),
       queuedAt: new Date().toISOString()
     };
-    log("info", `ComfyUI template=${payload.template}`);
-    const data = await postJsonWithEvents("/api/run", payload, log, signal);
-    const outputs = parseOutputs(data);
-    log("success", `Xong ${name}: ${outputs.length} output`);
-    return { outputs, raw: data, runId };
+    log("info", `ComfyUI template=${body.template}`);
+    return {
+      endpoint: "/api/run",
+      body,
+      provider: "local"
+    };
   }
 
   if (kind === STEP_KINDS.RH_WF) {
@@ -296,12 +299,13 @@ export async function runCanvasNode({ node, nodes, edges, rhAuth, onLog, runId: 
       log("error", "Thiếu RunningHub API key — vào Settings để nhập lại");
       throw new Error("RunningHub API key required");
     }
-    const job = buildRunningHubWfJob({ runId, ...rhAuth, templateId: node.data.ref, values });
-    log("info", summarizeRhWfJob(job, values));
-    const data = await postJsonWithEvents("/api/runninghub-wf/run", job, log, signal);
-    const outputs = parseOutputs(data);
-    log("success", `Xong ${name}: ${outputs.length} output`);
-    return { outputs, raw: data, runId };
+    const body = buildRunningHubWfJob({ runId, ...rhAuth, templateId: node.data.ref, values });
+    log("info", summarizeRhWfJob(body, values));
+    return {
+      endpoint: "/api/runninghub-wf/run",
+      body,
+      provider: "runninghub"
+    };
   }
 
   if (kind === STEP_KINDS.RH_APP) {
@@ -309,19 +313,33 @@ export async function runCanvasNode({ node, nodes, edges, rhAuth, onLog, runId: 
       log("error", "Thiếu RunningHub API key — vào Settings để nhập lại");
       throw new Error("RunningHub API key required");
     }
-    const job = buildCanvasRunningHubJob({
+    const body = buildCanvasRunningHubJob({
       runId,
       rhAuth,
       webappId: String(node.data.ref).trim(),
       nodes: node.data.nodes || [],
       values
     });
-    log("info", summarizeRhAppJob(job));
-    const data = await postJsonWithEvents("/api/runninghub/run", job, log, signal);
-    const outputs = parseOutputs(data);
-    log("success", `Xong ${name}: ${outputs.length} output`);
-    return { outputs, raw: data, runId };
+    log("info", summarizeRhAppJob(body));
+    return {
+      endpoint: "/api/runninghub/run",
+      body,
+      provider: "runninghub"
+    };
   }
 
   throw new Error(`Unknown step kind: ${kind}`);
+}
+
+/**
+ * Execute a single canvas node, injecting upstream outputs into image inputs.
+ * @returns {Promise<{outputs: Array<{url:string, filename?:string}>, raw:object}>}
+ */
+export async function runCanvasNode({ node, nodes, edges, rhAuth, onLog, runId: runIdInput, signal }) {
+  const log = (level, message) => onLog?.(level, message);
+  const name = node.data.name || node.id;
+  const request = await prepareCanvasNodeRunRequest({ node, nodes, edges, rhAuth, onLog, runId: runIdInput });
+  const result = await executePreparedCanvasRunRequest(request, log, signal);
+  log("success", `Xong ${name}: ${result.outputs.length} output`);
+  return result;
 }

@@ -390,6 +390,25 @@ html[data-theme="light"] .inputLibraryButton:hover {
   background: rgba(var(--accent-rgb), 0.32);
 }
 
+html[data-theme="dark"] .inputLibraryActions button.isFavorite,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .inputLibraryActions button.isFavorite,
+html[data-theme="light"] .inputLibraryActions button.isFavorite {
+  border-color: rgba(255, 206, 84, 0.92);
+  color: #151000;
+  background: linear-gradient(135deg, #ffd45a, #f59e0b);
+  box-shadow:
+    0 0 0 1px rgba(255, 212, 90, 0.24),
+    0 4px 12px rgba(245, 158, 11, 0.26);
+}
+
+html[data-theme="dark"] .inputLibraryActions button.isFavorite:hover,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .inputLibraryActions button.isFavorite:hover,
+html[data-theme="light"] .inputLibraryActions button.isFavorite:hover {
+  border-color: rgba(255, 221, 112, 0.98);
+  color: #151000;
+  background: linear-gradient(135deg, #ffe083, #fbbf24);
+}
+
 html[data-theme="dark"] .inputLibraryButton:hover,
 html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .inputLibraryButton:hover,
 html[data-theme="light"] .inputLibraryButton:hover {
@@ -408,11 +427,14 @@ html[data-theme="light"] .assetFilter {
 }
 
 html[data-theme="dark"] .imageLightboxClose,
+html[data-theme="dark"] .imageLightboxAction,
 html[data-theme="dark"] .imageLightboxClose.inPanel,
 html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .imageLightboxClose,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .imageLightboxAction,
 html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .imageLightboxClose.inPanel,
 html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .imageLightboxClose.inPanel,
 html[data-theme="light"] .imageLightboxClose,
+html[data-theme="light"] .imageLightboxAction,
 html[data-theme="light"] .imageLightboxClose.inPanel {
   width: 36px;
   height: 36px;
@@ -423,12 +445,23 @@ html[data-theme="light"] .imageLightboxClose.inPanel {
   box-shadow: var(--shadow);
 }
 
+html[data-theme="dark"] .imageLightboxClose.inPanel,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .imageLightboxClose.inPanel,
+html[data-theme="light"] .imageLightboxClose.inPanel {
+  width: 28px;
+  height: 28px;
+  box-shadow: none;
+}
+
 html[data-theme="dark"] .imageLightboxClose:hover,
+html[data-theme="dark"] .imageLightboxAction:hover,
 html[data-theme="dark"] .imageLightboxClose.inPanel:hover,
 html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .imageLightboxClose:hover,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .imageLightboxAction:hover,
 html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .imageLightboxClose.inPanel:hover,
 html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .imageLightboxClose.inPanel:hover,
 html[data-theme="light"] .imageLightboxClose:hover,
+html[data-theme="light"] .imageLightboxAction:hover,
 html[data-theme="light"] .imageLightboxClose.inPanel:hover {
   border-color: var(--border-default);
   background: var(--surface-3);

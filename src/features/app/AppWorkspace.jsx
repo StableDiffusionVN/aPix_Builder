@@ -276,7 +276,7 @@ export function AppWorkspace() {
     running, activeRunId, activeJob, activeTaskId, taskStatus, runQueue,
     status, setStatus, error, setError,
     result, setResult, progress,
-    runWorkflow, cancelWorkflow, runStep,
+    runWorkflow, cancelWorkflow, clearQueue, stopAllWorkflow, runStep,
     localExecution, rhExecution
   } = useRunOrchestration({ onComplete: onRunComplete, runLog: runLogHistory, executionMode });
 
@@ -292,6 +292,10 @@ export function AppWorkspace() {
     if (!runLogOpen) return;
     refreshRunLogSessions();
   }, [runLogOpen, refreshRunLogSessions]);
+
+  useEffect(() => {
+    refreshRunLogSessions();
+  }, [executionMode, isCanvasView, refreshRunLogSessions]);
 
   const isRunningHub = isRunningHubMode(executionMode);
   const isRunningHubApp = executionMode === "runninghub-app";
@@ -537,7 +541,15 @@ export function AppWorkspace() {
     provider: resultTiming.provider || (isRunningHub ? "runninghub" : undefined),
     rhCoins: resultTiming.rhCoins
   });
-  const showStatus = Boolean(error || result || running || activeRunId || runQueue.length);
+  const backendFormQueueCount = useMemo(() => (
+    (runLogSessions || []).filter(session => (
+      session.status === "queued"
+      && session.runKind === "form"
+      && !runQueue.some(job => job.runId === session.runId)
+    )).length
+  ), [runLogSessions, runQueue]);
+  const formQueueCount = runQueue.length + backendFormQueueCount;
+  const showStatus = Boolean(error || result || running || activeRunId || formQueueCount);
 
   const compareInputImage = useMemo(() => {
     if (isRunningHubApp) {
@@ -1052,8 +1064,8 @@ export function AppWorkspace() {
 
   // Khi không còn chạy và hết hàng chờ, tắt màn hình chờ để xem được ảnh
   useEffect(() => {
-    if (!running && !runQueue.length) setShowWaitScreen(false);
-  }, [running, runQueue.length]);
+    if (!running && !formQueueCount) setShowWaitScreen(false);
+  }, [running, formQueueCount]);
 
   // Auto-fill dynamic choices from discovery
   useEffect(() => {
@@ -1956,9 +1968,11 @@ export function AppWorkspace() {
           running={running}
           canRun={canRun}
           canCancel={Boolean(running && activeRunId)}
-          queueCount={runQueue.length}
+          queueCount={formQueueCount}
           onRun={handleRunClick}
           onCancel={cancelWorkflow}
+          onClearQueue={clearQueue}
+          onStopAll={stopAllWorkflow}
           runLabel={isRunningHub ? "Run" : undefined}
         />
       </aside>
@@ -2021,6 +2035,7 @@ export function AppWorkspace() {
           history={history}
           deleteRunLogSession={deleteRunLogSession}
           clearRunLogHistory={clearRunLogHistory}
+          refreshRunLogSessions={refreshRunLogSessions}
           restoreHistory={restoreHistory}
           rhApiKey={rhPrimaryApiKey}
           updateRunLogSession={updateRunLogSession}
@@ -2065,11 +2080,11 @@ export function AppWorkspace() {
           selectedIds={selectedHistoryIds}
           activeId={activeHistoryId}
           onDelete={handleDeleteHistoryItem}
-          pending={running || runQueue.length > 0}
+          pending={running || formQueueCount > 0}
           pendingActive={showRunningScreen}
           pendingLabel={progress?.label || status}
           pendingProgressPct={progressPct}
-          queueCount={runQueue.length}
+          queueCount={formQueueCount}
           onShowWaiting={() => setShowWaitScreen(true)}
         />
       </section>

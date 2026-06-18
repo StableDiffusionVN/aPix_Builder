@@ -9,23 +9,30 @@ import { DYNAMIC_FIELD_TYPES, canonicalDynamicType, dynamicFieldChoices, isDynam
 import { localizeRuntimeMessage, useI18n } from "../i18n/I18nContext";
 import { clearPickedFolderFiles, registerPickedFolderFiles } from "../lib/folderFileCache.js";
 import { isHttpImageUrl, readLocalFolderValue } from "../lib/localImageFolder.js";
-import { getSetting, setSetting } from "../lib/appSettings.js";
 import { isInputImagesCacheFresh } from "../lib/inputImagesCache.js";
+import {
+  deleteInputImage,
+  fileToDataUrl,
+  getFavoriteInputImages,
+  loadInputImageFromUrl,
+  makeInputImageValue,
+  saveEditedInputImage,
+  toggleInputImageFavorite,
+  uploadInputImageDataUrl,
+  uploadInputImageFile
+} from "../lib/inputImageActions.js";
 import { StaticFieldBlock } from "../features/fields/StaticFieldBlock.jsx";
 import { renderBasicField } from "../features/fields/basicFieldRegistry.jsx";
 import { InputLibraryModal } from "./InputLibraryModal.jsx";
 import { ImageLightboxOverlay } from "./ImageLightboxOverlay.jsx";
+import { ImageMaskOverlay } from "./ImageMaskOverlay.jsx";
 
 function readImageFieldValue(value) {
   return Array.isArray(value) ? value : value ? [value] : [];
 }
 
 function buildInputImageValue(item, libraryImage) {
-  return {
-    kind: "input-image",
-    ...libraryImage,
-    ...(item.maskDataUrl ? { maskDataUrl: item.maskDataUrl } : {})
-  };
+  return makeInputImageValue(libraryImage, item.maskDataUrl ? { maskDataUrl: item.maskDataUrl } : {});
 }
 
 function resolveSelectedImages(rawValue, libraryReady, libraryImages) {
@@ -112,15 +119,6 @@ const inputTypes = new Set([
   "json"
 ]);
 
-function fileToDataUrl(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
-
 export { StaticFieldBlock as StaticBlock };
 
 export function DynamicField({
@@ -143,7 +141,7 @@ export function DynamicField({
   const [isDraggingFile, setIsDraggingFile] = useState(false);
   const [libraryTimeFilter, setLibraryTimeFilter] = useState("all");
   const [libraryFavoritesOnly, setLibraryFavoritesOnly] = useState(false);
-  const [favoriteInputImages, setFavoriteInputImages] = useState(() => new Set(getSetting("favorites.inputImages", [])));
+  const [favoriteInputImages, setFavoriteInputImages] = useState(getFavoriteInputImages);
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [libraryLoading, setLibraryLoading] = useState(false);
   const [libraryMultiSelect, setLibraryMultiSelect] = useState(false);
@@ -155,13 +153,9 @@ export function DynamicField({
   const [imageUrlLoading, setImageUrlLoading] = useState(false);
   const [imageUrlError, setImageUrlError] = useState("");
   const folderPickerRef = useRef(null);
-  const [lightboxScale, setLightboxScale] = useState(1);
-  const [lightboxPan, setLightboxPan] = useState({ x: 0, y: 0 });
-  const [isPanningLightbox, setIsPanningLightbox] = useState(false);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [imageSizes, setImageSizes] = useState({});
   const [inputLibraryReady, setInputLibraryReady] = useState(false);
-  const lightboxDragRef = useRef(null);
   const reorderDragRef = useRef(null);
   const supportsMultipleImages = ui.type === "image" || ui.type === "image_mask";
   const isImageField = ui.type === "image" || ui.type === "image_mask" || ui.type === "file";
@@ -252,17 +246,6 @@ export function DynamicField({
     }
   }, [activeImageIndex, selectedImages.length]);
 
-  useEffect(() => {
-    if (!lightboxOpen) return undefined;
-    setLightboxScale(1);
-    setLightboxPan({ x: 0, y: 0 });
-    function handleKeyDown(event) {
-      if (event.key === "Escape") setLightboxOpen(false);
-    }
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [lightboxOpen, lightboxImage?.url]);
-
   function commitSelectedImages(images) {
     const next = images.filter(Boolean);
     if (!next.length) {
@@ -276,22 +259,7 @@ export function DynamicField({
 
   async function uploadPickedFile(file) {
     if (!file || (ui.type !== "file" && !file.type.startsWith("image/"))) return null;
-    const dataUrl = await fileToDataUrl(file);
-    try {
-      const response = await fetch("/api/input-images", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ filename: file.name, dataUrl })
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setInputImages(data.images || []);
-        if (data.image) return { kind: "input-image", ...data.image };
-      }
-    } catch {
-      // Direct upload still works even if the local input library is unavailable.
-    }
-    return dataUrl;
+    return uploadInputImageFile(file, { updateInputImages: setInputImages });
   }
 
   async function handlePickedFiles(files) {
@@ -316,18 +284,12 @@ export function DynamicField({
     const blob = await response.blob();
     const dataUrl = await fileToDataUrl(blob);
     try {
-      const uploadResponse = await fetch("/api/input-images", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ filename, dataUrl })
+      const nextImage = await uploadInputImageDataUrl(dataUrl, {
+        filename,
+        updateInputImages: setInputImages
       });
-      if (uploadResponse.ok) {
-        const data = await uploadResponse.json();
-        setInputImages(data.images || []);
-        if (data.image) {
-          const nextImage = { kind: "input-image", ...data.image };
-          commitSelectedImages(supportsMultipleImages ? [...selectedImages, nextImage] : [nextImage]);
-        }
+      if (nextImage) {
+        commitSelectedImages(supportsMultipleImages ? [...selectedImages, nextImage] : [nextImage]);
       }
     } catch {
       commitSelectedImages(supportsMultipleImages ? [...selectedImages, dataUrl] : [dataUrl]);
@@ -339,19 +301,12 @@ export function DynamicField({
     setImageUrlLoading(true);
     setImageUrlError("");
     try {
-      const response = await fetch("/api/input-images/from-url", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ url: sourceUrl })
+      const nextImage = await loadInputImageFromUrl(sourceUrl, {
+        updateInputImages: setInputImages,
+        errorMessage: t("field.urlError")
       });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(localizeRuntimeMessage(data.error, locale) || t("field.urlError"));
-      setInputImages(data.images || []);
-      if (data.image) {
-        const nextImage = { kind: "input-image", ...data.image };
-        commitSelectedImages(supportsMultipleImages ? [...selectedImages, nextImage] : [nextImage]);
-        if (clearInput) setImageUrlInput("");
-      }
+      commitSelectedImages(supportsMultipleImages ? [...selectedImages, nextImage] : [nextImage]);
+      if (clearInput) setImageUrlInput("");
     } catch (error) {
       setImageUrlError(localizeRuntimeMessage(error.message, locale) || t("field.urlError"));
     } finally {
@@ -437,10 +392,6 @@ export function DynamicField({
   async function openInputLibrary() {
     setLibraryMultiSelect(false);
     setLibraryOpen(true);
-    if (inputImages.length > 0) {
-      void refreshInputImages({ force: false });
-      return;
-    }
     setLibraryLoading(true);
     try {
       await refreshInputImages({ force: true });
@@ -453,7 +404,7 @@ export function DynamicField({
     if (!name) return;
     const image = inputImages.find(item => item.name === name);
     if (image) {
-      const nextImage = { kind: "input-image", ...image };
+      const nextImage = makeInputImageValue(image);
       const alreadySelected = selectedImages.some(item => item?.kind === "input-image" && item.name === name);
       if (supportsMultipleImages && libraryMultiSelect) {
         const next = alreadySelected
@@ -489,38 +440,20 @@ export function DynamicField({
   }
 
   function toggleInputFavorite(name) {
-    if (!name) return;
-    setFavoriteInputImages(current => {
-      const next = new Set(current);
-      if (next.has(name)) {
-        next.delete(name);
-      } else {
-        next.add(name);
-      }
-      setSetting("favorites.inputImages", [...next]);
-      return next;
-    });
+    toggleInputImageFavorite(name, setFavoriteInputImages);
   }
 
   async function handleSaveEditedInput(dataUrl) {
     try {
-      const baseName = selectedInputName
-        ? selectedInputName.replace(/(\.[^.]+)?$/, "_edited.png")
-        : "edited.png";
-      const response = await fetch("/api/input-images", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ filename: baseName, dataUrl })
+      const nextImage = await saveEditedInputImage(dataUrl, {
+        selectedName: selectedInputName,
+        updateInputImages: setInputImages
       });
-      if (response.ok) {
-        const data = await response.json();
-        setInputImages(data.images || []);
-        if (data.image) {
-          const next = [...selectedImages];
-          next[activeImageIndex] = { kind: "input-image", ...data.image };
-          commitSelectedImages(next);
-          return;
-        }
+      if (nextImage) {
+        const next = [...selectedImages];
+        next[activeImageIndex] = nextImage;
+        commitSelectedImages(next);
+        return;
       }
     } catch {
       // Server unavailable — fall back to raw dataUrl
@@ -536,7 +469,8 @@ export function DynamicField({
     if (nextMaskDataUrl) {
       next[activeImageIndex] = { ...activeImage, maskDataUrl: nextMaskDataUrl };
     } else {
-      const { maskDataUrl: _omit, ...rest } = activeImage;
+      const rest = { ...activeImage };
+      delete rest.maskDataUrl;
       next[activeImageIndex] = rest;
     }
     commitSelectedImages(next);
@@ -544,60 +478,10 @@ export function DynamicField({
 
   async function handleDeleteInputImage(image) {
     if (!image?.name) return;
-    const response = await fetch("/api/input-images/delete", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ name: image.name })
-    });
-    if (!response.ok) return;
-    const data = await response.json();
-    setInputImages(data.images || []);
+    const images = await deleteInputImage(image, { updateInputImages: setInputImages });
+    if (!images) return;
     const next = selectedImages.filter(item => !(item?.kind === "input-image" && item.name === image.name));
     if (next.length !== selectedImages.length) commitSelectedImages(next);
-  }
-
-  function handleLightboxWheel(event) {
-    event.preventDefault();
-    const delta = event.deltaY > 0 ? -0.18 : 0.18;
-    setLightboxScale(current => {
-      const next = Math.min(6, Math.max(1, Number((current + delta).toFixed(2))));
-      if (next === 1) setLightboxPan({ x: 0, y: 0 });
-      return next;
-    });
-  }
-
-  function handleLightboxPointerDown(event) {
-    if (event.button !== 0) return;
-    event.preventDefault();
-    event.currentTarget.setPointerCapture(event.pointerId);
-    lightboxDragRef.current = {
-      pointerId: event.pointerId,
-      startX: event.clientX,
-      startY: event.clientY,
-      panX: lightboxPan.x,
-      panY: lightboxPan.y
-    };
-    setIsPanningLightbox(true);
-  }
-
-  function handleLightboxPointerMove(event) {
-    const drag = lightboxDragRef.current;
-    if (!drag || drag.pointerId !== event.pointerId) return;
-    event.preventDefault();
-    setLightboxPan({
-      x: drag.panX + event.clientX - drag.startX,
-      y: drag.panY + event.clientY - drag.startY
-    });
-  }
-
-  function handleLightboxPointerUp(event) {
-    const drag = lightboxDragRef.current;
-    if (!drag || drag.pointerId !== event.pointerId) return;
-    lightboxDragRef.current = null;
-    setIsPanningLightbox(false);
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId);
-    }
   }
 
   if (isMenuSub(item)) {
@@ -787,10 +671,10 @@ export function DynamicField({
                         }}
                         onError={() => removeSelectedImage(index)}
                       />
-                      <span className="multiImageOrder">{index + 1}</span>
                       {imageHasMask ? (
-                        <span className="multiImageMask" title={t("field.hasMask")}><Scissors size={11} /></span>
+                        <ImageMaskOverlay maskDataUrl={image.maskDataUrl} fit="cover" />
                       ) : null}
+                      <span className="multiImageOrder">{index + 1}</span>
                       {imageSize?.width && imageSize?.height ? (
                         <div className="imageSizeBadge">
                           {imageSize.width} x {imageSize.height}
@@ -989,41 +873,12 @@ export function DynamicField({
           onViewImage={openLightbox}
           onDeleteImage={handleDeleteInputImage}
         />
-        {lightboxOpen && lightboxImage?.url ? createPortal(
-          <div className="imageLightbox" role="presentation" onClick={event => {
-            if (event.target === event.currentTarget) setLightboxOpen(false);
-          }}>
-            <div
-              className={`imageLightboxFrame ${isPanningLightbox ? "isPanning" : ""}`}
-              role="dialog"
-              aria-modal="true"
-              aria-label={label}
-              onClick={event => {
-                if (event.target === event.currentTarget) setLightboxOpen(false);
-              }}
-              onWheel={handleLightboxWheel}
-            >
-              <button type="button" className="imageLightboxClose" onClick={() => setLightboxOpen(false)} title={t("common.close")}>
-                <X size={18} />
-              </button>
-              <div
-                className="imageLightboxStage"
-                style={{
-                  "--lightbox-scale": lightboxScale,
-                  "--lightbox-pan-x": `${lightboxPan.x}px`,
-                  "--lightbox-pan-y": `${lightboxPan.y}px`
-                }}
-                onPointerDown={handleLightboxPointerDown}
-                onPointerMove={handleLightboxPointerMove}
-                onPointerUp={handleLightboxPointerUp}
-                onPointerCancel={handleLightboxPointerUp}
-              >
-                <img src={lightboxImage.url} alt={lightboxImage.name || label} draggable="false" />
-              </div>
-            </div>
-          </div>,
-          document.body
-        ) : null}
+        <ImageLightboxOverlay
+          open={lightboxOpen}
+          image={lightboxImage}
+          title={label}
+          onClose={() => setLightboxOpen(false)}
+        />
         {editorOpen && selectedImageUrl ? createPortal(
           <Suspense fallback={null}>
             <ImageEditorModal

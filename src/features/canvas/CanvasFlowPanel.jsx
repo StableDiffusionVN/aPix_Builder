@@ -1,6 +1,6 @@
 import { MiniMap, Panel, useReactFlow, useViewport } from "@xyflow/react";
 import { useCallback, useEffect } from "react";
-import { Hand, Map, Maximize2, Minus, MousePointer2, Plus, ScrollText } from "lucide-react";
+import { Hand, Map, Maximize2, Minus, MousePointer2, Plus, Redo2, ScrollText, Undo2 } from "lucide-react";
 import { RunControls } from "../../components/RunControls.jsx";
 import { isTypingTarget } from "../../lib/keyboard.js";
 import { fitCanvasWorkflowView } from "./canvasFitView.js";
@@ -37,7 +37,7 @@ export function CanvasFlowPanel({
   logHasActivity = false,
   logBadgeCount = 0,
   minZoom = 0.1,
-  maxZoom = 10,
+  maxZoom = 30,
   selectedTool = "select",
   activeTool = selectedTool,
   onToolChange,
@@ -46,8 +46,14 @@ export function CanvasFlowPanel({
   canRun = false,
   canCancel = false,
   queueCount = 0,
+  canUndo = false,
+  canRedo = false,
+  onUndo,
+  onRedo,
   onRun,
-  onCancel
+  onCancel,
+  onClearQueue,
+  onStopAll
 }) {
   const { zoomIn, zoomOut, fitView } = useReactFlow();
   const { zoom } = useViewport();
@@ -124,6 +130,29 @@ export function CanvasFlowPanel({
         <button
           type="button"
           className="canvasZoomBtn"
+          onClick={onUndo}
+          title="Undo (⌘/Ctrl+Z)"
+          aria-label="Undo"
+          aria-keyshortcuts="Control+Z Meta+Z"
+          disabled={!canUndo}
+        >
+          <Undo2 size={14} />
+        </button>
+        <button
+          type="button"
+          className="canvasZoomBtn"
+          onClick={onRedo}
+          title="Redo (⌘/Ctrl+Shift+Z hoặc Ctrl+Y)"
+          aria-label="Redo"
+          aria-keyshortcuts="Control+Shift+Z Meta+Shift+Z Control+Y Meta+Y"
+          disabled={!canRedo}
+        >
+          <Redo2 size={14} />
+        </button>
+        <span className="canvasZoomDivider" aria-hidden="true" />
+        <button
+          type="button"
+          className="canvasZoomBtn"
           onClick={() => zoomIn()}
           title="Phóng to"
           disabled={zoom >= maxZoom - ZOOM_EPSILON}
@@ -185,6 +214,8 @@ export function CanvasFlowPanel({
           queueCount={queueCount}
           onRun={onRun}
           onCancel={onCancel}
+          onClearQueue={onClearQueue}
+          onStopAll={onStopAll}
           runLabel="Run"
           compact
           stopInsideRun

@@ -1,7 +1,7 @@
-import { Suspense, useCallback, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useViewport } from "@xyflow/react";
-import { Maximize2, Wand2 } from "lucide-react";
+import { Eye, Pencil } from "lucide-react";
 import { ImageLightboxOverlay } from "../../components/ImageLightboxOverlay.jsx";
 import { ImageEditorModal } from "../../components/lazyModals.js";
 
@@ -52,18 +52,83 @@ async function saveOutputToInputLibrary(dataUrl) {
   } catch {}
 }
 
-export function CanvasNodeComparePreview({ inputUrl, outputUrl, outputTimingLabel = "", onContextMenu }) {
+function PreviewToolbar({ onOpen, onEdit }) {
+  return (
+    <div className="canvasPreviewToolbar nodrag">
+      <button
+        type="button"
+        onClick={event => { event.preventDefault(); event.stopPropagation(); onOpen(); }}
+        title="Mở ảnh đầy đủ"
+      >
+        <Eye size={13} />
+      </button>
+      <button
+        type="button"
+        onClick={event => { event.preventDefault(); event.stopPropagation(); onEdit(); }}
+        title="Image Editor"
+      >
+        <Pencil size={13} />
+      </button>
+    </div>
+  );
+}
+
+export function CanvasNodeComparePreview({
+  inputUrl,
+  outputUrl,
+  outputTimingLabel = "",
+  embedded = false,
+  onContextMenu
+}) {
   const [comparePosition, setComparePosition] = useState(50);
   const [isHovering, setIsHovering] = useState(false);
   const [imageSizes, setImageSizes] = useState({});
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
+  const [stageSize, setStageSize] = useState(null);
+  const compareStageRef = useRef(null);
   const { zoom } = useViewport();
 
   const canCompare = Boolean(inputUrl && outputUrl);
   const inputSize = imageSizes[inputUrl];
   const outputSize = imageSizes[outputUrl];
   const compareSize = outputSize || inputSize;
+
+  useEffect(() => {
+    if (!canCompare) return undefined;
+    const element = compareStageRef.current;
+    if (!element) return undefined;
+    const updateStageSize = () => {
+      const rect = element.getBoundingClientRect();
+      const canvasZoom = Math.max(zoom, 0.01);
+      setStageSize(current => {
+        const next = {
+          width: Math.max(0, rect.width / canvasZoom),
+          height: Math.max(0, rect.height / canvasZoom)
+        };
+        if (current?.width === next.width && current?.height === next.height) return current;
+        return next;
+      });
+    };
+    updateStageSize();
+    const resizeObserver = new ResizeObserver(updateStageSize);
+    resizeObserver.observe(element);
+    return () => resizeObserver.disconnect();
+  }, [canCompare, zoom]);
+
+  const compareFrameSize = (() => {
+    if (!compareSize?.width || !compareSize?.height || !stageSize?.width || !stageSize?.height) {
+      return null;
+    }
+    const imageAspect = compareSize.width / compareSize.height;
+    const stageAspect = stageSize.width / stageSize.height;
+    if (stageAspect > imageAspect) {
+      const height = stageSize.height;
+      return { width: height * imageAspect, height };
+    }
+    const width = stageSize.width;
+    return { width, height: width / imageAspect };
+  })();
 
   const rememberImageSize = useCallback((url, width, height) => {
     setImageSizes(current => {
@@ -91,6 +156,8 @@ export function CanvasNodeComparePreview({ inputUrl, outputUrl, outputTimingLabe
   }, []);
 
   const handleContextMenu = useCallback((event) => {
+    event.preventDefault();
+    event.stopPropagation();
     let imageUrl = outputUrl;
     let imageKind = "output";
     if (isHovering && canCompare) {
@@ -108,28 +175,20 @@ export function CanvasNodeComparePreview({ inputUrl, outputUrl, outputTimingLabe
 
   if (!outputUrl) return null;
 
+  const rootClass = embedded
+    ? "canvasNodePreview isEmbedded"
+    : "canvasNodePreview";
+
   if (!canCompare) {
     return (
-      <div className="canvasNodePreview" onContextMenu={handleContextMenu}>
+      <div className={rootClass} onContextMenu={handleContextMenu}>
         <div className="canvasNodePreviewStage">
           <PreviewImage src={outputUrl} alt="output" onSize={rememberImageSize} />
           <SizeBadge label="Output" size={outputSize} side="output" timingLabel={outputTimingLabel} />
-          <div className="canvasPreviewToolbar nodrag">
-            <button
-              type="button"
-              onClick={event => { event.preventDefault(); event.stopPropagation(); setLightboxOpen(true); }}
-              title="View full size"
-            >
-              <Maximize2 size={12} />
-            </button>
-            <button
-              type="button"
-              onClick={event => { event.preventDefault(); event.stopPropagation(); setEditorOpen(true); }}
-              title="Open in Image Editor"
-            >
-              <Wand2 size={12} />
-            </button>
-          </div>
+          <PreviewToolbar
+            onOpen={() => setLightboxOpen(true)}
+            onEdit={() => setEditorOpen(true)}
+          />
         </div>
         <ImageLightboxOverlay
           open={lightboxOpen}
@@ -157,16 +216,22 @@ export function CanvasNodeComparePreview({ inputUrl, outputUrl, outputTimingLabe
 
   return (
     <div
-      className={`canvasNodePreview canvasNodePreviewCompare nodrag${isHovering ? " isCompareActive" : ""}`}
+      className={`${rootClass} canvasNodePreviewCompare nodrag${isHovering ? " isCompareActive" : ""}`}
       onContextMenu={handleContextMenu}
     >
       <div
+        ref={compareStageRef}
         className={`canvasNodePreviewStage canvasNodeCompareStage${isHovering ? " isCompareActive" : ""}`}
       >
         <div
           className={`canvasCompareImageFrame${isHovering ? " isCompareActive" : ""}`}
           style={{
-            ...(compareSize ? { aspectRatio: `${compareSize.width} / ${compareSize.height}` } : {}),
+            ...(compareFrameSize ? {
+              width: `${compareFrameSize.width}px`,
+              height: `${compareFrameSize.height}px`
+            } : compareSize ? {
+              aspectRatio: `${compareSize.width} / ${compareSize.height}`
+            } : {}),
             "--compare-position": `${isHovering ? comparePosition : 0}%`,
             "--canvas-zoom": Math.max(zoom, 0.01)
           }}
@@ -190,24 +255,10 @@ export function CanvasNodeComparePreview({ inputUrl, outputUrl, outputTimingLabe
         </div>
         <SizeBadge label="Output" size={outputSize} side="output" timingLabel={outputTimingLabel} />
         {isHovering ? <SizeBadge label="Input" size={inputSize} side="input" /> : null}
-        {!isHovering ? (
-          <div className="canvasPreviewToolbar nodrag">
-            <button
-              type="button"
-              onClick={event => { event.preventDefault(); event.stopPropagation(); setLightboxOpen(true); }}
-              title="View full size"
-            >
-              <Maximize2 size={12} />
-            </button>
-            <button
-              type="button"
-              onClick={event => { event.preventDefault(); event.stopPropagation(); setEditorOpen(true); }}
-              title="Open in Image Editor"
-            >
-              <Wand2 size={12} />
-            </button>
-          </div>
-        ) : null}
+        <PreviewToolbar
+          onOpen={() => setLightboxOpen(true)}
+          onEdit={() => setEditorOpen(true)}
+        />
       </div>
       <ImageLightboxOverlay
         open={lightboxOpen}

@@ -4,7 +4,9 @@ import {
   findStaleRunLogSessions,
   historyItemToOutputs,
   matchCanvasNodeForSession,
-  sessionMatchesProject
+  orphanGraceMsForSession,
+  sessionMatchesProject,
+  sessionStartedPastGrace
 } from "../src/features/canvas/canvasRuntimeSync.js";
 
 describe("canvas runtime sync", () => {
@@ -46,5 +48,18 @@ describe("canvas runtime sync", () => {
     expect(historyItemToOutputs({
       outputs: [{ url: "/api/output-image?name=a.png", filename: "a.png" }]
     })).toEqual([{ url: "/api/output-image?name=a.png", filename: "a.png" }]);
+  });
+
+  test("sessionStartedPastGrace requires startedAt and grace window", () => {
+    const recent = { startedAt: new Date().toISOString() };
+    expect(sessionStartedPastGrace(recent, 15000)).toBe(false);
+    expect(sessionStartedPastGrace({ startedAt: "" }, 15000)).toBe(false);
+    const old = { startedAt: new Date(Date.now() - 20000).toISOString() };
+    expect(sessionStartedPastGrace(old, 15000)).toBe(true);
+  });
+
+  test("orphanGraceMsForSession uses longer grace for RunningHub", () => {
+    expect(orphanGraceMsForSession({ provider: "runninghub" })).toBe(60000);
+    expect(orphanGraceMsForSession({ provider: "local" })).toBe(15000);
   });
 });

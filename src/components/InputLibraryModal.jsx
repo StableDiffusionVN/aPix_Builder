@@ -16,7 +16,12 @@ function InputLibraryThumb({ image, onSelect, title }) {
     <button
       type="button"
       className={`inputLibraryThumb${broken ? " isBroken" : ""}`}
-      onClick={() => onSelect(image.name)}
+      onMouseDown={event => event.stopPropagation()}
+      onClick={event => {
+        event.preventDefault();
+        event.stopPropagation();
+        onSelect?.(image.name);
+      }}
       title={title || image.name}
     >
       {url && !broken ? (
@@ -86,7 +91,9 @@ export function InputLibraryModal({
     <div
       className={`inputLibraryModal${overlayClassName ? ` ${overlayClassName}` : ""}`}
       role="presentation"
-      onMouseDown={() => onClose?.()}
+      onMouseDown={event => {
+        if (event.target === event.currentTarget) onClose?.();
+      }}
     >
       <section
         className="inputLibraryPanel"
@@ -95,6 +102,7 @@ export function InputLibraryModal({
         aria-label={t("field.inputLibrary")}
         aria-busy={loading}
         onMouseDown={event => event.stopPropagation()}
+        onClick={event => event.stopPropagation()}
       >
         <div className="inputLibraryHeader">
           <div>
@@ -191,8 +199,12 @@ export function InputLibraryModal({
                         onToggleFavorite?.(image.name);
                       }}
                       title={favorites.has(image.name) ? t("history.unfavorite") : t("history.favorite")}
+                      aria-pressed={favorites.has(image.name)}
                     >
-                      <Star size={15} />
+                      <Star
+                        size={15}
+                        fill={favorites.has(image.name) ? "currentColor" : "none"}
+                      />
                     </button>
                     <button
                       type="button"

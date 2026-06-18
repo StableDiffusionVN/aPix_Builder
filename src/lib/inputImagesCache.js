@@ -1,3 +1,5 @@
+import { compareInputImagesNewestFirst } from "./inputImageUtils.js";
+
 const STALE_MS = 30_000;
 
 let cache = {
@@ -12,7 +14,9 @@ export function getCachedInputImages() {
 }
 
 export function setCachedInputImages(images) {
-  const list = Array.isArray(images) ? images : [];
+  const list = Array.isArray(images)
+    ? [...images].sort(compareInputImagesNewestFirst)
+    : [];
   cache = {
     images: list,
     total: list.length,

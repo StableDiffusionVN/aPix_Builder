@@ -23,7 +23,7 @@ export const CANVAS_PANELS = {
   }
 };
 
-export function CanvasDock({ activePanel, onSelect, nodeCount = 0 }) {
+export function CanvasDock({ activePanel, onSelect }) {
   return (
     <nav className="canvasDock" aria-label="Canvas tools">
       {Object.values(CANVAS_PANELS).map(panel => {
@@ -39,10 +39,7 @@ export function CanvasDock({ activePanel, onSelect, nodeCount = 0 }) {
             aria-pressed={isActive}
             onClick={() => onSelect(isActive ? null : panel.id)}
           >
-            <Icon size={18} />
-            {panel.id === "nodes" && nodeCount > 0 ? (
-              <span className="canvasDockBadge">{nodeCount > 99 ? "99+" : nodeCount}</span>
-            ) : null}
+            <Icon size={16} />
           </button>
         );
       })}

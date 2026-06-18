@@ -427,9 +427,9 @@ describe("canvas step node layout", () => {
     const result = restoreOutputPassthroughOnRemove(nodes, edges, "split-1");
     expect(result.nodes.map(node => node.id)).toEqual(["step-1", "step-2"]);
     expect(result.nodes[0].data.detachedOutputs).toBeUndefined();
-    // Fixed height is preserved so growStepNodesToFit can expand it to fit the
-    // returning output preview.
-    expect(result.nodes[0].data.size).toEqual({ width: 236, height: 200 });
+    // Restoring the preview clears the fixed height so the step auto-fits the
+    // complete output image at its natural aspect ratio.
+    expect(result.nodes[0].data.size).toEqual({ width: 236 });
     expect(result.edges).toEqual([
       {
         id: "e-step-1-step-2-0",

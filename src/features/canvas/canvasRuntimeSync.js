@@ -10,15 +10,30 @@ export function findStaleRunLogSessions(sessions = [], skipRunIds = new Set()) {
   ));
 }
 
+/** @returns {Promise<{ runs: object[], ok: boolean }>} */
 export async function fetchActiveRuns() {
   try {
     const response = await fetch("/api/active-runs");
     const data = await response.json().catch(() => ({}));
-    if (!response.ok) return [];
-    return Array.isArray(data.runs) ? data.runs : [];
+    if (!response.ok) return { runs: [], ok: false };
+    return {
+      runs: Array.isArray(data.runs) ? data.runs : [],
+      ok: true
+    };
   } catch {
-    return [];
+    return { runs: [], ok: false };
   }
+}
+
+export function sessionStartedPastGrace(session, graceMs = 15000) {
+  const startedAt = session?.startedAt ? new Date(session.startedAt).getTime() : 0;
+  if (!startedAt) return false;
+  return Date.now() - startedAt > graceMs;
+}
+
+export function orphanGraceMsForSession(session) {
+  if (session?.provider === "runninghub") return 60000;
+  return 15000;
 }
 
 export async function fetchOutputHistoryByRunId() {

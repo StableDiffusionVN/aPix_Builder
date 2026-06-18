@@ -305,16 +305,14 @@ export function restoreOutputPassthroughOnRemove(nodes, edges, passthroughId) {
   const nextNodes = withoutPassthrough.map(node => {
     if (node.id !== stepId) return node;
     const width = node.data?.size?.width || CANVAS_NODE_DEFAULT_WIDTH;
-    const height = node.data?.size?.height;
-    // Preserve any existing fixed height so growStepNodesToFit can expand it to
-    // fit the returning output preview (+ any input image already set).
-    // Auto-fit nodes (height undefined/0) remain auto-fit; CSS flex handles them.
-    const size = (Number.isFinite(height) && height > 0) ? { width, height } : { width };
     return {
       ...node,
       data: {
         ...node.data,
-        size
+        // The output preview is rendered at its natural aspect ratio only when
+        // the step has no fixed height. Reset height as the detached output is
+        // restored so the original node expands to show the complete image.
+        size: compactStepNodeSize(width)
       }
     };
   });

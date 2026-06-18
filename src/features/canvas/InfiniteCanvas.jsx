@@ -13,7 +13,7 @@ import { StepPalette } from "./StepPalette.jsx";
 import { CanvasActionsContext } from "./canvasContext.js";
 import { useCanvasProject } from "./useCanvasProject.js";
 import { loadStepDefinition, useStepLibrary } from "./useStepLibrary.js";
-import { runCanvasNode, bypassCanvasNode } from "./canvasRunner.js";
+import { runCanvasNode, bypassCanvasNode, prepareCanvasNodeRunRequest } from "./canvasRunner.js";
 import { buildCanvasNodeDefaults, arePortsCompatible, STEP_KINDS, topoOrder, upstreamStepsNeedingRunAsync, upstreamStepsWithStaleFilesAsync, linkedImageInputsMissingSource, beginNodeExecutionPatch, nodeRunCachePatch, clearNodeRunCachePatch } from "./canvasModel.js";
 import { buildDefaults, flattenInputs } from "../../lib/template.js";
 import { buildRhRunAuth, getPrimaryRhApiKey, hasRhApiKey } from "../../lib/rhTokenPool.js";
@@ -40,6 +40,11 @@ import {
   cancelServerRun
 } from "./canvasRuntimeSync.js";
 import { useCanvasRunSync } from "./useCanvasRunSync.js";
+import {
+  createCanvasRunJob,
+  snapshotRhApiKeyReady
+} from "./canvasRunSnapshot.js";
+import { expandCanvasRunJobImageBatches } from "./canvasBatchImages.js";
 
 const nodeTypes = { step: StepNode, source: SourceNode };
 
@@ -76,6 +81,11 @@ function runLogProvider(kind) {
   return kind === STEP_KINDS.LOCAL ? "local" : "runninghub";
 }
 
+function runLogProviderForSnapshot(snapshot) {
+  const step = (snapshot?.nodes || []).find(node => node.type === "step" && !node.data?.bypassed);
+  return runLogProvider(step?.data?.kind);
+}
+
 function InfiniteCanvasInner({
   rhSettings,
   inputImages,
@@ -101,10 +111,12 @@ function InfiniteCanvasInner({
   const {
     nodes, edges,
     projects, activeId, activeName,
+    canUndo, canRedo,
     onNodesChange, onEdgesChange, onConnect, setEdges,
     addNode, updateNodeData, updateNodeSize, removeNode, removeEdge,
     disconnectTargetPort, toggleNodeBypass, convertInputToSource, convertOutputToSource, clearProject,
-    switchProject, createProject, renameProject, deleteProject
+    switchProject, createProject, renameProject, deleteProject,
+    undoCanvas, redoCanvas
   } = useCanvasProject();
 
   const [activePanel, setActivePanel] = useState(null);
@@ -136,13 +148,36 @@ function InfiniteCanvasInner({
   const reconciledStaleRunIdsRef = useRef(new Set());
   const runLogSessionsRef = useRef(runLogSessions);
   const canvasRunning = graphRunning || nodeRunning;
+  const logHasActivity = canvasRunning
+    || runQueue.length > 0
+    || (runLogSessions?.some(session => ACTIVE_RUN_LOG_STATUSES.has(session.status)) ?? false);
+  const hasStaleRunningSessions = useMemo(
+    () => findStaleRunLogSessions(runLogSessions).some(session => session.status === "running"),
+    [runLogSessions]
+  );
+  const activeRunSessionCount = useMemo(() => (
+    (runLogSessions || []).filter(session => (
+      ACTIVE_RUN_LOG_STATUSES.has(session.status)
+      && session.runId
+      && session.runId !== activeRunId
+    )).length
+  ), [activeRunId, runLogSessions]);
+  const backendQueuedSessionCount = useMemo(() => (
+    (runLogSessions || []).filter(session => (
+      session.status === "queued"
+      && session.runId
+      && !runQueue.some(job => job.runId === session.runId)
+    )).length
+  ), [runLogSessions, runQueue]);
+  const canvasQueueCount = runQueue.length + backendQueuedSessionCount;
+  const logBadgeCount = (canvasRunning ? 1 : 0) + canvasQueueCount + activeRunSessionCount;
 
   useEffect(() => {
     const runningStep = nodes.find(node => node.type === "step" && node.data?.status === "running");
     const stepNodes = nodes.filter(node => node.type === "step");
     onRuntimeStateChange?.({
       running: canvasRunning,
-      queueCount: runQueue.length,
+      queueCount: canvasQueueCount,
       activeKind: runningStep?.data?.kind ?? null,
       activeLabel: runningStep?.data?.name ?? null,
       hasRhNodes: stepNodes.some(node => (
@@ -150,7 +185,7 @@ function InfiniteCanvasInner({
       )),
       hasLocalNodes: stepNodes.some(node => node.data?.kind === STEP_KINDS.LOCAL)
     });
-  }, [canvasRunning, runQueue.length, nodes, onRuntimeStateChange]);
+  }, [canvasRunning, canvasQueueCount, nodes, onRuntimeStateChange]);
 
   useEffect(() => { nodesRef.current = nodes; }, [nodes]);
   useEffect(() => { edgesRef.current = edges; }, [edges]);
@@ -170,6 +205,26 @@ function InfiniteCanvasInner({
   useEffect(() => {
     setSetting("canvas.tool", canvasTool);
   }, [canvasTool]);
+
+  useEffect(() => {
+    function handleUndoRedo(event) {
+      const isUndoKey = event.key?.toLowerCase() === "z";
+      const isRedoKey = event.key?.toLowerCase() === "y";
+      if ((!isUndoKey && !isRedoKey) || (!event.metaKey && !event.ctrlKey) || event.altKey) return;
+      if (isTypingTarget(event.target)) return;
+      if (event.target instanceof Element && event.target.closest("[role='dialog'], .imageEditorModal, .inputLibraryModal, .imageLightbox, .maskEditorModal, .canvasContextMenu")) {
+        return;
+      }
+      const redo = isRedoKey || (isUndoKey && event.shiftKey);
+      const handled = redo ? redoCanvas() : undoCanvas();
+      if (!handled) return;
+      event.preventDefault();
+      event.stopPropagation();
+    }
+
+    window.addEventListener("keydown", handleUndoRedo, true);
+    return () => window.removeEventListener("keydown", handleUndoRedo, true);
+  }, [redoCanvas, undoCanvas]);
 
   useEffect(() => {
     let shortcutActive = false;
@@ -221,15 +276,6 @@ function InfiniteCanvasInner({
   useEffect(() => {
     if (runLogOpen) setMinimapOpen(false);
   }, [runLogOpen]);
-
-  const logHasActivity = canvasRunning
-    || runQueue.length > 0
-    || (runLogSessions?.some(session => ACTIVE_RUN_LOG_STATUSES.has(session.status)) ?? false);
-  const hasStaleRunSessions = useMemo(
-    () => findStaleRunLogSessions(runLogSessions).length > 0,
-    [runLogSessions]
-  );
-  const logBadgeCount = canvasRunning ? 1 : 0;
 
   useEffect(() => {
     if (!runLogOpen) return;
@@ -426,7 +472,7 @@ function InfiniteCanvasInner({
   }, []);
 
   const updateNodeValues = useCallback((id, patch) => {
-    updateNodeData(id, prev => ({ values: { ...(prev.values || {}), ...patch } }));
+    updateNodeData(id, prev => ({ values: { ...(prev.values || {}), ...patch } }), { history: true });
   }, [updateNodeData]);
 
   const resetRunningNodes = useCallback(() => {
@@ -458,7 +504,12 @@ function InfiniteCanvasInner({
     )
   });
 
-  const executeNode = useCallback(async (node, contextNodes, { pipelineIntro = "", runKind = "canvas-node" } = {}) => {
+  const executeNode = useCallback(async (node, contextNodes, {
+    pipelineIntro = "",
+    runKind = "canvas-node",
+    edges: runEdges,
+    rhAuth: runRhAuth
+  } = {}) => {
     const runId = crypto.randomUUID();
     const abortController = new AbortController();
     abortControllerRef.current = abortController;
@@ -481,8 +532,8 @@ function InfiniteCanvasInner({
       const { outputs, raw } = await runner({
         node,
         nodes: contextNodes,
-        edges: edgesRef.current,
-        rhAuth,
+        edges: runEdges,
+        rhAuth: runRhAuth,
         runId,
         signal: abortController.signal,
         onLog: log
@@ -521,11 +572,9 @@ function InfiniteCanvasInner({
       }
       abortControllerRef.current = null;
     }
-  }, [activeId, rhAuth, makeRunLogger, runLogStartSession, runLogEndSession]);
+  }, [activeId, makeRunLogger, runLogStartSession, runLogEndSession]);
 
   const cancelCanvasRun = useCallback(async () => {
-    runQueueRef.current = [];
-    setRunQueue([]);
     pipelineCancelledRef.current = true;
     abortControllerRef.current?.abort();
     runLockRef.current = false;
@@ -540,7 +589,8 @@ function InfiniteCanvasInner({
     }
 
     const skipRunIds = new Set(runId ? [runId] : []);
-    const stale = findStaleRunLogSessions(runLogSessionsRef.current, skipRunIds);
+    const stale = findStaleRunLogSessions(runLogSessionsRef.current, skipRunIds)
+      .filter(session => session.status === "running");
     for (const session of stale) {
       reconciledStaleRunIdsRef.current.add(session.runId);
       await cancelServerRun(session);
@@ -553,6 +603,24 @@ function InfiniteCanvasInner({
     refreshRunLogSessions?.();
   }, [resetRunningNodes, refreshRunLogSessions, runLogEndSession]);
 
+  const clearCanvasQueue = useCallback(async () => {
+    runQueueRef.current = [];
+    setRunQueue([]);
+    try {
+      await fetch("/api/run-queue/clear", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({})
+      });
+    } catch {}
+    refreshRunLogSessions?.();
+  }, [refreshRunLogSessions]);
+
+  const stopAllCanvasRuns = useCallback(async () => {
+    await clearCanvasQueue();
+    await cancelCanvasRun();
+  }, [cancelCanvasRun, clearCanvasQueue]);
+
   const applyStepSuccess = useCallback((live, stepId, outputs, runId = "", metadata = {}) => {
     const index = live.findIndex(item => item.id === stepId);
     if (index < 0) return;
@@ -562,27 +630,36 @@ function InfiniteCanvasInner({
     syncLiveToRefs(live);
   }, [updateNodeData, syncLiveToRefs]);
 
-  const runStepInLive = useCallback(async (live, stepId, pipelineIntro = "", runKind = "canvas-node") => {
+  const runStepInLive = useCallback(async (live, stepId, runEdges, runRhAuth, pipelineIntro = "", runKind = "canvas-node") => {
     const index = live.findIndex(item => item.id === stepId);
     if (index < 0) throw new Error("Node not found");
     const startPatch = beginNodeExecutionPatch();
     live[index] = { ...live[index], data: { ...live[index].data, ...startPatch } };
     updateNodeData(stepId, startPatch);
     syncLiveToRefs(live);
-    const { outputs, runId, metadata } = await executeNode(live[index], live, { pipelineIntro, runKind });
+    const { outputs, runId, metadata } = await executeNode(live[index], live, {
+      pipelineIntro,
+      runKind,
+      edges: runEdges,
+      rhAuth: runRhAuth
+    });
     return { outputs, runId, metadata };
   }, [executeNode, updateNodeData, syncLiveToRefs]);
 
-  const executeNodeRun = useCallback(async (id) => {
+  const executeNodeRun = useCallback(async (job) => {
+    const { nodeId: id, snapshot } = job;
+    const runEdges = snapshot.edges;
+    const runRhAuth = snapshot.rhAuth;
+    const snapRhSettings = snapshot.rhSettings;
+
     setNodeRunning(true);
     pipelineCancelledRef.current = false;
     try {
-      const node = nodesRef.current.find(item => item.id === id);
+      const live = snapshot.nodes.map(item => ({ ...item, data: { ...item.data } }));
+      const node = live.find(item => item.id === id);
       if (!node || node.type !== "step") return false;
 
-      const live = nodesRef.current.map(item => ({ ...item, data: { ...item.data } }));
-
-      const missingSources = linkedImageInputsMissingSource(node, live, edgesRef.current);
+      const missingSources = linkedImageInputsMissingSource(node, live, runEdges);
       const blocked = missingSources.find(item => !item.canAutoRun);
       if (blocked) {
         const sourceName = blocked.source.data?.name || blocked.source.id;
@@ -593,7 +670,7 @@ function InfiniteCanvasInner({
         return true;
       }
 
-      const upstreamIds = await upstreamStepsNeedingRunAsync(id, live, edgesRef.current);
+      const upstreamIds = await upstreamStepsNeedingRunAsync(id, live, runEdges);
       const stepsToRun = [...upstreamIds, id];
       const needsRhAny = stepsToRun.some(stepId => {
         const step = live.find(item => item.id === stepId);
@@ -601,7 +678,7 @@ function InfiniteCanvasInner({
           step.data.kind === STEP_KINDS.RH_APP || step.data.kind === STEP_KINDS.RH_WF
         );
       });
-      if (needsRhAny && !hasRhApiKey(rhSettings)) {
+      if (needsRhAny && !hasRhApiKey(snapRhSettings)) {
         updateNodeData(id, { status: "error", error: "Thiếu RunningHub API key" });
         return true;
       }
@@ -613,7 +690,7 @@ function InfiniteCanvasInner({
           ? `Tự chạy node upstream (chưa có cache output): ${upstream.data?.name || upstreamId}`
           : "";
         try {
-          const { outputs, runId, metadata } = await runStepInLive(live, upstreamId, intro);
+          const { outputs, runId, metadata } = await runStepInLive(live, upstreamId, runEdges, runRhAuth, intro);
           applyStepSuccess(live, upstreamId, outputs, runId, metadata);
         } catch (err) {
           if (err.name === "AbortError" || pipelineCancelledRef.current) {
@@ -639,7 +716,7 @@ function InfiniteCanvasInner({
       const stillMissing = linkedImageInputsMissingSource(
         live.find(item => item.id === id),
         live,
-        edgesRef.current
+        runEdges
       );
       if (stillMissing.length) {
         const item = stillMissing[0];
@@ -652,7 +729,7 @@ function InfiniteCanvasInner({
       }
 
       const runTarget = async () => {
-        const { outputs, runId, metadata } = await runStepInLive(live, id);
+        const { outputs, runId, metadata } = await runStepInLive(live, id, runEdges, runRhAuth);
         applyStepSuccess(live, id, outputs, runId, metadata);
       };
 
@@ -660,7 +737,7 @@ function InfiniteCanvasInner({
         await runTarget();
       } catch (err) {
         if (!err.message?.includes("file không tồn tại")) throw err;
-        const staleIds = await upstreamStepsWithStaleFilesAsync(id, live, edgesRef.current);
+        const staleIds = await upstreamStepsWithStaleFilesAsync(id, live, runEdges);
         if (!staleIds.length) throw err;
         for (const upstreamId of staleIds) {
           if (pipelineCancelledRef.current) break;
@@ -668,7 +745,7 @@ function InfiniteCanvasInner({
           const intro = upstream
             ? `Tự chạy lại node upstream (file output đã mất): ${upstream.data?.name || upstreamId}`
             : "";
-          const { outputs, runId, metadata } = await runStepInLive(live, upstreamId, intro);
+          const { outputs, runId, metadata } = await runStepInLive(live, upstreamId, runEdges, runRhAuth, intro);
           applyStepSuccess(live, upstreamId, outputs, runId, metadata);
         }
         if (pipelineCancelledRef.current) {
@@ -695,16 +772,18 @@ function InfiniteCanvasInner({
     }
     return true;
   }, [
-    rhSettings,
     updateNodeData,
     runStepInLive,
     applyStepSuccess,
     refreshOutputHistory
   ]);
 
-  const executeGraphRun = useCallback(async () => {
-    const live = nodesRef.current.map(node => ({ ...node, data: { ...node.data } }));
-    const order = topoOrder(live, edgesRef.current);
+  const executeGraphRun = useCallback(async (job) => {
+    const { snapshot } = job;
+    const runEdges = snapshot.edges;
+    const runRhAuth = snapshot.rhAuth;
+    const live = snapshot.nodes.map(node => ({ ...node, data: { ...node.data } }));
+    const order = topoOrder(live, runEdges);
     pipelineCancelledRef.current = false;
     setGraphRunning(true);
 
@@ -719,7 +798,14 @@ function InfiniteCanvasInner({
             ? `Pipeline: ${order.filter(stepId => live.find(item => item.id === stepId)?.type === "step").length} node theo thứ tự topo`
             : "";
           pipelineIntroLogged = true;
-          const { outputs, runId, metadata } = await runStepInLive(live, id, pipelineIntro, "canvas-graph");
+          const { outputs, runId, metadata } = await runStepInLive(
+            live,
+            id,
+            runEdges,
+            runRhAuth,
+            pipelineIntro,
+            "canvas-graph"
+          );
           if (pipelineCancelledRef.current) break;
           applyStepSuccess(live, id, outputs, runId, metadata);
         } catch (err) {
@@ -761,33 +847,132 @@ function InfiniteCanvasInner({
   executeNodeRunRef.current = executeNodeRun;
   executeGraphRunRef.current = executeGraphRun;
 
-  const enqueueRun = useCallback((job) => {
+  const buildRunJob = useCallback((partial) => {
     queueSequenceRef.current += 1;
-    const queued = {
-      ...job,
-      runId: `canvas-q-${Date.now()}-${queueSequenceRef.current}`,
-      queuedAt: new Date().toISOString()
+    return createCanvasRunJob({
+      nodes: nodesRef.current,
+      edges: edgesRef.current,
+      rhSettings,
+      sequence: queueSequenceRef.current,
+      ...partial
+    });
+  }, [rhSettings]);
+
+  const buildBackendQueueJob = useCallback(async (job) => {
+    const { nodeId: id, snapshot } = job;
+    const live = snapshot.nodes.map(item => ({ ...item, data: { ...item.data } }));
+    const node = live.find(item => item.id === id);
+    if (!node || node.type !== "step") return null;
+    if (node.data?.bypassed) {
+      throw new Error("Node bypass không thể gửi vào backend queue");
+    }
+    const request = await prepareCanvasNodeRunRequest({
+      node,
+      nodes: live,
+      edges: snapshot.edges,
+      rhAuth: snapshot.rhAuth,
+      runId: job.runId,
+      onLog: null
+    });
+    return {
+      endpoint: request.endpoint,
+      body: request.body,
+      meta: {
+        provider: request.provider,
+        canvasNodeId: id,
+        canvasProjectId: activeId,
+        runKind: "canvas-node",
+        waitForRunId: activeRunIdRef.current || (
+          (runLogSessionsRef.current || []).find(session => (
+            session.status === "running"
+            && String(session.runKind || "").startsWith("canvas")
+          ))?.runId || ""
+        )
+      }
     };
-    const next = [...runQueueRef.current, queued];
-    runQueueRef.current = next;
-    setRunQueue(next);
+  }, [activeId]);
+
+  const hasBackendCanvasActivity = useCallback(() => (
+    Boolean(activeRunIdRef.current)
+    || (runLogSessionsRef.current || []).some(session => (
+      (session.status === "running" || session.status === "queued")
+      && String(session.runKind || "").startsWith("canvas")
+    ))
+  ), []);
+
+  const graphJobAsSingleNodeJob = useCallback((job) => {
+    const stepNodes = job.snapshot.nodes.filter(node => node.type === "step");
+    if (stepNodes.length !== 1) return null;
+    return {
+      ...job,
+      type: "node",
+      nodeId: stepNodes[0].id,
+      jobLabel: stepNodes[0].data?.name || job.jobLabel || stepNodes[0].id
+    };
   }, []);
 
+  const submitBackendQueueJobs = useCallback(async (queueJobs) => {
+    if (!queueJobs.length) return;
+    const response = await fetch("/api/run-queue/submit", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ jobs: queueJobs })
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || "Không gửi được hàng chờ backend");
+    refreshRunLogSessions?.();
+  }, [refreshRunLogSessions]);
+
+  const enqueueRunJobs = useCallback((jobs) => {
+    if (!jobs.length) return;
+    const next = [...runQueueRef.current, ...jobs];
+    runQueueRef.current = next;
+    setRunQueue(next);
+    for (const job of jobs) {
+      runLogStartSession?.({
+        runId: job.runId,
+        template: "",
+        templateId: "",
+        webappId: "",
+        jobLabel: job.jobLabel || "Canvas queued graph"
+      }, {
+        provider: runLogProviderForSnapshot(job.snapshot),
+        status: "queued",
+        canvasProjectId: activeId,
+        runKind: job.type === "graph" ? "canvas-graph" : "canvas-node"
+      });
+    }
+    refreshRunLogSessions?.();
+  }, [activeId, refreshRunLogSessions, runLogStartSession]);
+
+  const startOrQueueRunJobs = useCallback((jobs) => {
+    const runnable = jobs.filter(job => snapshotRhApiKeyReady(job.snapshot));
+    if (!runnable.length) return;
+    if (runLockRef.current || runQueueRef.current.length > 0) {
+      enqueueRunJobs(runnable);
+      return;
+    }
+    const [first, ...queued] = runnable;
+    if (queued.length) enqueueRunJobs(queued);
+    runLockRef.current = true;
+    if (first.type === "node") {
+      void executeNodeRunRef.current?.(first);
+    } else {
+      void executeGraphRunRef.current?.(first);
+    }
+  }, [enqueueRunJobs]);
+
   const drainRunQueue = useCallback(() => {
+    if (pipelineCancelledRef.current) return;
     if (runLockRef.current) return;
     const [job, ...remaining] = runQueueRef.current;
     if (!job) return;
 
-    if (job.type === "graph") {
-      const hasRhSteps = nodesRef.current.some(node => node.type === "step" && (
-        node.data.kind === STEP_KINDS.RH_APP || node.data.kind === STEP_KINDS.RH_WF
-      ));
-      if (hasRhSteps && !hasRhApiKey(rhSettings)) {
-        runQueueRef.current = remaining;
-        setRunQueue(remaining);
-        queueMicrotask(() => drainRunQueueRef.current());
-        return;
-      }
+    if (!snapshotRhApiKeyReady(job.snapshot)) {
+      runQueueRef.current = remaining;
+      setRunQueue(remaining);
+      queueMicrotask(() => drainRunQueueRef.current());
+      return;
     }
 
     runLockRef.current = true;
@@ -795,41 +980,87 @@ function InfiniteCanvasInner({
     setRunQueue(remaining);
 
     if (job.type === "node") {
-      void executeNodeRunRef.current?.(job.nodeId);
+      void executeNodeRunRef.current?.(job);
     } else {
-      void executeGraphRunRef.current?.();
+      void executeGraphRunRef.current?.(job);
     }
-  }, [rhSettings]);
+  }, []);
   drainRunQueueRef.current = drainRunQueue;
 
-  const runNode = useCallback((id) => {
+  const runNode = useCallback(async (id) => {
     const node = nodesRef.current.find(item => item.id === id);
     if (!node || node.type !== "step") return;
-    if (runLockRef.current || runQueueRef.current.length > 0) {
-      enqueueRun({
-        type: "node",
-        nodeId: id,
-        jobLabel: node.data?.name || id
-      });
-      return;
+    const job = buildRunJob({
+      type: "node",
+      nodeId: id,
+      jobLabel: node.data?.name || id
+    });
+    try {
+      const jobs = await expandCanvasRunJobImageBatches(job, { rootNodeId: id });
+      const queueJobs = (await Promise.all(jobs.map(buildBackendQueueJob))).filter(Boolean);
+      await submitBackendQueueJobs(queueJobs);
+    } catch (err) {
+      updateNodeData(id, { status: "error", error: err.message || "Không tạo được hàng chờ ảnh" });
     }
-    runLockRef.current = true;
-    void executeNodeRunRef.current?.(id);
-  }, [enqueueRun]);
+  }, [buildBackendQueueJob, buildRunJob, submitBackendQueueJobs, updateNodeData]);
 
-  const runGraph = useCallback(() => {
+  const runGraph = useCallback(async () => {
     if (!nodesRef.current.some(node => node.type === "step")) return;
-    const hasRhSteps = nodesRef.current.some(node => node.type === "step" && (
-      node.data.kind === STEP_KINDS.RH_APP || node.data.kind === STEP_KINDS.RH_WF
-    ));
-    if (hasRhSteps && !hasRhApiKey(rhSettings)) return;
-    if (runLockRef.current || runQueueRef.current.length > 0) {
-      enqueueRun({ type: "graph", jobLabel: "Canvas pipeline" });
-      return;
+    const job = buildRunJob({ type: "graph", jobLabel: "Canvas pipeline" });
+    try {
+      const jobs = await expandCanvasRunJobImageBatches(job);
+      const nodeJobs = jobs.map(graphJobAsSingleNodeJob);
+      if (nodeJobs.every(Boolean)) {
+        const queueJobs = (await Promise.all(nodeJobs.map(buildBackendQueueJob))).filter(Boolean);
+        await submitBackendQueueJobs(queueJobs);
+        return;
+      }
+      if (hasBackendCanvasActivity()) {
+        enqueueRunJobs(jobs);
+        return;
+      }
+      startOrQueueRunJobs(jobs);
+    } catch (err) {
+      const firstStep = nodesRef.current.find(node => node.type === "step");
+      if (firstStep) {
+        updateNodeData(firstStep.id, { status: "error", error: err.message || "Không tạo được hàng chờ ảnh" });
+      }
     }
-    runLockRef.current = true;
-    void executeGraphRunRef.current?.();
-  }, [enqueueRun, rhSettings]);
+  }, [
+    buildBackendQueueJob,
+    buildRunJob,
+    enqueueRunJobs,
+    graphJobAsSingleNodeJob,
+    hasBackendCanvasActivity,
+    startOrQueueRunJobs,
+    submitBackendQueueJobs,
+    updateNodeData
+  ]);
+
+  useEffect(() => {
+    function handleRunShortcut(event) {
+      if (event.key !== "Enter" || (!event.metaKey && !event.ctrlKey) || event.altKey || event.shiftKey) return;
+      if (event.repeat || isTypingTarget(event.target)) return;
+      if (event.target instanceof Element && event.target.closest(
+        "[role='dialog'], .imageEditorModal, .inputLibraryModal, .imageLightbox, .maskEditorModal, .canvasContextMenu"
+      )) return;
+
+      const selectedStep = nodesRef.current.find(node => node.type === "step" && node.selected);
+      const hasStep = nodesRef.current.some(node => node.type === "step");
+      if (!selectedStep && !hasStep) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+      if (selectedStep) {
+        runNode(selectedStep.id);
+      } else {
+        runGraph();
+      }
+    }
+
+    window.addEventListener("keydown", handleRunShortcut, true);
+    return () => window.removeEventListener("keydown", handleRunShortcut, true);
+  }, [runGraph, runNode]);
 
   const queuedNodeCounts = useMemo(() => {
     const counts = {};
@@ -911,7 +1142,6 @@ function InfiniteCanvasInner({
           <CanvasDock
             activePanel={activePanel}
             onSelect={setActivePanel}
-            nodeCount={nodes.length}
           />
 
           {activePanel ? (
@@ -994,7 +1224,8 @@ function InfiniteCanvasInner({
               onPaneClick={closeContextMenu}
               isValidConnection={isValidConnection}
               minZoom={0.1}
-              maxZoom={10}
+              maxZoom={30}
+              zoomOnScroll
               doubleClickZoom={false}
               connectionRadius={24}
               panOnDrag
@@ -1033,17 +1264,23 @@ function InfiniteCanvasInner({
                 logHasActivity={logHasActivity}
                 logBadgeCount={logBadgeCount}
                 minZoom={0.1}
-                maxZoom={10}
+                maxZoom={30}
                 selectedTool={canvasTool}
                 activeTool={activeCanvasTool}
                 onToolChange={setCanvasTool}
                 spaceHeld={spaceHeld}
                 running={canvasRunning}
                 canRun={nodes.some(node => node.type === "step")}
-                canCancel={Boolean(canvasRunning || runQueue.length || hasStaleRunSessions)}
-                queueCount={runQueue.length}
+                canCancel={Boolean(canvasRunning || hasStaleRunningSessions)}
+                queueCount={canvasQueueCount}
+                canUndo={canUndo}
+                canRedo={canRedo}
+                onUndo={undoCanvas}
+                onRedo={redoCanvas}
                 onRun={runGraph}
                 onCancel={cancelCanvasRun}
+                onClearQueue={clearCanvasQueue}
+                onStopAll={stopAllCanvasRuns}
               />
             </ReactFlow>
           </CanvasActionsContext.Provider>
@@ -1058,6 +1295,7 @@ function InfiniteCanvasInner({
             outputHistory={outputHistory || []}
             onDeleteSession={deleteRunLogSession}
             onClearHistory={runLogClearHistory}
+            onRefresh={refreshRunLogSessions}
             onRestoreOutput={restoreHistory}
             rhApiKey={logRhApiKey || rhApiKey || ""}
             onRhTaskInspected={(session, detail) => {
@@ -1068,6 +1306,7 @@ function InfiniteCanvasInner({
               });
             }}
             runQueue={runQueue}
+            queueRunKind="canvas-node"
             activeRunId={activeRunId}
             status=""
             running={canvasRunning}

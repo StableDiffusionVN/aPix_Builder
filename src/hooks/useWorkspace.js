@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useCallback, useRef } from "react";
 import { getSetting, setSetting } from "../lib/appSettings.js";
 
 function loadStoredWorkspace() {
@@ -36,11 +36,11 @@ function saveStoredWorkspace(workspace) {
 export function useWorkspace() {
   const workspaceRef = useRef(loadStoredWorkspace());
 
-  function getStoredValues(templateId) {
+  const getStoredValues = useCallback((templateId) => {
     return workspaceRef.current.valuesByTemplate?.[templateId] || null;
-  }
+  }, []);
 
-  function saveValues(templateId, values) {
+  const saveValues = useCallback((templateId, values) => {
     const nextWorkspace = {
       ...workspaceRef.current,
       selectedTemplate: templateId,
@@ -51,11 +51,11 @@ export function useWorkspace() {
     };
     workspaceRef.current = nextWorkspace;
     saveStoredWorkspace(nextWorkspace);
-  }
+  }, []);
 
-  function getLastTemplate() {
+  const getLastTemplate = useCallback(() => {
     return workspaceRef.current.selectedTemplate;
-  }
+  }, []);
 
   return { workspaceRef, getStoredValues, saveValues, getLastTemplate };
 }

@@ -8,16 +8,21 @@ import { canvasViewportsEqual, normalizeCanvasViewport } from "./canvasViewport.
 
 const CANVAS_HISTORY_LIMIT = 80;
 
-function cloneCanvasState(nodes, edges) {
+export function snapshotCanvasState(nodes, edges) {
   return {
-    nodes: structuredClone(nodes || []),
-    edges: structuredClone(edges || [])
+    // Canvas updates are immutable. Retain node/edge objects so undo history
+    // shares heavy config and image metadata instead of cloning it 80 times.
+    nodes: [...(nodes || [])],
+    edges: [...(edges || [])]
   };
 }
 
-function canvasSnapshotsEqual(a, b) {
+export function canvasSnapshotsEqual(a, b) {
   if (!a || !b) return false;
-  return JSON.stringify(a) === JSON.stringify(b);
+  return a.nodes.length === b.nodes.length
+    && a.edges.length === b.edges.length
+    && a.nodes.every((node, index) => node === b.nodes[index])
+    && a.edges.every((edge, index) => edge === b.edges[index]);
 }
 
 /** Strip transient runtime fields before persisting a node; keep runCache. */
@@ -149,7 +154,7 @@ export function useCanvasProject() {
   }, [publishHistoryAvailability]);
 
   const currentSnapshot = useCallback(() => (
-    cloneCanvasState(nodesRef.current, edgesRef.current)
+    snapshotCanvasState(nodesRef.current, edgesRef.current)
   ), []);
 
   const pushHistorySnapshot = useCallback((snapshot = currentSnapshot()) => {

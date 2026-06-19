@@ -91,6 +91,7 @@ export function useRunningHub() {
   const [nodesLoading, setNodesLoading] = useState(false);
   const [nodesError, setNodesError] = useState("");
   const webappOptions = listRhAppOptions(defaultApps, savedWebapps);
+  const primaryApiKey = getPrimaryRhApiKey(settings);
 
   useEffect(() => {
     savedWebappsRef.current = savedWebapps;
@@ -124,7 +125,7 @@ export function useRunningHub() {
   }, []);
 
   useEffect(() => {
-    const apiKey = getPrimaryRhApiKey(settings);
+    const apiKey = primaryApiKey;
     if (!apiKey?.trim()) return undefined;
 
     let cancelled = false;
@@ -140,7 +141,7 @@ export function useRunningHub() {
     return () => {
       cancelled = true;
     };
-  }, [settings]);
+  }, [primaryApiKey]);
 
   useEffect(() => {
     let cancelled = false;
@@ -194,7 +195,7 @@ export function useRunningHub() {
   }, []);
 
   const fetchNodes = useCallback(async (override = {}) => {
-    const apiKey = override.apiKey ?? getPrimaryRhApiKey(settings);
+    const apiKey = override.apiKey ?? primaryApiKey;
     const webappId = override.webappId ?? settings.webappId;
     const shouldThrow = override.throwOnError === true;
     if (!apiKey?.trim()) {
@@ -250,7 +251,7 @@ export function useRunningHub() {
     } finally {
       setNodesLoading(false);
     }
-  }, [locale, settings, t]);
+  }, [locale, primaryApiKey, settings.webappId, t]);
 
   const saveCurrentWebapp = useCallback(async () => {
     if (!savedAppsReady) {

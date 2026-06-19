@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import {
   fetchInputImages,
   getCachedInputImages,
@@ -8,17 +8,17 @@ import {
 export function useInputImages() {
   const [inputImages, setInputImagesState] = useState(() => getCachedInputImages());
 
-  async function refreshInputImages(options = {}) {
+  const refreshInputImages = useCallback(async (options = {}) => {
     const images = await fetchInputImages(options);
     setInputImagesState(images);
     return images;
-  }
+  }, []);
 
-  function setInputImages(images) {
+  const setInputImages = useCallback((images) => {
     const list = setCachedInputImages(images);
     setInputImagesState(list);
     return list;
-  }
+  }, []);
 
   return { inputImages, setInputImages, refreshInputImages };
 }

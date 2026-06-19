@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { getSetting, setSetting } from "../lib/appSettings.js";
 
 function loadData() {
@@ -18,25 +18,25 @@ export function useServerList() {
   const listRef = useRef(loadData());
   const [, forceRender] = useState(0);
 
-  function getServers() {
+  const getServers = useCallback(() => {
     return listRef.current;
-  }
+  }, []);
 
-  function addServer(label, address) {
+  const addServer = useCallback((label, address) => {
     const id = `srv_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
     const next = [...listRef.current, { id, label: label.trim() || address, address }];
     listRef.current = next;
     persistData(next);
     forceRender(n => n + 1);
     return id;
-  }
+  }, []);
 
-  function removeServer(id) {
+  const removeServer = useCallback((id) => {
     const next = listRef.current.filter(s => s.id !== id);
     listRef.current = next;
     persistData(next);
     forceRender(n => n + 1);
-  }
+  }, []);
 
   return { getServers, addServer, removeServer };
 }

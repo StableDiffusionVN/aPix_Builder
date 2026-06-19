@@ -1,5 +1,9 @@
 import { describe, expect, test } from "vitest";
 import { downstreamStepIds, topoOrder } from "../src/features/canvas/canvasModel.js";
+import {
+  canvasSnapshotsEqual,
+  snapshotCanvasState
+} from "../src/features/canvas/useCanvasProject.js";
 
 function linearGraph(size) {
   const nodes = Array.from({ length: size }, (_, index) => ({
@@ -16,6 +20,23 @@ function linearGraph(size) {
 }
 
 describe("canvas graph scalability", () => {
+  test("uses structural sharing for undo snapshots", () => {
+    const { nodes, edges } = linearGraph(5_000);
+    const first = snapshotCanvasState(nodes, edges);
+    const second = snapshotCanvasState(nodes, edges);
+
+    expect(first.nodes).not.toBe(nodes);
+    expect(first.edges).not.toBe(edges);
+    expect(first.nodes[0]).toBe(nodes[0]);
+    expect(first.edges[0]).toBe(edges[0]);
+    expect(canvasSnapshotsEqual(first, second)).toBe(true);
+
+    const movedNodes = nodes.map((node, index) => (
+      index === 0 ? { ...node, position: { x: 1, y: 1 } } : node
+    ));
+    expect(canvasSnapshotsEqual(first, snapshotCanvasState(movedNodes, edges))).toBe(false);
+  });
+
   test("keeps graph traversal linear for large workflows", () => {
     const { nodes, edges } = linearGraph(5_000);
     const startedAt = performance.now();

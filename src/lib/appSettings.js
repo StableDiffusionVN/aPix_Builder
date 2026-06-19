@@ -35,6 +35,8 @@ const DEFAULT_SETTINGS = {
   }
 };
 
+const SETTINGS_PERSIST_DEBOUNCE_MS = 200;
+
 function createSettingsStore() {
   if (import.meta.hot?.data?.apixSettingsStore) {
     return import.meta.hot.data.apixSettingsStore;
@@ -43,7 +45,8 @@ function createSettingsStore() {
     settings: structuredClone(DEFAULT_SETTINGS),
     ready: false,
     loadedFromServer: false,
-    persistQueue: Promise.resolve()
+    persistQueue: Promise.resolve(),
+    persistTimer: null
   };
   if (import.meta.hot) {
     import.meta.hot.data.apixSettingsStore = store;
@@ -334,6 +337,15 @@ async function persistSettings() {
   return store.persistQueue;
 }
 
+function schedulePersistSettings() {
+  if (!store.ready || !store.loadedFromServer) return;
+  if (store.persistTimer) globalThis.clearTimeout(store.persistTimer);
+  store.persistTimer = globalThis.setTimeout(() => {
+    store.persistTimer = null;
+    void persistSettings();
+  }, SETTINGS_PERSIST_DEBOUNCE_MS);
+}
+
 export function isSettingsReady() {
   return store.ready && store.loadedFromServer;
 }
@@ -397,6 +409,14 @@ export function getSetting(path, fallback) {
 
 export function setSetting(path, value) {
   const keys = String(path).split(".");
+  const current = getSetting(path);
+  if (Object.is(current, value)) return;
+  if (
+    current && value
+    && typeof current === "object"
+    && typeof value === "object"
+    && JSON.stringify(current) === JSON.stringify(value)
+  ) return;
   const next = structuredClone(store.settings);
   let target = next;
   for (const key of keys.slice(0, -1)) {
@@ -406,5 +426,5 @@ export function setSetting(path, value) {
   target[keys.at(-1)] = value;
   store.settings = next;
   rememberSensitiveSettings(store.settings);
-  void persistSettings();
+  schedulePersistSettings();
 }

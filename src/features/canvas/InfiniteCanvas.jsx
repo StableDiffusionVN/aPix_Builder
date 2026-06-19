@@ -222,11 +222,6 @@ function InfiniteCanvasInner({
     applyStoredViewport(reactFlowRef.current, viewport);
   }, [activeId, applyStoredViewport, viewport]);
 
-  const handleViewportChange = useCallback((nextViewport) => {
-    if (suppressViewportReportRef.current) return;
-    reportViewport(nextViewport);
-  }, [reportViewport]);
-
   const beginViewportGesture = useCallback(() => {
     suppressViewportReportRef.current = true;
   }, []);
@@ -512,6 +507,12 @@ function InfiniteCanvasInner({
     }
   }, [updateNodeData]);
 
+  const isLocalCanvasRun = useCallback((runId) => (
+    Boolean(runId)
+    && activeRunIdRef.current === runId
+    && Boolean(abortControllerRef.current)
+  ), []);
+
   useCanvasRunSync({
     activeId,
     runLogSessions,
@@ -526,11 +527,7 @@ function InfiniteCanvasInner({
     activeRunIdRef,
     activeRunKindRef,
     reconciledStaleRunIdsRef,
-    isLocalRun: (runId) => (
-      Boolean(runId)
-      && activeRunIdRef.current === runId
-      && Boolean(abortControllerRef.current)
-    )
+    isLocalRun: isLocalCanvasRun
   });
 
   const executeNode = useCallback(async (node, contextNodes, {
@@ -1270,9 +1267,14 @@ function InfiniteCanvasInner({
                 removeEdge(edge.id);
               }}
               onPaneClick={closeContextMenu}
-              onViewportChange={handleViewportChange}
-              onMoveStart={() => setCanvasInteracting(true)}
-              onMoveEnd={() => setCanvasInteracting(false)}
+              onMoveStart={() => {
+                beginViewportGesture();
+                setCanvasInteracting(true);
+              }}
+              onMoveEnd={(_event, nextViewport) => {
+                endViewportGesture(nextViewport);
+                setCanvasInteracting(false);
+              }}
               isValidConnection={isValidConnection}
               minZoom={0.1}
               maxZoom={30}

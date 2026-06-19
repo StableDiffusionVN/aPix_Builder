@@ -312,7 +312,11 @@ export function AppWorkspace() {
   const app = config?.app || {};
   const serverAddress = config?.server?.address || config?.sever?.address || "";
   const rhPrimaryApiKey = getPrimaryRhApiKey(rhSettings);
-  const rhEnabledTokenCount = getEnabledRhTokens(rhSettings).length;
+  const rhEnabledTokens = getEnabledRhTokens(rhSettings);
+  const rhEnabledTokenCount = rhEnabledTokens.length;
+  const rhAccountTokenSignature = rhEnabledTokens
+    .map(token => `${token.id}:${token.apiKey}`)
+    .join("|");
   const rhTotalCoins = useMemo(() => {
     const values = rhTokenAccounts
       .map(entry => entry.account?.remainCoins)
@@ -812,7 +816,7 @@ export function AppWorkspace() {
 
   useEffect(() => {
     if (isCanvasView) return;
-    if (executionMode !== "runninghub-app" || !hasRhApiKey(rhSettings)) return;
+    if (executionMode !== "runninghub-app" || !rhPrimaryApiKey) return;
     if (!String(rhSettings.webappId || "").trim()) return;
     const timer = window.setTimeout(() => {
       fetchRhNodes().then(nextNodes => {
@@ -820,16 +824,16 @@ export function AppWorkspace() {
       });
     }, 500);
     return () => window.clearTimeout(timer);
-  }, [executionMode, isCanvasView, rhSettings, rhSettings.webappId, fetchRhNodes, setRhValues]);
+  }, [executionMode, isCanvasView, rhPrimaryApiKey, rhSettings.webappId, fetchRhNodes, setRhValues]);
 
   useEffect(() => {
-    if (!settingsOpen || settingsTab !== "runninghub" || !hasRhApiKey(rhSettings)) return;
+    if (!settingsOpen || settingsTab !== "runninghub" || !rhAccountTokenSignature) return;
     if (rhAccount || rhAccountLoading || rhAccountError) return;
     handleRhAccountRefresh();
   // handleRhAccountRefresh intentionally reads the latest token pool and is
   // recreated with account state; depending on it would refetch in a loop.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [settingsOpen, settingsTab, rhSettings, rhAccount, rhAccountLoading, rhAccountError]);
+  }, [settingsOpen, settingsTab, rhAccountTokenSignature, rhAccount, rhAccountLoading, rhAccountError]);
 
   useEffect(() => {
     if (isCanvasView) return;
@@ -1221,7 +1225,7 @@ export function AppWorkspace() {
   }
 
   async function handleRhAccountRefresh() {
-    const tokens = getEnabledRhTokens(rhSettings);
+    const tokens = rhEnabledTokens;
     if (!tokens.length) {
       const message = t("error.rhNoApiKey");
       setRhAccount(null);
@@ -1293,9 +1297,9 @@ export function AppWorkspace() {
     }, 5 * 60 * 1000);
     return () => window.clearInterval(timer);
   // handleRhAccountRefresh mutates the account state it reads; keeping this
-  // interval keyed to mode/settings avoids a refresh loop.
+  // interval keyed to mode/token identity avoids refreshes for unrelated RH settings.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isRunningHub, isCanvasView, canvasRuntime.hasRhNodes, rhSettings, setRhAccount, setRhAccountError, setRhAccountLoading, setRhTokenAccounts]);
+  }, [isRunningHub, isCanvasView, canvasRuntime.hasRhNodes, rhAccountTokenSignature, setRhAccount, setRhAccountError, setRhAccountLoading, setRhTokenAccounts]);
 
   async function handleRhTestConnection() {
     setRhTesting(true);

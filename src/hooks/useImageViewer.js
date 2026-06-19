@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 const MIN_IMAGE_SCALE = 0.5;
 const MAX_IMAGE_SCALE = 100;
@@ -27,13 +27,13 @@ export function useImageViewer(heroImage, canCompare) {
     imagePanRef.current = imagePan;
   });
 
-  function resetImageView() {
+  const resetImageView = useCallback(() => {
     const next = { scale: 1, pan: { x: 0, y: 0 } };
     imageScaleRef.current = next.scale;
     imagePanRef.current = next.pan;
     setImageScale(next.scale);
     setImagePan(next.pan);
-  }
+  }, []);
 
   function updateImageFitSize() {
     const area = previewAreaRef.current;

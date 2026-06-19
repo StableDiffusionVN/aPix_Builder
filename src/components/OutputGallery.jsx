@@ -184,7 +184,15 @@ export function OutputGallery({
               }}
             >
               <span className="historyThumb">
-                {primaryOutput ? <img src={primaryOutput.url} alt={primaryOutput.filename || item.templateName} draggable="false" /> : null}
+                {primaryOutput ? (
+                  <img
+                    src={primaryOutput.url}
+                    alt={primaryOutput.filename || item.templateName}
+                    draggable="false"
+                    loading="lazy"
+                    decoding="async"
+                  />
+                ) : null}
                 {isSelected ? <span className="historySelectBadge" aria-hidden="true">✓</span> : null}
               </span>
               <div className="historyMeta">

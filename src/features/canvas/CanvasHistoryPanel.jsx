@@ -101,7 +101,9 @@ export function CanvasHistoryPanel({
                       disabled={!thumb}
                       title={thumb ? "Xem ảnh" : "Không có ảnh"}
                     >
-                      {thumb ? <img src={thumb} alt="" draggable="false" /> : <div className="canvasHistoryOutputPlaceholder" />}
+                      {thumb ? (
+                        <img src={thumb} alt="" draggable="false" loading="lazy" decoding="async" />
+                      ) : <div className="canvasHistoryOutputPlaceholder" />}
                       <div className="canvasHistoryOutputMeta">
                         <strong>{item.webappId || item.template || item.provider || "Output"}</strong>
                         <small>{formatTime(item.completedAt || item.submittedAt)}</small>

@@ -65,6 +65,11 @@ import {
   startRunLogSession,
   updateRunLogSession
 } from "./lib/runLogStore.js";
+import {
+  decorateCanvasHistoryItem,
+  mergeCanvasHistoryItem,
+  normalizeCanvasHistory
+} from "./lib/canvasHistory.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
@@ -879,7 +884,7 @@ function reconcileBackendRunLogState() {
   ].filter(Boolean));
   for (const session of getRunLogSessions()) {
     const runKind = String(session.runKind || "");
-    const isBackendQueuedKind = runKind === "form" || runKind === "canvas-node";
+    const isBackendQueuedKind = runKind === "form" || runKind.startsWith("canvas");
     if (!isBackendQueuedKind || session.status !== "queued") continue;
     if (queueRunIds.has(session.runId)) continue;
     if (activeRuns.has(session.runId) || activeRhRuns.has(session.runId)) {
@@ -925,9 +930,14 @@ async function handleRunQueueSubmit(req, res) {
 async function handleRunQueueClear(req, res) {
   const body = JSON.parse(await readBody(req) || "{}");
   const runKind = String(body.runKind || "").trim();
-  const cleared = clearQueuedBackendRuns(runKind
-    ? job => String(job.meta?.runKind || "") === runKind
-    : null);
+  const runKindPrefix = String(body.runKindPrefix || "").trim();
+  const cleared = clearQueuedBackendRuns(
+    runKindPrefix
+      ? job => String(job.meta?.runKind || "").startsWith(runKindPrefix)
+      : runKind
+        ? job => String(job.meta?.runKind || "") === runKind
+        : null
+  );
   send(res, 200, { cleared });
 }
 await applyStorageSettings(await loadStorageSettings());
@@ -1178,7 +1188,8 @@ async function handleRun(req, res) {
           type: "output_download_retry",
           data: { label, attempt }
         });
-      }
+      },
+      canvasHistory: body
     });
     send(res, 200, {
       runId,
@@ -1587,7 +1598,7 @@ async function readOutputHistory() {
   try {
     const raw = await readFile(outputHistoryPath, "utf8");
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    return normalizeCanvasHistory(parsed);
   } catch {
     return [];
   }
@@ -1631,7 +1642,8 @@ async function archiveOutputRun({
   values,
   submittedAt,
   signal,
-  onDownloadRetry
+  onDownloadRetry,
+  canvasHistory
 }) {
   await mkdir(outputDir, { recursive: true });
   const completedAt = new Date().toISOString();
@@ -1683,7 +1695,7 @@ async function archiveOutputRun({
     throw new Error("ComfyUI hoàn tất nhưng không tải được ảnh kết quả sau nhiều lần thử");
   }
 
-  const item = {
+  const item = decorateCanvasHistoryItem({
     id: runId,
     templateId: template.id,
     templateName: template.name || template.id,
@@ -1706,9 +1718,9 @@ async function archiveOutputRun({
       durationMs,
       outputs: archivedOutputs
     }
-  };
+  }, canvasHistory);
   const current = await readOutputHistory();
-  await writeOutputHistory([item, ...current]);
+  await writeOutputHistory(mergeCanvasHistoryItem(current, item));
   return item;
 }
 
@@ -2170,7 +2182,8 @@ async function archiveRunningHubOutputs({
   values: savedValues,
   submittedAt,
   signal,
-  onDownloadRetry
+  onDownloadRetry,
+  canvasHistory
 }) {
   await mkdir(outputDir, { recursive: true });
   const completedAt = new Date().toISOString();
@@ -2223,7 +2236,7 @@ async function archiveRunningHubOutputs({
     ? (rhWfTemplateId ? `RH Wf · ${rhWfTemplateId}` : `RunningHub Wf ${workflowId}`)
     : `RunningHub App ${webappId}`;
 
-  const item = {
+  const item = decorateCanvasHistoryItem({
     id: runId,
     templateId: isWf && rhWfTemplateId ? `runninghub-wf-template:${rhWfTemplateId}` : templateId,
     templateName,
@@ -2261,9 +2274,9 @@ async function archiveRunningHubOutputs({
       rhCoins: resolvedRhCoins,
       outputs: archivedOutputs
     }
-  };
+  }, canvasHistory);
   const current = await readOutputHistory();
-  await writeOutputHistory([item, ...current]);
+  await writeOutputHistory(mergeCanvasHistoryItem(current, item));
   return item;
 }
 
@@ -2383,7 +2396,8 @@ async function handleRunningHubRun(req, res) {
             type: "output_download_retry",
             data: { label, attempt, taskId: String(taskId) }
           });
-        }
+        },
+        canvasHistory: body
       });
       send(res, 200, {
         runId,
@@ -2568,7 +2582,8 @@ async function handleRunningHubWfRun(req, res) {
             type: "output_download_retry",
             data: { label, attempt, taskId: String(taskId) }
           });
-        }
+        },
+        canvasHistory: body
       });
       send(res, 200, {
         runId,

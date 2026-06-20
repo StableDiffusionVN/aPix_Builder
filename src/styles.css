@@ -1870,24 +1870,66 @@ html[data-theme="light"] .workflowNoteContent a:hover {
 }
 
 .imageLightboxActions {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.imageLightboxNav {
   position: absolute;
-  top: -4px;
-  right: -56px;
-  z-index: 2;
+  top: 50%;
+  z-index: 3;
   display: grid;
-  gap: 8px;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: rgba(8, 8, 18, 0.82);
+  color: #fff;
+  cursor: pointer;
+  transform: translateY(-50%);
+}
+
+.imageLightboxNav.previous { left: -62px; }
+.imageLightboxNav.next { right: -62px; }
+
+.imageLightboxNav:hover {
+  border-color: rgba(var(--accent-rgb), 0.55);
+  background: rgba(var(--accent-rgb), 0.28);
+}
+
+.imageLightboxCounter {
+  position: absolute;
+  left: 50%;
+  bottom: -38px;
+  z-index: 3;
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgba(8, 8, 18, 0.82);
+  color: #fff;
+  font-size: 12px;
+  transform: translateX(-50%);
 }
 
 .imageLightboxClose,
 .imageLightboxAction {
   display: grid;
   place-items: center;
-  width: 40px;
-  height: 40px;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: rgba(8, 8, 18, 0.88);
-  color: var(--muted);
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 6px;
+  background: rgba(8, 8, 18, 0.94);
+  color: rgba(255, 255, 255, 0.88);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.24);
   cursor: pointer;
 }
 
@@ -7469,6 +7511,9 @@ html[data-theme="light"] .saveTemplateButton:hover:not(:disabled) {
     max-height: calc(100vh - 96px);
   }
 
+  .imageLightboxNav.previous { left: 8px; }
+  .imageLightboxNav.next { right: 8px; }
+
   .inputLibraryModal {
     padding: 14px;
   }
@@ -7500,9 +7545,8 @@ html[data-theme="light"] .saveTemplateButton:hover:not(:disabled) {
   }
 
   .imageLightboxActions {
-    top: -44px;
-    right: 0;
-    grid-auto-flow: column;
+    top: 8px;
+    right: 8px;
   }
 }
 

@@ -1,6 +1,6 @@
 import { MiniMap, Panel, useReactFlow, useViewport } from "@xyflow/react";
 import { useCallback, useEffect } from "react";
-import { Hand, Map, Maximize2, Minus, MousePointer2, Plus, Redo2, ScrollText, Undo2 } from "lucide-react";
+import { Hand, Map, Minus, MousePointer2, Plus, Redo2, ScrollText, Undo2 } from "lucide-react";
 import { RunControls } from "../../components/RunControls.jsx";
 import { isTypingTarget } from "../../lib/keyboard.js";
 import { fitCanvasWorkflowView } from "./canvasFitView.js";
@@ -170,13 +170,14 @@ export function CanvasFlowPanel({
         </button>
         <button
           type="button"
-          className="canvasZoomValue canvasZoomValueAction"
+          className="canvasZoomBtn canvasZoomValue"
+          onClick={fitWorkflowView}
           onContextMenu={event => {
             event.preventDefault();
             fitWorkflowView();
           }}
-          title="Chuột phải hoặc phím 1: vừa khung và căn giữa quy trình"
-          aria-label={`Mức zoom ${zoomPercent}%. Chuột phải hoặc phím 1 để vừa khung.`}
+          title="Nhấn hoặc phím 1: vừa khung và căn giữa quy trình"
+          aria-label={`Mức zoom ${zoomPercent}%. Nhấn hoặc phím 1 để vừa khung.`}
           aria-keyshortcuts="1"
         >
           {zoomPercent}%
@@ -189,9 +190,6 @@ export function CanvasFlowPanel({
           disabled={zoom <= minZoom + ZOOM_EPSILON}
         >
           <Minus size={14} />
-        </button>
-        <button type="button" className="canvasZoomBtn" onClick={fitWorkflowView} title="Vừa khung (1)">
-          <Maximize2 size={13} />
         </button>
         <button
           type="button"

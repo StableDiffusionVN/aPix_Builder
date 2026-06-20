@@ -249,6 +249,20 @@ function summarizeRhWfJob(job, values) {
   return `templateId=${job.templateId}, fields=[${filled.join(", ") || "—"}]`;
 }
 
+function withCanvasHistoryContext(body, context = {}) {
+  if (!context.canvasRunGroupId) return body;
+  return {
+    ...body,
+    canvasRunGroupId: context.canvasRunGroupId,
+    canvasProjectId: context.canvasProjectId || "",
+    canvasNodeId: context.canvasNodeId || "",
+    canvasNodeName: context.canvasNodeName || "",
+    canvasGroupLabel: context.canvasGroupLabel || "Canvas run",
+    ...(Number.isInteger(context.canvasBatchIndex) ? { canvasBatchIndex: context.canvasBatchIndex } : {}),
+    ...(Number.isInteger(context.canvasBatchTotal) ? { canvasBatchTotal: context.canvasBatchTotal } : {})
+  };
+}
+
 /** Pass-through outputs when a step node is bypassed. */
 export async function bypassCanvasNode({ node, nodes, edges, onLog }) {
   const values = await resolveInputValues(node, nodes, edges, onLog);
@@ -267,7 +281,15 @@ export async function bypassCanvasNode({ node, nodes, edges, onLog }) {
   return { outputs, raw: {}, runId: crypto.randomUUID() };
 }
 
-export async function prepareCanvasNodeRunRequest({ node, nodes, edges, rhAuth, onLog, runId: runIdInput }) {
+export async function prepareCanvasNodeRunRequest({
+  node,
+  nodes,
+  edges,
+  rhAuth,
+  onLog,
+  runId: runIdInput,
+  historyContext
+}) {
   const log = (level, message) => onLog?.(level, message);
   const kind = node.data.kind;
   const name = node.data.name || node.id;
@@ -279,13 +301,13 @@ export async function prepareCanvasNodeRunRequest({ node, nodes, edges, rhAuth, 
 
   if (kind === STEP_KINDS.LOCAL) {
     const items = flattenInputs(node.data.config?.input || {});
-    const body = {
+    const body = withCanvasHistoryContext({
       runId,
       template: node.data.ref,
       address: node.data.serverAddress || values.__address || undefined,
       values: requestPayload(items, values),
       queuedAt: new Date().toISOString()
-    };
+    }, historyContext);
     log("info", `ComfyUI template=${body.template}`);
     return {
       endpoint: "/api/run",
@@ -299,7 +321,10 @@ export async function prepareCanvasNodeRunRequest({ node, nodes, edges, rhAuth, 
       log("error", "Thiếu RunningHub API key — vào Settings để nhập lại");
       throw new Error("RunningHub API key required");
     }
-    const body = buildRunningHubWfJob({ runId, ...rhAuth, templateId: node.data.ref, values });
+    const body = withCanvasHistoryContext(
+      buildRunningHubWfJob({ runId, ...rhAuth, templateId: node.data.ref, values }),
+      historyContext
+    );
     log("info", summarizeRhWfJob(body, values));
     return {
       endpoint: "/api/runninghub-wf/run",
@@ -313,13 +338,13 @@ export async function prepareCanvasNodeRunRequest({ node, nodes, edges, rhAuth, 
       log("error", "Thiếu RunningHub API key — vào Settings để nhập lại");
       throw new Error("RunningHub API key required");
     }
-    const body = buildCanvasRunningHubJob({
+    const body = withCanvasHistoryContext(buildCanvasRunningHubJob({
       runId,
       rhAuth,
       webappId: String(node.data.ref).trim(),
       nodes: node.data.nodes || [],
       values
-    });
+    }), historyContext);
     log("info", summarizeRhAppJob(body));
     return {
       endpoint: "/api/runninghub/run",
@@ -335,10 +360,18 @@ export async function prepareCanvasNodeRunRequest({ node, nodes, edges, rhAuth, 
  * Execute a single canvas node, injecting upstream outputs into image inputs.
  * @returns {Promise<{outputs: Array<{url:string, filename?:string}>, raw:object}>}
  */
-export async function runCanvasNode({ node, nodes, edges, rhAuth, onLog, runId: runIdInput, signal }) {
+export async function runCanvasNode({ node, nodes, edges, rhAuth, onLog, runId: runIdInput, signal, historyContext }) {
   const log = (level, message) => onLog?.(level, message);
   const name = node.data.name || node.id;
-  const request = await prepareCanvasNodeRunRequest({ node, nodes, edges, rhAuth, onLog, runId: runIdInput });
+  const request = await prepareCanvasNodeRunRequest({
+    node,
+    nodes,
+    edges,
+    rhAuth,
+    onLog,
+    runId: runIdInput,
+    historyContext
+  });
   const result = await executePreparedCanvasRunRequest(request, log, signal);
   log("success", `Xong ${name}: ${result.outputs.length} output`);
   return result;

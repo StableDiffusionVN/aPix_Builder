@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import {
   arePortsCompatible,
+  beginNodeExecutionPatch,
   buildNodeRunCache,
   deriveStepPorts,
   findLinkedImageSource,
@@ -70,6 +71,10 @@ describe("canvas image cache validation", () => {
       rhCoins: 3,
       provider: "runninghub"
     });
+  });
+
+  test("keeps the previous output visible while a replacement run is pending", () => {
+    expect(beginNodeExecutionPatch()).toEqual({ status: "running", error: "" });
   });
 
   test("treats existing local cached outputs as reusable when the file is present", async () => {

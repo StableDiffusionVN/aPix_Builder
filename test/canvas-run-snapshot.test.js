@@ -73,6 +73,7 @@ describe("canvas run snapshot", () => {
     expect(job.snapshot.nodes).toHaveLength(2);
     expect(job.snapshot.edges).toHaveLength(1);
     expect(job.runId).toMatch(/^canvas-q-/);
+    expect(job.groupId).toBe(job.runId);
   });
 
   test("snapshotRhApiKeyReady uses snapshotted RH settings", () => {

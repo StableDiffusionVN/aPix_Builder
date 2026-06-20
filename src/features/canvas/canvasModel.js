@@ -350,7 +350,7 @@ export function nodeRunCachePatch(outputs, runId = "", metadata = {}) {
   };
 }
 
-/** Clear run cache when a node is explicitly re-run. */
+/** Clear run cache only for explicit destructive state changes (for example bypass). */
 export function clearNodeRunCachePatch() {
   return {
     runCache: null,
@@ -363,7 +363,8 @@ export function clearNodeRunCachePatch() {
 export const NODE_EXEC_START = { status: "running", error: "" };
 
 export function beginNodeExecutionPatch() {
-  return { ...clearNodeRunCachePatch(), ...NODE_EXEC_START };
+  // Keep the last successful preview visible until a replacement output arrives.
+  return { ...NODE_EXEC_START };
 }
 
 /** Read an upstream node's cached output URL from a source handle id. */

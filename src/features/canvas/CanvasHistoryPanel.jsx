@@ -34,7 +34,7 @@ export function CanvasHistoryPanel({
   const [tab, setTab] = useState("outputs");
   const [loadingOutputs, setLoadingOutputs] = useState(false);
   const [loadingLogs, setLoadingLogs] = useState(false);
-  const [lightboxImage, setLightboxImage] = useState(null);
+  const [lightboxItem, setLightboxItem] = useState(null);
   const didAutoRefreshRef = useRef(false);
 
   useEffect(() => {
@@ -88,15 +88,30 @@ export function CanvasHistoryPanel({
           ) : (
             <ul className="canvasHistoryOutputs">
               {outputHistory.slice(0, 40).map(item => {
-                const thumb = item.outputs?.[0]?.url;
-                const outputName = item.outputs?.[0]?.filename || item.webappId || item.template || item.provider || "Output";
+                const outputs = (item.outputs || []).filter(output => output?.url);
+                const thumb = outputs[0]?.url;
+                const outputName = item.templateName
+                  || outputs[0]?.canvasNodeName
+                  || outputs[0]?.filename
+                  || item.webappId
+                  || item.template
+                  || item.provider
+                  || "Output";
                 return (
                   <li key={item.id} className="canvasHistoryOutputItem">
                     <button
                       type="button"
                       className="canvasHistoryOutputButton"
                       onClick={() => {
-                        if (thumb) setLightboxImage({ url: thumb, name: outputName });
+                        if (thumb) {
+                          setLightboxItem({
+                            title: outputName,
+                            images: outputs.map((output, index) => ({
+                              ...output,
+                              name: output.canvasNodeName || output.filename || `Output ${index + 1}`
+                            }))
+                          });
+                        }
                       }}
                       disabled={!thumb}
                       title={thumb ? "Xem ảnh" : "Không có ảnh"}
@@ -105,8 +120,11 @@ export function CanvasHistoryPanel({
                         <img src={thumb} alt="" draggable="false" loading="lazy" decoding="async" />
                       ) : <div className="canvasHistoryOutputPlaceholder" />}
                       <div className="canvasHistoryOutputMeta">
-                        <strong>{item.webappId || item.template || item.provider || "Output"}</strong>
-                        <small>{formatTime(item.completedAt || item.submittedAt)}</small>
+                        <strong>{outputName}</strong>
+                        <small>
+                          {formatTime(item.completedAt || item.submittedAt)}
+                          {outputs.length > 1 ? ` · ${outputs.length} ảnh` : ""}
+                        </small>
                       </div>
                     </button>
                   </li>
@@ -143,10 +161,10 @@ export function CanvasHistoryPanel({
         </div>
       ) : null}
       <ImageLightboxOverlay
-        open={Boolean(lightboxImage)}
-        image={lightboxImage}
-        title={lightboxImage?.name || "Output"}
-        onClose={() => setLightboxImage(null)}
+        open={Boolean(lightboxItem)}
+        images={lightboxItem?.images}
+        title={lightboxItem?.title || "Output"}
+        onClose={() => setLightboxItem(null)}
       />
     </div>
   );

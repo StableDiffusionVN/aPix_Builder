@@ -45,7 +45,8 @@ export function useCanvasRunSync({
   activeRunIdRef,
   activeRunKindRef,
   reconciledStaleRunIdsRef,
-  isLocalRun
+  isLocalRun,
+  isQueuedLocally
 }) {
   const syncRunWatchersRef = useRef(new Map());
   const completingRunIdsRef = useRef(new Set());
@@ -184,6 +185,17 @@ export function useCanvasRunSync({
 
       const trackedSessions = findStaleRunLogSessions(runLogSessionsRef.current)
         .filter(session => sessionMatchesProject(session, projectId));
+
+      if (activeRunsOk) {
+        for (const session of trackedSessions) {
+          if (session.status !== "queued") continue;
+          if (activeRunIds.has(session.runId)) continue;
+          if (isQueuedLocally?.(session.runId)) continue;
+          runLogEndSession?.(session.runId, "cancelled", { error: "missing_from_backend_queue" });
+          observedActiveRunIdsRef.current.delete(session.runId);
+        }
+      }
+
       const runningSessions = trackedSessions.filter(session => {
         const activeRun = activeRunById.get(session.runId);
         if (activeRun?.status === "queued") return false;
@@ -275,6 +287,7 @@ export function useCanvasRunSync({
     cleanupWatcher,
     completeFromHistory,
     isLocalRun,
+    isQueuedLocally,
     nodesRef,
     reconciledStaleRunIdsRef,
     runLogAppendLog,

@@ -10,6 +10,33 @@ export function findStaleRunLogSessions(sessions = [], skipRunIds = new Set()) {
   ));
 }
 
+/** Count active/queued canvas jobs once even when mirrored by frontend and backend state. */
+export function countCanvasRunActivity({
+  canvasRunning = false,
+  activeRunId = "",
+  queuedJobs = [],
+  sessions = [],
+  projectId = ""
+} = {}) {
+  const runIds = new Set();
+  if (canvasRunning) runIds.add(activeRunId || "__canvas_active__");
+
+  for (const [index, job] of queuedJobs.entries()) {
+    runIds.add(job?.runId || `__canvas_queue_${index}__`);
+  }
+  for (const session of sessions) {
+    if (!session?.runId || !ACTIVE_RUN_LOG_STATUSES.has(session.status)) continue;
+    if (projectId) {
+      if (String(session.runKind || "") === "form") continue;
+      if (!sessionMatchesProject(session, projectId)) continue;
+      if (session.runKind && !isCanvasRunKind(session.runKind)) continue;
+    }
+    runIds.add(session.runId);
+  }
+
+  return runIds.size;
+}
+
 /** @returns {Promise<{ runs: object[], ok: boolean }>} */
 export async function fetchActiveRuns() {
   try {
@@ -42,10 +69,55 @@ export async function fetchOutputHistoryByRunId() {
     const data = await response.json().catch(() => ({}));
     if (!response.ok) return new Map();
     const history = Array.isArray(data.history) ? data.history : [];
-    return new Map(history.filter(item => item?.id).map(item => [item.id, item]));
+    return outputHistoryByRunId(history);
   } catch {
     return new Map();
   }
+}
+
+export function outputHistoryByRunId(history = []) {
+  const entries = [];
+  for (const item of history) {
+    const runs = Array.isArray(item?.runs) ? item.runs : [];
+    if (runs.length) {
+      for (const run of runs) {
+        if (run?.id) entries.push([run.id, run]);
+      }
+      continue;
+    }
+    if (item?.id) entries.push([item.id, item]);
+  }
+  return new Map(entries);
+}
+
+function historyCompletedAt(item) {
+  const value = item?.completedAt || item?.createdAt || item?.startedAt || "";
+  const timestamp = value ? new Date(value).getTime() : 0;
+  return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
+/** Latest completed history run with outputs for each node in a canvas project. */
+export function outputHistoryByCanvasNodeId(history = [], projectId = "") {
+  const byNodeId = new Map();
+  const completedAtByNodeId = new Map();
+
+  for (const item of history) {
+    const nestedRuns = Array.isArray(item?.runs) ? item.runs : [];
+    const runs = nestedRuns.length ? nestedRuns : [item];
+    for (const run of runs) {
+      const nodeId = run?.canvasNodeId || (nestedRuns.length ? "" : item?.canvasNodeId) || "";
+      const runProjectId = run?.canvasProjectId || item?.canvasProjectId || "";
+      if (!nodeId || !Array.isArray(run?.outputs) || !run.outputs.length) continue;
+      if (projectId && runProjectId && runProjectId !== projectId) continue;
+
+      const completedAt = historyCompletedAt(run) || historyCompletedAt(item);
+      if (byNodeId.has(nodeId) && completedAt <= completedAtByNodeId.get(nodeId)) continue;
+      byNodeId.set(nodeId, run);
+      completedAtByNodeId.set(nodeId, completedAt);
+    }
+  }
+
+  return byNodeId;
 }
 
 export async function cancelServerRun(session) {
@@ -149,4 +221,29 @@ export function attachRunEventWatcher(runId, { onLog, onEnd, onDisconnect }) {
 export function sessionMatchesProject(session, projectId) {
   if (!session?.canvasProjectId) return true;
   return session.canvasProjectId === projectId;
+}
+
+export function isCanvasRunKind(runKind = "") {
+  return String(runKind || "").startsWith("canvas");
+}
+
+/** Queued canvas sessions for the active project (mirrors local + backend queue depth). */
+export function findCanvasQueuedSessions(sessions = [], { projectId = "" } = {}) {
+  return sessions.filter(session => (
+    session?.runId
+    && session.status === "queued"
+    && isCanvasRunKind(session.runKind)
+    && sessionMatchesProject(session, projectId)
+  ));
+}
+
+export function countCanvasQueuedJobs({ queuedJobs = [], sessions = [], projectId = "" } = {}) {
+  const runIds = new Set();
+  for (const job of queuedJobs) {
+    if (job?.runId) runIds.add(job.runId);
+  }
+  for (const session of findCanvasQueuedSessions(sessions, { projectId })) {
+    runIds.add(session.runId);
+  }
+  return runIds.size;
 }

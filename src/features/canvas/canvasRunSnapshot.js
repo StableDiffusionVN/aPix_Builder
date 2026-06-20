@@ -19,13 +19,19 @@ export function createCanvasRunJob({
   type,
   nodeId,
   jobLabel,
-  sequence
+  sequence,
+  canvasProjectId = "",
+  canvasGroupLabel = "Canvas run"
 }) {
+  const runId = `canvas-q-${Date.now()}-${sequence}`;
   return {
     type,
     nodeId,
     jobLabel,
-    runId: `canvas-q-${Date.now()}-${sequence}`,
+    runId,
+    groupId: runId,
+    canvasProjectId,
+    canvasGroupLabel,
     queuedAt: new Date().toISOString(),
     snapshot: captureCanvasRunSnapshot({ nodes, edges, rhSettings })
   };

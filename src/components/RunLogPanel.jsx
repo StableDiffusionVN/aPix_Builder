@@ -73,7 +73,10 @@ function sessionTarget(session) {
 
 function sessionMatchesQueueScope(session, queueRunKind) {
   if (!queueRunKind) return true;
-  return !session.runKind || session.runKind === queueRunKind;
+  const kind = String(session.runKind || "");
+  if (!kind) return true;
+  if (queueRunKind === "canvas") return kind.startsWith("canvas");
+  return kind === queueRunKind;
 }
 
 function confirmAction(message) {

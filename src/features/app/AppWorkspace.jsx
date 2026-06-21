@@ -1,6 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  CheckCircle2,
   Coins,
   Info,
   Loader2,
@@ -8,8 +7,7 @@ import {
   Minimize2,
   Settings2,
   Wifi,
-  WifiOff,
-  X
+  WifiOff
 } from "lucide-react";
 import { DynamicField } from "../../components/DynamicField";
 import { OutputGallery } from "../../components/OutputGallery";
@@ -25,12 +23,7 @@ import {
 import { cloneDefaultAdjustments } from "../../lib/imageAdjustments";
 import { DEFAULT_HEALING_BRUSH_SIZE } from "../../lib/healingBrush";
 import { PreviewPanel } from "../../components/PreviewPanel";
-import {
-  ImageEditorModal,
-  preloadSettingsModal,
-  SettingsModal,
-  TemplateEditorModal
-} from "../../components/lazyModals";
+import { preloadSettingsModal } from "../../components/lazyModals";
 import { formatOutputTimingLabel, formatRhCoins } from "../../lib/runLog";
 import { PresetBar } from "../../components/PresetBar";
 import { RunControls } from "../../components/RunControls";
@@ -38,14 +31,11 @@ import { TemplateSelector } from "../../components/TemplateSelector";
 import { downloadImage } from "../../lib/download";
 import { canonicalDynamicType, dynamicFieldChoices } from "../../lib/dynamicTypes";
 import {
-  expandImageBatchByKeys,
-  expandImageBatchValues,
   extractImageValueUrl,
   findCompareInputImage,
   flattenInputs,
   itemValueKey,
-  normalizeId,
-  requestPayload
+  normalizeId
 } from "../../lib/template";
 import { useDiscovery } from "../../hooks/useDiscovery";
 import { useHistory } from "../../hooks/useHistory";
@@ -65,18 +55,15 @@ import {
 } from "../../hooks/useRunningHub";
 import {
   advanceRhRotateIndex,
-  buildRhRunAuth,
   getEnabledRhTokens,
   getPrimaryRhApiKey,
   hasRhApiKey,
   RH_TOKEN_POLICY
 } from "../../lib/rhTokenPool.js";
-import { expandFolderImageValues } from "../../lib/localImageFolder.js";
 import { rhWfWorkspaceKey } from "../../lib/runningHubTemplate";
 import { buildRunningHubAppShortcutConfig } from "../../lib/runningHubShortcut";
 import { ExecutionModeToggle, RunningHubPanel } from "../../components/RunningHubPanel";
 import { SidebarLayoutHandles } from "../../components/SidebarLayoutHandles";
-import { SdvnWaterLogo } from "../../components/SdvnWaterLogo";
 import { AppUpdateBanner } from "../../components/AppUpdateBanner";
 import { ComfyUiLogomark } from "../../components/icons/ComfyUiIcon";
 import { RunningHubLogomark } from "../../components/icons/RunningHubIcon";
@@ -84,9 +71,7 @@ import { AppleShortcutsIcon } from "../../components/icons/AppleShortcutsIcon";
 import { localizeRuntimeMessage, useI18n } from "../../i18n/I18nContext";
 import { MAIN_FONT_OPTIONS, syncMainFontStylesheet, THEME_OPTIONS } from "../../constants/appearance";
 import { getSetting, setSetting } from "../../lib/appSettings";
-import { APP_VERSION_LABEL } from "../../constants/app";
 import { useAppUpdate } from "../../hooks/useAppUpdate";
-import { isTextEntryTarget, isTypingTarget, releaseGlobalShortcutFocus } from "../../lib/keyboard";
 import { useColorAdjustContext } from "../../providers/ColorAdjustProvider.jsx";
 import { useExecutionContext } from "../../providers/ExecutionProvider.jsx";
 import { useHistoryContext } from "../../providers/HistoryProvider.jsx";
@@ -94,10 +79,12 @@ import {
   DEFAULT_COMFY_SERVER,
   useWorkspaceLayoutContext
 } from "../../providers/WorkspaceLayoutProvider.jsx";
-import {
-  SettingsModalProvider
-} from "../../providers/SettingsModalProvider.jsx";
 import { useTemplateWorkspaceActions } from "../templates/useTemplateWorkspaceActions.js";
+import { useBatchImageState } from "./useBatchImageState.js";
+import { useWorkspaceModals } from "./useWorkspaceModals.js";
+import { useShortcutActionRefs, useWorkspaceShortcuts } from "./useWorkspaceShortcuts.js";
+import { RunningState } from "./AppWorkspaceRunningUi.jsx";
+import { WorkspaceModals } from "./WorkspaceModals.jsx";
 
 const InfiniteCanvas = lazy(() => import("../canvas/InfiniteCanvas.jsx").then(module => ({ default: module.InfiniteCanvas })));
 
@@ -131,11 +118,6 @@ function formatServerName(address) {
   } catch {
     return address;
   }
-}
-
-function isLogToggleKey(event) {
-  if (event.code === "Backquote" || event.code === "IntlBackslash") return true;
-  return event.key === "`" || event.key === "~";
 }
 
 export function AppWorkspace() {
@@ -331,6 +313,27 @@ export function AppWorkspace() {
 
   const inputs = useMemo(() => flattenInputs(config?.input), [config]);
   const rhWfInputs = useMemo(() => flattenInputs(rhWfConfig?.input), [rhWfConfig]);
+  const { runWithBatchExpansion } = useBatchImageState({
+    locale,
+    t,
+    executionMode,
+    inputs,
+    values,
+    selectedTemplate,
+    comfyAddress,
+    rhSettings,
+    rhNodes,
+    rhValues,
+    rhWfConfig,
+    rhWfInputs,
+    rhWfValues,
+    rhWfSelectedTemplate,
+    runStep,
+    setError,
+    setStatus,
+    setShowWaitScreen
+  });
+  const handleRunClick = runWithBatchExpansion;
   const outputs = useMemo(() => Object.values(config?.output || {}), [config]);
   const currentPresets = useMemo(() => {
     void presetsVersion;
@@ -918,194 +921,6 @@ export function AppWorkspace() {
     };
   }, [themeMenuOpen, setThemeMenuOpen]);
 
-  // Execution mode shortcuts (Alt/Option + `/1/2/3)
-  useEffect(() => {
-    const MODE_BY_CODE = {
-      Digit1: "local",
-      Digit2: "runninghub-wf",
-      Digit3: "runninghub-app"
-    };
-
-    function handleExecutionModeShortcut(event) {
-      if (!event.altKey) return;
-      if (event.metaKey || event.ctrlKey || event.shiftKey) return;
-      if (isTextEntryTarget(event.target)) return;
-
-      if (isLogToggleKey(event)) {
-        event.preventDefault();
-        event.stopPropagation();
-        releaseGlobalShortcutFocus(event.target);
-        setWorkspaceView(current => (current === "canvas" ? "form" : "canvas"));
-        return;
-      }
-
-      const mode = MODE_BY_CODE[event.code];
-      if (!mode) return;
-      event.preventDefault();
-      event.stopPropagation();
-      releaseGlobalShortcutFocus(event.target);
-      setWorkspaceView("form");
-      setExecutionMode(mode);
-    }
-
-    window.addEventListener("keydown", handleExecutionModeShortcut, true);
-    return () => window.removeEventListener("keydown", handleExecutionModeShortcut, true);
-  }, [setExecutionMode, setWorkspaceView]);
-
-  // Settings modal shortcut (Cmd/Ctrl + ,)
-  useEffect(() => {
-    function handleSettingsShortcut(event) {
-      if (event.key !== "," && event.code !== "Comma") return;
-      if (!event.metaKey && !event.ctrlKey) return;
-      if (event.altKey || event.shiftKey) return;
-      if (isTextEntryTarget(event.target)) return;
-      event.preventDefault();
-      event.stopPropagation();
-      setInfoOpen(false);
-      setSettingsOpen(current => !current);
-    }
-    window.addEventListener("keydown", handleSettingsShortcut, true);
-    return () => window.removeEventListener("keydown", handleSettingsShortcut, true);
-  }, [setInfoOpen, setSettingsOpen]);
-
-  // Info modal shortcut (Cmd/Ctrl + /)
-  useEffect(() => {
-    function handleInfoShortcut(event) {
-      if (event.key === "Escape" && infoOpen) { setInfoOpen(false); return; }
-      if (event.key !== "/") return;
-      if (!event.metaKey && !event.ctrlKey) return;
-      if (event.altKey || event.shiftKey) return;
-      if (isTextEntryTarget(event.target)) return;
-      event.preventDefault();
-      event.stopPropagation();
-      setSettingsOpen(false);
-      setInfoOpen(true);
-    }
-    window.addEventListener("keydown", handleInfoShortcut, true);
-    return () => window.removeEventListener("keydown", handleInfoShortcut, true);
-  }, [infoOpen, setInfoOpen, setSettingsOpen]);
-
-  useEffect(() => {
-    function handleFullscreenChange() {
-      setIsFullscreen(Boolean(document.fullscreenElement));
-    }
-    document.addEventListener("fullscreenchange", handleFullscreenChange);
-    return () => document.removeEventListener("fullscreenchange", handleFullscreenChange);
-  }, [setIsFullscreen]);
-
-  const toggleFullscreen = useCallback(async () => {
-    try {
-      if (document.fullscreenElement) {
-        await document.exitFullscreen();
-      } else {
-        await document.documentElement.requestFullscreen();
-      }
-    } catch {}
-  }, []);
-
-  // Fullscreen shortcut (Cmd/Ctrl + Shift + F)
-  useEffect(() => {
-    function handleFullscreenShortcut(event) {
-      if (event.key.toLowerCase() !== "f") return;
-      if (!event.metaKey && !event.ctrlKey) return;
-      if (!event.shiftKey || event.altKey) return;
-      if (isTextEntryTarget(event.target)) return;
-      event.preventDefault();
-      event.stopPropagation();
-      void toggleFullscreen();
-    }
-    window.addEventListener("keydown", handleFullscreenShortcut, true);
-    return () => window.removeEventListener("keydown", handleFullscreenShortcut, true);
-  }, [toggleFullscreen]);
-
-  // Log panel shortcut (` or Ctrl+`; Cmd+` is reserved by macOS window switching)
-  useEffect(() => {
-    function handleLogShortcut(event) {
-      if (!isLogToggleKey(event)) return;
-      if (event.metaKey || event.altKey) return;
-      const bareBacktick = !event.ctrlKey && !event.shiftKey;
-      const ctrlBacktick = event.ctrlKey && !event.shiftKey;
-      if (!bareBacktick && !ctrlBacktick) return;
-      if (isTextEntryTarget(event.target)) return;
-      event.preventDefault();
-      event.stopPropagation();
-      setRunLogOpen(current => !current);
-    }
-    window.addEventListener("keydown", handleLogShortcut, true);
-    return () => window.removeEventListener("keydown", handleLogShortcut, true);
-  }, [setRunLogOpen]);
-
-  // Keyboard: space reset, S compare
-  useEffect(() => {
-    function hasActiveEditorModal() {
-      return Boolean(document.querySelector(".imageEditorModal, .maskEditorModal"));
-    }
-    function handleSpaceReset(event) {
-      if (event.code !== "Space") return;
-      if (isTypingTarget(event.target)) return;
-      if (hasActiveEditorModal()) return;
-      event.preventDefault();
-      event.stopPropagation();
-      releaseGlobalShortcutFocus(event.target);
-      if (healingBridgeRef.current?.suspendToolsForSpace?.()) return;
-      if (heroImage) resetImageView();
-    }
-    function handleSpaceKeyUp(event) {
-      if (event.code !== "Space") return;
-      if (isTypingTarget(event.target)) return;
-      if (hasActiveEditorModal()) return;
-      healingBridgeRef.current?.resumeToolsAfterSpace?.();
-    }
-    function handleCompareToggle(event) {
-      if (!canCompare || event.key.toLowerCase() !== "s") return;
-      if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
-      if (isTypingTarget(event.target)) return;
-      if (hasActiveEditorModal()) return;
-      event.preventDefault(); event.stopPropagation();
-      releaseGlobalShortcutFocus(event.target);
-      setCompareMode(current => !current);
-    }
-    function preventSpaceClick(event) {
-      if (event.code !== "Space") return;
-      if (isTypingTarget(event.target)) return;
-      if (hasActiveEditorModal()) return;
-      if (!heroImage) return;
-      event.preventDefault();
-      event.stopPropagation();
-      releaseGlobalShortcutFocus(event.target);
-    }
-    window.addEventListener("keydown", handleSpaceReset, true);
-    window.addEventListener("keydown", handleCompareToggle, true);
-    window.addEventListener("keyup", handleSpaceKeyUp, true);
-    window.addEventListener("keyup", preventSpaceClick, true);
-    return () => {
-      window.removeEventListener("keydown", handleSpaceReset, true);
-      window.removeEventListener("keydown", handleCompareToggle, true);
-      window.removeEventListener("keyup", handleSpaceKeyUp, true);
-      window.removeEventListener("keyup", preventSpaceClick, true);
-    };
-  }, [canCompare, heroImage, resetImageView, setCompareMode]);
-
-  // Keyboard: arrow navigate outputs
-  useEffect(() => {
-    function handleOutputNavigation(event) {
-      if (isCanvasView) return;
-      if (!heroImage || resultOutputs.length < 2) return;
-      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
-      if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
-      if (isTypingTarget(event.target)) return;
-      if (document.querySelector(".imageEditorModal")) return;
-      event.preventDefault(); event.stopPropagation();
-      releaseGlobalShortcutFocus(event.target);
-      stepOutput(event.key === "ArrowRight" ? 1 : -1);
-    }
-    window.addEventListener("keydown", handleOutputNavigation, true);
-    return () => window.removeEventListener("keydown", handleOutputNavigation, true);
-  // stepOutput is a render-local helper; the listener is refreshed whenever
-  // its output collection changes, which is the state it reads.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [heroImage, isCanvasView, resultOutputs.length]);
-
   // Reset output index when result changes
   useEffect(() => {
     if (selectedOutputIndex >= resultOutputs.length) setSelectedOutputIndex(0);
@@ -1178,85 +993,6 @@ export function AppWorkspace() {
       restoredValues[nodeFieldKey(node)] = node.fieldValue ?? "";
     }
     return restoredValues;
-  }
-
-  async function handleRunClick() {
-    setShowWaitScreen(true);
-    setError("");
-    try {
-      if (isRunningHubApp) {
-        if (!hasRhApiKey(rhSettings)) {
-          setError(t("error.rhMissingApiKey"));
-          setStatus(t("error.rhMissingConfig"));
-          setShowWaitScreen(false);
-          return;
-        }
-        if (!rhNodes.length) {
-          setError(t("error.rhMissingNodes"));
-          setStatus(t("error.rhMissingAppNodes"));
-          setShowWaitScreen(false);
-          return;
-        }
-        const rhAuth = buildRhRunAuth(rhSettings);
-        const imageKeys = rhNodes
-          .filter(node => String(node.fieldType || "").toUpperCase() === "IMAGE")
-          .map(nodeFieldKey);
-        const expandedRhValues = await expandFolderImageValues(rhValues, imageKeys);
-        for (const batchValues of expandImageBatchByKeys(expandedRhValues, imageKeys)) {
-          runStep({
-            ...rhAuth,
-            webappId: rhSettings.webappId.trim(),
-            nodes: rhNodes,
-            values: batchValues
-          });
-        }
-        return;
-      }
-      if (isRunningHubWf) {
-        const workflowId = String(rhWfConfig?.runninghub?.workflowId || "").trim();
-        if (!hasRhApiKey(rhSettings)) {
-          setError(t("error.rhMissingApiKey"));
-          setStatus(t("error.rhMissingConfig"));
-          setShowWaitScreen(false);
-          return;
-        }
-        if (!rhWfConfig || !rhWfInputs.length) {
-          setError(t("error.rhWfMissingTemplate"));
-          setStatus(t("error.rhWfMissingTemplateShort"));
-          setShowWaitScreen(false);
-          return;
-        }
-        if (!workflowId) {
-          setError(t("error.rhMissingWorkflowId"));
-          setStatus(t("error.rhMissingWorkflowIdShort"));
-          setShowWaitScreen(false);
-          return;
-        }
-        const rhAuth = buildRhRunAuth(rhSettings);
-        const expandedRhWfValues = await expandFolderImageValues(rhWfValues);
-        for (const batchValues of expandImageBatchValues(rhWfInputs, expandedRhWfValues)) {
-          runStep({
-            ...rhAuth,
-            templateId: rhWfSelectedTemplate,
-            values: batchValues
-          });
-        }
-        return;
-      }
-      const expandedValues = await expandFolderImageValues(values);
-      for (const batchValues of expandImageBatchValues(inputs, expandedValues)) {
-        runStep({
-          template: selectedTemplate,
-          address: comfyAddress,
-          values: requestPayload(inputs, batchValues)
-        });
-      }
-    } catch (err) {
-      const message = localizeRuntimeMessage(err.message, locale);
-      setError(message);
-      setStatus(message);
-      setShowWaitScreen(false);
-    }
   }
 
   async function handleRhAccountRefresh() {
@@ -1674,52 +1410,96 @@ export function AppWorkspace() {
       ? Boolean(rhWfConfig && rhWfInputs.length && hasRhApiKey(rhSettings) && String(rhWfConfig?.runninghub?.workflowId || "").trim())
       : Boolean(config);
 
-  const handleRunClickRef = useRef(handleRunClick);
-  handleRunClickRef.current = handleRunClick;
+  const {
+    openSettings,
+    toggleSettings,
+    openInfo,
+    closeInfo,
+    settingsModalProviderValue
+  } = useWorkspaceModals({
+    setSettingsOpen,
+    setInfoOpen,
+    setSettingsTab,
+    settingsOpen,
+    settingsTab,
+    theme,
+    setTheme,
+    themeMenuOpen,
+    setThemeMenuOpen,
+    selectedThemeOption,
+    mainFont,
+    setMainFont,
+    languagePreference,
+    setLanguagePreference,
+    healthStatus,
+    showServerDetails,
+    setShowServerDetails,
+    notifyEnabled,
+    setNotifyEnabled,
+    comfyAddress,
+    setComfyAddress,
+    serverAddress,
+    discovery,
+    discoveryLoading,
+    discoverySystem,
+    discoveryDevice,
+    serverDetailRows,
+    formatBytes,
+    getServers,
+    addServer,
+    removeServer,
+    addServerOpen,
+    setAddServerOpen,
+    rhSettings,
+    updateRhSettings,
+    handleRhTestConnection,
+    rhTesting,
+    rhTestResult,
+    rhAccount,
+    rhAccountLoading,
+    rhAccountError,
+    handleRhAccountRefresh,
+    rhTokenAccounts,
+    rhTotalCoins,
+    setRhTestResult,
+    setRhAccount,
+    setRhAccountError,
+    canvasSmartGuide,
+    setCanvasSmartGuide,
+    canvasSnapGrid,
+    setCanvasSnapGrid,
+    canvasSnapGridSize,
+    setCanvasSnapGridSize,
+    maxHistoryDisplay,
+    setMaxHistoryDisplay
+  });
 
-  const handleColorPanelToggleRef = useRef(handleColorPanelToggle);
-  handleColorPanelToggleRef.current = handleColorPanelToggle;
+  const handleRunClickRef = useShortcutActionRefs(handleRunClick);
+  const handleColorPanelToggleRef = useShortcutActionRefs(handleColorPanelToggle);
+  const stepOutputRef = useShortcutActionRefs(stepOutput);
 
-  useEffect(() => {
-    function hasBlockingOverlay() {
-      return Boolean(document.querySelector(
-        ".imageEditorModal, .maskEditorModal, .templateEditorModal, .modalBackdrop"
-      ));
-    }
-    function handleColorPanelShortcut(event) {
-      if (event.key !== "Tab") return;
-      if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
-      if (isTextEntryTarget(event.target)) return;
-      if (hasBlockingOverlay()) return;
-      if (!colorPanelOpen && (!heroImage || showRunningScreen)) return;
-      event.preventDefault();
-      event.stopPropagation();
-      handleColorPanelToggleRef.current();
-    }
-    window.addEventListener("keydown", handleColorPanelShortcut, true);
-    return () => window.removeEventListener("keydown", handleColorPanelShortcut, true);
-  }, [heroImage, showRunningScreen, colorPanelOpen]);
-
-  useEffect(() => {
-    function hasBlockingOverlay() {
-      return Boolean(document.querySelector(
-        ".imageEditorModal, .maskEditorModal, .templateEditorModal, .modalBackdrop"
-      ));
-    }
-    function handleRunShortcut(event) {
-      if (event.key !== "Enter") return;
-      if (!event.metaKey && !event.ctrlKey) return;
-      if (event.altKey || event.shiftKey) return;
-      if (isCanvasView) return;
-      if (hasBlockingOverlay()) return;
-      if (!canRun) return;
-      event.preventDefault();
-      event.stopPropagation();
-      handleRunClickRef.current();
-    }
-    window.addEventListener("keydown", handleRunShortcut, true);
-    return () => window.removeEventListener("keydown", handleRunShortcut, true);
-  }, [canRun, isCanvasView]);
+  const { toggleFullscreen } = useWorkspaceShortcuts({
+    isCanvasView,
+    infoOpen,
+    setInfoOpen,
+    setSettingsOpen,
+    setExecutionMode,
+    setWorkspaceView,
+    setIsFullscreen,
+    setRunLogOpen,
+    heroImage,
+    canCompare,
+    resetImageView,
+    setCompareMode,
+    healingBridgeRef,
+    resultOutputsLength: resultOutputs.length,
+    stepOutputRef,
+    colorPanelOpen,
+    showRunningScreen,
+    handleColorPanelToggleRef,
+    canRun,
+    handleRunClickRef
+  });
 
   return (
     <main
@@ -1759,13 +1539,11 @@ export function AppWorkspace() {
             onPointerEnter={preloadSettingsModal}
             onFocus={preloadSettingsModal}
             onClick={() => {
-              setInfoOpen(false);
-              setSettingsTab(
+              openSettings(
                 isCanvasView
                   ? (canvasTopBarLocal && !canvasTopBarRh ? "comfy" : "runninghub")
                   : (isRunningHub ? "runninghub" : "comfy")
               );
-              setSettingsOpen(true);
             }}
             title={topBarServerTitle}
             aria-label={topBarServerTitle}
@@ -1816,7 +1594,7 @@ export function AppWorkspace() {
             className="appTopBarButton"
             onPointerEnter={preloadSettingsModal}
             onFocus={preloadSettingsModal}
-            onClick={() => { setInfoOpen(false); setSettingsOpen(true); }}
+            onClick={toggleSettings}
             title={`${t("settings.open")} (Cmd/Ctrl + ,)`}
             aria-label={t("settings.open")}
             aria-keyshortcuts="Meta+Comma Control+Comma"
@@ -1834,7 +1612,7 @@ export function AppWorkspace() {
           >
             {isFullscreen ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
           </button>
-          <button className="appTopBarButton" onClick={() => { setSettingsOpen(false); setInfoOpen(true); }} title={`${t("info.open")} (Cmd/Ctrl + /)`} aria-label={t("info.open")} aria-keyshortcuts="Meta+/ Control+/">
+          <button className="appTopBarButton" onClick={openInfo} title={`${t("info.open")} (Cmd/Ctrl + /)`} aria-label={t("info.open")} aria-keyshortcuts="Meta+/ Control+/">
             <Info size={15} />
           </button>
         </div>
@@ -2167,353 +1945,38 @@ export function AppWorkspace() {
       </>
       )}
 
-      {settingsOpen ? <SettingsModalProvider value={{
-        open: settingsOpen,
-        onClose: () => setSettingsOpen(false),
-        settingsTab,
-        setSettingsTab,
-        theme,
-        setTheme,
-        themeMenuOpen,
-        setThemeMenuOpen,
-        selectedThemeOption,
-        mainFont,
-        setMainFont,
-        languagePreference,
-        setLanguagePreference,
-        healthStatus,
-        showServerDetails,
-        setShowServerDetails,
-        notifyEnabled,
-        setNotifyEnabled,
-        comfyAddress,
-        setComfyAddress,
-        serverAddress,
-        discovery,
-        discoveryLoading,
-        discoverySystem,
-        discoveryDevice,
-        serverDetailRows,
-        formatBytes,
-        getServers,
-        addServer,
-        removeServer,
-        addServerOpen,
-        setAddServerOpen,
-        rhSettings,
-        updateRhSettings,
-        handleRhTestConnection,
-        rhTesting,
-        rhTestResult,
-        rhAccount,
-        rhAccountLoading,
-        rhAccountError,
-        handleRhAccountRefresh,
-        rhTokenAccounts,
-        rhTotalCoins,
-        setRhTestResult,
-        setRhAccount,
-        setRhAccountError,
-        canvasSmartGuide,
-        setCanvasSmartGuide,
-        canvasSnapGrid,
-        setCanvasSnapGrid,
-        canvasSnapGridSize,
-        setCanvasSnapGridSize,
-        maxHistoryDisplay,
-        setMaxHistoryDisplay
-      }}>
-        <Suspense fallback={null}>
-          <SettingsModal />
-        </Suspense>
-      </SettingsModalProvider> : null}
+      <WorkspaceModals
+        settingsOpen={settingsOpen}
+        settingsModalProviderValue={settingsModalProviderValue}
+        infoOpen={infoOpen}
+        closeInfo={closeInfo}
+        infoModeLabel={infoModeLabel}
+        infoTemplateLabel={infoTemplateLabel}
+        infoTargetLabel={infoTargetLabel}
+        isDesktop={isDesktop}
+        updateChecking={updateChecking}
+        updateCheckError={updateCheckError}
+        updateUpToDate={updateUpToDate}
+        availableUpdate={availableUpdate}
+        checkForUpdates={checkForUpdates}
+        downloadUpdate={downloadUpdate}
+        templateEditorOpen={templateEditorOpen}
+        setTemplateEditorOpen={setTemplateEditorOpen}
+        selectedTemplate={selectedTemplate}
+        discovery={discovery}
+        reloadTemplates={reloadTemplates}
+        rhWfTemplateEditorOpen={rhWfTemplateEditorOpen}
+        setRhWfTemplateEditorOpen={setRhWfTemplateEditorOpen}
+        rhWfSelectedTemplate={rhWfSelectedTemplate}
+        rhPrimaryApiKey={rhPrimaryApiKey}
+        reloadRhWfTemplates={reloadRhWfTemplates}
+        outputEditorOpen={outputEditorOpen}
+        setOutputEditorOpen={setOutputEditorOpen}
+        heroImage={heroImage}
+        handleSaveEditedOutput={handleSaveEditedOutput}
+      />
 
-      {infoOpen ? (
-        <div className="modalBackdrop infoBackdrop" role="presentation" onMouseDown={() => setInfoOpen(false)}>
-          <section className="settingsModal infoModal" role="dialog" aria-modal="true" aria-label={t("info.dialog")} onMouseDown={event => event.stopPropagation()}>
-            <button type="button" className="modalClose infoModalClose" onClick={() => setInfoOpen(false)} title={t("common.close")} aria-label={t("common.close")}>
-              <X size={14} />
-            </button>
-            <div className="modalHeader infoModalHeader">
-              <div className="infoModalHeaderMain">
-                <div>
-                  <h2 className="infoModalTitle">
-                    aPix Builder <span className="infoVersion">{APP_VERSION_LABEL}</span>
-                  </h2>
-                  <p className="infoModalLead">{t("info.description")}</p>
-                </div>
-              </div>
-              <div className="infoStatusStrip" aria-label={t("info.summary")}>
-                <div><span>{t("info.mode")}</span><b>{infoModeLabel}</b></div>
-                <div><span>{t("info.currentTemplate")}</span><b title={infoTemplateLabel}>{infoTemplateLabel}</b></div>
-                <div><span>{t("info.target")}</span><b title={infoTargetLabel}>{infoTargetLabel}</b></div>
-              </div>
-            </div>
-
-            <div className="infoModalBody">
-              <div className="infoFeatureBar" aria-label={t("info.update")}>
-                <span className="infoFeatureBarLabel">{t("info.update")}</span>
-                <ul className="infoFeatureList">
-                  {t("info.updateText").split(/,\s*/).filter(Boolean).map(item => (
-                    <li key={item}>{item.trim()}</li>
-                  ))}
-                </ul>
-              </div>
-
-              <div className="infoMainWide">
-                <section className="infoPanel infoGuidePanel" aria-label={t("info.guideTitle")}>
-                  <h3>{t("info.guideTitle")}</h3>
-                  <div className="infoGuideGrid">
-                    <article className="infoGuideBlock">
-                      <h4>{t("info.guideQuickStart")}</h4>
-                      <ol className="infoGuideList">
-                        <li>{t("info.guideQuick1")}</li>
-                        <li>{t("info.guideQuick2")}</li>
-                        <li>{t("info.guideQuick3")}</li>
-                        <li>{t("info.guideQuick4")}</li>
-                        <li>{t("info.guideQuick5")}</li>
-                      </ol>
-                    </article>
-                    <article className="infoGuideBlock">
-                      <h4>{t("info.guideInput")}</h4>
-                      <ul className="infoGuideList infoGuideListBullets">
-                        <li>{t("info.guideInput1")}</li>
-                        <li>{t("info.guideInput2")}</li>
-                        <li>{t("info.guideInput3")}</li>
-                        <li>{t("info.guideInput4")}</li>
-                      </ul>
-                    </article>
-                    <article className="infoGuideBlock">
-                      <h4>{t("info.guideOutput")}</h4>
-                      <ul className="infoGuideList infoGuideListBullets">
-                        <li>{t("info.guideOutput1")}</li>
-                        <li>{t("info.guideOutput2")}</li>
-                        <li>{t("info.guideOutput3")}</li>
-                        <li>{t("info.guideOutput4")}</li>
-                      </ul>
-                    </article>
-                    <article className="infoGuideBlock">
-                      <h4>{t("info.guideModes")}</h4>
-                      <ul className="infoGuideList infoGuideListBullets">
-                        <li>{t("info.guideModes1")}</li>
-                        <li>{t("info.guideModes2")}</li>
-                        <li>{t("info.guideModes3")}</li>
-                        <li>{t("info.guideModes4")}</li>
-                      </ul>
-                    </article>
-                  </div>
-                </section>
-
-                <section className="infoPanel infoShortcutsPanel" aria-label={t("info.shortcutsTitle")}>
-                  <h3>{t("info.shortcutsTitle")}</h3>
-                  <div className="infoShortcutSheet infoShortcutSheetWide">
-                    <div className="infoShortcutGroup">
-                      <h4>{t("info.shortcutsGeneral")}</h4>
-                      <div className="shortcutList">
-                        <ShortcutRow label={t("info.shortcutSettings")} keys={["Cmd/Ctrl", ","]} />
-                        <ShortcutRow label={t("info.shortcutHelp")} keys={["Cmd/Ctrl", "/"]} />
-                        <ShortcutRow label={t("info.shortcutModeComfy")} keys={["Alt/Option", "1"]} />
-                        <ShortcutRow label={t("info.shortcutModeRhWf")} keys={["Alt/Option", "2"]} />
-                        <ShortcutRow label={t("info.shortcutModeRhApp")} keys={["Alt/Option", "3"]} />
-                        <ShortcutRow label={t("info.shortcutRun")} keys={["Cmd/Ctrl", "Enter"]} />
-                        <ShortcutRow label={t("info.shortcutFullscreen")} keys={["Cmd/Ctrl", "Shift", "F"]} />
-                        <ShortcutRow label={t("info.shortcutLog")} keys={["F1"]} />
-                        <ShortcutRow label={t("info.shortcutClose")} keys={["Esc"]} />
-                      </div>
-                    </div>
-                    <div className="infoShortcutGroup">
-                      <h4>{t("info.shortcutsPreview")}</h4>
-                      <div className="shortcutList">
-                        <ShortcutRow label={t("info.shortcutResetZoom")} keys={["Space"]} />
-                        <ShortcutRow label={t("info.shortcutCompare")} keys={["S"]} />
-                        <ShortcutRow label={t("info.shortcutOutputNav")} keys={["←", "→"]} />
-                        <ShortcutRow label={t("info.shortcutZoom")} keys={[t("info.mouseWheel")]} />
-                        <ShortcutRow label={t("info.shortcutPan")} keys={[t("info.dragImage")]} />
-                      </div>
-                    </div>
-                    <div className="infoShortcutGroup">
-                      <h4>{t("info.shortcutsEditorColor")}</h4>
-                      <div className="shortcutList">
-                        <ShortcutRow label={t("info.shortcutBeforeAfter")} keys={["S"]} />
-                        <ShortcutRow label={t("info.shortcutResetAdjustments")} keys={["Cmd/Ctrl", "Shift", "R"]} />
-                        <ShortcutRow label={t("info.shortcutSpaceDual")} keys={[t("info.holdSpace")]} />
-                        <ShortcutRow label={t("info.shortcutUndo")} keys={["Cmd/Ctrl", "Z"]} />
-                        <ShortcutRow label={t("info.shortcutRedo")} keys={["Cmd/Ctrl", "Shift", "Z"]} />
-                        <ShortcutRow label={t("info.shortcutSaveOutput")} keys={["Save"]} />
-                      </div>
-                    </div>
-                  </div>
-                </section>
-              </div>
-
-              <section className="infoPanel infoContactsPanel" aria-label={t("info.creatorSection")}>
-                <h3>{t("info.project")}</h3>
-                <div className="infoContactRows">
-                  <div className="infoContactRow">
-                    <span>{t("info.version")}</span>
-                    <b>{APP_VERSION_LABEL}</b>
-                  </div>
-                  {isDesktop ? (
-                    <div className="infoContactRow infoUpdateRow">
-                      <span>{t("update.label")}</span>
-                      <div className="infoUpdateActions">
-                        <button
-                          type="button"
-                          className="infoUpdateButton"
-                          onClick={() => { checkForUpdates(); }}
-                          disabled={updateChecking}
-                        >
-                          {updateChecking ? t("update.checking") : t("update.checkNow")}
-                        </button>
-                        {updateCheckError ? (
-                          <span className="infoUpdateStatus isError">{t("update.checkFailed")}</span>
-                        ) : updateUpToDate ? (
-                          <span className="infoUpdateStatus">{t("update.upToDate")}</span>
-                        ) : availableUpdate ? (
-                          <button type="button" className="infoUpdateLink" onClick={downloadUpdate}>
-                            {t("update.download")} {availableUpdate.label || `v${availableUpdate.version}`}
-                          </button>
-                        ) : null}
-                      </div>
-                    </div>
-                  ) : null}
-                  <div className="infoContactRow">
-                    <span>{t("info.officialWebsite")}</span>
-                    <a href="https://apix.sdvn.vn" target="_blank" rel="noreferrer">apix.sdvn.vn</a>
-                  </div>
-                  <div className="infoContactRow">
-                    <span>{t("info.creator")}</span>
-                    <a href="https://www.facebook.com/phamhungd/" target="_blank" rel="noreferrer">© Phạm Hưng</a>
-                  </div>
-                  <div className="infoContactRow">
-                    <span>{t("info.contact")}</span>
-                    <a href="https://zalo.me/0355873687" target="_blank" rel="noreferrer">0355873687</a>
-                  </div>
-                  <div className="infoContactRow">
-                    <span>{t("info.community")}</span>
-                    <a href="https://www.facebook.com/groups/stablediffusion.vn" target="_blank" rel="noreferrer">SDVN AI Art</a>
-                  </div>
-                  <div className="infoContactRow">
-                    <span>GitHub</span>
-                    <a href="https://github.com/StableDiffusionVN/" target="_blank" rel="noreferrer">StableDiffusionVN</a>
-                  </div>
-                  <div className="infoContactRow">
-                    <span>HuggingFace</span>
-                    <a href="https://huggingface.co/StableDiffusionVN/" target="_blank" rel="noreferrer">StableDiffusionVN</a>
-                  </div>
-                </div>
-                <div className="infoLinkBlocks">
-                  <div className="infoLinkBlock">
-                    <span>Website</span>
-                    <div className="infoLinkPills">
-                      <a href="https://apix.sdvn.vn" target="_blank" rel="noreferrer">apix.sdvn.vn</a>
-                      <a href="https://sdvn.vn" target="_blank" rel="noreferrer">sdvn.vn</a>
-                      <a href="https://hungdiffusion.com" target="_blank" rel="noreferrer">hungdiffusion.com</a>
-                      <a href="https://trainlora.vn" target="_blank" rel="noreferrer">trainlora.vn</a>
-                      <a href="https://stablediffusion.vn" target="_blank" rel="noreferrer">stablediffusion.vn</a>
-                      <a href="https://comfy.vn" target="_blank" rel="noreferrer">comfy.vn</a>
-                    </div>
-                  </div>
-                  <div className="infoLinkBlock">
-                    <span>{t("info.learnMore")}</span>
-                    <div className="infoLinkPills">
-                      <a href="https://aistudio.google.com/app/u/0/apps/d798af97-ec18-4946-bce4-3b5b0e7d403e?showPreview=true&showAssistant=true&fullscreenApplet=true" target="_blank" rel="noreferrer">aPix Studio</a>
-                      <a href="https://github.com/StableDiffusionVN/sdvn_apix_python" target="_blank" rel="noreferrer">aPix Python</a>
-                      <a href="https://github.com/StableDiffusionVN/sdvn_apix_react" target="_blank" rel="noreferrer">aPix React</a>
-                      <a href="https://sdvn.me" target="_blank" rel="noreferrer">Colab SDVN</a>
-                    </div>
-                  </div>
-                </div>
-              </section>
-            </div>
-          </section>
-        </div>
-      ) : null}
-
-      {templateEditorOpen ? (
-        <Suspense fallback={null}>
-          <TemplateEditorModal
-            selectedTemplate={selectedTemplate}
-            discovery={discovery}
-            onClose={() => setTemplateEditorOpen(false)}
-            onSaved={reloadTemplates}
-          />
-        </Suspense>
-      ) : null}
-
-      {rhWfTemplateEditorOpen ? (
-        <Suspense fallback={null}>
-          <TemplateEditorModal
-            mode="runninghub-wf"
-            selectedTemplate={rhWfSelectedTemplate}
-            apiKey={rhPrimaryApiKey}
-            onClose={() => setRhWfTemplateEditorOpen(false)}
-            onSaved={reloadRhWfTemplates}
-          />
-        </Suspense>
-      ) : null}
-
-      {outputEditorOpen && heroImage ? (
-        <Suspense fallback={null}>
-          <ImageEditorModal
-            source={heroImage}
-            title="Output - Image Editor"
-            onClose={() => setOutputEditorOpen(false)}
-            onSave={handleSaveEditedOutput}
-          />
-        </Suspense>
-      ) : null}
     </main>
   );
 }
 
-function ShortcutRow({ label, keys }) {
-  return (
-    <div className="shortcutRow">
-      <span>{label}</span>
-      <span className="keyGroup">{keys.map(key => <kbd key={key}>{key}</kbd>)}</span>
-    </div>
-  );
-}
-
-function RunningState({ progress, status, progressPct }) {
-  const { t } = useI18n();
-  const phase =
-    !progress || progress.type === "start" ? 1
-    : progress.type === "cached" || progress.type === "executing" || progress.type === "progress" || progress.type === "executed" ? 2
-    : 1;
-
-  const detail = progress?.label || status || t("running.waiting");
-
-  return (
-    <div className="runningState">
-      <SdvnWaterLogo
-        percent={progressPct}
-        indeterminate={progressPct === null}
-        tone="accent"
-        title={t("running.comfy")}
-      />
-
-      <p className="runningTitle">{t("running.comfy")}</p>
-
-      <div className="runPhases">
-        <RunPhase label={t("running.submit")} active={phase === 1} done={phase > 1} />
-        <span className="runPhaseSep" aria-hidden="true" />
-        <RunPhase label={t("running.nodes")} active={phase === 2} done={phase > 2} />
-        <span className="runPhaseSep" aria-hidden="true" />
-        <RunPhase label={t("running.save")} active={phase === 3} done={false} />
-      </div>
-
-      <p className="runDetail">{detail}</p>
-    </div>
-  );
-}
-
-function RunPhase({ label, active, done }) {
-  return (
-    <span className={`runPhase ${active ? "active" : ""} ${done ? "done" : ""}`}>
-      {done ? <CheckCircle2 size={11} /> : active ? <Loader2 size={11} className="spin" /> : null}
-      {label}
-    </span>
-  );
-}

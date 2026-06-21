@@ -452,11 +452,334 @@ p {
   color: var(--accent-hover);
 }
 
-.appTopBarIdentity > .executionModeToggle {
+.appTopBarIdentity > .appTopBarModeCluster {
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+  flex: 1 1 auto;
+  gap: 8px;
+  height: 36px !important;
+}
+
+/* Ensure consistent height and styling for both panels inside the topbar mode cluster */
+html[data-theme] .appTopBar .executionModeToggle {
   justify-content: flex-start;
   width: auto;
+  margin: 0 !important;
+  height: 36px !important;
+  display: flex !important;
+  align-items: stretch !important;
+}
+
+.appTopBarModeCluster .executionModeToggle {
+  justify-content: flex-start;
+  align-items: stretch;
+  width: auto;
   margin: 0;
-  transform: translateY(5px);
+  flex: 0 0 auto;
+  height: 36px !important;
+}
+
+.appTopBarWorkflowHost {
+  display: flex;
+  align-items: stretch;
+  align-self: center;
+  min-width: 0;
+  overflow: hidden;
+  height: 32px !important;
+}
+
+.appTopBar .executionModeTrackStage {
+  position: relative;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: min(520px, calc(100vw - 360px));
+  height: 32px;
+  overflow: hidden;
+}
+
+.appTopBar .executionModeTrackPanels {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.appTopBar .executionModeTrackPanel {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  width: max-content;
+  max-width: 100%;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  transition:
+    transform 0.34s cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 0.22s ease;
+  will-change: transform;
+}
+
+.appTopBar .executionModeTrackStage.is-form .executionModeTrackPanelForm {
+  position: relative;
+  transform: translateX(0);
+  opacity: 1;
+}
+
+.appTopBar .executionModeTrackStage.is-form .executionModeTrackPanelCanvas {
+  transform: translateX(108%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.appTopBar .executionModeTrackStage.is-canvas .executionModeTrackPanelForm {
+  transform: translateX(-108%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.appTopBar .executionModeTrackStage.is-canvas .executionModeTrackPanelCanvas {
+  position: relative;
+  transform: translateX(0);
+  opacity: 1;
+}
+
+.appTopBar .executionModeTrackPanelForm .executionModeFormOptions {
+  position: relative;
+  display: inline-flex;
+  align-items: stretch;
+  gap: 2px;
+  max-width: none;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.appTopBar .executionModeTrackPanelForm .executionModeFormOptions .executionModeIndicator {
+  top: 2px;
+  bottom: 2px;
+}
+
+.appTopBar .executionModeTrackPanelCanvas .appTopBarWorkflowHost {
+  flex: 0 1 auto;
+  width: auto;
+  max-width: 100%;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.appTopBarModeCluster.is-canvas-view {
+  gap: 0 !important;
+}
+
+/* Ensure the Track and the Toolbar have EXACTLY the same dimensions, backgrounds and borders */
+html[data-theme] .appTopBar .executionModeTrack {
+  border: 1px solid var(--border-subtle) !important;
+  border-radius: 8px !important;
+  background: var(--surface-2) !important;
+  box-sizing: border-box !important;
+  height: 36px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  padding: 2px !important;
+  gap: 2px !important;
+  max-width: min(620px, calc(100vw - 320px));
+}
+
+.appTopBarModeCluster.is-canvas-view .executionModeTrack {
+  align-self: center;
+}
+
+.appTopBar .canvasWorkflowToolbar.isAppTopBar {
+  position: static;
+  width: auto;
+  min-width: 0;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  height: 32px !important;
+  box-sizing: border-box !important;
+  align-self: center;
+  align-items: center;
+  flex: 0 0 auto;
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  gap: 2px;
+}
+
+/* Theme overrides for topbar toolbar background and border colors */
+
+.appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasWorkflowTabs {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: min(36vw, 280px);
+  align-items: center;
+}
+
+.appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasWorkflowTab {
+  border-radius: 6px;
+  background: transparent;
+  border-color: transparent;
+  min-height: 32px !important;
+  height: 32px !important;
+  overflow: hidden;
+  flex-shrink: 1;
+}
+
+html[data-theme="dark"] .appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasWorkflowTab,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasWorkflowTab,
+html[data-theme="light"] .appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasWorkflowTab {
+  color: var(--text-tertiary);
+}
+
+html[data-theme="dark"] .appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasWorkflowTab:hover,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasWorkflowTab:hover,
+html[data-theme="light"] .appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasWorkflowTab:hover {
+  color: var(--text-secondary);
+  background: rgba(var(--accent-rgb), 0.08);
+}
+
+.appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasWorkflowTab.active {
+  flex: 1 1 140px;
+  max-width: 180px;
+  min-width: 96px;
+  border-color: transparent;
+  flex-shrink: 0;
+}
+
+html[data-theme="dark"] .appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasWorkflowTab.active,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasWorkflowTab.active {
+  color: #ffffff;
+  background: var(--surface-1);
+  box-shadow: none;
+}
+
+html[data-theme="dark"] .appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasWorkflowTab.active .canvasWorkflowTabSelect,
+html[data-theme="dark"] .appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasWorkflowTab.active .canvasWorkflowTabLabel,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasWorkflowTab.active .canvasWorkflowTabSelect,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasWorkflowTab.active .canvasWorkflowTabLabel {
+  color: #ffffff;
+}
+
+html[data-theme="light"] .appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasWorkflowTab.active {
+  color: var(--text-primary);
+  background: var(--surface-1);
+  box-shadow: none;
+}
+
+html[data-theme="light"] .appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasWorkflowTab.active .canvasWorkflowTabSelect,
+html[data-theme="light"] .appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasWorkflowTab.active .canvasWorkflowTabLabel {
+  color: var(--text-primary);
+}
+
+/* Hide execution indicator on left when in canvas mode and style form toggle as inactive */
+.appTopBarModeCluster.is-canvas-view .executionModeIndicator {
+  display: none !important;
+  opacity: 0 !important;
+}
+
+html[data-theme="dark"] .appTopBarModeCluster.is-canvas-view .executionModeCanvasToggle.active,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .appTopBarModeCluster.is-canvas-view .executionModeCanvasToggle.active,
+html[data-theme="light"] .appTopBarModeCluster.is-canvas-view .executionModeCanvasToggle.active {
+  color: var(--text-tertiary) !important;
+  font-weight: 500 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+html[data-theme="dark"] .appTopBarModeCluster.is-canvas-view .executionModeCanvasToggle.active:hover,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .appTopBarModeCluster.is-canvas-view .executionModeCanvasToggle.active:hover,
+html[data-theme="light"] .appTopBarModeCluster.is-canvas-view .executionModeCanvasToggle.active:hover {
+  color: var(--text-secondary) !important;
+  background: rgba(var(--accent-rgb), 0.08) !important;
+}
+
+/* Style for inactive executionModeToggle buttons when in canvas-view */
+
+/* Align and pad text inputs properly inside top bar workspace tabs */
+.appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasWorkflowTabSelect {
+  padding: 0 0 0 8px;
+  align-self: center;
+  min-width: 0;
+}
+
+.appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasWorkflowTabLabel {
+  min-width: 0;
+}
+
+.appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasWorkflowTabClose {
+  flex: 0 0 20px;
+  width: 20px;
+  min-width: 20px;
+  opacity: 0.72;
+  position: relative;
+  z-index: 2;
+}
+
+.appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasWorkflowTab:hover .canvasWorkflowTabClose,
+.appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasWorkflowTab.active .canvasWorkflowTabClose {
+  opacity: 0.92;
+}
+
+.appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasWorkflowTabNew {
+  width: 32px !important;
+  min-height: 32px !important;
+  height: 32px !important;
+  flex: 0 0 32px !important;
+  border-radius: 6px !important;
+}
+
+html[data-theme="dark"] .appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasWorkflowTabNew,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasWorkflowTabNew,
+html[data-theme="light"] .appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasWorkflowTabNew {
+  color: var(--text-tertiary);
+}
+
+html[data-theme="dark"] .appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasWorkflowTabNew:hover,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasWorkflowTabNew:hover,
+html[data-theme="light"] .appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasWorkflowTabNew:hover {
+  color: var(--text-secondary);
+  border-color: transparent;
+  background: rgba(var(--accent-rgb), 0.08);
+}
+
+.appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasZoomBtn {
+  width: 32px !important;
+  height: 32px !important;
+  min-height: 32px !important;
+  border-radius: 6px !important;
+  border-color: transparent;
+  background: transparent;
+}
+
+html[data-theme="dark"] .appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasZoomBtn,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasZoomBtn,
+html[data-theme="light"] .appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasZoomBtn {
+  color: var(--text-tertiary);
+}
+
+html[data-theme="dark"] .appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasZoomBtn:hover,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasZoomBtn:hover,
+html[data-theme="light"] .appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasZoomBtn:hover,
+html[data-theme="dark"] .appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasZoomBtn:focus-visible,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasZoomBtn:focus-visible,
+html[data-theme="light"] .appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasZoomBtn:focus-visible {
+  border-color: transparent;
+  background: rgba(var(--accent-rgb), 0.08);
+  color: var(--text-secondary);
+}
+
+.appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasZoomDivider {
+  align-self: center;
+  height: 18px;
+  margin: 0 1px;
+  background: var(--border-subtle);
+}
+
+.appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasWorkflowSessionDot {
+  margin-right: 6px;
 }
 
 .appTopBar .executionModeTrack {
@@ -477,7 +800,8 @@ p {
     0 1px 3px rgba(0, 0, 0, 0.2);
 }
 
-.appTopBar .executionModeToggle button {
+.appTopBar .executionModeToggle .executionModeCanvasToggle,
+.appTopBar .executionModeToggle .executionModeFormOption {
   min-height: 26px;
   padding: 3px 10px;
   border-radius: 6px;
@@ -487,15 +811,47 @@ p {
   font-weight: 600;
 }
 
-.appTopBar .executionModeToggle button.active {
+.appTopBar .executionModeToggle .executionModeCanvasToggle.active,
+.appTopBar .executionModeToggle .executionModeFormOption.active {
   background: transparent;
   color: var(--text);
   font-weight: 700;
 }
 
-.appTopBar .executionModeToggle button:hover:not(.active) {
+.appTopBar .executionModeToggle .executionModeCanvasToggle:hover:not(.active),
+.appTopBar .executionModeToggle .executionModeFormOption:hover:not(.active) {
   background: rgba(var(--execution-brand-rgb), 0.1);
   color: var(--text);
+}
+
+/* Toolbar buttons live inside executionModeTrack — undo executionModeToggle button defaults */
+.appTopBar .executionModeToggle .canvasWorkflowToolbar button {
+  position: static;
+  z-index: auto;
+  padding: 0;
+  min-height: unset;
+  font-size: inherit;
+  font-weight: inherit;
+  letter-spacing: normal;
+  line-height: normal;
+  white-space: nowrap;
+  color: inherit;
+}
+
+.appTopBar .executionModeToggle .canvasWorkflowToolbar .canvasWorkflowTabSelect {
+  display: flex;
+  align-items: center;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0 0 0 8px;
+}
+
+.appTopBar .executionModeToggle .canvasWorkflowToolbar .canvasWorkflowTabClose,
+.appTopBar .executionModeToggle .canvasWorkflowToolbar .canvasWorkflowTabNew,
+.appTopBar .executionModeToggle .canvasWorkflowToolbar .canvasZoomBtn {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
 }
 
 .sidebar,
@@ -7635,11 +7991,17 @@ html[data-theme="light"] .saveTemplateButton:hover:not(:disabled) {
     display: none;
   }
 
+  .appTopBarModeCluster .executionModeToggle,
   .appTopBarIdentity > .executionModeToggle {
     min-width: 0;
   }
 
-  .appTopBar .executionModeToggle button {
+  .appTopBar .executionModeTrackStage {
+    max-width: min(420px, calc(100vw - 280px));
+  }
+
+  .appTopBar .executionModeToggle .executionModeCanvasToggle,
+  .appTopBar .executionModeToggle .executionModeFormOption {
     padding-inline: 6px;
   }
 
@@ -9032,6 +9394,22 @@ html:not([data-theme="dark"]):not([data-theme="light"]) .appShell.is-runninghub 
 
 .executionModeToggle.is-canvas-only .executionModeTrack {
   min-width: 0;
+}
+
+.executionModeFormOptions {
+  position: relative;
+  display: inline-flex;
+  align-items: stretch;
+  gap: 2px;
+  overflow: hidden;
+  max-width: 420px;
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .appTopBar .executionModeTrackPanel {
+    transition: none;
+  }
 }
 
 .executionModeToggle.is-form-mode .executionModeCanvasToggle:not(.active) {

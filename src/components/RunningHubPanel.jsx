@@ -80,36 +80,54 @@ const EXECUTION_MODE_OPTIONS = [
   { id: "runninghub-app", label: "RH App", title: "RunningHub App (Alt/Option+3)", icon: RunningHubLogomark, iconTitle: "RunningHub", shortcut: "Alt+3" }
 ];
 
-export function ExecutionModeToggle({ mode, onChange, canvasActive = false, onCanvasToggle }) {
+export function ExecutionModeToggle({ mode, onChange, canvasActive = false, onCanvasToggle, children }) {
   const { locale } = useI18n();
   const trackRef = useRef(null);
+  const formOptionsRef = useRef(null);
   const buttonRefs = useRef({});
   const indicatorKey = canvasActive ? "canvas" : mode;
   const [indicator, setIndicator] = useState({ left: 0, width: 0, ready: false });
   const isVi = locale === "vi";
 
   const syncIndicator = useCallback(() => {
-    const track = trackRef.current;
     const button = buttonRefs.current[indicatorKey];
-    if (!track || !button) return;
-    const trackRect = track.getBoundingClientRect();
+    if (!button) return;
+
+    if (canvasActive) {
+      const track = trackRef.current;
+      if (!track) return;
+      const trackRect = track.getBoundingClientRect();
+      const buttonRect = button.getBoundingClientRect();
+      setIndicator({
+        left: buttonRect.left - trackRect.left,
+        width: buttonRect.width,
+        ready: true
+      });
+      return;
+    }
+
+    const formOptions = formOptionsRef.current;
+    if (!formOptions) return;
+    const formRect = formOptions.getBoundingClientRect();
     const buttonRect = button.getBoundingClientRect();
     setIndicator({
-      left: buttonRect.left - trackRect.left,
+      left: buttonRect.left - formRect.left,
       width: buttonRect.width,
       ready: true
     });
-  }, [indicatorKey]);
+  }, [indicatorKey, canvasActive]);
 
   useLayoutEffect(() => {
     syncIndicator();
-  }, [syncIndicator, canvasActive]);
+  }, [syncIndicator, canvasActive, mode]);
 
   useEffect(() => {
     const track = trackRef.current;
-    if (!track) return undefined;
+    const formOptions = formOptionsRef.current;
+    if (!track && !formOptions) return undefined;
     const observer = new ResizeObserver(syncIndicator);
-    observer.observe(track);
+    if (track) observer.observe(track);
+    if (formOptions) observer.observe(formOptions);
     window.addEventListener("resize", syncIndicator);
     return () => {
       observer.disconnect();
@@ -124,14 +142,6 @@ export function ExecutionModeToggle({ mode, onChange, canvasActive = false, onCa
       aria-label={isVi ? "Chế độ làm việc" : "Workspace mode"}
     >
       <div className="executionModeTrack" ref={trackRef}>
-        <span
-          className={`executionModeIndicator ${indicator.ready ? "is-ready" : ""}`}
-          style={{
-            width: indicator.width,
-            transform: `translateX(${indicator.left}px)`
-          }}
-          aria-hidden="true"
-        />
         <button
           type="button"
           role="tab"
@@ -155,34 +165,61 @@ export function ExecutionModeToggle({ mode, onChange, canvasActive = false, onCa
           )}
           {canvasActive ? "Form" : "Canvas"}
         </button>
-        {!canvasActive ? EXECUTION_MODE_OPTIONS.map(option => {
-          const Icon = option.icon;
-          const isActive = mode === option.id;
-          return (
-          <button
-            key={option.id}
-            type="button"
-            role="tab"
-            ref={node => {
-              buttonRefs.current[option.id] = node;
-            }}
-            aria-selected={isActive}
-            className={`${isActive ? "active" : ""}${Icon ? " hasModeIcon" : ""}`}
-            title={option.title}
-            aria-keyshortcuts={option.shortcut}
-            onClick={() => onChange(option.id)}
-          >
-            {Icon ? (
-              <Icon
-                className="executionModeIcon"
-                title={option.iconTitle}
-                {...(Icon === RunningHubLogomark ? { sizedByCss: true } : { size: 12 })}
-              />
-            ) : null}
-            {option.label}
-          </button>
-          );
-        }) : null}
+        <div
+          className={`executionModeTrackStage${canvasActive ? " is-canvas" : " is-form"}`}
+          aria-hidden={false}
+        >
+          <div className="executionModeTrackPanels">
+            <div className="executionModeTrackPanel executionModeTrackPanelForm">
+              <div
+                ref={formOptionsRef}
+                className="executionModeFormOptions"
+                aria-hidden={canvasActive}
+              >
+                <span
+                  className={`executionModeIndicator${indicator.ready ? " is-ready" : ""}`}
+                  style={{
+                    width: indicator.width,
+                    transform: `translateX(${indicator.left}px)`
+                  }}
+                  aria-hidden="true"
+                />
+                {EXECUTION_MODE_OPTIONS.map(option => {
+                  const Icon = option.icon;
+                  const isActive = mode === option.id;
+                  return (
+                    <button
+                      key={option.id}
+                      type="button"
+                      role="tab"
+                      ref={node => {
+                        buttonRefs.current[option.id] = node;
+                      }}
+                      aria-selected={isActive}
+                      className={`executionModeFormOption${isActive ? " active" : ""}${Icon ? " hasModeIcon" : ""}`}
+                      title={option.title}
+                      aria-keyshortcuts={option.shortcut}
+                      tabIndex={canvasActive ? -1 : 0}
+                      onClick={() => onChange(option.id)}
+                    >
+                      {Icon ? (
+                        <Icon
+                          className="executionModeIcon"
+                          title={option.iconTitle}
+                          {...(Icon === RunningHubLogomark ? { sizedByCss: true } : { size: 12 })}
+                        />
+                      ) : null}
+                      {option.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="executionModeTrackPanel executionModeTrackPanelCanvas">
+              {children}
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

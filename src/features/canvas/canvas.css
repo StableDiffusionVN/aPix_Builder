@@ -30,6 +30,7 @@
   position: relative;
   flex: 1 1 auto;
   min-height: 0;
+  box-sizing: border-box;
 }
 
 .canvasWorkspace .react-flow {
@@ -92,7 +93,7 @@
 .canvasFlyout {
   position: absolute;
   left: 58px;
-  top: 10px;
+  top: 58px;
   bottom: 10px;
   z-index: 13;
   display: flex;
@@ -167,6 +168,228 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* ===== Active workflow toolbar ===== */
+
+.canvasWorkflowToolbar {
+  position: absolute;
+  left: 10px;
+  top: 10px;
+  z-index: 15;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: min(96vw, 920px);
+  padding: 4px;
+  border: 1px solid var(--canvas-chrome-border);
+  border-radius: 10px;
+  background: var(--canvas-chrome-bg);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  box-shadow: var(--canvas-chrome-shadow);
+  pointer-events: auto;
+}
+
+.canvasWorkflowTabs {
+  display: flex;
+  align-items: stretch;
+  gap: 1px;
+  min-width: 0;
+  max-width: min(52vw, 420px);
+  overflow-x: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+}
+
+.canvasWorkflowTabs::-webkit-scrollbar {
+  display: none;
+}
+
+.canvasWorkflowTab {
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+  flex: 0 1 72px;
+  max-width: 72px;
+  border: 1px solid transparent;
+  border-radius: 8px 8px 6px 6px;
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--muted);
+  transition:
+    flex-basis 0.22s ease,
+    max-width 0.22s ease,
+    min-width 0.22s ease,
+    background 0.18s ease,
+    border-color 0.18s ease,
+    color 0.18s ease;
+}
+
+.canvasWorkflowTab:hover {
+  color: var(--text);
+  background: rgba(var(--accent-rgb), 0.06);
+}
+
+.canvasWorkflowTab.active {
+  flex: 1 1 168px;
+  max-width: 220px;
+  min-width: 120px;
+  color: var(--text);
+  border-color: rgba(var(--accent-rgb), 0.42);
+  background: var(--accent-muted);
+}
+
+.canvasWorkflowTab.unsaved .canvasWorkflowTabLabel {
+  font-style: italic;
+}
+
+.canvasWorkflowTabSelect {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  flex: 1 1 auto;
+  padding: 5px 0 5px 8px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.canvasWorkflowTabLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.canvasWorkflowTabClose {
+  display: grid;
+  place-items: center;
+  flex: 0 0 22px;
+  width: 22px;
+  margin-right: 2px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  opacity: 0.55;
+  cursor: pointer;
+  pointer-events: auto;
+  position: relative;
+  z-index: 2;
+}
+
+.canvasWorkflowTab:hover .canvasWorkflowTabClose,
+.canvasWorkflowTab.active .canvasWorkflowTabClose {
+  opacity: 0.85;
+}
+
+.canvasWorkflowTabClose:hover {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.canvasWorkflowTabNew {
+  display: grid;
+  place-items: center;
+  flex: 0 0 28px;
+  width: 28px;
+  min-height: 28px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.canvasWorkflowTabNew:hover {
+  color: var(--text);
+  border-color: rgba(var(--accent-rgb), 0.35);
+  background: rgba(var(--accent-rgb), 0.08);
+}
+
+.canvasWorkflowTabRenameInput {
+  width: 100%;
+  min-width: 0;
+  padding: 2px 4px;
+  border: 1px solid rgba(var(--accent-rgb), 0.45);
+  border-radius: 5px;
+  background: var(--panel);
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.canvasWorkflowSessionDot {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  margin-left: 2px;
+  border-radius: 999px;
+  background: transparent;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.12);
+  transition: background 0.18s ease;
+}
+
+.canvasWorkflowSessionDot.is-library-unsaved {
+  background: #f0b429;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.25);
+}
+
+.canvasWorkflowSessionDot.is-library-saved {
+  background: #3ecf8e;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.25);
+}
+
+.canvasWorkflowSessionDot.is-error {
+  background: var(--danger-text);
+}
+
+.canvasWorkflowCloseBackdrop {
+  z-index: 40;
+}
+
+.canvasWorkflowCloseDialog {
+  width: min(440px, 100%);
+}
+
+.canvasWorkflowCloseDialog p {
+  margin: 8px 0 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.canvasWorkflowCloseDialog p strong {
+  color: var(--text);
+}
+
+.canvasWorkflowCloseDialog code {
+  font-size: 12px;
+}
+
+.canvasWorkflowCloseActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.canvasWorkflowCloseActions .primaryActionButton,
+.canvasWorkflowCloseActions .secondaryActionButton,
+.canvasWorkflowCloseActions .dangerActionButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+}
+
+.canvasWorkflowFileInput {
+  display: none;
 }
 
 /* ===== Palette (flyout content) ===== */
@@ -643,6 +866,111 @@
   gap: 10px;
 }
 
+.canvasProjectPanelLibrary {
+  gap: 8px;
+  min-height: 0;
+}
+
+.canvasProjectLibraryLoading {
+  display: grid;
+  place-items: center;
+  padding: 16px 0;
+  color: var(--muted);
+}
+
+.canvasProjectLibraryList {
+  gap: 4px;
+}
+
+.canvasProjectLibraryItem {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px;
+  align-items: stretch;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+}
+
+.canvasProjectLibraryActions {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+}
+
+.canvasProjectLibraryOpen {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.canvasProjectLibraryOpen:hover,
+.canvasProjectLibraryOpen:focus-visible {
+  background: rgba(var(--accent-rgb), 0.08);
+  outline: none;
+}
+
+.canvasProjectLibraryName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.canvasProjectLibraryFav {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted-2);
+  cursor: pointer;
+}
+
+.canvasProjectLibraryFav:hover,
+.canvasProjectLibraryFav:focus-visible {
+  color: var(--text-secondary);
+  background: rgba(var(--accent-rgb), 0.06);
+  outline: none;
+}
+
+.canvasProjectLibraryFav.is-active {
+  color: #f0b429;
+}
+
+.canvasProjectLibraryDelete {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted-2);
+  cursor: pointer;
+}
+
+.canvasProjectLibraryDelete:hover,
+.canvasProjectLibraryDelete:focus-visible {
+  color: var(--danger-text);
+  background: rgba(248, 113, 113, 0.08);
+  outline: none;
+}
+
+.canvasProjectLibraryDelete:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 .canvasProjectActive {
   display: flex;
   flex-direction: column;
@@ -668,6 +996,20 @@
 .canvasProjectActiveMeta {
   font-size: 11px;
   color: var(--muted-2);
+}
+
+.canvasProjectLibraryHint {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--muted-2);
+}
+
+.canvasProjectEmpty {
+  margin: 0;
+  padding: 10px 2px;
+  color: var(--muted-2);
+  font-size: 12px;
 }
 
 .canvasProjectList {

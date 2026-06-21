@@ -32,6 +32,10 @@ const DEFAULT_SETTINGS = {
   },
   migration: {
     localStorageImported: false
+  },
+  canvas: {
+    minimapOpen: false,
+    tool: "select"
   }
 };
 
@@ -303,19 +307,23 @@ function applySensitivePreserve(snapshot) {
 }
 
 async function migrateCanvasProjectOffSettings(project) {
-  if (!project || typeof project !== "object") return;
+  if (!project || typeof project !== "object") return true;
   const nodes = Array.isArray(project.nodes) ? project.nodes : [];
   const edges = Array.isArray(project.edges) ? project.edges : [];
-  if (!nodes.length && !edges.length) return;
-  try {
-    await fetch("/api/canvas-project", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ nodes, edges })
-    });
-  } catch (error) {
-    console.warn("Could not migrate canvas project out of app-settings:", error);
+  if (!nodes.length && !edges.length) return true;
+  const response = await fetch("/api/canvas-project", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      nodes,
+      edges,
+      viewport: project.viewport
+    })
+  });
+  if (!response.ok) {
+    throw new Error(`Could not migrate canvas project: HTTP ${response.status}`);
   }
+  return true;
 }
 
 async function persistSettings() {
@@ -358,10 +366,20 @@ export async function initializeAppSettings() {
     const data = await response.json();
     let serverSettings = data.settings && typeof data.settings === "object" ? data.settings : {};
     if (serverSettings.canvas?.project) {
-      strippedCanvasKey = true;
-      await migrateCanvasProjectOffSettings(serverSettings.canvas.project);
-      serverSettings = { ...serverSettings };
-      delete serverSettings.canvas;
+      try {
+        await migrateCanvasProjectOffSettings(serverSettings.canvas.project);
+        strippedCanvasKey = true;
+        const canvasPrefs = { ...(serverSettings.canvas || {}) };
+        delete canvasPrefs.project;
+        serverSettings = { ...serverSettings };
+        if (Object.keys(canvasPrefs).length) {
+          serverSettings.canvas = canvasPrefs;
+        } else {
+          delete serverSettings.canvas;
+        }
+      } catch (error) {
+        console.warn("Could not migrate canvas project out of app-settings:", error);
+      }
     }
     store.settings = mergeDeep(DEFAULT_SETTINGS, serverSettings);
     store.loadedFromServer = true;

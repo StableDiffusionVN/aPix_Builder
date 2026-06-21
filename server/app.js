@@ -91,6 +91,7 @@ const defaultStorageSettings = {
 let configDir;
 let userTemplatesDir;
 let templatesRhDir;
+let workflowsDir;
 let inputDir;
 let outputDir;
 let outputHistoryPath;
@@ -156,7 +157,9 @@ function buildResolvedPaths() {
     appSettings: appSettingsPath,
     colorPresets: presetsFilePath,
     workflowPresets: workflowPresetsFilePath,
-    uploads: uploadDir
+    uploads: uploadDir,
+    canvasWorkspace: canvasProjectsPath,
+    workflows: workflowsDir
   };
 }
 
@@ -267,9 +270,11 @@ async function applyStorageSettings(settings) {
 
   const nextUserTemplatesDir = path.join(normalized.configDir, "templates");
   const nextTemplatesRhDir = path.join(normalized.configDir, "templates-rh");
+  const nextWorkflowsDir = path.join(normalized.configDir, "workflows");
   await Promise.all([
     mkdir(nextUserTemplatesDir, { recursive: true }),
-    mkdir(nextTemplatesRhDir, { recursive: true })
+    mkdir(nextTemplatesRhDir, { recursive: true }),
+    mkdir(nextWorkflowsDir, { recursive: true })
   ]);
   if (path.resolve(normalized.configDir) === path.resolve(defaultStorageSettings.configDir)) {
     await migrateLegacyUserFolders(normalized);
@@ -282,6 +287,7 @@ async function applyStorageSettings(settings) {
   configDir = normalized.configDir;
   userTemplatesDir = nextUserTemplatesDir;
   templatesRhDir = nextTemplatesRhDir;
+  workflowsDir = nextWorkflowsDir;
   rhSavedAppsFilePath = path.join(templatesRhDir, "apps.json");
   rhDefaultAppsFilePath = path.join(configDir, "runninghub-default-apps.json");
   await applyPersonalDataPaths(normalized.personalDataDir, previousPersonalDataDir);
@@ -323,8 +329,13 @@ async function readAppSettings() {
 
 async function writeAppSettings(settings) {
   const normalized = normalizeAppSettings(settings);
-  delete normalized.canvas;
-  await mkdir(dataRoot, { recursive: true });
+  if (normalized.canvas && typeof normalized.canvas === "object") {
+    const canvas = { ...normalized.canvas };
+    delete canvas.project;
+    if (Object.keys(canvas).length) normalized.canvas = canvas;
+    else delete normalized.canvas;
+  }
+  await mkdir(path.dirname(appSettingsPath), { recursive: true });
   await writeFile(appSettingsPath, JSON.stringify(normalized, null, 2), {
     encoding: "utf8",
     mode: 0o600
@@ -359,10 +370,13 @@ async function readCanvasProjectsStore() {
       projects: {
         p_default: {
           id: "p_default",
-          name: "Project 1",
+          name: "Workflow 1",
+          createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
           nodes: Array.isArray(legacy?.nodes) ? legacy.nodes : [],
-          edges: Array.isArray(legacy?.edges) ? legacy.edges : []
+          edges: Array.isArray(legacy?.edges) ? legacy.edges : [],
+          librarySaved: false,
+          savedSlug: null
         }
       }
     };
@@ -379,16 +393,36 @@ function normalizeCanvasProjectsStore(raw = {}) {
   return { activeId, projects };
 }
 
+function projectLibrarySaved(project) {
+  return project?.librarySaved === true;
+}
+
 function summarizeCanvasProjects(store) {
   return Object.values(store.projects || {})
     .map(project => ({
       id: project.id,
       name: project.name || project.id,
+      createdAt: project.createdAt || null,
       updatedAt: project.updatedAt || null,
       nodeCount: Array.isArray(project.nodes) ? project.nodes.length : 0,
-      edgeCount: Array.isArray(project.edges) ? project.edges.length : 0
+      edgeCount: Array.isArray(project.edges) ? project.edges.length : 0,
+      librarySaved: projectLibrarySaved(project),
+      savedSlug: project.savedSlug || null
     }))
-    .sort((a, b) => String(b.updatedAt || "").localeCompare(String(a.updatedAt || "")));
+    .sort((a, b) => String(a.createdAt || a.updatedAt || "").localeCompare(String(b.createdAt || b.updatedAt || "")));
+}
+
+function canvasProjectResponse(store, activeId = store.activeId) {
+  const active = store.projects[activeId] || { nodes: [], edges: [], name: "Workflow" };
+  return {
+    activeId,
+    name: active.name || "Workflow",
+    nodes: Array.isArray(active.nodes) ? active.nodes : [],
+    edges: Array.isArray(active.edges) ? active.edges : [],
+    viewport: projectViewport(active),
+    librarySaved: projectLibrarySaved(active),
+    projects: summarizeCanvasProjects(store)
+  };
 }
 
 function normalizeCanvasViewport(value) {
@@ -416,21 +450,152 @@ async function writeCanvasProjectsStore(store) {
   return payload;
 }
 
+const CANVAS_WORKFLOW_FILE = "workflow.apix-workflow.json";
+
+async function readCanvasWorkflowLibraryEntry(slug) {
+  const safeSlug = String(slug || "").trim();
+  if (!safeSlug) return null;
+  const targetDir = path.join(workflowsDir, safeSlug);
+  assertWritableTemplatePath(configDir, targetDir);
+  const filePath = path.join(targetDir, CANVAS_WORKFLOW_FILE);
+  const raw = JSON.parse(await readFile(filePath, "utf8"));
+  const workflow = raw?.workflow && typeof raw.workflow === "object" ? raw.workflow : raw;
+  if (!workflow || !Array.isArray(workflow.nodes) || !Array.isArray(workflow.edges)) {
+    throw new Error("Workflow phải chứa nodes và edges");
+  }
+  const fileStat = await stat(filePath);
+  return {
+    slug: safeSlug,
+    name: String(workflow.name || safeSlug).trim() || safeSlug,
+    updatedAt: fileStat.mtime.toISOString(),
+    nodeCount: workflow.nodes.length,
+    edgeCount: workflow.edges.length,
+    workflow
+  };
+}
+
+async function listCanvasWorkflowLibrary() {
+  let entries = [];
+  try {
+    entries = await readdir(workflowsDir, { withFileTypes: true });
+  } catch (error) {
+    if (error?.code === "ENOENT") return [];
+    throw error;
+  }
+  const workflows = [];
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    try {
+      const item = await readCanvasWorkflowLibraryEntry(entry.name);
+      if (item) workflows.push(item);
+    } catch {
+      /* skip invalid entries */
+    }
+  }
+  return workflows
+    .map(({ slug, name, updatedAt, nodeCount, edgeCount }) => ({
+      slug,
+      name,
+      updatedAt,
+      nodeCount,
+      edgeCount
+    }))
+    .sort((a, b) => String(b.updatedAt || "").localeCompare(String(a.updatedAt || "")));
+}
+
+async function detachLibrarySlugFromSession(store, slug) {
+  let changed = false;
+  for (const project of Object.values(store.projects || {})) {
+    if (project.savedSlug !== slug) continue;
+    project.librarySaved = false;
+    project.savedSlug = null;
+    changed = true;
+  }
+  if (changed) await writeCanvasProjectsStore(store);
+}
+
+async function handleCanvasWorkflowLibrary(req, res, url) {
+  const pathname = url?.pathname || "/api/canvas-workflows";
+
+  if (pathname === "/api/canvas-workflows") {
+    if (req.method === "GET") {
+      send(res, 200, { workflows: await listCanvasWorkflowLibrary() });
+      return;
+    }
+    send(res, 405, { error: "Method not allowed" });
+    return;
+  }
+
+  if (req.method !== "POST") {
+    send(res, 405, { error: "Method not allowed" });
+    return;
+  }
+
+  const body = JSON.parse(await readBody(req) || "{}");
+
+  if (pathname === "/api/canvas-workflows/open") {
+    const slug = String(body.slug || "").trim();
+    if (!slug) {
+      send(res, 400, { error: "Thiếu slug workflow" });
+      return;
+    }
+    let entry;
+    try {
+      entry = await readCanvasWorkflowLibraryEntry(slug);
+    } catch (error) {
+      send(res, 404, { error: error?.message || "Không tìm thấy workflow trong thư viện" });
+      return;
+    }
+    const store = await readCanvasProjectsStore();
+    const id = `p_${randomUUID().slice(0, 8)}`;
+    const now = new Date().toISOString();
+    store.projects[id] = {
+      id,
+      name: entry.name,
+      createdAt: now,
+      updatedAt: now,
+      nodes: entry.workflow.nodes,
+      edges: entry.workflow.edges,
+      viewport: normalizeCanvasViewport(entry.workflow.viewport),
+      librarySaved: true,
+      savedSlug: slug
+    };
+    store.activeId = id;
+    await writeCanvasProjectsStore(store);
+    send(res, 200, { success: true, ...canvasProjectResponse(store, id) });
+    return;
+  }
+
+  if (pathname === "/api/canvas-workflows/delete") {
+    const slug = String(body.slug || "").trim();
+    if (!slug) {
+      send(res, 400, { error: "Thiếu slug workflow" });
+      return;
+    }
+    const targetDir = path.join(workflowsDir, slug);
+    assertWritableTemplatePath(configDir, targetDir);
+    await rm(targetDir, { recursive: true, force: true });
+    const store = await readCanvasProjectsStore();
+    await detachLibrarySlugFromSession(store, slug);
+    send(res, 200, {
+      success: true,
+      slug,
+      workflows: await listCanvasWorkflowLibrary(),
+      projects: summarizeCanvasProjects(store)
+    });
+    return;
+  }
+
+  send(res, 404, { error: "Not found" });
+}
+
 async function handleCanvasProject(req, res, url) {
   const pathname = url?.pathname || "/api/canvas-project";
 
   if (pathname === "/api/canvas-project") {
     if (req.method === "GET") {
       const store = await readCanvasProjectsStore();
-      const active = store.projects[store.activeId] || { nodes: [], edges: [], name: "Project" };
-      send(res, 200, {
-        activeId: store.activeId,
-        name: active.name || "Project",
-        nodes: Array.isArray(active.nodes) ? active.nodes : [],
-        edges: Array.isArray(active.edges) ? active.edges : [],
-        viewport: projectViewport(active),
-        projects: summarizeCanvasProjects(store)
-      });
+      send(res, 200, canvasProjectResponse(store));
       return;
     }
     if (req.method === "POST") {
@@ -438,7 +603,7 @@ async function handleCanvasProject(req, res, url) {
       const store = await readCanvasProjectsStore();
       const active = store.projects[store.activeId];
       if (!active) {
-        send(res, 404, { error: "Không tìm thấy project đang mở" });
+        send(res, 404, { error: "Không tìm thấy workflow đang mở" });
         return;
       }
       active.nodes = Array.isArray(body.nodes) ? body.nodes : [];
@@ -470,45 +635,32 @@ async function handleCanvasProject(req, res, url) {
   if (pathname === "/api/canvas-project/switch") {
     const id = String(body.id || "").trim();
     if (!id || !store.projects[id]) {
-      send(res, 404, { error: "Không tìm thấy project" });
+      send(res, 404, { error: "Không tìm thấy workflow" });
       return;
     }
     store.activeId = id;
     await writeCanvasProjectsStore(store);
-    const active = store.projects[id];
-    send(res, 200, {
-      success: true,
-      activeId: id,
-      name: active.name,
-      nodes: active.nodes || [],
-      edges: active.edges || [],
-      viewport: projectViewport(active),
-      projects: summarizeCanvasProjects(store)
-    });
+    send(res, 200, { success: true, ...canvasProjectResponse(store, id) });
     return;
   }
 
   if (pathname === "/api/canvas-project/create") {
-    const name = String(body.name || "Project mới").trim() || "Project mới";
+    const name = String(body.name || "Workflow mới").trim() || "Workflow mới";
     const id = `p_${randomUUID().slice(0, 8)}`;
+    const now = new Date().toISOString();
     store.projects[id] = {
       id,
       name,
-      updatedAt: new Date().toISOString(),
+      createdAt: now,
+      updatedAt: now,
       nodes: [],
-      edges: []
+      edges: [],
+      librarySaved: false,
+      savedSlug: null
     };
     store.activeId = id;
     await writeCanvasProjectsStore(store);
-    send(res, 200, {
-      success: true,
-      activeId: id,
-      name,
-      nodes: [],
-      edges: [],
-      viewport: null,
-      projects: summarizeCanvasProjects(store)
-    });
+    send(res, 200, { success: true, ...canvasProjectResponse(store, id) });
     return;
   }
 
@@ -517,7 +669,7 @@ async function handleCanvasProject(req, res, url) {
     const name = String(body.name || "").trim();
     const project = store.projects[id];
     if (!project || !name) {
-      send(res, 400, { error: "Thiếu tên project" });
+      send(res, 400, { error: "Thiếu tên workflow" });
       return;
     }
     project.name = name;
@@ -527,31 +679,131 @@ async function handleCanvasProject(req, res, url) {
     return;
   }
 
-  if (pathname === "/api/canvas-project/delete") {
-    const id = String(body.id || "").trim();
-    if (!id || !store.projects[id]) {
-      send(res, 404, { error: "Không tìm thấy project" });
+  if (pathname === "/api/canvas-project/import" || pathname === "/api/canvas-project/open-tab") {
+    const source = body.workflow && typeof body.workflow === "object" ? body.workflow : body;
+    if (!Array.isArray(source.nodes) || !Array.isArray(source.edges)) {
+      send(res, 400, { error: "Workflow phải chứa nodes và edges" });
       return;
     }
-    if (Object.keys(store.projects).length <= 1) {
-      send(res, 400, { error: "Không thể xóa project cuối cùng" });
+    const name = String(source.name || "Workflow nhập").trim() || "Workflow nhập";
+    const id = `p_${randomUUID().slice(0, 8)}`;
+    const now = new Date().toISOString();
+    store.projects[id] = {
+      id,
+      name,
+      createdAt: now,
+      updatedAt: now,
+      nodes: source.nodes,
+      edges: source.edges,
+      viewport: normalizeCanvasViewport(source.viewport),
+      librarySaved: false,
+      savedSlug: null
+    };
+    store.activeId = id;
+    await writeCanvasProjectsStore(store);
+    send(res, 200, { success: true, ...canvasProjectResponse(store, id) });
+    return;
+  }
+
+  if (pathname === "/api/canvas-project/save-file") {
+    const file = body.file && typeof body.file === "object" ? body.file : null;
+    if (!file?.workflow || typeof file.workflow !== "object") {
+      send(res, 400, { error: "Thiếu dữ liệu workflow JSON" });
+      return;
+    }
+    const workflow = file.workflow;
+    if (!Array.isArray(workflow.nodes) || !Array.isArray(workflow.edges)) {
+      send(res, 400, { error: "Workflow phải chứa nodes và edges" });
+      return;
+    }
+    const name = String(workflow.name || body.name || "Workflow").trim() || "Workflow";
+    const slug = slugifyTemplateId(name);
+    const targetDir = path.join(workflowsDir, slug);
+    assertWritableTemplatePath(configDir, targetDir);
+    const fileName = CANVAS_WORKFLOW_FILE;
+    const filePath = path.join(targetDir, fileName);
+    await mkdir(targetDir, { recursive: true });
+    await writeFile(filePath, `${JSON.stringify(file, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
+    await chmod(filePath, 0o600);
+
+    const projectId = String(body.projectId || store.activeId).trim();
+    const project = store.projects[projectId];
+    if (project) {
+      project.savedSlug = slug;
+      project.librarySaved = true;
+      project.librarySavedAt = new Date().toISOString();
+      project.updatedAt = project.librarySavedAt;
+      await writeCanvasProjectsStore(store);
+    }
+
+    send(res, 200, {
+      success: true,
+      slug,
+      path: filePath,
+      fileName,
+      projects: summarizeCanvasProjects(store)
+    });
+    return;
+  }
+
+  if (pathname === "/api/canvas-project/close-tab") {
+    const id = String(body.id || "").trim();
+    if (!id || !store.projects[id]) {
+      send(res, 404, { error: "Không tìm thấy workflow" });
       return;
     }
     delete store.projects[id];
-    if (store.activeId === id) {
+    if (Object.keys(store.projects).length === 0) {
+      const newId = `p_${randomUUID().slice(0, 8)}`;
+      const now = new Date().toISOString();
+      store.projects[newId] = {
+        id: newId,
+        name: "Workflow mới",
+        createdAt: now,
+        updatedAt: now,
+        nodes: [],
+        edges: [],
+        viewport: null,
+        librarySaved: false,
+        savedSlug: null
+      };
+      store.activeId = newId;
+    } else if (store.activeId === id) {
       store.activeId = Object.keys(store.projects)[0];
     }
     await writeCanvasProjectsStore(store);
-    const active = store.projects[store.activeId];
-    send(res, 200, {
-      success: true,
-      activeId: store.activeId,
-      name: active?.name,
-      nodes: active?.nodes || [],
-      edges: active?.edges || [],
-      viewport: projectViewport(active),
-      projects: summarizeCanvasProjects(store)
-    });
+    send(res, 200, { success: true, ...canvasProjectResponse(store) });
+    return;
+  }
+
+  if (pathname === "/api/canvas-project/delete") {
+    const id = String(body.id || "").trim();
+    if (!id || !store.projects[id]) {
+      send(res, 404, { error: "Không tìm thấy workflow" });
+      return;
+    }
+    if (Object.keys(store.projects).length <= 1) {
+      const now = new Date().toISOString();
+      store.projects[id] = {
+        id,
+        name: "Workflow mới",
+        createdAt: now,
+        updatedAt: now,
+        nodes: [],
+        edges: [],
+        viewport: null,
+        librarySaved: false,
+        savedSlug: null
+      };
+      store.activeId = id;
+    } else {
+      delete store.projects[id];
+      if (store.activeId === id) {
+        store.activeId = Object.keys(store.projects)[0];
+      }
+    }
+    await writeCanvasProjectsStore(store);
+    send(res, 200, { success: true, ...canvasProjectResponse(store) });
     return;
   }
 
@@ -2843,6 +3095,7 @@ export const routeContext = {
   endRunLogSession,
   handleAppSettings,
   handleCanvasProject,
+  handleCanvasWorkflowLibrary,
   handleCancel,
   handleComfyDiscovery,
   handleComfyHealth,

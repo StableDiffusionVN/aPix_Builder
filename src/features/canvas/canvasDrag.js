@@ -80,3 +80,24 @@ export function shouldAcceptCanvasDrop(event) {
   if (isBlockedDropTarget(event.target)) return false;
   return Boolean(event.target.closest(".canvasWorkspace"));
 }
+
+export function isWorkflowFileDragEvent(event) {
+  const types = Array.from(event?.dataTransfer?.types || []);
+  return types.includes("Files");
+}
+
+export function isWorkflowJsonFile(file) {
+  if (!file) return false;
+  const name = String(file.name || "").toLowerCase();
+  return name.endsWith(".json") || file.type === "application/json";
+}
+
+export function shouldAcceptWorkflowFileDrop(event) {
+  if (!isWorkflowFileDragEvent(event)) return false;
+  if (isBlockedDropTarget(event.target)) return false;
+  return Boolean(event.target.closest(".canvasWorkspace"));
+}
+
+export function shouldAcceptAnyCanvasDrop(event) {
+  return shouldAcceptCanvasDrop(event) || shouldAcceptWorkflowFileDrop(event);
+}

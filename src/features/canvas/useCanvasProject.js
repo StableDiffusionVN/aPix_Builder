@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { applyEdgeChanges, applyNodeChanges, addEdge } from "@xyflow/react";
 import { clearNodeRunCachePatch, stripRhDefaultImages, getNodeRunCache, buildNodeRunCache, deriveStepPorts, portTypeForUi } from "./canvasModel.js";
 import { resolveFieldValueForSource, resolveOutputValueForSource } from "./canvasMenuHelpers.js";
 import { CANVAS_NODE_DEFAULT_WIDTH } from "./CanvasNodeResizeHandles.jsx";
 import { compactStepNodeSize, growStepNodesToFit, isStepOutputDetached, normalizeOutputSplitNodes, reconcileOutputSplitOnEdgeRemove, restoreInputSourceOnRemove, restoreOutputPassthroughOnRemove } from "./canvasNodeLayout.js";
 import { canvasViewportsEqual, normalizeCanvasViewport } from "./canvasViewport.js";
+import { createWorkflowFile, parseWorkflowFile } from "./workflowFile.js";
 
 const CANVAS_HISTORY_LIMIT = 80;
 
@@ -107,11 +108,23 @@ function applyProjectPayload(data, applyState) {
   );
   applyState({
     activeId: data.activeId || "",
-    activeName: data.name || "Project",
+    activeName: data.name || "Workflow",
     projects: Array.isArray(data.projects) ? data.projects : [],
     nodes,
     edges,
     viewport: normalizeCanvasViewport(data.viewport)
+  });
+}
+
+function isProjectUnsavedToLibrary(project, dirtyTabIds) {
+  if (!project) return false;
+  return dirtyTabIds.has(project.id);
+}
+
+function serializeBaseline(nodes, edges) {
+  return JSON.stringify({
+    nodes: (nodes || []).map(serializeNode),
+    edges: edges || []
   });
 }
 
@@ -120,9 +133,11 @@ export function useCanvasProject() {
   const [edges, rawSetEdges] = useState([]);
   const [projects, setProjects] = useState([]);
   const [activeId, setActiveId] = useState("");
-  const [activeName, setActiveName] = useState("Project");
+  const [activeName, setActiveName] = useState("Workflow");
   const [viewport, setViewport] = useState(null);
   const [loaded, setLoaded] = useState(false);
+  const [workspaceSaveState, setWorkspaceSaveState] = useState("idle");
+  const [tabOrder, setTabOrder] = useState([]);
   const [historyAvailability, setHistoryAvailability] = useState({ canUndo: false, canRedo: false });
   const persistTimer = useRef(null);
   const persistEnabled = useRef(false);
@@ -133,9 +148,39 @@ export function useCanvasProject() {
   const dragStartSnapshotRef = useRef(null);
   const resizeStartSnapshotRef = useRef(null);
   const interactionActiveRef = useRef(false);
+  const suppressLibraryDirtyRef = useRef(true);
+  const libraryDirtyTabsRef = useRef(new Set());
+  const libraryBaselineRef = useRef(new Map());
+  const [libraryDirtyTick, setLibraryDirtyTick] = useState(0);
+
+  const syncLibraryBaseline = useCallback((projectId, nextNodes, nextEdges) => {
+    if (!projectId) return;
+    libraryBaselineRef.current.set(projectId, serializeBaseline(nextNodes, nextEdges));
+    if (libraryDirtyTabsRef.current.delete(projectId)) {
+      setLibraryDirtyTick(tick => tick + 1);
+    }
+  }, []);
 
   useEffect(() => { nodesRef.current = nodes; }, [nodes]);
   useEffect(() => { edgesRef.current = edges; }, [edges]);
+  const activeIdRef = useRef(activeId);
+  useEffect(() => { activeIdRef.current = activeId; }, [activeId]);
+
+  useEffect(() => {
+    setTabOrder(current => {
+      const ids = projects.map(project => project.id);
+      const next = current.filter(id => ids.includes(id));
+      for (const id of ids) {
+        if (!next.includes(id)) next.push(id);
+      }
+      return next.length ? next : ids;
+    });
+  }, [projects]);
+
+  const orderedTabs = useMemo(() => {
+    const byId = new Map(projects.map(project => [project.id, project]));
+    return tabOrder.map(id => byId.get(id)).filter(Boolean);
+  }, [projects, tabOrder]);
 
   const publishHistoryAvailability = useCallback(() => {
     const { past, future } = historyRef.current;
@@ -152,6 +197,23 @@ export function useCanvasProject() {
     interactionActiveRef.current = false;
     publishHistoryAvailability();
   }, [publishHistoryAvailability]);
+
+  const markLibraryDirtySuppressed = useCallback(() => {
+    suppressLibraryDirtyRef.current = true;
+    window.requestAnimationFrame(() => {
+      suppressLibraryDirtyRef.current = false;
+    });
+  }, []);
+
+  const flushActiveSession = useCallback(async () => {
+    if (!persistEnabled.current || !activeIdRef.current) return;
+    if (persistTimer.current) window.clearTimeout(persistTimer.current);
+    await postCanvasProject("/api/canvas-project", {
+      nodes: nodesRef.current.map(serializeNode),
+      edges: edgesRef.current,
+      viewport: viewportRef.current
+    });
+  }, []);
 
   const currentSnapshot = useCallback(() => (
     snapshotCanvasState(nodesRef.current, edgesRef.current)
@@ -226,14 +288,39 @@ export function useCanvasProject() {
   useEffect(() => {
     if (interactionActiveRef.current) return;
     const { nodes: grown, changed } = growStepNodesToFit(nodes, edges);
-    if (changed) setNodes(grown, { history: false });
+    if (changed) {
+      setNodes(grown, { history: false });
+      if (activeIdRef.current) {
+        libraryBaselineRef.current.set(
+          activeIdRef.current,
+          serializeBaseline(grown, edges)
+        );
+      }
+    }
   }, [nodes, edges, setNodes]);
+
+  const [libraryWorkflows, setLibraryWorkflows] = useState([]);
+  const [libraryLoading, setLibraryLoading] = useState(false);
+
+  const reloadLibraryWorkflows = useCallback(async () => {
+    setLibraryLoading(true);
+    try {
+      const response = await fetch("/api/canvas-workflows");
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const data = await response.json();
+      setLibraryWorkflows(Array.isArray(data.workflows) ? data.workflows : []);
+      return data.workflows;
+    } finally {
+      setLibraryLoading(false);
+    }
+  }, []);
 
   const loadProject = useCallback(async () => {
     const response = await fetch("/api/canvas-project");
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     applyProjectPayload(data, ({ activeId: id, activeName: name, projects: list, nodes: nextNodes, edges: nextEdges, viewport: nextViewport }) => {
+      activeIdRef.current = id;
       setActiveId(id);
       setActiveName(name);
       setProjects(list);
@@ -241,9 +328,11 @@ export function useCanvasProject() {
       setViewport(nextViewport);
       applyCanvasState(nextNodes, nextEdges, { history: false });
       resetHistory();
+      syncLibraryBaseline(id, nextNodes, nextEdges);
+      markLibraryDirtySuppressed();
     });
     return data;
-  }, [applyCanvasState, resetHistory]);
+  }, [applyCanvasState, markLibraryDirtySuppressed, resetHistory, syncLibraryBaseline]);
 
   useEffect(() => {
     let cancelled = false;
@@ -252,25 +341,28 @@ export function useCanvasProject() {
         if (!cancelled) {
           setLoaded(true);
           persistEnabled.current = true;
+          setWorkspaceSaveState("saved");
+          void reloadLibraryWorkflows();
         }
       })
       .catch(error => {
         console.error("Could not load canvas project:", error);
         if (!cancelled) {
           setLoaded(true);
-          persistEnabled.current = true;
         }
       });
     return () => {
       cancelled = true;
     };
-  }, [loadProject]);
+  }, [loadProject, reloadLibraryWorkflows]);
 
   useEffect(() => {
     if (!loaded || !persistEnabled.current) return undefined;
+    setWorkspaceSaveState("pending");
     if (persistTimer.current) window.clearTimeout(persistTimer.current);
     persistTimer.current = window.setTimeout(() => {
       if (interactionActiveRef.current) return;
+      setWorkspaceSaveState("saving");
       fetch("/api/canvas-project", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -283,9 +375,11 @@ export function useCanvasProject() {
         .then(res => res.json())
         .then(data => {
           if (Array.isArray(data.projects)) setProjects(data.projects);
+          setWorkspaceSaveState("saved");
         })
         .catch(error => {
           console.error("Could not save canvas project:", error);
+          setWorkspaceSaveState("error");
         });
     }, 400);
     return () => {
@@ -293,12 +387,123 @@ export function useCanvasProject() {
     };
   }, [nodes, edges, viewport, loaded]);
 
+  useEffect(() => {
+    if (!loaded || suppressLibraryDirtyRef.current || !activeId) return;
+    const baseline = libraryBaselineRef.current.get(activeId);
+    const current = serializeBaseline(nodes, edges);
+    if (baseline === undefined) {
+      libraryBaselineRef.current.set(activeId, current);
+      return;
+    }
+    const dirty = baseline !== current;
+    const wasDirty = libraryDirtyTabsRef.current.has(activeId);
+    if (dirty && !wasDirty) {
+      libraryDirtyTabsRef.current.add(activeId);
+      setLibraryDirtyTick(tick => tick + 1);
+    } else if (!dirty && wasDirty) {
+      libraryDirtyTabsRef.current.delete(activeId);
+      setLibraryDirtyTick(tick => tick + 1);
+    }
+  }, [nodes, edges, activeId, loaded]);
+
+  const isTabUnsavedToLibrary = useCallback((projectId) => {
+    const project = projects.find(item => item.id === projectId);
+    return isProjectUnsavedToLibrary(project, libraryDirtyTabsRef.current);
+  }, [projects, libraryDirtyTick]);
+
+  const needsCloseConfirmation = useCallback((projectId) => {
+    const project = projects.find(item => item.id === projectId);
+    if (!project) return false;
+    if (libraryDirtyTabsRef.current.has(projectId)) return true;
+    const nodeCount = projectId === activeIdRef.current
+      ? nodesRef.current.length
+      : (project.nodeCount || 0);
+    const edgeCount = projectId === activeIdRef.current
+      ? edgesRef.current.length
+      : (project.edgeCount || 0);
+    if (project.librarySaved !== true && (nodeCount > 0 || edgeCount > 0)) {
+      return true;
+    }
+    return false;
+  }, [projects, libraryDirtyTick]);
+
+  const isTabInLibrary = useCallback((projectId) => {
+    const project = projects.find(item => item.id === projectId);
+    return project?.librarySaved === true;
+  }, [projects]);
+
+  const saveWorkflowFileRef = useRef(null);
+  const switchProjectRef = useRef(null);
+
   const reportViewport = useCallback((nextViewport) => {
     const normalized = normalizeCanvasViewport(nextViewport);
     if (canvasViewportsEqual(viewportRef.current, normalized)) return;
     viewportRef.current = normalized;
     setViewport(normalized);
   }, []);
+
+  const saveWorkflowFile = useCallback(async (tabId = activeIdRef.current) => {
+    const targetId = tabId || activeIdRef.current;
+    const summary = projects.find(project => project.id === targetId);
+    const name = summary?.name || activeName;
+    const file = createWorkflowFile({
+      id: targetId,
+      name,
+      createdAt: summary?.createdAt || null,
+      updatedAt: summary?.updatedAt || null,
+      nodes: nodesRef.current.map(serializeNode),
+      edges: edgesRef.current,
+      viewport: viewportRef.current
+    });
+    const data = await postCanvasProject("/api/canvas-project/save-file", {
+      projectId: targetId,
+      file
+    });
+    if (Array.isArray(data.projects)) setProjects(data.projects);
+    syncLibraryBaseline(targetId, nodesRef.current, edgesRef.current);
+    await reloadLibraryWorkflows();
+    return data;
+  }, [activeName, projects, syncLibraryBaseline, reloadLibraryWorkflows]);
+
+  saveWorkflowFileRef.current = saveWorkflowFile;
+
+  const exportWorkflow = useCallback(() => {
+    const summary = projects.find(project => project.id === activeId);
+    return createWorkflowFile({
+      id: activeId,
+      name: activeName,
+      createdAt: summary?.createdAt || null,
+      updatedAt: summary?.updatedAt || null,
+      nodes: nodesRef.current.map(serializeNode),
+      edges: edgesRef.current,
+      viewport: viewportRef.current
+    });
+  }, [activeId, activeName, projects]);
+
+  const importWorkflow = useCallback(async (fileContents) => {
+    const workflow = parseWorkflowFile(fileContents);
+    persistEnabled.current = false;
+    if (persistTimer.current) window.clearTimeout(persistTimer.current);
+    try {
+      await flushActiveSession();
+      const data = await postCanvasProject("/api/canvas-project/open-tab", workflow);
+      applyProjectPayload(data, ({ activeId: nextId, activeName: name, projects: list, nodes: nextNodes, edges: nextEdges, viewport: nextViewport }) => {
+        activeIdRef.current = nextId;
+        setActiveId(nextId);
+        setActiveName(name);
+        setProjects(list);
+        viewportRef.current = nextViewport;
+        setViewport(nextViewport);
+        applyCanvasState(nextNodes, nextEdges, { history: false });
+        resetHistory();
+        syncLibraryBaseline(nextId, nextNodes, nextEdges);
+        markLibraryDirtySuppressed();
+      });
+      return data;
+    } finally {
+      persistEnabled.current = true;
+    }
+  }, [applyCanvasState, flushActiveSession, markLibraryDirtySuppressed, resetHistory, syncLibraryBaseline]);
 
   const onNodesChange = useCallback((changes) => {
     const currentNodes = nodesRef.current;
@@ -612,34 +817,148 @@ export function useCanvasProject() {
   }, [applyCanvasState]);
 
   const switchProject = useCallback(async (id) => {
+    if (id === activeIdRef.current) return;
     persistEnabled.current = false;
-    const data = await postCanvasProject("/api/canvas-project/switch", { id });
-    applyProjectPayload(data, ({ activeId: nextId, activeName: name, projects: list, nodes: nextNodes, edges: nextEdges, viewport: nextViewport }) => {
-      setActiveId(nextId);
-      setActiveName(name);
-      setProjects(list);
-      viewportRef.current = nextViewport;
-      setViewport(nextViewport);
-      applyCanvasState(nextNodes, nextEdges, { history: false });
-      resetHistory();
-    });
-    persistEnabled.current = true;
-  }, [applyCanvasState, resetHistory]);
+    if (persistTimer.current) window.clearTimeout(persistTimer.current);
+    try {
+      await flushActiveSession();
+      const data = await postCanvasProject("/api/canvas-project/switch", { id });
+      applyProjectPayload(data, ({ activeId: nextId, activeName: name, projects: list, nodes: nextNodes, edges: nextEdges, viewport: nextViewport }) => {
+        activeIdRef.current = nextId;
+        setActiveId(nextId);
+        setActiveName(name);
+        setProjects(list);
+        viewportRef.current = nextViewport;
+        setViewport(nextViewport);
+        applyCanvasState(nextNodes, nextEdges, { history: false });
+        resetHistory();
+        syncLibraryBaseline(nextId, nextNodes, nextEdges);
+        markLibraryDirtySuppressed();
+      });
+    } finally {
+      persistEnabled.current = true;
+    }
+  }, [applyCanvasState, flushActiveSession, markLibraryDirtySuppressed, resetHistory, syncLibraryBaseline]);
+
+  switchProjectRef.current = switchProject;
+
+  const saveTabToLibrary = useCallback(async (tabId) => {
+    const targetId = tabId || activeIdRef.current;
+    if (targetId && targetId !== activeIdRef.current) {
+      await switchProjectRef.current?.(targetId);
+    }
+    return saveWorkflowFileRef.current?.(targetId);
+  }, []);
+
+  const openNewTab = useCallback(async () => {
+    persistEnabled.current = false;
+    if (persistTimer.current) window.clearTimeout(persistTimer.current);
+    try {
+      await flushActiveSession();
+      const data = await postCanvasProject("/api/canvas-project/create", {
+        name: `Workflow ${projects.length + 1}`
+      });
+      applyProjectPayload(data, ({ activeId: nextId, activeName: nextName, projects: list, nodes: nextNodes, edges: nextEdges, viewport: nextViewport }) => {
+        activeIdRef.current = nextId;
+        setActiveId(nextId);
+        setActiveName(nextName);
+        setProjects(list);
+        viewportRef.current = nextViewport;
+        setViewport(nextViewport);
+        applyCanvasState(nextNodes, nextEdges, { history: false });
+        resetHistory();
+        syncLibraryBaseline(nextId, nextNodes, nextEdges);
+        markLibraryDirtySuppressed();
+      });
+    } finally {
+      persistEnabled.current = true;
+    }
+  }, [applyCanvasState, flushActiveSession, markLibraryDirtySuppressed, projects.length, resetHistory, syncLibraryBaseline]);
 
   const createProject = useCallback(async (name) => {
     persistEnabled.current = false;
-    const data = await postCanvasProject("/api/canvas-project/create", { name });
-    applyProjectPayload(data, ({ activeId: nextId, activeName: nextName, projects: list, nodes: nextNodes, edges: nextEdges, viewport: nextViewport }) => {
-      setActiveId(nextId);
-      setActiveName(nextName);
-      setProjects(list);
-      viewportRef.current = nextViewport;
-      setViewport(nextViewport);
-      applyCanvasState(nextNodes, nextEdges, { history: false });
-      resetHistory();
-    });
-    persistEnabled.current = true;
-  }, [applyCanvasState, resetHistory]);
+    if (persistTimer.current) window.clearTimeout(persistTimer.current);
+    try {
+      await flushActiveSession();
+      const data = await postCanvasProject("/api/canvas-project/create", { name });
+      applyProjectPayload(data, ({ activeId: nextId, activeName: nextName, projects: list, nodes: nextNodes, edges: nextEdges, viewport: nextViewport }) => {
+        activeIdRef.current = nextId;
+        setActiveId(nextId);
+        setActiveName(nextName);
+        setProjects(list);
+        viewportRef.current = nextViewport;
+        setViewport(nextViewport);
+        applyCanvasState(nextNodes, nextEdges, { history: false });
+        resetHistory();
+        syncLibraryBaseline(nextId, nextNodes, nextEdges);
+        markLibraryDirtySuppressed();
+      });
+    } finally {
+      persistEnabled.current = true;
+    }
+  }, [applyCanvasState, flushActiveSession, markLibraryDirtySuppressed, resetHistory, syncLibraryBaseline]);
+
+  const openLibraryWorkflow = useCallback(async (slug) => {
+    if (!slug) return;
+    persistEnabled.current = false;
+    if (persistTimer.current) window.clearTimeout(persistTimer.current);
+    try {
+      await flushActiveSession();
+      const data = await postCanvasProject("/api/canvas-workflows/open", { slug });
+      applyProjectPayload(data, ({ activeId: nextId, activeName: name, projects: list, nodes: nextNodes, edges: nextEdges, viewport: nextViewport }) => {
+        activeIdRef.current = nextId;
+        setActiveId(nextId);
+        setActiveName(name);
+        setProjects(list);
+        viewportRef.current = nextViewport;
+        setViewport(nextViewport);
+        applyCanvasState(nextNodes, nextEdges, { history: false });
+        resetHistory();
+        syncLibraryBaseline(nextId, nextNodes, nextEdges);
+        markLibraryDirtySuppressed();
+      });
+      return data;
+    } finally {
+      persistEnabled.current = true;
+    }
+  }, [applyCanvasState, flushActiveSession, markLibraryDirtySuppressed, resetHistory, syncLibraryBaseline]);
+
+  const deleteLibraryWorkflow = useCallback(async (slug) => {
+    if (!slug) return;
+    const data = await postCanvasProject("/api/canvas-workflows/delete", { slug });
+    if (Array.isArray(data.workflows)) setLibraryWorkflows(data.workflows);
+    if (Array.isArray(data.projects)) setProjects(data.projects);
+    setLibraryDirtyTick(tick => tick + 1);
+    return data;
+  }, []);
+
+  const closeTab = useCallback(async (tabId, { discardChanges = false } = {}) => {
+    if (!tabId) return;
+    persistEnabled.current = false;
+    if (persistTimer.current) window.clearTimeout(persistTimer.current);
+    try {
+      if (!discardChanges) {
+        await flushActiveSession();
+      }
+      libraryDirtyTabsRef.current.delete(tabId);
+      libraryBaselineRef.current.delete(tabId);
+      const data = await postCanvasProject("/api/canvas-project/close-tab", { id: tabId });
+      applyProjectPayload(data, ({ activeId: nextId, activeName: name, projects: list, nodes: nextNodes, edges: nextEdges, viewport: nextViewport }) => {
+        activeIdRef.current = nextId;
+        setActiveId(nextId);
+        setActiveName(name);
+        setProjects(list);
+        viewportRef.current = nextViewport;
+        setViewport(nextViewport);
+        applyCanvasState(nextNodes, nextEdges, { history: false });
+        resetHistory();
+        syncLibraryBaseline(nextId, nextNodes, nextEdges);
+        markLibraryDirtySuppressed();
+      });
+    } finally {
+      persistEnabled.current = true;
+    }
+  }, [applyCanvasState, flushActiveSession, markLibraryDirtySuppressed, resetHistory, syncLibraryBaseline]);
 
   const renameProject = useCallback(async (id, name) => {
     const data = await postCanvasProject("/api/canvas-project/rename", { id, name });
@@ -649,22 +968,33 @@ export function useCanvasProject() {
 
   const deleteProject = useCallback(async (id) => {
     persistEnabled.current = false;
-    const data = await postCanvasProject("/api/canvas-project/delete", { id });
-    applyProjectPayload(data, ({ activeId: nextId, activeName: name, projects: list, nodes: nextNodes, edges: nextEdges, viewport: nextViewport }) => {
-      setActiveId(nextId);
-      setActiveName(name);
-      setProjects(list);
-      viewportRef.current = nextViewport;
-      setViewport(nextViewport);
-      applyCanvasState(nextNodes, nextEdges, { history: false });
-      resetHistory();
-    });
-    persistEnabled.current = true;
-  }, [applyCanvasState, resetHistory]);
+    if (persistTimer.current) window.clearTimeout(persistTimer.current);
+    try {
+      if (id === activeIdRef.current) await flushActiveSession();
+      libraryDirtyTabsRef.current.delete(id);
+      libraryBaselineRef.current.delete(id);
+      const data = await postCanvasProject("/api/canvas-project/delete", { id });
+      applyProjectPayload(data, ({ activeId: nextId, activeName: name, projects: list, nodes: nextNodes, edges: nextEdges, viewport: nextViewport }) => {
+        activeIdRef.current = nextId;
+        setActiveId(nextId);
+        setActiveName(name);
+        setProjects(list);
+        viewportRef.current = nextViewport;
+        setViewport(nextViewport);
+        applyCanvasState(nextNodes, nextEdges, { history: false });
+        resetHistory();
+        syncLibraryBaseline(nextId, nextNodes, nextEdges);
+        markLibraryDirtySuppressed();
+      });
+    } finally {
+      persistEnabled.current = true;
+    }
+  }, [applyCanvasState, flushActiveSession, markLibraryDirtySuppressed, resetHistory, syncLibraryBaseline]);
 
   return {
     nodes, edges, loaded,
-    projects, activeId, activeName, viewport,
+    projects, orderedTabs, activeId, activeName, viewport,
+    workspaceSaveState,
     canUndo: historyAvailability.canUndo,
     canRedo: historyAvailability.canRedo,
     setNodes, setEdges,
@@ -673,6 +1003,9 @@ export function useCanvasProject() {
     disconnectTargetPort, toggleNodeBypass, convertInputToSource, convertOutputToSource, clearProject,
     undoCanvas, redoCanvas,
     switchProject, createProject, renameProject, deleteProject,
+    openNewTab, closeTab, saveTabToLibrary, isTabUnsavedToLibrary, isTabInLibrary, needsCloseConfirmation,
+    libraryWorkflows, libraryLoading, reloadLibraryWorkflows, openLibraryWorkflow, deleteLibraryWorkflow,
+    saveWorkflowFile, exportWorkflow, importWorkflow,
     reportViewport
   };
 }

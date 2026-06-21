@@ -3,7 +3,7 @@ import { FolderKanban, History, LayoutGrid, Network, X } from "lucide-react";
 export const CANVAS_PANELS = {
   projects: {
     id: "projects",
-    label: "Thư viện project",
+    label: "Thư viện workflow",
     icon: FolderKanban
   },
   library: {
@@ -13,7 +13,7 @@ export const CANVAS_PANELS = {
   },
   nodes: {
     id: "nodes",
-    label: "Node trong project",
+    label: "Node trong workflow",
     icon: Network
   },
   history: {

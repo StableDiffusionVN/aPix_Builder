@@ -22,8 +22,8 @@ function resolveCanvasRoots(container) {
 /**
  * Fit padding excludes only:
  * - left: library dock width (`.canvasDock`)
- * - bottom: toolbar height (`.canvasZoomBar`)
- * Minimap and toolbar width are ignored; top/right use minimal edge padding.
+ * - bottom: zoom toolbar height (`.canvasZoomBar`)
+ * Minimap and toolbar widths are ignored; right uses minimal edge padding.
  */
 export function measureCanvasFitPadding(container) {
   const edge = CANVAS_FIT_EDGE_PADDING;

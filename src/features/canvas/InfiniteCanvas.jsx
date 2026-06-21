@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, Suspense } from "react";
+import { createPortal } from "react-dom";
 import {
   Background,
   ReactFlow,
@@ -23,6 +24,7 @@ import { isTypingTarget } from "../../lib/keyboard.js";
 import { RunLogPanel } from "../../components/lazyModals.js";
 import { CanvasDock, CanvasFlyoutPanel, CANVAS_PANELS } from "./CanvasDock.jsx";
 import { CanvasProjectPanel } from "./CanvasProjectPanel.jsx";
+import { CanvasWorkflowToolbar } from "./CanvasWorkflowToolbar.jsx";
 import { CanvasNodesPanel } from "./CanvasNodesPanel.jsx";
 import { CanvasHistoryPanel } from "./CanvasHistoryPanel.jsx";
 import { CanvasFlowPanel } from "./CanvasFlowPanel.jsx";
@@ -30,7 +32,15 @@ import { CanvasContextMenu } from "./CanvasContextMenu.jsx";
 import {
   buildEdgeContextMenuItems
 } from "./canvasMenuHelpers.js";
-import { readCanvasDragPayload, shouldAcceptCanvasDrop, isCanvasDragEvent } from "./canvasDrag.js";
+import {
+  readCanvasDragPayload,
+  shouldAcceptAnyCanvasDrop,
+  shouldAcceptCanvasDrop,
+  shouldAcceptWorkflowFileDrop,
+  isCanvasDragEvent,
+  isWorkflowFileDragEvent,
+  isWorkflowJsonFile
+} from "./canvasDrag.js";
 import {
   ACTIVE_RUN_LOG_STATUSES,
   countCanvasQueuedJobs,
@@ -123,17 +133,21 @@ function InfiniteCanvasInner({
   updateRunLogSession,
   restoreHistory,
   logRhApiKey,
-  onRuntimeStateChange
+  onRuntimeStateChange,
+  workflowToolbarHost = null
 }) {
   const { library, loading, error, reload } = useStepLibrary();
   const {
     nodes, edges,
-    projects, activeId, activeName, viewport,
+    projects, orderedTabs, activeId, activeName, viewport,
     canUndo, canRedo,
     onNodesChange, onEdgesChange, onConnect, setEdges,
     addNode, updateNodeData, updateNodeSize, commitNodeResize, removeNode, removeEdge,
     disconnectTargetPort, toggleNodeBypass, convertInputToSource, convertOutputToSource,
     switchProject, createProject, renameProject, deleteProject,
+    openNewTab, closeTab, saveTabToLibrary, isTabUnsavedToLibrary, isTabInLibrary, needsCloseConfirmation,
+    libraryWorkflows, libraryLoading, reloadLibraryWorkflows, openLibraryWorkflow, deleteLibraryWorkflow,
+    saveWorkflowFile, exportWorkflow, importWorkflow,
     undoCanvas, redoCanvas, reportViewport
   } = useCanvasProject();
 
@@ -438,13 +452,31 @@ function InfiniteCanvasInner({
   }, [nextPosition]);
 
   const handleCanvasDragOver = useCallback((event) => {
-    if (!shouldAcceptCanvasDrop(event)) return;
+    if (!shouldAcceptAnyCanvasDrop(event)) return;
     event.preventDefault();
     event.dataTransfer.dropEffect = "copy";
     setPaletteDropActive(true);
   }, []);
 
-  const handleCanvasDrop = useCallback((event) => {
+  const handleCanvasDrop = useCallback(async (event) => {
+    if (shouldAcceptWorkflowFileDrop(event)) {
+      const file = event.dataTransfer?.files?.[0];
+      if (!file) return;
+      event.preventDefault();
+      event.stopPropagation();
+      setPaletteDropActive(false);
+      if (!isWorkflowJsonFile(file)) {
+        window.alert("Chỉ hỗ trợ tệp JSON workflow.");
+        return;
+      }
+      try {
+        await importWorkflow(await file.text());
+      } catch (error) {
+        window.alert(error?.message || "Không thể import workflow.");
+      }
+      return;
+    }
+
     if (!shouldAcceptCanvasDrop(event)) return;
     const payload = readCanvasDragPayload(event.dataTransfer);
     if (!payload) return;
@@ -463,14 +495,14 @@ function InfiniteCanvasInner({
     if (payload.type === "source") {
       handleAddSource(payload.sourceType, position);
     }
-  }, [handleAddSource, handleAddStep, resolveDropPosition]);
+  }, [handleAddSource, handleAddStep, importWorkflow, resolveDropPosition]);
 
   useEffect(() => {
     const root = canvasWorkspaceRef.current;
     if (!root) return undefined;
 
     function handleDragEnter(event) {
-      if (!isCanvasDragEvent(event)) return;
+      if (!isCanvasDragEvent(event) && !isWorkflowFileDragEvent(event)) return;
       if (event.target instanceof Element && event.target.closest(".canvasFlyout, .canvasDock, .canvasFlowPanel")) {
         return;
       }
@@ -937,7 +969,7 @@ function InfiniteCanvasInner({
       rhSettings,
       sequence: queueSequenceRef.current,
       canvasProjectId: activeId,
-      canvasGroupLabel: `Canvas · ${activeName || "Project"}`,
+      canvasGroupLabel: `Canvas · ${activeName || "Workflow"}`,
       ...partial
     });
   }, [activeId, activeName, rhSettings]);
@@ -1290,17 +1322,35 @@ function InfiniteCanvasInner({
             onSelect={setActivePanel}
           />
 
+          {workflowToolbarHost ? createPortal(
+            <CanvasWorkflowToolbar
+              placement="topbar"
+              tabs={orderedTabs}
+              activeId={activeId}
+              isTabUnsavedToLibrary={isTabUnsavedToLibrary}
+              isTabInLibrary={isTabInLibrary}
+              needsCloseConfirmation={needsCloseConfirmation}
+              onSwitchTab={switchProject}
+              onRename={renameProject}
+              onNewTab={openNewTab}
+              onCloseTab={closeTab}
+              onSaveTabToLibrary={saveTabToLibrary}
+              onSaveFile={saveWorkflowFile}
+              onExport={exportWorkflow}
+              onImport={importWorkflow}
+            />,
+            workflowToolbarHost
+          ) : null}
+
           {activePanel ? (
             <CanvasFlyoutPanel title={flyoutTitle} onClose={() => setActivePanel(null)}>
               {activePanel === "projects" ? (
                 <CanvasProjectPanel
-                  projects={projects}
-                  activeId={activeId}
-                  activeName={activeName}
-                  onSwitch={switchProject}
-                  onCreate={createProject}
-                  onRename={renameProject}
-                  onDelete={deleteProject}
+                  workflows={libraryWorkflows}
+                  loading={libraryLoading}
+                  onReload={reloadLibraryWorkflows}
+                  onOpen={openLibraryWorkflow}
+                  onDelete={deleteLibraryWorkflow}
                 />
               ) : null}
               {activePanel === "library" ? (

@@ -172,6 +172,10 @@ export function AppWorkspace() {
     workspaceView, setWorkspaceView
   } = useWorkspaceLayoutContext();
   const isCanvasView = workspaceView === "canvas";
+  const [workflowToolbarHost, setWorkflowToolbarHost] = useState(null);
+  const handleWorkflowToolbarHost = useCallback((node) => {
+    setWorkflowToolbarHost(node);
+  }, []);
   const [canvasRuntime, setCanvasRuntime] = useState(CANVAS_RUNTIME_IDLE);
   const handleCanvasRuntimeChange = useCallback((next) => {
     setCanvasRuntime(current => {
@@ -1698,15 +1702,23 @@ export function AppWorkspace() {
             <h1 className="title-font">aPix Builder</h1>
           </div>
 
-          <ExecutionModeToggle
-            mode={executionMode}
-            onChange={(nextMode) => {
-              setExecutionMode(nextMode);
-              if (isCanvasView) setWorkspaceView("form");
-            }}
-            canvasActive={isCanvasView}
-            onCanvasToggle={() => setWorkspaceView(isCanvasView ? "form" : "canvas")}
-          />
+          <div className={`appTopBarModeCluster${isCanvasView ? " is-canvas-view" : ""}`}>
+            <ExecutionModeToggle
+              mode={executionMode}
+              onChange={(nextMode) => {
+                setExecutionMode(nextMode);
+                if (isCanvasView) setWorkspaceView("form");
+              }}
+              canvasActive={isCanvasView}
+              onCanvasToggle={() => setWorkspaceView(isCanvasView ? "form" : "canvas")}
+            >
+              <div
+                ref={handleWorkflowToolbarHost}
+                className="appTopBarWorkflowHost"
+                aria-hidden={!isCanvasView}
+              />
+            </ExecutionModeToggle>
+          </div>
         </div>
 
         <div className="appTopBarActions">
@@ -1815,6 +1827,7 @@ export function AppWorkspace() {
             restoreHistory={restoreHistory}
             logRhApiKey={rhPrimaryApiKey}
             onRuntimeStateChange={handleCanvasRuntimeChange}
+            workflowToolbarHost={workflowToolbarHost}
           />
         </Suspense>
       ) : (

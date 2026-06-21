@@ -1,150 +1,139 @@
-import { useState } from "react";
-import { FolderPlus, Loader2, Pencil, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Loader2, Star, Trash2 } from "lucide-react";
+import { getSetting, setSetting } from "../../lib/appSettings.js";
+import { useI18n } from "../../i18n/I18nContext.jsx";
 
-function formatUpdatedAt(value) {
-  if (!value) return "";
-  try {
-    return new Date(value).toLocaleString("vi-VN", {
-      day: "2-digit",
-      month: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit"
+const FAVORITES_KEY = "canvas.workflowLibraryFavorites";
+
+function readFavoriteSlugs() {
+  const raw = getSetting(FAVORITES_KEY, []);
+  return Array.isArray(raw) ? raw.filter(slug => typeof slug === "string" && slug) : [];
+}
+
+function sortWorkflows(workflows, favoriteSlugs) {
+  const favorites = new Set(favoriteSlugs);
+  return [...workflows].sort((a, b) => {
+    const aFavorite = favorites.has(a.slug);
+    const bFavorite = favorites.has(b.slug);
+    if (aFavorite !== bFavorite) return aFavorite ? -1 : 1;
+    return String(a.name || a.slug).localeCompare(String(b.name || b.slug), "vi", {
+      sensitivity: "base"
     });
-  } catch {
-    return "";
-  }
+  });
 }
 
 export function CanvasProjectPanel({
-  projects,
-  activeId,
-  activeName,
-  onSwitch,
-  onCreate,
-  onRename,
+  workflows = [],
+  loading = false,
+  onReload,
+  onOpen,
   onDelete
 }) {
-  const [busyId, setBusyId] = useState("");
-  const [creating, setCreating] = useState(false);
-  const [renameId, setRenameId] = useState("");
-  const [renameValue, setRenameValue] = useState("");
+  const { t } = useI18n();
+  const [busySlug, setBusySlug] = useState("");
+  const [favoriteSlugs, setFavoriteSlugs] = useState(readFavoriteSlugs);
 
-  async function handleCreate() {
-    const name = window.prompt("Tên project mới:", "Project mới");
-    if (!name?.trim()) return;
-    setCreating(true);
+  useEffect(() => {
+    void onReload?.();
+  }, [onReload]);
+
+  const sortedWorkflows = useMemo(
+    () => sortWorkflows(workflows, favoriteSlugs),
+    [workflows, favoriteSlugs]
+  );
+
+  function toggleFavorite(slug, event) {
+    event.preventDefault();
+    event.stopPropagation();
+    setFavoriteSlugs(current => {
+      const next = current.includes(slug)
+        ? current.filter(item => item !== slug)
+        : [...current, slug];
+      setSetting(FAVORITES_KEY, next);
+      return next;
+    });
+  }
+
+  async function handleOpen(slug) {
+    if (!slug || busySlug) return;
+    setBusySlug(slug);
     try {
-      await onCreate(name.trim());
+      await onOpen?.(slug);
     } finally {
-      setCreating(false);
+      setBusySlug("");
     }
   }
 
-  async function handleSwitch(id) {
-    if (id === activeId) return;
-    setBusyId(id);
+  async function handleDelete(workflow, event) {
+    event.preventDefault();
+    event.stopPropagation();
+    const slug = workflow?.slug;
+    if (!slug || busySlug) return;
+    const name = workflow?.name || slug;
+    if (!window.confirm(t("canvas.library.confirmDelete", { name }))) return;
+    setBusySlug(slug);
     try {
-      await onSwitch(id);
+      await onDelete?.(slug);
+      setFavoriteSlugs(current => {
+        if (!current.includes(slug)) return current;
+        const next = current.filter(item => item !== slug);
+        setSetting(FAVORITES_KEY, next);
+        return next;
+      });
+    } catch (error) {
+      window.alert(error?.message || t("canvas.library.deleteFailed"));
     } finally {
-      setBusyId("");
-    }
-  }
-
-  async function handleRename(id, currentName) {
-    setRenameId(id);
-    setRenameValue(currentName);
-  }
-
-  async function submitRename() {
-    const name = renameValue.trim();
-    if (!name || !renameId) {
-      setRenameId("");
-      return;
-    }
-    setBusyId(renameId);
-    try {
-      await onRename(renameId, name);
-    } finally {
-      setBusyId("");
-      setRenameId("");
-    }
-  }
-
-  async function handleDelete(id, name) {
-    if (!window.confirm(`Xóa project "${name}"?`)) return;
-    setBusyId(id);
-    try {
-      await onDelete(id);
-    } finally {
-      setBusyId("");
+      setBusySlug("");
     }
   }
 
   return (
-    <div className="canvasProjectPanel">
-      <div className="canvasProjectActive">
-        <span className="canvasProjectActiveLabel">Đang mở</span>
-        <strong>{activeName}</strong>
-        <span className="canvasProjectActiveMeta">{projects.length} project</span>
-      </div>
+    <div className="canvasProjectPanel canvasProjectPanelLibrary">
+      {loading && sortedWorkflows.length === 0 ? (
+        <div className="canvasProjectLibraryLoading">
+          <Loader2 size={16} className="spin" />
+        </div>
+      ) : null}
 
-      <button type="button" className="canvasFlyoutAction primary" onClick={handleCreate} disabled={creating}>
-        {creating ? <Loader2 size={14} className="spin" /> : <FolderPlus size={14} />}
-        Project mới
-      </button>
+      {!loading && sortedWorkflows.length === 0 ? (
+        <p className="canvasProjectEmpty">Chưa có workflow đã lưu.</p>
+      ) : null}
 
-      <ul className="canvasProjectList">
-        {projects.map(project => {
-          const isActive = project.id === activeId;
-          const busy = busyId === project.id;
+      <ul className="canvasProjectList canvasProjectLibraryList">
+        {sortedWorkflows.map(workflow => {
+          const busy = busySlug === workflow.slug;
+          const isFavorite = favoriteSlugs.includes(workflow.slug);
           return (
-            <li key={project.id} className={`canvasProjectItem${isActive ? " active" : ""}`}>
-              {renameId === project.id ? (
-                <form
-                  className="canvasProjectRenameForm"
-                  onSubmit={event => {
-                    event.preventDefault();
-                    submitRename();
-                  }}
-                >
-                  <input
-                    autoFocus
-                    value={renameValue}
-                    onChange={event => setRenameValue(event.target.value)}
-                    onBlur={submitRename}
-                  />
-                </form>
-              ) : (
+            <li key={workflow.slug} className="canvasProjectLibraryItem">
+              <button
+                type="button"
+                className="canvasProjectLibraryOpen"
+                disabled={busy}
+                onClick={() => handleOpen(workflow.slug)}
+              >
+                <span className="canvasProjectLibraryName">{workflow.name}</span>
+                {busy ? <Loader2 size={13} className="spin" /> : null}
+              </button>
+              <div className="canvasProjectLibraryActions">
                 <button
                   type="button"
-                  className="canvasProjectOpen"
+                  className={`canvasProjectLibraryFav${isFavorite ? " is-active" : ""}`}
+                  aria-label={isFavorite ? "Bỏ ghim workflow" : "Ghim workflow lên đầu"}
+                  title={isFavorite ? "Bỏ ghim" : "Ghim lên đầu"}
                   disabled={busy}
-                  onClick={() => handleSwitch(project.id)}
+                  onClick={event => toggleFavorite(workflow.slug, event)}
                 >
-                  <span className="canvasProjectName">{project.name}</span>
-                  <span className="canvasProjectMeta">
-                    {project.nodeCount} node · {formatUpdatedAt(project.updatedAt)}
-                  </span>
-                  {busy ? <Loader2 size={13} className="spin" /> : null}
-                </button>
-              )}
-              <div className="canvasProjectItemActions">
-                <button
-                  type="button"
-                  className="canvasNodeBtn"
-                  title="Đổi tên"
-                  onClick={() => handleRename(project.id, project.name)}
-                >
-                  <Pencil size={12} />
+                  <Star size={13} fill={isFavorite ? "currentColor" : "none"} />
                 </button>
                 <button
                   type="button"
-                  className="canvasNodeBtn danger"
-                  title="Xóa"
-                  disabled={projects.length <= 1}
-                  onClick={() => handleDelete(project.id, project.name)}
+                  className="canvasProjectLibraryDelete"
+                  aria-label={t("canvas.library.deleteWorkflow")}
+                  title={t("canvas.library.deleteWorkflow")}
+                  disabled={busy}
+                  onClick={event => handleDelete(workflow, event)}
                 >
-                  <Trash2 size={12} />
+                  <Trash2 size={13} />
                 </button>
               </div>
             </li>

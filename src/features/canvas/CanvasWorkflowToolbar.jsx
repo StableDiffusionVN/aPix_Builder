@@ -2,19 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Download, FolderOutput, Loader2, Pencil, Plus, Upload, X } from "lucide-react";
 import { localizeRuntimeMessage, useI18n } from "../../i18n/I18nContext.jsx";
 import { CanvasWorkflowCloseDialog } from "./CanvasWorkflowCloseDialog.jsx";
-import { workflowFileName } from "./workflowFile.js";
-
-function downloadJson(payload, fileName) {
-  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = fileName;
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  window.setTimeout(() => URL.revokeObjectURL(url), 0);
-}
+import { downloadWorkflowFile } from "./workflowFile.js";
 
 export function CanvasWorkflowToolbar({
   placement = "canvas",
@@ -132,7 +120,7 @@ export function CanvasWorkflowToolbar({
   function handleExport() {
     try {
       const payload = onExport();
-      downloadJson(payload, workflowFileName(payload.workflow?.name || "Workflow"));
+      downloadWorkflowFile(payload, payload.workflow?.name || "Workflow");
     } catch (error) {
       window.alert(localizeRuntimeMessage(error?.message, locale) || t("canvas.workflow.exportFailed"));
     }

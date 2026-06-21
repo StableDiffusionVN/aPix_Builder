@@ -92,4 +92,16 @@ export function workflowFileName(name = "Workflow") {
   return `${safeName || "workflow"}.apix-workflow.json`;
 }
 
+export function downloadWorkflowFile(payload, name = "Workflow") {
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = workflowFileName(name);
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
 export const WORKFLOW_FILE_BASENAME = "workflow.apix-workflow.json";

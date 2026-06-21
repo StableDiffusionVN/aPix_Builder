@@ -53,6 +53,7 @@ import { RunLogPanel } from "../../components/lazyModals.js";
 import { CanvasDock, CanvasFlyoutPanel, CANVAS_PANELS } from "./CanvasDock.jsx";
 import { CanvasProjectPanel } from "./CanvasProjectPanel.jsx";
 import { CanvasWorkflowToolbar } from "./CanvasWorkflowToolbar.jsx";
+import { downloadWorkflowFile } from "./workflowFile.js";
 import { CanvasNodesPanel } from "./CanvasNodesPanel.jsx";
 import { CanvasHistoryPanel } from "./CanvasHistoryPanel.jsx";
 import { CanvasFlowPanel } from "./CanvasFlowPanel.jsx";
@@ -165,7 +166,8 @@ function InfiniteCanvasInner({
   workflowToolbarHost = null,
   smartGuide = true,
   snapGrid = false,
-  snapGridSize = 15
+  snapGridSize = 15,
+  maxHistoryDisplay = 100
 }) {
   const { locale, t } = useI18n();
   const { library, loading, error, reload } = useStepLibrary();
@@ -256,6 +258,7 @@ function InfiniteCanvasInner({
   const pasteCountRef = useRef(0);
   const altDragRef = useRef(null);
   const altDragPositionsRef = useRef(null);
+  const workflowImportInputRef = useRef(null);
 
   const [smartGuides, setSmartGuides] = useState([]);
 
@@ -1676,6 +1679,52 @@ function InfiniteCanvasInner({
     return () => window.removeEventListener("keydown", handleRunShortcut, true);
   }, [runGraph, runNode]);
 
+  useEffect(() => {
+    function handleWorkflowShortcuts(event) {
+      if (event.repeat) return;
+      if (isTypingTarget(event.target)) return;
+      if (event.target instanceof Element && event.target.closest(
+        "[role='dialog'], .imageEditorModal, .inputLibraryModal, .imageLightbox, .maskEditorModal, .canvasContextMenu"
+      )) return;
+
+      const isMod = event.metaKey || event.ctrlKey;
+      if (!isMod || event.altKey) return;
+
+      const key = event.key?.toLowerCase();
+      if (event.shiftKey) return;
+
+      if (key === "s") {
+        event.preventDefault();
+        event.stopPropagation();
+        void saveWorkflowFile().catch(error => {
+          window.alert(localizeRuntimeMessage(error?.message, locale) || t("canvas.workflow.saveFailed"));
+        });
+        return;
+      }
+
+      if (key === "e") {
+        event.preventDefault();
+        event.stopPropagation();
+        try {
+          const payload = exportWorkflow();
+          downloadWorkflowFile(payload, payload.workflow?.name || "Workflow");
+        } catch (error) {
+          window.alert(localizeRuntimeMessage(error?.message, locale) || t("canvas.workflow.exportFailed"));
+        }
+        return;
+      }
+
+      if (key === "o") {
+        event.preventDefault();
+        event.stopPropagation();
+        workflowImportInputRef.current?.click();
+      }
+    }
+
+    window.addEventListener("keydown", handleWorkflowShortcuts, true);
+    return () => window.removeEventListener("keydown", handleWorkflowShortcuts, true);
+  }, [exportWorkflow, locale, saveWorkflowFile, t]);
+
   const queuedNodeCounts = useMemo(() => {
     const counts = {};
     for (const job of runQueue) {
@@ -2019,6 +2068,29 @@ function InfiniteCanvasInner({
           ref={canvasWorkspaceRef}
           className={`canvasWorkspace${paletteDropActive ? " isPaletteDropTarget" : ""}`}
         >
+          <input
+            ref={workflowImportInputRef}
+            className="canvasWorkflowFileInput"
+            type="file"
+            aria-hidden="true"
+            tabIndex={-1}
+            accept=".json,.apix-workflow.json,application/json"
+            onChange={async event => {
+              const file = event.target.files?.[0];
+              event.target.value = "";
+              if (!file) return;
+              if (!isWorkflowJsonFile(file)) {
+                window.alert(t("canvas.drop.jsonOnly"));
+                return;
+              }
+              try {
+                await importWorkflow(await file.text());
+              } catch (error) {
+                window.alert(localizeRuntimeMessage(error?.message, locale) || t("canvas.drop.importFailed"));
+              }
+            }}
+          />
+
           <CanvasDock
             activePanel={activePanel}
             onSelect={setActivePanel}
@@ -2079,6 +2151,7 @@ function InfiniteCanvasInner({
                   onRefreshOutputHistory={refreshOutputHistory}
                   runLogSessions={runLogSessions || []}
                   onRefreshRunLogs={refreshRunLogSessions}
+                  maxHistoryDisplay={maxHistoryDisplay}
                   onOpenRunLog={() => {
                     setMinimapOpen(false);
                     setRunLogOpen?.(true);

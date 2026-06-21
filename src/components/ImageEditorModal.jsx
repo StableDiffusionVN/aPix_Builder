@@ -888,9 +888,9 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
       drawOriginalGeometry(origCanvas, meta);
 
       const splitX = (editorComparePosition / 100) * canvas.width;
-      // Match output compare: adjusted image on the left, original on the right.
-      ctx.drawImage(tmp, 0, 0, splitX, canvas.height, 0, 0, splitX, canvas.height);
-      ctx.drawImage(origCanvas, splitX, 0, canvas.width - splitX, canvas.height, splitX, 0, canvas.width - splitX, canvas.height);
+      // Match output compare: original (input) on the left, adjusted on the right.
+      ctx.drawImage(origCanvas, 0, 0, splitX, canvas.height, 0, 0, splitX, canvas.height);
+      ctx.drawImage(tmp, splitX, 0, canvas.width - splitX, canvas.height, splitX, 0, canvas.width - splitX, canvas.height);
     } else {
       ctx.drawImage(tmp, 0, 0);
     }

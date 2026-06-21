@@ -75,7 +75,9 @@ export function SettingsModal() {
     canvasSnapGrid,
     setCanvasSnapGrid,
     canvasSnapGridSize,
-    setCanvasSnapGridSize
+    setCanvasSnapGridSize,
+    maxHistoryDisplay,
+    setMaxHistoryDisplay
   } = useSettingsModalContext();
 
   if (!open) return null;
@@ -185,6 +187,18 @@ export function SettingsModal() {
                       <option value="vi">{t("language.vi")}</option>
                       <option value="en">{t("language.en")}</option>
                     </select>
+                  </label>
+
+                  <label className="field">
+                    <span>{t("settings.history.maxDisplay")}</span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={1000}
+                      step={1}
+                      value={maxHistoryDisplay}
+                      onChange={event => setMaxHistoryDisplay(Number(event.target.value))}
+                    />
                   </label>
                 </div>
               </section>

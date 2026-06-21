@@ -152,10 +152,10 @@ export function ExecutionModeToggle({ mode, onChange, canvasActive = false, onCa
           className={`executionModeCanvasToggle${canvasActive ? " active" : ""} hasModeIcon`}
           title={
             canvasActive
-              ? (isVi ? "Quay lại Form (Alt/Option+0)" : "Back to Form (Alt/Option+0)")
-              : (isVi ? "Chuyển sang Canvas (Alt/Option+0)" : "Switch to Canvas (Alt/Option+0)")
+              ? (isVi ? "Quay lại Form (Alt/Option+`)" : "Back to Form (Alt/Option+`)")
+              : (isVi ? "Chuyển sang Canvas (Alt/Option+`)" : "Switch to Canvas (Alt/Option+`)")
           }
-          aria-keyshortcuts="Alt+0"
+          aria-keyshortcuts="Alt+Backquote"
           onClick={() => onCanvasToggle?.()}
         >
           {canvasActive ? (

@@ -30,7 +30,8 @@ export function CanvasHistoryPanel({
   onRefreshOutputHistory,
   runLogSessions,
   onRefreshRunLogs,
-  onOpenRunLog
+  onOpenRunLog,
+  maxHistoryDisplay = 100
 }) {
   const { locale, t } = useI18n();
   const [tab, setTab] = useState("outputs");
@@ -89,7 +90,7 @@ export function CanvasHistoryPanel({
             <p className="canvasFlyoutEmpty">{t("canvas.history.noOutputs")}</p>
           ) : (
             <ul className="canvasHistoryOutputs">
-              {outputHistory.slice(0, 40).map(item => {
+              {outputHistory.slice(0, maxHistoryDisplay).map(item => {
                 const outputs = (item.outputs || []).filter(output => output?.url);
                 const thumb = outputs[0]?.url;
                 const outputName = item.templateName
@@ -149,7 +150,7 @@ export function CanvasHistoryPanel({
             <p className="canvasFlyoutEmpty">{t("canvas.history.noLogs")}</p>
           ) : (
             <ul className="canvasHistoryRuns">
-              {runLogSessions.slice(0, 30).map(session => (
+              {runLogSessions.slice(0, maxHistoryDisplay).map(session => (
                 <li key={session.id} className="canvasHistoryRunItem">
                   <strong>{sessionLabel(session)}</strong>
                   <small>

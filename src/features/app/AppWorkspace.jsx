@@ -175,6 +175,7 @@ export function AppWorkspace() {
   const [canvasSmartGuide, setCanvasSmartGuide] = useState(() => getSetting("canvas.smartGuide", true));
   const [canvasSnapGrid, setCanvasSnapGrid] = useState(() => getSetting("canvas.snapGrid", false));
   const [canvasSnapGridSize, setCanvasSnapGridSize] = useState(() => getSetting("canvas.snapGridSize", 15));
+  const [maxHistoryDisplay, setMaxHistoryDisplay] = useState(() => getSetting("history.maxDisplay", 100));
 
   useEffect(() => {
     setSetting("canvas.smartGuide", canvasSmartGuide);
@@ -187,6 +188,15 @@ export function AppWorkspace() {
   useEffect(() => {
     setSetting("canvas.snapGridSize", canvasSnapGridSize);
   }, [canvasSnapGridSize]);
+
+  useEffect(() => {
+    const clamped = Math.min(1000, Math.max(1, Math.floor(Number(maxHistoryDisplay) || 100)));
+    if (clamped !== maxHistoryDisplay) {
+      setMaxHistoryDisplay(clamped);
+      return;
+    }
+    setSetting("history.maxDisplay", clamped);
+  }, [maxHistoryDisplay]);
 
   const [workflowToolbarHost, setWorkflowToolbarHost] = useState(null);
   const handleWorkflowToolbarHost = useCallback((node) => {
@@ -903,7 +913,7 @@ export function AppWorkspace() {
     };
   }, [themeMenuOpen, setThemeMenuOpen]);
 
-  // Execution mode shortcuts (Alt/Option + 0/1/2/3)
+  // Execution mode shortcuts (Alt/Option + `/1/2/3)
   useEffect(() => {
     const MODE_BY_CODE = {
       Digit1: "local",
@@ -916,7 +926,7 @@ export function AppWorkspace() {
       if (event.metaKey || event.ctrlKey || event.shiftKey) return;
       if (isTextEntryTarget(event.target)) return;
 
-      if (event.code === "Digit0") {
+      if (isLogToggleKey(event)) {
         event.preventDefault();
         event.stopPropagation();
         releaseGlobalShortcutFocus(event.target);
@@ -1847,6 +1857,7 @@ export function AppWorkspace() {
             smartGuide={canvasSmartGuide}
             snapGrid={canvasSnapGrid}
             snapGridSize={canvasSnapGridSize}
+            maxHistoryDisplay={maxHistoryDisplay}
           />
         </Suspense>
       ) : (
@@ -2123,6 +2134,7 @@ export function AppWorkspace() {
 
         <OutputGallery
           history={history}
+          maxHistoryDisplay={maxHistoryDisplay}
           onDownload={handleDownload}
           onItemClick={handleHistoryItemClick}
           onRestore={restoreHistory}
@@ -2192,7 +2204,9 @@ export function AppWorkspace() {
         canvasSnapGrid,
         setCanvasSnapGrid,
         canvasSnapGridSize,
-        setCanvasSnapGridSize
+        setCanvasSnapGridSize,
+        maxHistoryDisplay,
+        setMaxHistoryDisplay
       }}>
         <SettingsModal />
       </SettingsModalProvider>
@@ -2200,6 +2214,9 @@ export function AppWorkspace() {
       {infoOpen ? (
         <div className="modalBackdrop infoBackdrop" role="presentation" onMouseDown={() => setInfoOpen(false)}>
           <section className="settingsModal infoModal" role="dialog" aria-modal="true" aria-label={t("info.dialog")} onMouseDown={event => event.stopPropagation()}>
+            <button type="button" className="modalClose infoModalClose" onClick={() => setInfoOpen(false)} title={t("common.close")} aria-label={t("common.close")}>
+              <X size={14} />
+            </button>
             <div className="modalHeader infoModalHeader">
               <div className="infoModalHeaderMain">
                 <div>
@@ -2208,7 +2225,6 @@ export function AppWorkspace() {
                   </h2>
                   <p className="infoModalLead">{t("info.description")}</p>
                 </div>
-                <button className="modalClose" onClick={() => setInfoOpen(false)} title={t("common.close")}><X size={18} /></button>
               </div>
               <div className="infoStatusStrip" aria-label={t("info.summary")}>
                 <div><span>{t("info.mode")}</span><b>{infoModeLabel}</b></div>

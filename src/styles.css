@@ -5368,7 +5368,7 @@ html[data-theme="light"] .logTaskInspectLine {
 
 .compareOutputImage {
   z-index: 2;
-  clip-path: inset(0 calc(100% - var(--compare-position, 50%)) 0 0);
+  clip-path: inset(0 0 0 var(--compare-position, 50%));
 }
 
 .compareDivider {
@@ -5830,6 +5830,7 @@ html[data-theme="light"] .logTaskInspectLine {
 }
 
 .infoModal {
+  position: relative;
   width: calc(100vw - 24px);
   max-width: 1400px;
   max-height: calc(100vh - 24px);
@@ -5842,10 +5843,20 @@ html[data-theme="light"] .logTaskInspectLine {
   line-height: 1.42;
 }
 
+.infoModalClose {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 2;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+}
+
 .infoModalHeader {
   display: grid;
   gap: 10px;
-  padding: 14px 18px;
+  padding: 14px 44px 14px 18px;
   border-bottom: 1px solid var(--border);
 }
 
@@ -5873,10 +5884,8 @@ html[data-theme="light"] .logTaskInspectLine {
 }
 
 .infoModalHeaderMain {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px;
+  display: block;
+  min-width: 0;
 }
 
 .infoModalTitle {
@@ -8010,7 +8019,7 @@ html[data-theme="light"] .saveTemplateButton:hover:not(:disabled) {
   }
 
   .infoModalHeader {
-    padding: 10px 12px;
+    padding: 10px 40px 10px 12px;
   }
 
   .infoModalBody {

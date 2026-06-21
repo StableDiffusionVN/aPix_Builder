@@ -30,6 +30,9 @@ const DEFAULT_SETTINGS = {
     history: [],
     inputImages: []
   },
+  history: {
+    maxDisplay: 100
+  },
   migration: {
     localStorageImported: false
   },
@@ -413,6 +416,14 @@ export async function initializeAppSettings() {
     }
   }
   if (store.settings.migration?.localStorageImported) window.localStorage.clear();
+}
+
+export const DEFAULT_MAX_HISTORY_DISPLAY = 100;
+
+export function getMaxHistoryDisplay() {
+  const value = Number(getSetting("history.maxDisplay", DEFAULT_MAX_HISTORY_DISPLAY));
+  if (!Number.isFinite(value) || value < 1) return DEFAULT_MAX_HISTORY_DISPLAY;
+  return Math.min(1000, Math.floor(value));
 }
 
 export function getSetting(path, fallback) {

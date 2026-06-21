@@ -1,4 +1,4 @@
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Eye, Folder, Images, Link, Loader2, Pencil, Scissors, Upload, X } from "lucide-react";
 import { ImageEditorModal } from "./lazyModals";
@@ -23,6 +23,7 @@ import {
 } from "../lib/inputImageActions.js";
 import { StaticFieldBlock } from "../features/fields/StaticFieldBlock.jsx";
 import { renderBasicField } from "../features/fields/basicFieldRegistry.jsx";
+import { areDynamicFieldPropsEqual } from "../features/fields/fieldMemo.js";
 import { InputLibraryModal } from "./InputLibraryModal.jsx";
 import { ImageLightboxOverlay } from "./ImageLightboxOverlay.jsx";
 import { ImageMaskOverlay } from "./ImageMaskOverlay.jsx";
@@ -121,7 +122,7 @@ const inputTypes = new Set([
 
 export { StaticFieldBlock as StaticBlock };
 
-export function DynamicField({
+const DynamicFieldInner = memo(function DynamicFieldInner({
   item,
   value,
   onChange,
@@ -536,6 +537,7 @@ export function DynamicField({
   }
   if (!inputTypes.has(ui.type) && !isDynamicFieldType(ui.type)) return <StaticFieldBlock item={item} />;
   const basicField = renderBasicField({
+    item,
     ui,
     label,
     description,
@@ -904,4 +906,6 @@ export function DynamicField({
     );
   }
   return null;
-}
+}, areDynamicFieldPropsEqual);
+
+export { DynamicFieldInner as DynamicField };

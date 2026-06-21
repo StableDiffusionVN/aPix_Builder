@@ -11,6 +11,8 @@ import {
   sessionMatchesProject,
   sessionStartedPastGrace
 } from "./canvasRuntimeSync.js";
+
+const QUEUED_BACKEND_GRACE_MS = 30000;
 import { beginNodeExecutionPatch, STEP_KINDS } from "./canvasModel.js";
 
 const SYNC_POLL_MS = 6000;
@@ -46,7 +48,8 @@ export function useCanvasRunSync({
   activeRunKindRef,
   reconciledStaleRunIdsRef,
   isLocalRun,
-  isQueuedLocally
+  isQueuedLocally,
+  onRunSettled
 }) {
   const syncRunWatchersRef = useRef(new Map());
   const completingRunIdsRef = useRef(new Set());
@@ -57,9 +60,15 @@ export function useCanvasRunSync({
   const runLogSessionsRef = useRef(runLogSessions);
   const activeIdRef = useRef(activeId);
   const syncWithBackendRef = useRef(async () => {});
+  const onRunSettledRef = useRef(onRunSettled);
 
   useEffect(() => { runLogSessionsRef.current = runLogSessions || []; }, [runLogSessions]);
   useEffect(() => { activeIdRef.current = activeId; }, [activeId]);
+  useEffect(() => { onRunSettledRef.current = onRunSettled; }, [onRunSettled]);
+
+  const notifyRunSettled = useCallback(() => {
+    onRunSettledRef.current?.();
+  }, []);
 
   const cleanupWatcher = useCallback((runId) => {
     const cleanup = syncRunWatchersRef.current.get(runId);
@@ -117,12 +126,14 @@ export function useCanvasRunSync({
       refreshOutputHistory?.();
     } finally {
       completingRunIdsRef.current.delete(session.runId);
+      notifyRunSettled();
     }
   }, [
     activeRunIdRef,
     activeRunKindRef,
     cleanupWatcher,
     nodesRef,
+    notifyRunSettled,
     refreshOutputHistory,
     runLogEndSession,
     setActiveRunId,
@@ -191,6 +202,7 @@ export function useCanvasRunSync({
           if (session.status !== "queued") continue;
           if (activeRunIds.has(session.runId)) continue;
           if (isQueuedLocally?.(session.runId)) continue;
+          if (!sessionStartedPastGrace(session, QUEUED_BACKEND_GRACE_MS)) continue;
           runLogEndSession?.(session.runId, "cancelled", { error: "missing_from_backend_queue" });
           observedActiveRunIdsRef.current.delete(session.runId);
         }
@@ -258,6 +270,7 @@ export function useCanvasRunSync({
           setGraphRunning(false);
           setNodeRunning(false);
         }
+        notifyRunSettled();
       }
 
       for (const node of nodesRef.current) {
@@ -288,6 +301,7 @@ export function useCanvasRunSync({
     completeFromHistory,
     isLocalRun,
     isQueuedLocally,
+    notifyRunSettled,
     nodesRef,
     reconciledStaleRunIdsRef,
     runLogAppendLog,

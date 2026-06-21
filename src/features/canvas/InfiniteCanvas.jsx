@@ -215,7 +215,19 @@ function InfiniteCanvasInner({
   const executeNodeRunRef = useRef(null);
   const executeGraphRunRef = useRef(null);
   const reconciledStaleRunIdsRef = useRef(new Set());
+  const pendingBackendNodeJobsRef = useRef([]);
+  const submitNextPendingBackendNodeJobRef = useRef(null);
+  const backendQueuedRunIdsRef = useRef(new Set());
   const runLogSessionsRef = useRef(runLogSessions);
+  useEffect(() => {
+    runLogSessionsRef.current = runLogSessions || [];
+    for (const runId of backendQueuedRunIdsRef.current) {
+      const session = (runLogSessions || []).find(item => item.runId === runId);
+      if (session && !ACTIVE_RUN_LOG_STATUSES.has(session.status)) {
+        backendQueuedRunIdsRef.current.delete(runId);
+      }
+    }
+  }, [runLogSessions]);
   const canvasRunning = graphRunning || nodeRunning;
   const logHasActivity = canvasRunning
     || runQueue.length > 0
@@ -640,7 +652,6 @@ function InfiniteCanvasInner({
     window.addEventListener("keydown", handleCopyPasteDelete, true);
     return () => window.removeEventListener("keydown", handleCopyPasteDelete, true);
   }, [onNodesChange, setNodes, setEdges]);
-  useEffect(() => { runLogSessionsRef.current = runLogSessions || []; }, [runLogSessions]);
 
   const syncLiveToRefs = useCallback((live) => {
     nodesRef.current = live.map(item => ({
@@ -980,6 +991,11 @@ function InfiniteCanvasInner({
     && Boolean(abortControllerRef.current)
   ), []);
 
+  const onCanvasRunSettled = useCallback(() => {
+    queueMicrotask(() => drainRunQueueRef.current());
+    void submitNextPendingBackendNodeJobRef.current?.();
+  }, []);
+
   useCanvasRunSync({
     activeId,
     runLogSessions,
@@ -995,7 +1011,11 @@ function InfiniteCanvasInner({
     activeRunKindRef,
     reconciledStaleRunIdsRef,
     isLocalRun: isLocalCanvasRun,
-    isQueuedLocally: (runId) => runQueueRef.current.some(job => job.runId === runId)
+    isQueuedLocally: (runId) => (
+      runQueueRef.current.some(job => job.runId === runId)
+      || backendQueuedRunIdsRef.current.has(runId)
+    ),
+    onRunSettled: onCanvasRunSettled
   });
 
   const executeNode = useCallback(async (node, contextNodes, {
@@ -1458,11 +1478,53 @@ function InfiniteCanvasInner({
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data.error || "Không gửi được hàng chờ backend");
+    for (const job of queueJobs) {
+      const runId = String(job.body?.runId || job.meta?.runId || "").trim();
+      if (runId) backendQueuedRunIdsRef.current.add(runId);
+    }
     refreshRunLogSessions?.();
   }, [refreshRunLogSessions]);
 
-  const enqueueRunJobs = useCallback((jobs) => {
+  const submitNextPendingBackendNodeJob = useCallback(async () => {
+    if (pendingBackendNodeJobsRef.current.length === 0) return;
+    if (hasBackendCanvasActivity()) return;
+    const next = pendingBackendNodeJobsRef.current.shift();
+    if (!next) return;
+    const job = buildRunJob({
+      type: "node",
+      nodeId: next.nodeId,
+      jobLabel: next.jobLabel || next.nodeId
+    });
+    try {
+      const queueJob = await buildBackendQueueJob(job);
+      if (queueJob) await submitBackendQueueJobs([queueJob]);
+    } catch (err) {
+      updateNodeData(next.nodeId, {
+        status: "error",
+        error: err.message || "Không gửi được node kế tiếp trong pipeline"
+      });
+      pendingBackendNodeJobsRef.current = [];
+    }
+  }, [buildBackendQueueJob, buildRunJob, hasBackendCanvasActivity, submitBackendQueueJobs, updateNodeData]);
+  submitNextPendingBackendNodeJobRef.current = submitNextPendingBackendNodeJob;
+
+  const enqueueRunJobs = useCallback(async (jobs) => {
     if (!jobs.length) return;
+    const nodeJobs = jobs.map(job => (
+      job.type === "node" ? job : graphJobAsSingleNodeJob(job)
+    ));
+    if (nodeJobs.every(Boolean)) {
+      try {
+        const queueJobs = (await Promise.all(nodeJobs.map(buildBackendQueueJob))).filter(Boolean);
+        if (queueJobs.length === jobs.length) {
+          await submitBackendQueueJobs(queueJobs);
+          return;
+        }
+      } catch {
+        // Fall back to in-browser queue below.
+      }
+    }
+
     const next = [...runQueueRef.current, ...jobs];
     runQueueRef.current = next;
     setRunQueue(next);
@@ -1481,17 +1543,24 @@ function InfiniteCanvasInner({
       });
     }
     refreshRunLogSessions?.();
-  }, [activeId, refreshRunLogSessions, runLogStartSession]);
+  }, [
+    activeId,
+    buildBackendQueueJob,
+    graphJobAsSingleNodeJob,
+    refreshRunLogSessions,
+    runLogStartSession,
+    submitBackendQueueJobs
+  ]);
 
   const startOrQueueRunJobs = useCallback((jobs) => {
     const runnable = jobs.filter(job => snapshotRhApiKeyReady(job.snapshot));
     if (!runnable.length) return;
     if (runLockRef.current || runQueueRef.current.length > 0) {
-      enqueueRunJobs(runnable);
+      void enqueueRunJobs(runnable);
       return;
     }
     const [first, ...queued] = runnable;
-    if (queued.length) enqueueRunJobs(queued);
+    if (queued.length) void enqueueRunJobs(queued);
     runLockRef.current = true;
     if (first.type === "node") {
       void executeNodeRunRef.current?.(first);
@@ -1549,12 +1618,23 @@ function InfiniteCanvasInner({
       const jobs = await expandCanvasRunJobImageBatches(job);
       const nodeJobs = jobs.map(graphJobAsSingleNodeJob);
       if (nodeJobs.every(Boolean)) {
-        const queueJobs = (await Promise.all(nodeJobs.map(buildBackendQueueJob))).filter(Boolean);
+        const validNodeJobs = nodeJobs.filter(Boolean);
+        const uniqueNodeIds = new Set(validNodeJobs.map(job => job.nodeId));
+        if (uniqueNodeIds.size > 1) {
+          pendingBackendNodeJobsRef.current = validNodeJobs.slice(1).map(job => ({
+            nodeId: job.nodeId,
+            jobLabel: job.jobLabel || job.nodeId
+          }));
+          const firstJob = await buildBackendQueueJob(validNodeJobs[0]);
+          if (firstJob) await submitBackendQueueJobs([firstJob]);
+          return;
+        }
+        const queueJobs = (await Promise.all(validNodeJobs.map(buildBackendQueueJob))).filter(Boolean);
         await submitBackendQueueJobs(queueJobs);
         return;
       }
       if (hasBackendCanvasActivity()) {
-        enqueueRunJobs(jobs);
+        await enqueueRunJobs(jobs);
         return;
       }
       startOrQueueRunJobs(jobs);

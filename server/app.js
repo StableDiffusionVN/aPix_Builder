@@ -180,6 +180,7 @@ function queuedJobWaitsForActiveRun(job) {
   const waitForRunId = String(job.meta?.waitForRunId || "").trim();
   if (!waitForRunId) return false;
   const session = getRunLogSessions().find(item => item.runId === waitForRunId);
+  if (session?.status === "queued") return false;
   if (session && !["running", "queued"].includes(session.status)) return false;
   if (activeRuns.has(waitForRunId) || activeRhRuns.has(waitForRunId)) return true;
 
@@ -237,7 +238,7 @@ function drainBackendRunQueue() {
       if (backendRunQueueCurrent?.runId === job.runId) backendRunQueueCurrent = null;
       backendRunQueueActive = false;
       void persistBackendRunQueue();
-      queueMicrotask(drainBackendRunQueue);
+      setImmediate(() => drainBackendRunQueue());
     });
 }
 
@@ -300,6 +301,14 @@ function ensureBackendQueueLogSession(job, status = "queued") {
   }
 }
 
+const QUEUE_RECONCILE_GRACE_MS = 30000;
+
+function sessionWithinQueueReconcileGrace(session) {
+  const startedAt = session?.startedAt ? new Date(session.startedAt).getTime() : 0;
+  if (!startedAt) return true;
+  return Date.now() - startedAt < QUEUE_RECONCILE_GRACE_MS;
+}
+
 function reconcileBackendRunLogState() {
   if (backendRunQueueCurrent) {
     ensureBackendQueueLogSession(backendRunQueueCurrent, "running");
@@ -322,6 +331,7 @@ function reconcileBackendRunLogState() {
       updateRunLogSession(session.runId, { status: "running", completedAt: null, error: "" });
       continue;
     }
+    if (sessionWithinQueueReconcileGrace(session)) continue;
     endRunLogSession(session.runId, "cancelled", { error: "missing_from_backend_queue" });
   }
 }

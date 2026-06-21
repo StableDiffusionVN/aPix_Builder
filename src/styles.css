@@ -494,7 +494,6 @@ html[data-theme] .appTopBar .executionModeToggle {
   flex: 0 1 auto;
   min-width: 0;
   max-width: min(520px, calc(100vw - 360px));
-  height: 32px;
   overflow: hidden;
 }
 
@@ -512,7 +511,7 @@ html[data-theme] .appTopBar .executionModeToggle {
   width: max-content;
   max-width: 100%;
   display: flex;
-  align-items: center;
+  align-items: stretch;
   overflow: hidden;
   transition:
     transform 0.34s cubic-bezier(0.4, 0, 0.2, 1),
@@ -555,8 +554,8 @@ html[data-theme] .appTopBar .executionModeToggle {
 }
 
 .appTopBar .executionModeTrackPanelForm .executionModeFormOptions .executionModeIndicator {
-  top: 2px;
-  bottom: 2px;
+  top: 0px;
+  bottom: 0px;
 }
 
 .appTopBar .executionModeTrackPanelCanvas .appTopBarWorkflowHost {
@@ -579,7 +578,7 @@ html[data-theme] .appTopBar .executionModeTrack {
   box-sizing: border-box !important;
   height: 36px !important;
   display: inline-flex !important;
-  align-items: center !important;
+  align-items: stretch !important;
   padding: 2px !important;
   gap: 2px !important;
   max-width: min(620px, calc(100vw - 320px));

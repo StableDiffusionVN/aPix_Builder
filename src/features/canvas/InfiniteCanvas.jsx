@@ -141,7 +141,7 @@ function InfiniteCanvasInner({
     nodes, edges,
     projects, orderedTabs, activeId, activeName, viewport,
     canUndo, canRedo,
-    onNodesChange, onEdgesChange, onConnect, setEdges,
+    onNodesChange, onEdgesChange, onConnect, setNodes, setEdges,
     addNode, updateNodeData, updateNodeSize, commitNodeResize, removeNode, removeEdge,
     disconnectTargetPort, toggleNodeBypass, convertInputToSource, convertOutputToSource,
     switchProject, createProject, renameProject, deleteProject,
@@ -219,6 +219,190 @@ function InfiniteCanvasInner({
 
   useEffect(() => { nodesRef.current = nodes; }, [nodes]);
   useEffect(() => { edgesRef.current = edges; }, [edges]);
+
+  const clipboardRef = useRef(null);
+  const pasteCountRef = useRef(0);
+  const altDragRef = useRef(null);
+  const altDragPositionsRef = useRef(null);
+
+  // Wrap onNodesChange to support Alt+drag copying
+  const handleNodesChange = useCallback((changes) => {
+    if (altDragRef.current) {
+      const redirectedChanges = changes.map(change => {
+        if (change.type === "position" && altDragRef.current[change.id]) {
+          const cloneId = altDragRef.current[change.id];
+          return {
+            ...change,
+            id: cloneId
+          };
+        }
+        return change;
+      });
+      onNodesChange(redirectedChanges);
+    } else {
+      onNodesChange(changes);
+    }
+  }, [onNodesChange]);
+
+  const handleNodeDragStart = useCallback((event, node) => {
+    setCanvasInteracting(true);
+
+    if (event.altKey) {
+      const selectedNodes = nodesRef.current.filter(n => n.selected);
+      if (selectedNodes.length === 0) return;
+
+      const mappings = {};
+      const startPositions = {};
+      const clones = [];
+
+      selectedNodes.forEach(n => {
+        const prefix = n.id.split("_")[0] || (n.type === "step" ? "n" : "s");
+        const cloneId = `${prefix}_${crypto.randomUUID().slice(0, 8)}`;
+        mappings[n.id] = cloneId;
+        startPositions[n.id] = { ...n.position };
+
+        clones.push({
+          ...n,
+          id: cloneId,
+          selected: true,
+          position: { ...n.position },
+          data: {
+            ...n.data,
+            status: "idle",
+            error: undefined
+          }
+        });
+      });
+
+      altDragRef.current = mappings;
+      altDragPositionsRef.current = startPositions;
+
+      setNodes(currentNodes => {
+        const updatedOriginals = currentNodes.map(n => {
+          if (mappings[n.id]) {
+            return {
+              ...n,
+              selected: false,
+              position: { ...startPositions[n.id] }
+            };
+          }
+          return n;
+        });
+        return [...updatedOriginals, ...clones];
+      });
+    }
+  }, [setNodes]);
+
+  const handleNodeDragStop = useCallback((event, node) => {
+    setCanvasInteracting(false);
+    altDragRef.current = null;
+    altDragPositionsRef.current = null;
+  }, []);
+
+  // Keyboard shortcut listener for Cmd+C, Cmd+V, and Delete/Backspace
+  useEffect(() => {
+    function handleCopyPasteDelete(event) {
+      if (isTypingTarget(event.target)) return;
+      if (event.target instanceof Element && event.target.closest(
+        "[role='dialog'], .imageEditorModal, .inputLibraryModal, .imageLightbox, .maskEditorModal, .canvasContextMenu"
+      )) return;
+
+      const isMod = event.metaKey || event.ctrlKey;
+
+      if ((event.key === "Delete" || event.key === "Backspace") && !isMod && !event.altKey && !event.shiftKey) {
+        const selectedNodes = nodesRef.current.filter(node => node.selected);
+        if (selectedNodes.length === 0) return;
+
+        event.preventDefault();
+        event.stopPropagation();
+        onNodesChange(selectedNodes.map(node => ({ type: "remove", id: node.id })));
+        return;
+      }
+
+      if (isMod && event.key?.toLowerCase() === "c" && !event.altKey && !event.shiftKey) {
+        const selectedNodes = nodesRef.current.filter(node => node.selected);
+        if (selectedNodes.length === 0) return;
+
+        event.preventDefault();
+        event.stopPropagation();
+
+        const selectedNodeIds = new Set(selectedNodes.map(n => n.id));
+        const connectedEdges = edgesRef.current.filter(edge => 
+          selectedNodeIds.has(edge.source) && selectedNodeIds.has(edge.target)
+        );
+
+        clipboardRef.current = {
+          nodes: selectedNodes.map(node => ({
+            ...node,
+            selected: false
+          })),
+          edges: connectedEdges
+        };
+        pasteCountRef.current = 0;
+        return;
+      }
+
+      if (isMod && event.key?.toLowerCase() === "v" && !event.altKey && !event.shiftKey) {
+        if (!clipboardRef.current) return;
+
+        const { nodes: copiedNodes, edges: copiedEdges } = clipboardRef.current;
+        if (copiedNodes.length === 0) return;
+
+        event.preventDefault();
+        event.stopPropagation();
+
+        pasteCountRef.current += 1;
+        const offset = 40 * pasteCountRef.current;
+
+        const idMapping = {};
+        const newNodes = copiedNodes.map(node => {
+          const prefix = node.id.split("_")[0] || (node.type === "step" ? "n" : "s");
+          const newId = `${prefix}_${crypto.randomUUID().slice(0, 8)}`;
+          idMapping[node.id] = newId;
+
+          return {
+            ...node,
+            id: newId,
+            selected: true,
+            position: {
+              x: node.position.x + offset,
+              y: node.position.y + offset
+            },
+            data: {
+              ...node.data,
+              status: "idle",
+              error: undefined
+            }
+          };
+        });
+
+        const newEdges = copiedEdges.map(edge => {
+          const newId = `e_${crypto.randomUUID().slice(0, 8)}`;
+          return {
+            ...edge,
+            id: newId,
+            source: idMapping[edge.source],
+            target: idMapping[edge.target]
+          };
+        });
+
+        setNodes(currentNodes => {
+          const unselected = currentNodes.map(n => ({ ...n, selected: false }));
+          return [...unselected, ...newNodes];
+        });
+
+        if (newEdges.length > 0) {
+          setEdges(currentEdges => {
+            const unselectedEdges = currentEdges.map(e => ({ ...e, selected: false }));
+            return [...unselectedEdges, ...newEdges];
+          });
+        }
+      }
+    }
+
+    window.addEventListener("keydown", handleCopyPasteDelete, true);
+    return () => window.removeEventListener("keydown", handleCopyPasteDelete, true);
+  }, [onNodesChange, setNodes, setEdges]);
   useEffect(() => { runLogSessionsRef.current = runLogSessions || []; }, [runLogSessions]);
 
   const syncLiveToRefs = useCallback((live) => {
@@ -1397,9 +1581,9 @@ function InfiniteCanvasInner({
                 reactFlowRef.current = instance;
                 applyStoredViewport(instance, viewport);
               }}
-              onNodesChange={onNodesChange}
-              onNodeDragStart={() => setCanvasInteracting(true)}
-              onNodeDragStop={() => setCanvasInteracting(false)}
+              onNodesChange={handleNodesChange}
+              onNodeDragStart={handleNodeDragStart}
+              onNodeDragStop={handleNodeDragStop}
               onEdgesChange={onEdgesChange}
               onConnect={onConnect}
               onReconnect={(oldEdge, newConnection) => {

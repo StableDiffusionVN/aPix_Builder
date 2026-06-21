@@ -493,7 +493,7 @@ html[data-theme] .appTopBar .executionModeToggle {
   position: relative;
   flex: 0 1 auto;
   min-width: 0;
-  max-width: min(520px, calc(100vw - 360px));
+  max-width: min(1000px, calc(100vw - 360px));
   overflow: hidden;
 }
 
@@ -581,7 +581,7 @@ html[data-theme] .appTopBar .executionModeTrack {
   align-items: stretch !important;
   padding: 2px !important;
   gap: 2px !important;
-  max-width: min(620px, calc(100vw - 320px));
+  max-width: min(1500px, calc(100vw - 320px));
 }
 
 .appTopBarModeCluster.is-canvas-view .executionModeTrack {
@@ -613,7 +613,7 @@ html[data-theme] .appTopBar .executionModeTrack {
 .appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasWorkflowTabs {
   flex: 0 1 auto;
   min-width: 0;
-  max-width: min(36vw, 280px);
+  max-width: min(50vw, 1000px);
   align-items: center;
 }
 

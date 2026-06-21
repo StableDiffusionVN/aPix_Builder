@@ -21,6 +21,8 @@ import {
   waitForRhApiKeyIdle
 } from "../lib/runningHubClient.js";
 import { withRhTokenFailover, resolveRhApiKeys, RH_TOKEN_POLICY } from "../lib/rhTokenFailover.js";
+import { normalizeValues } from "../lib/comfyClient.js";
+import { mapValuesToRequest } from "../lib/workflowPatcher.js";
 import { decorateCanvasHistoryItem, mergeCanvasHistoryItem } from "../lib/canvasHistory.js";
 
 const runningHubTimeoutMs = Number(process.env.RUNNINGHUB_TIMEOUT_MS || 10 * 60 * 1000);

@@ -2326,3 +2326,27 @@
 }
 
 .react-flow__attribution { display: none; }
+
+/* Alignment Bar and Smart Guides styles */
+.canvasSmartGuidesOverlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 1000;
+}
+
+.alignmentBarBtn {
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.alignmentBarBtn:hover {
+  background-color: rgba(255, 255, 255, 0.1) !important;
+  color: #fff !important;
+}
+
+.alignmentBarBtn:active {
+  background-color: rgba(255, 255, 255, 0.2) !important;
+}

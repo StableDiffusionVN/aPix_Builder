@@ -172,6 +172,22 @@ export function AppWorkspace() {
     workspaceView, setWorkspaceView
   } = useWorkspaceLayoutContext();
   const isCanvasView = workspaceView === "canvas";
+  const [canvasSmartGuide, setCanvasSmartGuide] = useState(() => getSetting("canvas.smartGuide", true));
+  const [canvasSnapGrid, setCanvasSnapGrid] = useState(() => getSetting("canvas.snapGrid", false));
+  const [canvasSnapGridSize, setCanvasSnapGridSize] = useState(() => getSetting("canvas.snapGridSize", 15));
+
+  useEffect(() => {
+    setSetting("canvas.smartGuide", canvasSmartGuide);
+  }, [canvasSmartGuide]);
+
+  useEffect(() => {
+    setSetting("canvas.snapGrid", canvasSnapGrid);
+  }, [canvasSnapGrid]);
+
+  useEffect(() => {
+    setSetting("canvas.snapGridSize", canvasSnapGridSize);
+  }, [canvasSnapGridSize]);
+
   const [workflowToolbarHost, setWorkflowToolbarHost] = useState(null);
   const handleWorkflowToolbarHost = useCallback((node) => {
     setWorkflowToolbarHost(node);
@@ -1828,6 +1844,9 @@ export function AppWorkspace() {
             logRhApiKey={rhPrimaryApiKey}
             onRuntimeStateChange={handleCanvasRuntimeChange}
             workflowToolbarHost={workflowToolbarHost}
+            smartGuide={canvasSmartGuide}
+            snapGrid={canvasSnapGrid}
+            snapGridSize={canvasSnapGridSize}
           />
         </Suspense>
       ) : (
@@ -2167,7 +2186,13 @@ export function AppWorkspace() {
         rhTotalCoins,
         setRhTestResult,
         setRhAccount,
-        setRhAccountError
+        setRhAccountError,
+        canvasSmartGuide,
+        setCanvasSmartGuide,
+        canvasSnapGrid,
+        setCanvasSnapGrid,
+        canvasSnapGridSize,
+        setCanvasSnapGridSize
       }}>
         <SettingsModal />
       </SettingsModalProvider>

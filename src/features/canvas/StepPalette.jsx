@@ -2,10 +2,11 @@ import { useMemo, useState } from "react";
 import { CheckSquare, Database, Hash, Image as ImageIcon, List, Loader2, Plus, RefreshCcw, Search, Type } from "lucide-react";
 import { ComfyUiLogomark } from "../../components/icons/ComfyUiIcon.jsx";
 import { RunningHubLogomark } from "../../components/icons/RunningHubIcon.jsx";
+import { localizeRuntimeMessage, useI18n } from "../../i18n/I18nContext.jsx";
 import { STEP_KINDS } from "./canvasModel.js";
 import { usePaletteDragHandlers } from "./canvasPaletteDrag.js";
 
-function PaletteGroup({ title, icon, items, onAdd, addingRef, bindStepItem, shouldSkipClick }) {
+function PaletteGroup({ title, icon, items, onAdd, addingRef, bindStepItem, shouldSkipClick, t }) {
   if (!items.length) return null;
   return (
     <div className="canvasPaletteGroup">
@@ -25,7 +26,7 @@ function PaletteGroup({ title, icon, items, onAdd, addingRef, bindStepItem, shou
                 if (shouldSkipClick()) return;
                 onAdd(item);
               }}
-              title={`${item.name} — kéo thả lên canvas hoặc bấm để thêm`}
+              title={t("canvas.palette.addTitle", { name: item.name })}
             >
               <span className="canvasPaletteItemName">{item.name}</span>
               {addingRef === item.ref ? <Loader2 size={13} className="spin" /> : <Plus size={13} />}
@@ -38,17 +39,18 @@ function PaletteGroup({ title, icon, items, onAdd, addingRef, bindStepItem, shou
 }
 
 const SOURCE_BUTTONS = [
-  { id: "image", label: "Node ảnh", icon: ImageIcon },
-  { id: "text", label: "Node text", icon: Type },
-  { id: "int", label: "Node int", icon: Hash },
-  { id: "float", label: "Node float", icon: Hash },
-  { id: "boolean", label: "Node boolean", icon: CheckSquare },
-  { id: "menu", label: "Node menu", icon: List },
-  { id: "checkpoint", label: "Node checkpoint", icon: Database },
-  { id: "lora", label: "Node lora", icon: Database }
+  { id: "image", labelKey: "canvas.palette.source.image", icon: ImageIcon },
+  { id: "text", labelKey: "canvas.palette.source.text", icon: Type },
+  { id: "int", labelKey: "canvas.palette.source.int", icon: Hash },
+  { id: "float", labelKey: "canvas.palette.source.float", icon: Hash },
+  { id: "boolean", labelKey: "canvas.palette.source.boolean", icon: CheckSquare },
+  { id: "menu", labelKey: "canvas.palette.source.menu", icon: List },
+  { id: "checkpoint", labelKey: "canvas.palette.source.checkpoint", icon: Database },
+  { id: "lora", labelKey: "canvas.palette.source.lora", icon: Database }
 ];
 
 export function StepPalette({ library, loading, error, onReload, onAddStep, onAddSource, addingRef }) {
+  const { locale, t } = useI18n();
   const [query, setQuery] = useState("");
   const { bindStepItem, bindSource, shouldSkipClick } = usePaletteDragHandlers();
 
@@ -71,36 +73,39 @@ export function StepPalette({ library, loading, error, onReload, onAddStep, onAd
           <input
             value={query}
             onChange={event => setQuery(event.target.value)}
-            placeholder="Tìm template / app…"
+            placeholder={t("canvas.palette.search")}
           />
         </div>
-        <button type="button" className="canvasNodeBtn" onClick={onReload} title="Tải lại">
+        <button type="button" className="canvasNodeBtn" onClick={onReload} title={t("canvas.history.reload")}>
           {loading ? <Loader2 size={13} className="spin" /> : <RefreshCcw size={13} />}
         </button>
       </div>
 
-      <p className="canvasPaletteHint">Kéo node từ thư viện và thả lên canvas để đặt đúng vị trí.</p>
+      <p className="canvasPaletteHint">{t("canvas.palette.hint")}</p>
 
       <div className="canvasPaletteSources">
-        {SOURCE_BUTTONS.map(({ id, label, icon: Icon }) => (
-          <button
-            key={id}
-            type="button"
-            className="canvasSourceBtn"
-            {...bindSource(id)}
-            onClick={() => {
-              if (shouldSkipClick()) return;
-              onAddSource(id);
-            }}
-            title={`${label} — kéo thả lên canvas hoặc bấm để thêm`}
-          >
-            <Icon size={13} /> {label}
-          </button>
-        ))}
+        {SOURCE_BUTTONS.map(({ id, labelKey, icon: Icon }) => {
+          const label = t(labelKey);
+          return (
+            <button
+              key={id}
+              type="button"
+              className="canvasSourceBtn"
+              {...bindSource(id)}
+              onClick={() => {
+                if (shouldSkipClick()) return;
+                onAddSource(id);
+              }}
+              title={t("canvas.palette.addTitle", { name: label })}
+            >
+              <Icon size={13} /> {label}
+            </button>
+          );
+        })}
       </div>
 
       <div className="canvasPaletteScroll">
-        {error ? <p className="canvasPaletteError">{error}</p> : null}
+        {error ? <p className="canvasPaletteError">{localizeRuntimeMessage(error, locale)}</p> : null}
         <PaletteGroup
           title="ComfyUI"
           icon={<ComfyUiLogomark size={13} />}
@@ -109,6 +114,7 @@ export function StepPalette({ library, loading, error, onReload, onAddStep, onAd
           addingRef={addingRef}
           bindStepItem={bindStepItem}
           shouldSkipClick={shouldSkipClick}
+          t={t}
         />
         <PaletteGroup
           title="RunningHub Workflow"
@@ -118,6 +124,7 @@ export function StepPalette({ library, loading, error, onReload, onAddStep, onAd
           addingRef={addingRef}
           bindStepItem={bindStepItem}
           shouldSkipClick={shouldSkipClick}
+          t={t}
         />
         <PaletteGroup
           title="RunningHub App"
@@ -127,9 +134,10 @@ export function StepPalette({ library, loading, error, onReload, onAddStep, onAd
           addingRef={addingRef}
           bindStepItem={bindStepItem}
           shouldSkipClick={shouldSkipClick}
+          t={t}
         />
         {!loading && !filtered.local.length && !filtered.rhWf.length && !filtered.rhApp.length ? (
-          <p className="canvasPaletteEmpty">Không có template hoặc app nào.</p>
+          <p className="canvasPaletteEmpty">{t("canvas.palette.empty")}</p>
         ) : null}
       </div>
     </div>

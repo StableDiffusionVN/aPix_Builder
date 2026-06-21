@@ -2,12 +2,14 @@ import { useCallback, useRef } from "react";
 import { useReactFlow } from "@xyflow/react";
 import { useCanvasActions, useCanvasGraph } from "./canvasContext.js";
 import { estimateCanvasNodeMinHeight } from "./canvasNodeLayout.js";
+import { useI18n } from "../../i18n/I18nContext.jsx";
 
 export const CANVAS_NODE_DEFAULT_WIDTH = 348;
 export const CANVAS_NODE_MIN_WIDTH = 180;
 export const CANVAS_NODE_MIN_HEIGHT = 100;
 
 export function CanvasNodeResizeHandles({ nodeId, size, position, nodeRef }) {
+  const { t } = useI18n();
   const { updateNodeSize, commitNodeResize } = useCanvasActions();
   const { nodes, edges } = useCanvasGraph();
   const { getZoom } = useReactFlow();
@@ -77,14 +79,14 @@ export function CanvasNodeResizeHandles({ nodeId, size, position, nodeRef }) {
         className="canvasNodeResize canvasNodeResize-sw nodrag"
         role="separator"
         aria-orientation="both"
-        aria-label="Resize node"
+        aria-label={t("canvas.node.resize")}
         onPointerDown={event => beginDrag(event, "sw")}
       />
       <span
         className="canvasNodeResize canvasNodeResize-se nodrag"
         role="separator"
         aria-orientation="both"
-        aria-label="Resize node"
+        aria-label={t("canvas.node.resize")}
         onPointerDown={event => beginDrag(event, "se")}
       />
     </>

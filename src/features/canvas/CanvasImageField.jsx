@@ -403,7 +403,7 @@ export function CanvasImageField({ label, value, onChange, onContextMenu }) {
                   event.stopPropagation();
                   setEditorOpen(true);
                 }}
-                title="Image Editor"
+                title={t("preview.editor")}
               >
                 <Pencil size={13} />
               </button>
@@ -513,7 +513,7 @@ export function CanvasImageField({ label, value, onChange, onContextMenu }) {
             title={t("field.chooseInput")}
           >
             <Images size={12} />
-            <span>Input</span>
+            <span>{t("canvas.preview.input")}</span>
           </button>
         </form>
         {urlError ? <p className="canvasImageUrlError">{urlError}</p> : null}
@@ -579,7 +579,7 @@ export function CanvasImageField({ label, value, onChange, onContextMenu }) {
         <Suspense fallback={null}>
           <ImageEditorModal
             source={preview}
-            title={`${label} - Image Editor`}
+            title={`${label} - ${t("preview.editor")}`}
             onClose={() => setEditorOpen(false)}
             onSave={async dataUrl => {
               await handleSaveEditedInput(dataUrl);

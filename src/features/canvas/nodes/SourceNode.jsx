@@ -15,6 +15,7 @@ import {
 import { useCanvasActions, useCanvasGraph } from "../canvasContext.js";
 import { handleNodeBodyWheel } from "../canvasWheel.js";
 import { formatOutputTimingLabel } from "../../../lib/runLog.js";
+import { useI18n } from "../../../i18n/I18nContext.jsx";
 
 const SOURCE_META = {
   image: { label: "Ảnh", title: "Image input", Icon: ImageIcon },
@@ -26,6 +27,7 @@ const SOURCE_META = {
 };
 
 function SourceNodeComponent({ id, data, selected }) {
+  const { t } = useI18n();
   const {
     updateNodeValues,
     removeNode,
@@ -43,7 +45,7 @@ function SourceNodeComponent({ id, data, selected }) {
     : meta.Icon;
   const isPassthrough = Boolean(data.passthroughFromOutput);
   const badgeLabel = isPassthrough
-    ? "Output"
+    ? t("canvas.preview.output")
     : hasChoices
     ? "Menu"
     : uiType === "checkpoints" || uiType === "checkpoint"
@@ -51,10 +53,16 @@ function SourceNodeComponent({ id, data, selected }) {
       : uiType === "loras" || uiType === "lora"
         ? "Lora"
         : uiType === "int"
-          ? "Số nguyên"
+          ? t("canvas.node.type.integer")
           : uiType === "float"
-            ? "Số thực"
-            : meta.label;
+            ? t("canvas.node.type.float")
+            : sourceType === "image"
+              ? t("canvas.node.type.image")
+              : sourceType === "number"
+                ? t("canvas.node.type.number")
+                : sourceType === "any"
+                  ? t("canvas.node.type.value")
+                  : meta.label;
   const value = data.values?.main;
   const node = nodes?.find(item => item.id === id);
   const stepNode = isPassthrough
@@ -110,7 +118,8 @@ function SourceNodeComponent({ id, data, selected }) {
         node,
         edges: edges || [],
         removeNode,
-        removeEdge
+        removeEdge,
+        t
       }))}
     >
       <header className="canvasNodeHeader">
@@ -119,7 +128,7 @@ function SourceNodeComponent({ id, data, selected }) {
           {badgeLabel}
         </span>
         <span className="canvasNodeTitle">{data.name || meta.title}</span>
-        <button type="button" className="canvasNodeBtn danger" title="Xóa node" onClick={() => removeNode(id)}>
+        <button type="button" className="canvasNodeBtn danger" title={t("canvas.node.delete")} onClick={() => removeNode(id)}>
           <Trash2 size={12} />
         </button>
       </header>
@@ -149,13 +158,14 @@ function SourceNodeComponent({ id, data, selected }) {
                       imageUrl: target?.imageUrl || outputPreviewUrl,
                       outputFilename,
                       inputImageUrl: inputPreviewUrl,
-                      removeEdge
+                      removeEdge,
+                      t
                     }))}
                   />
                 </div>
               ) : (
                 <div className="canvasImageLinked">
-                  <span>Chờ output từ node trước</span>
+                  <span>{t("canvas.node.waitingOutput")}</span>
                 </div>
               )}
             </div>

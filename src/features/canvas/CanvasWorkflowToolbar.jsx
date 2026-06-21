@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Download, FolderOutput, Loader2, Pencil, Plus, Upload, X } from "lucide-react";
+import { localizeRuntimeMessage, useI18n } from "../../i18n/I18nContext.jsx";
 import { CanvasWorkflowCloseDialog } from "./CanvasWorkflowCloseDialog.jsx";
 import { workflowFileName } from "./workflowFile.js";
 
@@ -31,6 +32,7 @@ export function CanvasWorkflowToolbar({
   onExport,
   onImport
 }) {
+  const { locale, t } = useI18n();
   const inputRef = useRef(null);
   const renameInputRef = useRef(null);
   const [busyAction, setBusyAction] = useState("");
@@ -52,7 +54,7 @@ export function CanvasWorkflowToolbar({
     try {
       return await callback();
     } catch (error) {
-      window.alert(error?.message || "Thao tác workflow thất bại.");
+      window.alert(localizeRuntimeMessage(error?.message, locale) || t("canvas.workflow.actionFailed"));
       return null;
     } finally {
       setBusyAction("");
@@ -93,7 +95,7 @@ export function CanvasWorkflowToolbar({
       await onCloseTab(tabId, { discardChanges });
       setClosePrompt(current => (current?.tabId === tabId ? null : current));
     } catch (error) {
-      window.alert(error?.message || "Không thể đóng workflow.");
+      window.alert(localizeRuntimeMessage(error?.message, locale) || t("canvas.workflow.closeFailed"));
     } finally {
       setClosingTabId("");
     }
@@ -121,7 +123,7 @@ export function CanvasWorkflowToolbar({
       await onSaveTabToLibrary(closePrompt.tabId);
       await performCloseTab(closePrompt.tabId);
     } catch (error) {
-      window.alert(error?.message || "Không thể lưu workflow.");
+      window.alert(localizeRuntimeMessage(error?.message, locale) || t("canvas.workflow.saveFailed"));
     } finally {
       setCloseDialogBusy(false);
     }
@@ -132,7 +134,7 @@ export function CanvasWorkflowToolbar({
       const payload = onExport();
       downloadJson(payload, workflowFileName(payload.workflow?.name || "Workflow"));
     } catch (error) {
-      window.alert(error?.message || "Không thể tải xuống workflow JSON.");
+      window.alert(localizeRuntimeMessage(error?.message, locale) || t("canvas.workflow.exportFailed"));
     }
   }
 
@@ -154,7 +156,7 @@ export function CanvasWorkflowToolbar({
       <section
         className={`canvasWorkflowToolbar nodrag${placement === "topbar" ? " isAppTopBar" : ""}`}
         role="toolbar"
-        aria-label="Thao tác workflow"
+        aria-label={t("canvas.workflow.actions")}
       >
         <input
           ref={inputRef}
@@ -166,7 +168,7 @@ export function CanvasWorkflowToolbar({
           onChange={handleImport}
         />
 
-        <div className="canvasWorkflowTabs" role="tablist" aria-label="Workflow đang mở">
+        <div className="canvasWorkflowTabs" role="tablist" aria-label={t("canvas.workflow.openTabs")}>
           {tabs.map(tab => {
             const isActive = tab.id === activeId;
             const unsaved = isTabUnsavedToLibrary?.(tab.id);
@@ -182,7 +184,7 @@ export function CanvasWorkflowToolbar({
                   role="tab"
                   aria-selected={isActive}
                   className="canvasWorkflowTabSelect"
-                  title={unsaved ? `${tab.name} (chưa lưu thư mục)` : tab.name}
+                  title={unsaved ? `${tab.name} (${t("canvas.workflow.unsavedSuffix")})` : tab.name}
                   disabled={disabled || isClosing}
                   onClick={() => {
                     if (tab.id !== activeId) void onSwitchTab(tab.id);
@@ -193,7 +195,7 @@ export function CanvasWorkflowToolbar({
                       ref={renameInputRef}
                       className="canvasWorkflowTabRenameInput nodrag"
                       value={renameValue}
-                      aria-label="Đổi tên tab workflow"
+                      aria-label={t("canvas.workflow.renameTab")}
                       disabled={disabled}
                       onClick={event => event.stopPropagation()}
                       onChange={event => setRenameValue(event.target.value)}
@@ -207,8 +209,8 @@ export function CanvasWorkflowToolbar({
                 <button
                   type="button"
                   className="canvasWorkflowTabClose nodrag nowheel"
-                  aria-label={`Đóng ${tab.name}`}
-                  title="Đóng tab"
+                  aria-label={t("canvas.workflow.closeNamed", { name: tab.name })}
+                  title={t("canvas.workflow.closeTab")}
                   disabled={disabled || isClosing}
                   onPointerDown={event => event.stopPropagation()}
                   onMouseDown={event => event.stopPropagation()}
@@ -222,8 +224,8 @@ export function CanvasWorkflowToolbar({
           <button
             type="button"
             className="canvasWorkflowTabNew nodrag nowheel"
-            aria-label="Workflow mới"
-            title="Tab canvas trắng mới"
+            aria-label={t("canvas.workflow.new")}
+            title={t("canvas.workflow.newTitle")}
             disabled={disabled}
             onClick={() => runAction("new-tab", onNewTab)}
           >
@@ -234,8 +236,8 @@ export function CanvasWorkflowToolbar({
         <button
           type="button"
           className="canvasZoomBtn nodrag nowheel"
-          aria-label="Đổi tên workflow"
-          title="Đổi tên tab đang mở"
+          aria-label={t("canvas.workflow.rename")}
+          title={t("canvas.workflow.renameTitle")}
           disabled={disabled || !activeId}
           onClick={startRename}
         >
@@ -247,8 +249,8 @@ export function CanvasWorkflowToolbar({
         <button
           type="button"
           className="canvasZoomBtn nodrag nowheel"
-          aria-label="Mở workflow JSON"
-          title="Mở JSON trên canvas (chưa lưu thư mục cho đến khi bấm Lưu)"
+          aria-label={t("canvas.workflow.import")}
+          title={t("canvas.workflow.importTitle")}
           disabled={disabled}
           onClick={() => inputRef.current?.click()}
         >
@@ -257,8 +259,8 @@ export function CanvasWorkflowToolbar({
         <button
           type="button"
           className="canvasZoomBtn nodrag nowheel"
-          aria-label="Tải xuống JSON"
-          title="Tải xuống bản sao JSON"
+          aria-label={t("canvas.workflow.download")}
+          title={t("canvas.workflow.downloadTitle")}
           disabled={disabled}
           onClick={handleExport}
         >
@@ -267,8 +269,8 @@ export function CanvasWorkflowToolbar({
         <button
           type="button"
           className="canvasZoomBtn nodrag nowheel"
-          aria-label="Lưu JSON vào thư mục workflows"
-          title="Lưu vào config/workflows/"
+          aria-label={t("canvas.workflow.saveToLibrary")}
+          title={t("canvas.workflow.saveToLibraryTitle")}
           disabled={disabled}
           onClick={() => runAction("save-file", onSaveFile)}
         >
@@ -278,8 +280,8 @@ export function CanvasWorkflowToolbar({
           className={`canvasWorkflowSessionDot ${libraryDotClass}`}
           title={
             activeInLibrary
-              ? "Workflow đã có trong thư viện workflows/"
-              : "Workflow chưa lưu vào thư viện workflows/"
+              ? t("canvas.workflow.inLibrary")
+              : t("canvas.workflow.notInLibrary")
           }
           aria-hidden="true"
         />

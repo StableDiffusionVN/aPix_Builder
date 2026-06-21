@@ -47,6 +47,7 @@ import { buildDefaults, flattenInputs } from "../../lib/template.js";
 import { getPrimaryRhApiKey, hasRhApiKey } from "../../lib/rhTokenPool.js";
 import { normalizeCanvasViewport } from "./canvasViewport.js";
 import { getSetting, setSetting } from "../../lib/appSettings.js";
+import { localizeRuntimeMessage, useI18n } from "../../i18n/I18nContext.jsx";
 import { isTypingTarget } from "../../lib/keyboard.js";
 import { RunLogPanel } from "../../components/lazyModals.js";
 import { CanvasDock, CanvasFlyoutPanel, CANVAS_PANELS } from "./CanvasDock.jsx";
@@ -166,6 +167,7 @@ function InfiniteCanvasInner({
   snapGrid = false,
   snapGridSize = 15
 }) {
+  const { locale, t } = useI18n();
   const { library, loading, error, reload } = useStepLibrary();
   const {
     nodes, edges,
@@ -961,13 +963,13 @@ function InfiniteCanvasInner({
       event.stopPropagation();
       setPaletteDropActive(false);
       if (!isWorkflowJsonFile(file)) {
-        window.alert("Chỉ hỗ trợ tệp JSON workflow.");
+        window.alert(t("canvas.drop.jsonOnly"));
         return;
       }
       try {
         await importWorkflow(await file.text());
       } catch (error) {
-        window.alert(error?.message || "Không thể import workflow.");
+        window.alert(localizeRuntimeMessage(error?.message, locale) || t("canvas.drop.importFailed"));
       }
       return;
     }
@@ -990,7 +992,7 @@ function InfiniteCanvasInner({
     if (payload.type === "source") {
       handleAddSource(payload.sourceType, position);
     }
-  }, [handleAddSource, handleAddStep, importWorkflow, resolveDropPosition]);
+  }, [handleAddSource, handleAddStep, importWorkflow, locale, resolveDropPosition, t]);
 
   useEffect(() => {
     const root = canvasWorkspaceRef.current;
@@ -1902,14 +1904,14 @@ function InfiniteCanvasInner({
         pointerEvents: "auto"
       }}>
         <div style={{ fontSize: "12px", fontWeight: "600", marginRight: "8px", opacity: 0.8, borderRight: "1px solid var(--color-border, rgba(255, 255, 255, 0.15))", paddingRight: "10px", display: "flex", alignItems: "center", height: "20px" }}>
-          Căn chỉnh ({selectedNodes.length})
+          {t("canvas.align.title", { count: selectedNodes.length })}
         </div>
 
         <button
           onClick={() => alignSelectedNodes("left")}
           style={{ background: "none", border: "none", padding: "6px", borderRadius: "4px", color: "inherit", cursor: "pointer", display: "flex" }}
           className="alignmentBarBtn"
-          title="Căn trái (Align Left)"
+          title={t("canvas.align.left")}
         >
           <AlignLeft size={16} />
         </button>
@@ -1918,7 +1920,7 @@ function InfiniteCanvasInner({
           onClick={() => alignSelectedNodes("centerX")}
           style={{ background: "none", border: "none", padding: "6px", borderRadius: "4px", color: "inherit", cursor: "pointer", display: "flex" }}
           className="alignmentBarBtn"
-          title="Căn giữa ngang (Align Center X)"
+          title={t("canvas.align.centerX")}
         >
           <AlignCenter size={16} style={{ transform: "rotate(90deg)" }} />
         </button>
@@ -1927,7 +1929,7 @@ function InfiniteCanvasInner({
           onClick={() => alignSelectedNodes("right")}
           style={{ background: "none", border: "none", padding: "6px", borderRadius: "4px", color: "inherit", cursor: "pointer", display: "flex" }}
           className="alignmentBarBtn"
-          title="Căn phải (Align Right)"
+          title={t("canvas.align.right")}
         >
           <AlignRight size={16} />
         </button>
@@ -1938,7 +1940,7 @@ function InfiniteCanvasInner({
           onClick={() => alignSelectedNodes("top")}
           style={{ background: "none", border: "none", padding: "6px", borderRadius: "4px", color: "inherit", cursor: "pointer", display: "flex" }}
           className="alignmentBarBtn"
-          title="Căn trên (Align Top)"
+          title={t("canvas.align.top")}
         >
           <AlignTop size={16} />
         </button>
@@ -1947,7 +1949,7 @@ function InfiniteCanvasInner({
           onClick={() => alignSelectedNodes("centerY")}
           style={{ background: "none", border: "none", padding: "6px", borderRadius: "4px", color: "inherit", cursor: "pointer", display: "flex" }}
           className="alignmentBarBtn"
-          title="Căn giữa dọc (Align Center Y)"
+          title={t("canvas.align.centerY")}
         >
           <AlignCenter size={16} />
         </button>
@@ -1956,7 +1958,7 @@ function InfiniteCanvasInner({
           onClick={() => alignSelectedNodes("bottom")}
           style={{ background: "none", border: "none", padding: "6px", borderRadius: "4px", color: "inherit", cursor: "pointer", display: "flex" }}
           className="alignmentBarBtn"
-          title="Căn dưới (Align Bottom)"
+          title={t("canvas.align.bottom")}
         >
           <AlignBottom size={16} />
         </button>
@@ -1968,7 +1970,7 @@ function InfiniteCanvasInner({
           disabled={selectedNodes.length < 3}
           style={{ background: "none", border: "none", padding: "6px", borderRadius: "4px", color: "inherit", cursor: selectedNodes.length < 3 ? "not-allowed" : "pointer", opacity: selectedNodes.length < 3 ? 0.4 : 1, display: "flex" }}
           className="alignmentBarBtn"
-          title="Xếp đều theo chiều ngang (Distribute Horizontally)"
+          title={t("canvas.align.distributeX")}
         >
           <AlignHorizontalSpaceBetween size={16} />
         </button>
@@ -1978,7 +1980,7 @@ function InfiniteCanvasInner({
           style={{ background: "none", border: "none", padding: "6px", borderRadius: "4px", color: "inherit", cursor: "pointer", display: "flex" }}
           className="alignmentBarBtn"
           disabled={selectedNodes.length < 3}
-          title="Xếp đều theo chiều dọc (Distribute Vertically)"
+          title={t("canvas.align.distributeY")}
         >
           <AlignVerticalSpaceBetween size={16} />
         </button>
@@ -1989,26 +1991,26 @@ function InfiniteCanvasInner({
           onClick={() => alignSelectedNodes("syncTallest")}
           style={{ background: "none", border: "none", padding: "6px", borderRadius: "4px", color: "inherit", cursor: "pointer", display: "flex", alignItems: "center", gap: "4px", fontSize: "11px", fontWeight: 500 }}
           className="alignmentBarBtn"
-          title="Đồng bộ chiều cao theo node cao nhất (Sync Tallest)"
+          title={t("canvas.align.syncTallest")}
         >
           <Maximize2 size={14} />
-          <span>Cao nhất</span>
+          <span>{t("canvas.align.tallest")}</span>
         </button>
 
         <button
           onClick={() => alignSelectedNodes("syncShortest")}
           style={{ background: "none", border: "none", padding: "6px", borderRadius: "4px", color: "inherit", cursor: "pointer", display: "flex", alignItems: "center", gap: "4px", fontSize: "11px", fontWeight: 500 }}
           className="alignmentBarBtn"
-          title="Đồng bộ chiều cao theo node thấp nhất (Sync Shortest)"
+          title={t("canvas.align.syncShortest")}
         >
           <Minimize2 size={14} />
-          <span>Thấp nhất</span>
+          <span>{t("canvas.align.shortest")}</span>
         </button>
       </div>
     );
   };
 
-  const flyoutTitle = activePanel ? CANVAS_PANELS[activePanel]?.label : "";
+  const flyoutTitle = activePanel ? t(CANVAS_PANELS[activePanel]?.labelKey) : "";
 
   return (
     <div className={`canvasView${canvasInteracting ? " is-interacting" : ""}`}>
@@ -2107,7 +2109,7 @@ function InfiniteCanvasInner({
                 setEdges(current => reconnectEdge(oldEdge, newConnection, current));
               }}
               onEdgeContextMenu={(event, edge) => {
-                openContextMenu(event, buildEdgeContextMenuItems({ edge, removeEdge }));
+                openContextMenu(event, buildEdgeContextMenuItems({ edge, removeEdge, t }));
               }}
               onEdgeDoubleClick={(event, edge) => {
                 event.preventDefault();

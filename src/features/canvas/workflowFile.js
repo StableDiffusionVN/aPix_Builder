@@ -30,7 +30,7 @@ function workflowPayload(value) {
     : value;
 }
 
-export function parseWorkflowFile(value) {
+export function parseWorkflowFile(value, { defaultName = "Workflow nhập" } = {}) {
   let parsed = value;
   if (typeof value === "string") {
     try {
@@ -46,7 +46,7 @@ export function parseWorkflowFile(value) {
   }
 
   return {
-    name: String(workflow.name || "Workflow nhập").trim() || "Workflow nhập",
+    name: String(workflow.name || defaultName).trim() || defaultName,
     nodes: workflow.nodes,
     edges: workflow.edges,
     viewport: normalizedViewport(workflow.viewport)

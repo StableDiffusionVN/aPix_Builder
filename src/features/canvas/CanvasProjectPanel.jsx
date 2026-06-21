@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Loader2, Star, Trash2 } from "lucide-react";
 import { getSetting, setSetting } from "../../lib/appSettings.js";
-import { useI18n } from "../../i18n/I18nContext.jsx";
+import { localizeRuntimeMessage, useI18n } from "../../i18n/I18nContext.jsx";
 
 const FAVORITES_KEY = "canvas.workflowLibraryFavorites";
 
@@ -10,13 +10,13 @@ function readFavoriteSlugs() {
   return Array.isArray(raw) ? raw.filter(slug => typeof slug === "string" && slug) : [];
 }
 
-function sortWorkflows(workflows, favoriteSlugs) {
+function sortWorkflows(workflows, favoriteSlugs, locale) {
   const favorites = new Set(favoriteSlugs);
   return [...workflows].sort((a, b) => {
     const aFavorite = favorites.has(a.slug);
     const bFavorite = favorites.has(b.slug);
     if (aFavorite !== bFavorite) return aFavorite ? -1 : 1;
-    return String(a.name || a.slug).localeCompare(String(b.name || b.slug), "vi", {
+    return String(a.name || a.slug).localeCompare(String(b.name || b.slug), locale, {
       sensitivity: "base"
     });
   });
@@ -29,7 +29,7 @@ export function CanvasProjectPanel({
   onOpen,
   onDelete
 }) {
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
   const [busySlug, setBusySlug] = useState("");
   const [favoriteSlugs, setFavoriteSlugs] = useState(readFavoriteSlugs);
 
@@ -38,8 +38,8 @@ export function CanvasProjectPanel({
   }, [onReload]);
 
   const sortedWorkflows = useMemo(
-    () => sortWorkflows(workflows, favoriteSlugs),
-    [workflows, favoriteSlugs]
+    () => sortWorkflows(workflows, favoriteSlugs, locale),
+    [workflows, favoriteSlugs, locale]
   );
 
   function toggleFavorite(slug, event) {
@@ -81,7 +81,7 @@ export function CanvasProjectPanel({
         return next;
       });
     } catch (error) {
-      window.alert(error?.message || t("canvas.library.deleteFailed"));
+      window.alert(localizeRuntimeMessage(error?.message, locale) || t("canvas.library.deleteFailed"));
     } finally {
       setBusySlug("");
     }
@@ -96,7 +96,7 @@ export function CanvasProjectPanel({
       ) : null}
 
       {!loading && sortedWorkflows.length === 0 ? (
-        <p className="canvasProjectEmpty">Chưa có workflow đã lưu.</p>
+        <p className="canvasProjectEmpty">{t("canvas.library.empty")}</p>
       ) : null}
 
       <ul className="canvasProjectList canvasProjectLibraryList">
@@ -118,8 +118,8 @@ export function CanvasProjectPanel({
                 <button
                   type="button"
                   className={`canvasProjectLibraryFav${isFavorite ? " is-active" : ""}`}
-                  aria-label={isFavorite ? "Bỏ ghim workflow" : "Ghim workflow lên đầu"}
-                  title={isFavorite ? "Bỏ ghim" : "Ghim lên đầu"}
+                  aria-label={isFavorite ? t("canvas.library.unpin") : t("canvas.library.pin")}
+                  title={isFavorite ? t("canvas.library.unpinShort") : t("canvas.library.pinShort")}
                   disabled={busy}
                   onClick={event => toggleFavorite(workflow.slug, event)}
                 >

@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { Loader2, RefreshCcw, ScrollText } from "lucide-react";
 import { ImageLightboxOverlay } from "../../components/ImageLightboxOverlay.jsx";
+import { useI18n } from "../../i18n/I18nContext.jsx";
 
-function formatTime(value) {
+function formatTime(value, locale) {
   if (!value) return "";
   try {
-    return new Date(value).toLocaleString("vi-VN", {
+    return new Date(value).toLocaleString(locale === "vi" ? "vi-VN" : "en-US", {
       day: "2-digit",
       month: "2-digit",
       hour: "2-digit",
@@ -31,6 +32,7 @@ export function CanvasHistoryPanel({
   onRefreshRunLogs,
   onOpenRunLog
 }) {
+  const { locale, t } = useI18n();
   const [tab, setTab] = useState("outputs");
   const [loadingOutputs, setLoadingOutputs] = useState(false);
   const [loadingLogs, setLoadingLogs] = useState(false);
@@ -64,27 +66,27 @@ export function CanvasHistoryPanel({
     <div className="canvasHistoryPanel">
       <div className="canvasHistoryTabs">
         <button type="button" className={tab === "outputs" ? "active" : ""} onClick={() => setTab("outputs")}>
-          Kết quả ({outputHistory.length})
+          {t("canvas.history.outputs", { count: outputHistory.length })}
         </button>
         <button type="button" className={tab === "runs" ? "active" : ""} onClick={() => setTab("runs")}>
-          Run log ({runLogSessions.length})
+          {t("canvas.history.runLogs", { count: runLogSessions.length })}
         </button>
       </div>
 
       <button type="button" className="canvasFlyoutAction" onClick={onOpenRunLog}>
-        <ScrollText size={14} /> Mở run.log
+        <ScrollText size={14} /> {t("canvas.history.openLog")}
       </button>
 
       {tab === "outputs" ? (
         <div className="canvasHistorySection">
           <div className="canvasHistorySectionHeader">
-            <span>Ảnh đã tạo</span>
-            <button type="button" className="canvasNodeBtn" onClick={refreshOutputs} title="Tải lại">
+            <span>{t("canvas.history.createdImages")}</span>
+            <button type="button" className="canvasNodeBtn" onClick={refreshOutputs} title={t("canvas.history.reload")}>
               {loadingOutputs ? <Loader2 size={13} className="spin" /> : <RefreshCcw size={13} />}
             </button>
           </div>
           {!outputHistory.length ? (
-            <p className="canvasFlyoutEmpty">Chưa có kết quả nào.</p>
+            <p className="canvasFlyoutEmpty">{t("canvas.history.noOutputs")}</p>
           ) : (
             <ul className="canvasHistoryOutputs">
               {outputHistory.slice(0, 40).map(item => {
@@ -96,7 +98,7 @@ export function CanvasHistoryPanel({
                   || item.webappId
                   || item.template
                   || item.provider
-                  || "Output";
+                  || t("canvas.preview.output");
                 return (
                   <li key={item.id} className="canvasHistoryOutputItem">
                     <button
@@ -108,13 +110,13 @@ export function CanvasHistoryPanel({
                             title: outputName,
                             images: outputs.map((output, index) => ({
                               ...output,
-                              name: output.canvasNodeName || output.filename || `Output ${index + 1}`
+                              name: output.canvasNodeName || output.filename || `${t("canvas.preview.output")} ${index + 1}`
                             }))
                           });
                         }
                       }}
                       disabled={!thumb}
-                      title={thumb ? "Xem ảnh" : "Không có ảnh"}
+                      title={thumb ? t("canvas.history.viewImage") : t("canvas.history.noImage")}
                     >
                       {thumb ? (
                         <img src={thumb} alt="" draggable="false" loading="lazy" decoding="async" />
@@ -122,8 +124,8 @@ export function CanvasHistoryPanel({
                       <div className="canvasHistoryOutputMeta">
                         <strong>{outputName}</strong>
                         <small>
-                          {formatTime(item.completedAt || item.submittedAt)}
-                          {outputs.length > 1 ? ` · ${outputs.length} ảnh` : ""}
+                          {formatTime(item.completedAt || item.submittedAt, locale)}
+                          {outputs.length > 1 ? ` · ${t("canvas.history.imageCount", { count: outputs.length })}` : ""}
                         </small>
                       </div>
                     </button>
@@ -138,21 +140,21 @@ export function CanvasHistoryPanel({
       {tab === "runs" ? (
         <div className="canvasHistorySection">
           <div className="canvasHistorySectionHeader">
-            <span>Phiên chạy</span>
-            <button type="button" className="canvasNodeBtn" onClick={refreshLogs} title="Tải lại">
+            <span>{t("canvas.history.sessions")}</span>
+            <button type="button" className="canvasNodeBtn" onClick={refreshLogs} title={t("canvas.history.reload")}>
               {loadingLogs ? <Loader2 size={13} className="spin" /> : <RefreshCcw size={13} />}
             </button>
           </div>
           {!runLogSessions.length ? (
-            <p className="canvasFlyoutEmpty">Chưa có run log.</p>
+            <p className="canvasFlyoutEmpty">{t("canvas.history.noLogs")}</p>
           ) : (
             <ul className="canvasHistoryRuns">
               {runLogSessions.slice(0, 30).map(session => (
                 <li key={session.id} className="canvasHistoryRunItem">
                   <strong>{sessionLabel(session)}</strong>
                   <small>
-                    {session.status || "unknown"} · {formatTime(session.endedAt || session.startedAt)}
-                    {session.logs?.length ? ` · ${session.logs.length} dòng log` : ""}
+                    {t(`canvas.history.status.${session.status || "unknown"}`)} · {formatTime(session.endedAt || session.startedAt, locale)}
+                    {session.logs?.length ? ` · ${t("canvas.history.logLines", { count: session.logs.length })}` : ""}
                   </small>
                 </li>
               ))}
@@ -163,7 +165,7 @@ export function CanvasHistoryPanel({
       <ImageLightboxOverlay
         open={Boolean(lightboxItem)}
         images={lightboxItem?.images}
-        title={lightboxItem?.title || "Output"}
+        title={lightboxItem?.title || t("canvas.preview.output")}
         onClose={() => setLightboxItem(null)}
       />
     </div>

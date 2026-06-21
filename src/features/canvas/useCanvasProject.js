@@ -6,6 +6,7 @@ import { CANVAS_NODE_DEFAULT_WIDTH } from "./CanvasNodeResizeHandles.jsx";
 import { compactStepNodeSize, growStepNodesToFit, isStepOutputDetached, normalizeOutputSplitNodes, reconcileOutputSplitOnEdgeRemove, restoreInputSourceOnRemove, restoreOutputPassthroughOnRemove } from "./canvasNodeLayout.js";
 import { canvasViewportsEqual, normalizeCanvasViewport } from "./canvasViewport.js";
 import { createWorkflowFile, parseWorkflowFile } from "./workflowFile.js";
+import { useI18n } from "../../i18n/I18nContext.jsx";
 
 const CANVAS_HISTORY_LIMIT = 80;
 
@@ -129,6 +130,7 @@ function serializeBaseline(nodes, edges) {
 }
 
 export function useCanvasProject() {
+  const { t } = useI18n();
   const [nodes, rawSetNodes] = useState([]);
   const [edges, rawSetEdges] = useState([]);
   const [projects, setProjects] = useState([]);
@@ -481,7 +483,7 @@ export function useCanvasProject() {
   }, [activeId, activeName, projects]);
 
   const importWorkflow = useCallback(async (fileContents) => {
-    const workflow = parseWorkflowFile(fileContents);
+    const workflow = parseWorkflowFile(fileContents, { defaultName: t("canvas.workflow.importedName") });
     persistEnabled.current = false;
     if (persistTimer.current) window.clearTimeout(persistTimer.current);
     try {
@@ -503,7 +505,7 @@ export function useCanvasProject() {
     } finally {
       persistEnabled.current = true;
     }
-  }, [applyCanvasState, flushActiveSession, markLibraryDirtySuppressed, resetHistory, syncLibraryBaseline]);
+  }, [applyCanvasState, flushActiveSession, markLibraryDirtySuppressed, resetHistory, syncLibraryBaseline, t]);
 
   const onNodesChange = useCallback((changes) => {
     const currentNodes = nodesRef.current;
@@ -693,7 +695,8 @@ export function useCanvasProject() {
       node,
       valueKey,
       currentNodes,
-      currentEdges
+      currentEdges,
+      t
     );
     const newId = `source-${crypto.randomUUID().slice(0, 8)}`;
     const newNode = {
@@ -740,7 +743,7 @@ export function useCanvasProject() {
         animated: false
       }
     ]);
-  }, [applyCanvasState]);
+  }, [applyCanvasState, t]);
 
   const convertOutputToSource = useCallback((nodeId, outputKey = "main") => {
     const currentNodes = nodesRef.current;
@@ -749,7 +752,7 @@ export function useCanvasProject() {
     if (!node || node.type !== "step") return;
     if (isStepOutputDetached(nodeId, outputKey, currentNodes, currentEdges)) return;
 
-    const { sourceType, label, port } = resolveOutputValueForSource(node, outputKey);
+    const { sourceType, label, port } = resolveOutputValueForSource(node, outputKey, t);
     const outputs = node.data?.ports?.outputs || [];
     if (!outputs.some(item => item.key === outputKey)) return;
 
@@ -810,7 +813,7 @@ export function useCanvasProject() {
         }
         : item
     )).concat(newNode), nextEdges);
-  }, [applyCanvasState]);
+  }, [applyCanvasState, t]);
 
   const clearProject = useCallback(() => {
     applyCanvasState([], []);

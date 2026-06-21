@@ -4,6 +4,7 @@ import { useViewport } from "@xyflow/react";
 import { Eye, Pencil } from "lucide-react";
 import { ImageLightboxOverlay } from "../../components/ImageLightboxOverlay.jsx";
 import { ImageEditorModal } from "../../components/lazyModals.js";
+import { useI18n } from "../../i18n/I18nContext.jsx";
 
 function PreviewImage({ src, alt, className = "", onSize }) {
   return (
@@ -55,19 +56,20 @@ async function saveOutputToInputLibrary(dataUrl) {
 }
 
 function PreviewToolbar({ onOpen, onEdit }) {
+  const { t } = useI18n();
   return (
     <div className="canvasPreviewToolbar nodrag">
       <button
         type="button"
         onClick={event => { event.preventDefault(); event.stopPropagation(); onOpen(); }}
-        title="Mở ảnh đầy đủ"
+        title={t("canvas.preview.openFull")}
       >
         <Eye size={13} />
       </button>
       <button
         type="button"
         onClick={event => { event.preventDefault(); event.stopPropagation(); onEdit(); }}
-        title="Image Editor"
+        title={t("preview.editor")}
       >
         <Pencil size={13} />
       </button>
@@ -82,6 +84,7 @@ export function CanvasNodeComparePreview({
   embedded = false,
   onContextMenu
 }) {
+  const { t } = useI18n();
   const [comparePosition, setComparePosition] = useState(50);
   const [isHovering, setIsHovering] = useState(false);
   const [imageSizes, setImageSizes] = useState({});
@@ -186,7 +189,7 @@ export function CanvasNodeComparePreview({
       <div className={rootClass} onContextMenu={handleContextMenu}>
         <div className="canvasNodePreviewStage">
           <PreviewImage src={outputUrl} alt="output" onSize={rememberImageSize} />
-          <SizeBadge label="Output" size={outputSize} side="output" timingLabel={outputTimingLabel} />
+          <SizeBadge label={t("canvas.preview.output")} size={outputSize} side="output" timingLabel={outputTimingLabel} />
           <PreviewToolbar
             onOpen={() => setLightboxOpen(true)}
             onEdit={() => setEditorOpen(true)}
@@ -194,15 +197,15 @@ export function CanvasNodeComparePreview({
         </div>
         <ImageLightboxOverlay
           open={lightboxOpen}
-          image={lightboxOpen ? { url: outputUrl, name: "Output" } : null}
-          title="Output"
+          image={lightboxOpen ? { url: outputUrl, name: t("canvas.preview.output") } : null}
+          title={t("canvas.preview.output")}
           onClose={() => setLightboxOpen(false)}
         />
         {editorOpen ? createPortal(
           <Suspense fallback={null}>
             <ImageEditorModal
               source={outputUrl}
-              title="Output — Image Editor"
+              title={t("canvas.preview.editorTitle")}
               onClose={() => setEditorOpen(false)}
               onSave={async dataUrl => {
                 await saveOutputToInputLibrary(dataUrl);
@@ -255,8 +258,8 @@ export function CanvasNodeComparePreview({
           />
           {isHovering ? <div className="canvasCompareDivider" aria-hidden="true" /> : null}
         </div>
-        <SizeBadge label="Output" size={outputSize} side="output" timingLabel={outputTimingLabel} />
-        {isHovering ? <SizeBadge label="Input" size={inputSize} side="input" /> : null}
+        <SizeBadge label={t("canvas.preview.output")} size={outputSize} side="output" timingLabel={outputTimingLabel} />
+        {isHovering ? <SizeBadge label={t("canvas.preview.input")} size={inputSize} side="input" /> : null}
         <PreviewToolbar
           onOpen={() => setLightboxOpen(true)}
           onEdit={() => setEditorOpen(true)}
@@ -264,15 +267,15 @@ export function CanvasNodeComparePreview({
       </div>
       <ImageLightboxOverlay
         open={lightboxOpen}
-        image={lightboxOpen ? { url: outputUrl, name: "Output" } : null}
-        title="Output"
+        image={lightboxOpen ? { url: outputUrl, name: t("canvas.preview.output") } : null}
+        title={t("canvas.preview.output")}
         onClose={() => setLightboxOpen(false)}
       />
       {editorOpen ? createPortal(
         <Suspense fallback={null}>
           <ImageEditorModal
             source={outputUrl}
-            title="Output — Image Editor"
+            title={t("canvas.preview.editorTitle")}
             onClose={() => setEditorOpen(false)}
             onSave={async dataUrl => {
               await saveOutputToInputLibrary(dataUrl);

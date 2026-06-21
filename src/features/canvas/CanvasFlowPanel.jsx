@@ -2,6 +2,7 @@ import { MiniMap, Panel, useReactFlow, useViewport } from "@xyflow/react";
 import { useCallback, useEffect } from "react";
 import { Hand, Map, Minus, MousePointer2, Plus, Redo2, ScrollText, Undo2 } from "lucide-react";
 import { RunControls } from "../../components/RunControls.jsx";
+import { useI18n } from "../../i18n/I18nContext.jsx";
 import { isTypingTarget } from "../../lib/keyboard.js";
 import { fitCanvasWorkflowView } from "./canvasFitView.js";
 
@@ -57,6 +58,7 @@ export function CanvasFlowPanel({
   onViewportGestureStart,
   onViewportGestureEnd
 }) {
+  const { t } = useI18n();
   const { zoomIn, zoomOut, fitView, getViewport } = useReactFlow();
   const { zoom } = useViewport();
   const zoomPercent = Math.round(zoom * 100);
@@ -114,13 +116,13 @@ export function CanvasFlowPanel({
           nodeBorderRadius={4}
         />
       ) : null}
-      <div className="canvasZoomBar" role="toolbar" aria-label="Canvas zoom">
+      <div className="canvasZoomBar" role="toolbar" aria-label={t("canvas.flow.zoomTools")}>
         <button
           type="button"
           className={`canvasZoomBtn${activeTool === "select" ? " active" : ""}`}
           onClick={() => onToolChange?.("select")}
-          title={`Select (V) — kéo nền để pan, Shift-kéo để chọn vùng${spaceHeld ? " (tạm thời qua Space)" : ""}`}
-          aria-label="Công cụ Select"
+          title={t("canvas.flow.selectTitle", { temporary: spaceHeld ? t("canvas.flow.temporarySpace") : "" })}
+          aria-label={t("canvas.flow.select")}
           aria-pressed={selectedTool === "select"}
         >
           <MousePointer2 size={14} />
@@ -129,8 +131,8 @@ export function CanvasFlowPanel({
           type="button"
           className={`canvasZoomBtn${activeTool === "hand" ? " active" : ""}`}
           onClick={() => onToolChange?.("hand")}
-          title={`Hand (H)${spaceHeld ? " (tạm thời qua Space)" : ""}`}
-          aria-label="Công cụ Hand"
+          title={t("canvas.flow.handTitle", { temporary: spaceHeld ? t("canvas.flow.temporarySpace") : "" })}
+          aria-label={t("canvas.flow.hand")}
           aria-pressed={selectedTool === "hand"}
         >
           <Hand size={14} />
@@ -140,8 +142,8 @@ export function CanvasFlowPanel({
           type="button"
           className="canvasZoomBtn"
           onClick={onUndo}
-          title="Undo (⌘/Ctrl+Z)"
-          aria-label="Undo"
+          title={t("canvas.flow.undo")}
+          aria-label={t("info.shortcutUndo")}
           aria-keyshortcuts="Control+Z Meta+Z"
           disabled={!canUndo}
         >
@@ -151,8 +153,8 @@ export function CanvasFlowPanel({
           type="button"
           className="canvasZoomBtn"
           onClick={onRedo}
-          title="Redo (⌘/Ctrl+Shift+Z hoặc Ctrl+Y)"
-          aria-label="Redo"
+          title={t("canvas.flow.redo")}
+          aria-label={t("info.shortcutRedo")}
           aria-keyshortcuts="Control+Shift+Z Meta+Shift+Z Control+Y Meta+Y"
           disabled={!canRedo}
         >
@@ -163,7 +165,7 @@ export function CanvasFlowPanel({
           type="button"
           className="canvasZoomBtn"
           onClick={() => zoomIn()}
-          title="Phóng to"
+          title={t("canvas.flow.zoomIn")}
           disabled={zoom >= maxZoom - ZOOM_EPSILON}
         >
           <Plus size={14} />
@@ -176,8 +178,8 @@ export function CanvasFlowPanel({
             event.preventDefault();
             fitWorkflowView();
           }}
-          title="Nhấn hoặc phím 1: vừa khung và căn giữa quy trình"
-          aria-label={`Mức zoom ${zoomPercent}%. Nhấn hoặc phím 1 để vừa khung.`}
+          title={t("canvas.flow.fit")}
+          aria-label={t("canvas.flow.zoomLevel", { percent: zoomPercent })}
           aria-keyshortcuts="1"
         >
           {zoomPercent}%
@@ -186,7 +188,7 @@ export function CanvasFlowPanel({
           type="button"
           className="canvasZoomBtn"
           onClick={() => zoomOut()}
-          title="Thu nhỏ"
+          title={t("canvas.flow.zoomOut")}
           disabled={zoom <= minZoom + ZOOM_EPSILON}
         >
           <Minus size={14} />
@@ -195,7 +197,7 @@ export function CanvasFlowPanel({
           type="button"
           className={`canvasZoomBtn${minimapOpen ? " active" : ""}`}
           onClick={onToggleMinimap}
-          title={minimapOpen ? "Ẩn minimap" : "Hiện minimap"}
+          title={minimapOpen ? t("canvas.flow.hideMinimap") : t("canvas.flow.showMinimap")}
           aria-pressed={minimapOpen}
         >
           <Map size={14} />

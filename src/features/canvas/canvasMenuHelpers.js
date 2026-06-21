@@ -11,6 +11,10 @@ import {
 import { downloadImage } from "../../lib/download.js";
 import { isStepOutputDetached } from "./canvasNodeLayout.js";
 
+function translate(t, key, fallback, variables) {
+  return typeof t === "function" ? t(key, variables) : fallback;
+}
+
 function imageFilename(url, fallback) {
   if (!url) return fallback;
   try {
@@ -32,7 +36,8 @@ export function buildNodeContextMenuItems({
   removeNode,
   toggleNodeBypass,
   removeEdge,
-  convertOutputToSource
+  convertOutputToSource,
+  t
 }) {
   if (!node) return [];
 
@@ -41,20 +46,22 @@ export function buildNodeContextMenuItems({
   if (node.type === "step") {
     items.push({
       id: "run",
-      label: "Chạy node",
+      label: translate(t, "canvas.node.run", "Chạy node"),
       disabled: node.data?.status === "running",
       onClick: () => runNode?.(node.id)
     });
     items.push({
       id: "bypass",
-      label: node.data?.bypassed ? "Bỏ bypass" : "Bypass node",
+      label: node.data?.bypassed
+        ? translate(t, "canvas.menu.removeBypass", "Bỏ bypass")
+        : translate(t, "canvas.menu.bypass", "Bypass node"),
       onClick: () => toggleNodeBypass?.(node.id)
     });
     const outputs = node.data?.ports?.outputs || [];
     if (outputs.length && !isStepOutputDetached(node.id, outputs[0].key, nodes, edges || [])) {
       items.push({
         id: "convert-output-source",
-        label: "Tách thành node Ảnh",
+        label: translate(t, "canvas.menu.splitImage", "Tách thành node Ảnh"),
         onClick: () => convertOutputToSource?.(node.id, outputs[0].key)
       });
     }
@@ -64,7 +71,7 @@ export function buildNodeContextMenuItems({
     const outgoing = edges.filter(edge => edge.source === node.id);
     items.push({
       id: "disconnect-out",
-      label: "Ngắt kết nối output",
+      label: translate(t, "canvas.menu.disconnectOutput", "Ngắt kết nối output"),
       disabled: !outgoing.length,
       onClick: () => outgoing.forEach(edge => removeEdge?.(edge.id))
     });
@@ -72,7 +79,7 @@ export function buildNodeContextMenuItems({
 
   items.push({
     id: "delete",
-    label: "Xóa node",
+    label: translate(t, "canvas.node.delete", "Xóa node"),
     danger: true,
     onClick: () => removeNode?.(node.id)
   });
@@ -88,7 +95,8 @@ export function buildFieldContextMenuItems({
   nodes,
   value,
   convertInputToSource,
-  disconnectTargetPort
+  disconnectTargetPort,
+  t
 }) {
   if (!node || !port) return [];
 
@@ -108,7 +116,7 @@ export function buildFieldContextMenuItems({
     if (imageUrl) {
       items.push({
         id: "save-input-image",
-        label: "Lưu ảnh",
+        label: translate(t, "canvas.menu.saveImage", "Lưu ảnh"),
         onClick: async () => {
           try {
             await downloadImage({
@@ -126,23 +134,25 @@ export function buildFieldContextMenuItems({
   if (linked || incoming) {
     items.push({
       id: "disconnect",
-      label: "Ngắt kết nối pipe",
+      label: translate(t, "canvas.menu.disconnectPipe", "Ngắt kết nối pipe"),
       onClick: () => disconnectTargetPort?.(node.id, valueKey)
     });
   }
 
   if (node.type === "step") {
     const sourceLabel = {
-      image: "Ảnh",
+      image: translate(t, "canvas.node.type.image", "Ảnh"),
       text: "Text",
-      number: String(port.uiType || "").toLowerCase() === "int" ? "Số nguyên" : "Số",
+      number: String(port.uiType || "").toLowerCase() === "int"
+        ? translate(t, "canvas.node.type.integer", "Số nguyên")
+        : translate(t, "canvas.node.type.number", "Số"),
       boolean: "Boolean",
       choice: port.label || "Menu",
-      any: port.label || "Giá trị"
-    }[type] || port.label || "Giá trị";
+      any: port.label || translate(t, "canvas.node.type.value", "Giá trị")
+    }[type] || port.label || translate(t, "canvas.node.type.value", "Giá trị");
     items.push({
       id: "convert-source",
-      label: `Tách thành node ${sourceLabel}`,
+      label: translate(t, "canvas.menu.splitSource", `Tách thành node ${sourceLabel}`, { name: sourceLabel }),
       onClick: () => convertInputToSource?.(node.id, valueKey)
     });
   }
@@ -159,13 +169,14 @@ export function buildPreviewContextMenuItems({
   outputFilename = "",
   inputImageUrl = "",
   convertOutputToSource,
-  outputKey = "main"
+  outputKey = "main",
+  t
 }) {
   if (!node || node.type !== "step") return [];
 
   const items = [{
     id: "save-image",
-    label: "Lưu ảnh",
+    label: translate(t, "canvas.menu.saveImage", "Lưu ảnh"),
     disabled: !imageUrl,
     onClick: async () => {
       try {
@@ -179,7 +190,7 @@ export function buildPreviewContextMenuItems({
     }
   }, {
     id: "convert-output-source",
-    label: "Tách thành node Ảnh",
+    label: translate(t, "canvas.menu.splitImage", "Tách thành node Ảnh"),
     disabled: isStepOutputDetached(node.id, outputKey, nodes, edges || []),
     onClick: () => convertOutputToSource?.(node.id, outputKey)
   }];
@@ -187,7 +198,7 @@ export function buildPreviewContextMenuItems({
   if (inputImageUrl && inputImageUrl !== imageUrl) {
     items.push({
       id: "save-input-image",
-      label: "Lưu ảnh input",
+      label: translate(t, "canvas.menu.saveInputImage", "Lưu ảnh input"),
       onClick: async () => {
         try {
           await downloadImage({
@@ -205,7 +216,7 @@ export function buildPreviewContextMenuItems({
   if (incoming.length) {
     items.push({
       id: "disconnect-all",
-      label: "Ngắt tất cả kết nối vào node",
+      label: translate(t, "canvas.menu.disconnectAllInputs", "Ngắt tất cả kết nối vào node"),
       onClick: () => {
         incoming.forEach(edge => disconnectTargetPort?.(edge.target, edge.targetHandle?.slice(3)));
       }
@@ -221,13 +232,14 @@ export function buildPassthroughPreviewContextMenuItems({
   outputFilename = "",
   inputImageUrl = "",
   edges = [],
-  removeEdge
+  removeEdge,
+  t
 }) {
   if (!passthroughNode || passthroughNode.type !== "source") return [];
 
   const items = [{
     id: "save-image",
-    label: "Lưu ảnh",
+    label: translate(t, "canvas.menu.saveImage", "Lưu ảnh"),
     disabled: !imageUrl,
     onClick: async () => {
       try {
@@ -244,7 +256,7 @@ export function buildPassthroughPreviewContextMenuItems({
   if (inputImageUrl && inputImageUrl !== imageUrl) {
     items.push({
       id: "save-input-image",
-      label: "Lưu ảnh input",
+      label: translate(t, "canvas.menu.saveInputImage", "Lưu ảnh input"),
       onClick: async () => {
         try {
           await downloadImage({
@@ -262,7 +274,7 @@ export function buildPassthroughPreviewContextMenuItems({
   if (outgoing.length) {
     items.push({
       id: "disconnect-out",
-      label: "Ngắt kết nối output",
+      label: translate(t, "canvas.menu.disconnectOutput", "Ngắt kết nối output"),
       onClick: () => outgoing.forEach(edge => removeEdge?.(edge.id))
     });
   }
@@ -270,18 +282,24 @@ export function buildPassthroughPreviewContextMenuItems({
   return items;
 }
 
-export function buildEdgeContextMenuItems({ edge, removeEdge }) {
+export function buildEdgeContextMenuItems({ edge, removeEdge, t }) {
   if (!edge) return [];
   return [{
     id: "disconnect",
-    label: "Ngắt kết nối",
+    label: translate(t, "canvas.menu.disconnect", "Ngắt kết nối"),
     onClick: () => removeEdge?.(edge.id)
   }];
 }
 
-export function resolveOutputValueForSource(node, outputKey = "main") {
+export function resolveOutputValueForSource(node, outputKey = "main", t) {
   const port = (node.data?.ports?.outputs || []).find(item => item.key === outputKey);
-  if (!port) return { sourceType: "image", value: "", imageUrl: "", label: "Output", port: { type: "image" } };
+  if (!port) return {
+    sourceType: "image",
+    value: "",
+    imageUrl: "",
+    label: translate(t, "canvas.preview.output", "Output"),
+    port: { type: "image" }
+  };
 
   const sourceType = port.type || portTypeForUi(port.uiType) || "image";
   const rawValue = nodeOutputValue(node, `out:${outputKey}`);
@@ -293,7 +311,7 @@ export function resolveOutputValueForSource(node, outputKey = "main") {
     sourceType,
     value,
     imageUrl,
-    label: port.label || "Output",
+    label: port.label || translate(t, "canvas.preview.output", "Output"),
     port: {
       type: sourceType,
       uiType: port.uiType,
@@ -306,7 +324,7 @@ export function resolveOutputValueForSource(node, outputKey = "main") {
   };
 }
 
-export function resolveFieldValueForSource(node, valueKey, nodes, edges) {
+export function resolveFieldValueForSource(node, valueKey, nodes, edges, t) {
   const port = (node.data?.ports?.inputs || []).find(item => item.valueKey === valueKey);
   if (!port) return { sourceType: "image", value: "" };
 
@@ -329,7 +347,7 @@ export function resolveFieldValueForSource(node, valueKey, nodes, edges) {
   return {
     sourceType,
     value,
-    label: port.label || "Input",
+    label: port.label || translate(t, "canvas.preview.input", "Input"),
     port: {
       type: sourceType,
       uiType: port.uiType,

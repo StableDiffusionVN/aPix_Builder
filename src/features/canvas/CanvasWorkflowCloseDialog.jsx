@@ -1,5 +1,6 @@
 import { createPortal } from "react-dom";
 import { Loader2 } from "lucide-react";
+import { useI18n } from "../../i18n/I18nContext.jsx";
 
 export function CanvasWorkflowCloseDialog({
   open,
@@ -10,6 +11,7 @@ export function CanvasWorkflowCloseDialog({
   onDiscard,
   onSaveAndClose
 }) {
+  const { t } = useI18n();
   if (!open) return null;
 
   return createPortal(
@@ -29,16 +31,14 @@ export function CanvasWorkflowCloseDialog({
       >
         <div className="modalHeader">
           <div>
-            <h2 id="canvasWorkflowCloseTitle">Đóng workflow</h2>
+            <h2 id="canvasWorkflowCloseTitle">{t("canvas.close.title")}</h2>
             {librarySaved ? (
               <p>
-                <strong>{workflowName}</strong> có thay đổi chưa lưu vào thư viện <code>workflows/</code>.
-                Đóng không lưu sẽ giữ nguyên bản đã có trong thư viện.
+                <strong>{workflowName}</strong> {t("canvas.close.modified")}
               </p>
             ) : (
               <p>
-                <strong>{workflowName}</strong> chưa lưu vào thư mục <code>workflows/</code>.
-                Bạn muốn lưu trước khi đóng tab?
+                <strong>{workflowName}</strong> {t("canvas.close.notSaved")}
               </p>
             )}
           </div>
@@ -50,7 +50,7 @@ export function CanvasWorkflowCloseDialog({
             disabled={busy}
             onClick={onCancel}
           >
-            Hủy
+            {t("common.cancel")}
           </button>
           <button
             type="button"
@@ -58,7 +58,7 @@ export function CanvasWorkflowCloseDialog({
             disabled={busy}
             onClick={onDiscard}
           >
-            Đóng không lưu
+            {t("canvas.close.discard")}
           </button>
           <button
             type="button"
@@ -67,7 +67,7 @@ export function CanvasWorkflowCloseDialog({
             onClick={onSaveAndClose}
           >
             {busy ? <Loader2 size={14} className="spin" /> : null}
-            Lưu và đóng
+            {t("canvas.close.save")}
           </button>
         </div>
       </section>

@@ -15,6 +15,7 @@ import { buildFieldContextMenuItems, buildNodeContextMenuItems, buildPreviewCont
 import { useCanvasActions, useCanvasGraph } from "../canvasContext.js";
 import { handleNodeBodyWheel } from "../canvasWheel.js";
 import { formatOutputTimingLabel } from "../../../lib/runLog.js";
+import { localizeRuntimeMessage, useI18n } from "../../../i18n/I18nContext.jsx";
 
 const KIND_BADGE = {
   local: { label: "ComfyUI", className: "kind-local" },
@@ -30,6 +31,7 @@ function StatusIcon({ status }) {
 }
 
 function StepNodeComponent({ id, data, selected }) {
+  const { locale, t } = useI18n();
   const {
     updateNodeValues,
     runNode,
@@ -101,7 +103,8 @@ function StepNodeComponent({ id, data, selected }) {
       className={`status-${data.status || "idle"}`}
       onContextMenu={event => openContextMenu?.(event, buildNodeContextMenuItems({
         ...menuActions,
-        nodes: nodes || []
+        nodes: nodes || [],
+        t
       }))}
     >
       <header className="canvasNodeHeader">
@@ -111,14 +114,14 @@ function StepNodeComponent({ id, data, selected }) {
         <button
           type="button"
           className={`canvasNodeBtn${queuedCount ? " hasQueue" : ""}`}
-          title={graphRunning || data.status === "running" ? "Thêm node vào hàng chờ" : "Chạy node"}
-          aria-label={queuedCount ? `Chạy node, ${queuedCount} lượt đang chờ` : "Chạy node"}
+          title={graphRunning || data.status === "running" ? t("canvas.node.queue") : t("canvas.node.run")}
+          aria-label={queuedCount ? t("canvas.node.queued", { count: queuedCount }) : t("canvas.node.run")}
           onClick={() => runNode(id)}
         >
           <Play size={12} />
           {queuedCount ? <span className="canvasNodeQueueBadge">{queuedCount}</span> : null}
         </button>
-        <button type="button" className="canvasNodeBtn danger" title="Xóa node" onClick={() => removeNode(id)}>
+        <button type="button" className="canvasNodeBtn danger" title={t("canvas.node.delete")} onClick={() => removeNode(id)}>
           <Trash2 size={12} />
         </button>
       </header>
@@ -139,7 +142,7 @@ function StepNodeComponent({ id, data, selected }) {
                 id={`in:${port.valueKey}`}
                 className={`canvasHandle in nodrag nopan type-${port.type}`}
                 isConnectable
-                title={`Nháy đúp để tách "${port.label}" thành node riêng`}
+                title={t("canvas.node.split", { name: port.label })}
                 onDoubleClick={event => {
                   event.preventDefault();
                   event.stopPropagation();
@@ -159,7 +162,8 @@ function StepNodeComponent({ id, data, selected }) {
                   nodes: nodes || [],
                   value: values[port.valueKey],
                   convertInputToSource,
-                  disconnectTargetPort
+                  disconnectTargetPort,
+                  t
                 }))}
               />
               {showOutput ? (
@@ -170,12 +174,12 @@ function StepNodeComponent({ id, data, selected }) {
                     id={`out:${outputPort.key}`}
                     className="canvasHandle out nodrag nopan"
                     isConnectable
-                    title={`Nháy đúp để tách "${outputPort.label}" thành node riêng`}
+                    title={t("canvas.node.split", { name: outputPort.label })}
                     onDoubleClick={event => handleOutputSplit(event, outputPort.key)}
                   />
                   <span
                     className="canvasOutputHandleHit nodrag nopan"
-                    title={`Nháy đúp để tách "${outputPort.label}" thành node riêng`}
+                    title={t("canvas.node.split", { name: outputPort.label })}
                     onDoubleClick={event => handleOutputSplit(event, outputPort.key)}
                   />
                 </>
@@ -196,18 +200,18 @@ function StepNodeComponent({ id, data, selected }) {
                 id={`out:${port.key}`}
                 className="canvasHandle out nodrag nopan"
                 isConnectable
-                title={`Nháy đúp để tách "${port.label}" thành node riêng`}
+                title={t("canvas.node.split", { name: port.label })}
                 onDoubleClick={event => handleOutputSplit(event, port.key)}
               />
             ))}
             <span
               className="canvasOutputHandleHit nodrag nopan"
-              title={`Nháy đúp để tách "${outputs[0].label}" thành node riêng`}
+              title={t("canvas.node.split", { name: outputs[0].label })}
               onDoubleClick={event => handleOutputSplit(event, outputs[0].key)}
             />
           </div>
         ) : null}
-        {!inputs.length && !outputs.length ? <p className="canvasNodeEmpty">Không có input</p> : null}
+        {!inputs.length && !outputs.length ? <p className="canvasNodeEmpty">{t("canvas.node.noInput")}</p> : null}
       </div>
 
       <CanvasNodeComparePreview
@@ -223,10 +227,15 @@ function StepNodeComponent({ id, data, selected }) {
           outputFilename: runCache?.primary?.filename || "",
           inputImageUrl: inputPreviewUrl,
           convertOutputToSource,
-          outputKey: primaryOutputKey
+          outputKey: primaryOutputKey,
+          t
         }))}
       />
-      {data.error ? <p className="canvasNodeError" title={data.error}>{data.error}</p> : null}
+      {data.error ? (
+        <p className="canvasNodeError" title={localizeRuntimeMessage(data.error, locale)}>
+          {localizeRuntimeMessage(data.error, locale)}
+        </p>
+      ) : null}
     </CanvasNodeFrame>
   );
 }

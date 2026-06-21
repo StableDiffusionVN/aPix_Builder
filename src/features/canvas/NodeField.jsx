@@ -1,9 +1,11 @@
 import { Link2 } from "lucide-react";
+import { useI18n } from "../../i18n/I18nContext.jsx";
 import { parseMenuChoices, resolveMenuStoredValue } from "../../../shared/menuChoices.js";
 import { portTypeForUi } from "./canvasModel.js";
 import { CanvasImageField } from "./CanvasImageField.jsx";
 
 export function NodeField({ port, value, onChange, linked, onContextMenu }) {
+  const { t } = useI18n();
   const type = port.type || portTypeForUi(port.uiType);
   const choices = Array.isArray(port.choices) ? port.choices : null;
 
@@ -13,7 +15,7 @@ export function NodeField({ port, value, onChange, linked, onContextMenu }) {
         <div className="canvasField" onContextMenu={onContextMenu}>
           <span className="canvasFieldLabel">{port.label}</span>
           <div className="canvasImageLinked">
-            <Link2 size={12} /> <span>Liên kết từ node trước</span>
+            <Link2 size={12} /> <span>{t("canvas.node.linked")}</span>
           </div>
         </div>
       );
@@ -33,7 +35,7 @@ export function NodeField({ port, value, onChange, linked, onContextMenu }) {
       <div className="canvasField" onContextMenu={onContextMenu}>
         <span className="canvasFieldLabel">{port.label}</span>
         <div className="canvasImageLinked">
-          <Link2 size={12} /> <span>Liên kết từ node trước</span>
+          <Link2 size={12} /> <span>{t("canvas.node.linked")}</span>
         </div>
       </div>
     );

@@ -88,6 +88,11 @@ export function ExecutionModeToggle({ mode, onChange, canvasActive = false, onCa
   const indicatorKey = canvasActive ? "canvas" : mode;
   const [indicator, setIndicator] = useState({ left: 0, width: 0, ready: false });
   const isVi = locale === "vi";
+  const workspaceLabel = isVi ? "Chế độ làm việc" : "Workspace mode";
+  const executionLabel = isVi ? "Nền tảng thực thi" : "Execution platform";
+  const canvasToggleLabel = canvasActive
+    ? (isVi ? "Quay lại Form (Alt/Option+`)" : "Back to Form (Alt/Option+`)")
+    : (isVi ? "Chuyển sang Canvas (Alt/Option+`)" : "Switch to Canvas (Alt/Option+`)");
 
   const syncIndicator = useCallback(() => {
     const button = buttonRefs.current[indicatorKey];
@@ -138,23 +143,18 @@ export function ExecutionModeToggle({ mode, onChange, canvasActive = false, onCa
   return (
     <div
       className={`executionModeToggle ${canvasActive ? "mode-canvas is-canvas-only" : `mode-${mode} is-form-mode`}`}
-      role="tablist"
-      aria-label={isVi ? "Chế độ làm việc" : "Workspace mode"}
+      role="toolbar"
+      aria-label={workspaceLabel}
     >
       <div className="executionModeTrack" ref={trackRef}>
         <button
           type="button"
-          role="tab"
           ref={node => {
             buttonRefs.current.canvas = node;
           }}
-          aria-selected={canvasActive}
+          aria-label={canvasToggleLabel}
           className={`executionModeCanvasToggle${canvasActive ? " active" : ""} hasModeIcon`}
-          title={
-            canvasActive
-              ? (isVi ? "Quay lại Form (Alt/Option+`)" : "Back to Form (Alt/Option+`)")
-              : (isVi ? "Chuyển sang Canvas (Alt/Option+`)" : "Switch to Canvas (Alt/Option+`)")
-          }
+          title={canvasToggleLabel}
           aria-keyshortcuts="Alt+Backquote"
           onClick={() => onCanvasToggle?.()}
         >
@@ -174,6 +174,8 @@ export function ExecutionModeToggle({ mode, onChange, canvasActive = false, onCa
               <div
                 ref={formOptionsRef}
                 className="executionModeFormOptions"
+                role="tablist"
+                aria-label={executionLabel}
                 aria-hidden={canvasActive}
               >
                 <span
@@ -195,7 +197,7 @@ export function ExecutionModeToggle({ mode, onChange, canvasActive = false, onCa
                       ref={node => {
                         buttonRefs.current[option.id] = node;
                       }}
-                      aria-selected={isActive}
+                      aria-selected={!canvasActive && isActive}
                       className={`executionModeFormOption${isActive ? " active" : ""}${Icon ? " hasModeIcon" : ""}`}
                       title={option.title}
                       aria-keyshortcuts={option.shortcut}

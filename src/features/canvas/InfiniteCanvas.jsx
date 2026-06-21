@@ -87,6 +87,7 @@ import {
   snapshotRhApiKeyReady
 } from "./canvasRunSnapshot.js";
 import { expandCanvasRunJobImageBatches } from "./canvasBatchImages.js";
+import { calculateSmartGuides } from "./canvasSmartGuides.js";
 
 const nodeTypes = { step: StepNode, source: SourceNode };
 const EMPTY_INPUT_IMAGES = [];
@@ -173,12 +174,12 @@ function InfiniteCanvasInner({
   const { library, loading, error, reload } = useStepLibrary();
   const {
     nodes, edges,
-    projects, orderedTabs, activeId, activeName, viewport,
+    orderedTabs, activeId, activeName, viewport,
     canUndo, canRedo,
     onNodesChange, onEdgesChange, onConnect, setNodes, setEdges,
     addNode, updateNodeData, updateNodeSize, commitNodeResize, removeNode, removeEdge,
     disconnectTargetPort, toggleNodeBypass, convertInputToSource, convertOutputToSource,
-    switchProject, createProject, renameProject, deleteProject,
+    switchProject, renameProject,
     openNewTab, closeTab, saveTabToLibrary, isTabUnsavedToLibrary, isTabInLibrary, needsCloseConfirmation,
     libraryWorkflows, libraryLoading, reloadLibraryWorkflows, openLibraryWorkflow, deleteLibraryWorkflow,
     saveWorkflowFile, exportWorkflow, importWorkflow,
@@ -260,143 +261,63 @@ function InfiniteCanvasInner({
   const altDragPositionsRef = useRef(null);
   const workflowImportInputRef = useRef(null);
 
-  const [smartGuides, setSmartGuides] = useState([]);
+  const smartGuideVerticalRef = useRef(null);
+  const smartGuideHorizontalRef = useRef(null);
+
+  const updateSmartGuideOverlay = useCallback((guides = []) => {
+    const viewportState = reactFlowRef.current?.getViewport();
+    const verticalLine = smartGuideVerticalRef.current;
+    const horizontalLine = smartGuideHorizontalRef.current;
+    const vertical = guides.find(guide => guide.type === "v");
+    const horizontal = guides.find(guide => guide.type === "h");
+
+    if (verticalLine) {
+      if (vertical && viewportState) {
+        const x = vertical.x * viewportState.zoom + viewportState.x;
+        verticalLine.setAttribute("x1", x);
+        verticalLine.setAttribute("x2", x);
+        verticalLine.setAttribute("y1", vertical.y1 * viewportState.zoom + viewportState.y);
+        verticalLine.setAttribute("y2", vertical.y2 * viewportState.zoom + viewportState.y);
+        verticalLine.style.display = "";
+      } else {
+        verticalLine.style.display = "none";
+      }
+    }
+    if (horizontalLine) {
+      if (horizontal && viewportState) {
+        const y = horizontal.y * viewportState.zoom + viewportState.y;
+        horizontalLine.setAttribute("x1", horizontal.x1 * viewportState.zoom + viewportState.x);
+        horizontalLine.setAttribute("x2", horizontal.x2 * viewportState.zoom + viewportState.x);
+        horizontalLine.setAttribute("y1", y);
+        horizontalLine.setAttribute("y2", y);
+        horizontalLine.style.display = "";
+      } else {
+        horizontalLine.style.display = "none";
+      }
+    }
+  }, []);
 
   // Wrap onNodesChange to support Alt+drag copying and Smart Guides
   const handleNodesChange = useCallback((changes) => {
-    let activeGuidesList = [];
-
     const positionChange = changes.find(c => c.type === "position" && c.dragging);
+    let nextChanges = changes;
     if (positionChange && smartGuide) {
-      const draggedNodeId = positionChange.id;
-      const allNodes = nodesRef.current;
-      const draggedNode = allNodes.find(n => n.id === draggedNodeId);
-
-      if (draggedNode) {
-        // Lấy bounding box của node đang kéo
-        const dWidth = draggedNode.data?.size?.width || draggedNode.measured?.width || draggedNode.width || 348;
-        const dHeight = draggedNode.data?.size?.height || draggedNode.measured?.height || draggedNode.height || 120;
-
-        let targetX = positionChange.position.x;
-        let targetY = positionChange.position.y;
-
-        const snapThreshold = 6; // px
-        let snappedX = null;
-        let snappedY = null;
-
-        const dLeft = targetX;
-        const dRight = targetX + dWidth;
-        const dCenterX = targetX + dWidth / 2;
-        const dTop = targetY;
-        const dBottom = targetY + dHeight;
-        const dCenterY = targetY + dHeight / 2;
-
-        const otherNodes = allNodes.filter(n => n.id !== draggedNodeId && !n.selected);
-
-        let bestDiffX = snapThreshold;
-        let bestDiffY = snapThreshold;
-
-        otherNodes.forEach(other => {
-          const oWidth = other.data?.size?.width || other.measured?.width || other.width || 348;
-          const oHeight = other.data?.size?.height || other.measured?.height || other.height || 120;
-          const oLeft = other.position.x;
-          const oRight = other.position.x + oWidth;
-          const oCenterX = other.position.x + oWidth / 2;
-          const oTop = other.position.y;
-          const oBottom = other.position.y + oHeight;
-          const oCenterY = other.position.y + oHeight / 2;
-
-          // Kiểm tra X Alignment (Vertical lines)
-          // 1. Trái - Trái
-          let diff = Math.abs(dLeft - oLeft);
-          if (diff < bestDiffX) {
-            bestDiffX = diff;
-            snappedX = oLeft;
-            activeGuidesList.push({ type: "v", x: oLeft, y1: Math.min(dTop, oTop) - 100, y2: Math.max(dBottom, oBottom) + 100 });
-          }
-          // 2. Giữa - Giữa
-          diff = Math.abs(dCenterX - oCenterX);
-          if (diff < bestDiffX) {
-            bestDiffX = diff;
-            snappedX = oCenterX - dWidth / 2;
-            activeGuidesList.push({ type: "v", x: oCenterX, y1: Math.min(dTop, oTop) - 100, y2: Math.max(dBottom, oBottom) + 100 });
-          }
-          // 3. Phải - Phải
-          diff = Math.abs(dRight - oRight);
-          if (diff < bestDiffX) {
-            bestDiffX = diff;
-            snappedX = oRight - dWidth;
-            activeGuidesList.push({ type: "v", x: oRight, y1: Math.min(dTop, oTop) - 100, y2: Math.max(dBottom, oBottom) + 100 });
-          }
-          // 4. Trái - Phải
-          diff = Math.abs(dLeft - oRight);
-          if (diff < bestDiffX) {
-            bestDiffX = diff;
-            snappedX = oRight;
-            activeGuidesList.push({ type: "v", x: oRight, y1: Math.min(dTop, oTop) - 100, y2: Math.max(dBottom, oBottom) + 100 });
-          }
-          // 5. Phải - Trái
-          diff = Math.abs(dRight - oLeft);
-          if (diff < bestDiffX) {
-            bestDiffX = diff;
-            snappedX = oLeft - dWidth;
-            activeGuidesList.push({ type: "v", x: oLeft, y1: Math.min(dTop, oTop) - 100, y2: Math.max(dBottom, oBottom) + 100 });
-          }
-
-          // Kiểm tra Y Alignment (Horizontal lines)
-          // 1. Trên - Trên
-          diff = Math.abs(dTop - oTop);
-          if (diff < bestDiffY) {
-            bestDiffY = diff;
-            snappedY = oTop;
-            activeGuidesList.push({ type: "h", y: oTop, x1: Math.min(dLeft, oLeft) - 100, x2: Math.max(dRight, oRight) + 100 });
-          }
-          // 2. Giữa - Giữa
-          diff = Math.abs(dCenterY - oCenterY);
-          if (diff < bestDiffY) {
-            bestDiffY = diff;
-            snappedY = oCenterY - dHeight / 2;
-            activeGuidesList.push({ type: "h", y: oCenterY, x1: Math.min(dLeft, oLeft) - 100, x2: Math.max(dRight, oRight) + 100 });
-          }
-          // 3. Dưới - Dưới
-          diff = Math.abs(dBottom - oBottom);
-          if (diff < bestDiffY) {
-            bestDiffY = diff;
-            snappedY = oBottom - dHeight;
-            activeGuidesList.push({ type: "h", y: oBottom, x1: Math.min(dLeft, oLeft) - 100, x2: Math.max(dRight, oRight) + 100 });
-          }
-          // 4. Trên - Dưới
-          diff = Math.abs(dTop - oBottom);
-          if (diff < bestDiffY) {
-            bestDiffY = diff;
-            snappedY = oBottom;
-            activeGuidesList.push({ type: "h", y: oBottom, x1: Math.min(dLeft, oLeft) - 100, x2: Math.max(dRight, oRight) + 100 });
-          }
-          // 5. Dưới - Trên
-          diff = Math.abs(dBottom - oTop);
-          if (diff < bestDiffY) {
-            bestDiffY = diff;
-            snappedY = oTop - dHeight;
-            activeGuidesList.push({ type: "h", y: oTop, x1: Math.min(dLeft, oLeft) - 100, x2: Math.max(dRight, oRight) + 100 });
-          }
-        });
-
-        // Áp dụng Snap vị trí nếu khớp
-        if (snappedX !== null) {
-          positionChange.position.x = snappedX;
-          activeGuidesList = activeGuidesList.filter(g => g.type === "v" && (Math.abs(g.x - snappedX) < 2 || Math.abs(g.x - (snappedX + dWidth / 2)) < 2 || Math.abs(g.x - (snappedX + dWidth)) < 2));
-        }
-        if (snappedY !== null) {
-          positionChange.position.y = snappedY;
-          activeGuidesList = activeGuidesList.filter(g => g.type === "h" && (Math.abs(g.y - snappedY) < 2 || Math.abs(g.y - (snappedY + dHeight / 2)) < 2 || Math.abs(g.y - (snappedY + dHeight)) < 2));
-        }
-      }
+      const result = calculateSmartGuides(
+        nodesRef.current,
+        positionChange.id,
+        positionChange.position
+      );
+      nextChanges = changes.map(change => change === positionChange
+        ? { ...change, position: result.position }
+        : change
+      );
+      updateSmartGuideOverlay(result.guides);
+    } else {
+      updateSmartGuideOverlay([]);
     }
 
-    setSmartGuides(activeGuidesList);
-
     if (altDragRef.current) {
-      const redirectedChanges = changes.map(change => {
+      const redirectedChanges = nextChanges.map(change => {
         if (change.type === "position" && altDragRef.current[change.id]) {
           const cloneId = altDragRef.current[change.id];
           return {
@@ -408,11 +329,11 @@ function InfiniteCanvasInner({
       });
       onNodesChange(redirectedChanges);
     } else {
-      onNodesChange(changes);
+      onNodesChange(nextChanges);
     }
-  }, [onNodesChange, smartGuide]);
+  }, [onNodesChange, smartGuide, updateSmartGuideOverlay]);
 
-  const handleNodeDragStart = useCallback((event, node) => {
+  const handleNodeDragStart = useCallback((event) => {
     setCanvasInteracting(true);
 
     if (event.altKey) {
@@ -461,12 +382,12 @@ function InfiniteCanvasInner({
     }
   }, [setNodes]);
 
-  const handleNodeDragStop = useCallback((event, node) => {
+  const handleNodeDragStop = useCallback(() => {
     setCanvasInteracting(false);
     altDragRef.current = null;
     altDragPositionsRef.current = null;
-    setSmartGuides([]);
-  }, []);
+    updateSmartGuideOverlay([]);
+  }, [updateSmartGuideOverlay]);
 
   const selectedNodes = useMemo(() => nodes.filter(n => n.selected), [nodes]);
   const hasMultipleSelected = selectedNodes.length >= 2;
@@ -515,7 +436,7 @@ function InfiniteCanvasInner({
     const distributedXPositions = {};
     if (nodeInfos.length > 2) {
       let currentX = minLeft;
-      sortedByLeft.forEach((n, index) => {
+      sortedByLeft.forEach((n) => {
         distributedXPositions[n.id] = currentX;
         currentX += n.width + horizontalGap;
       });
@@ -531,7 +452,7 @@ function InfiniteCanvasInner({
     const distributedYPositions = {};
     if (nodeInfos.length > 2) {
       let currentY = minTop;
-      sortedByTop.forEach((n, index) => {
+      sortedByTop.forEach((n) => {
         distributedYPositions[n.id] = currentY;
         currentY += n.height + verticalGap;
       });
@@ -1854,50 +1775,6 @@ function InfiniteCanvasInner({
     inputImages, refreshInputImages, updateInputImages
   ]);
 
-  const renderedSmartGuides = useMemo(() => {
-    if (!smartGuides || smartGuides.length === 0 || !reactFlowRef.current) return null;
-    const vp = reactFlowRef.current.getViewport();
-    return (
-      <svg className="canvasSmartGuidesOverlay">
-        {smartGuides.map((g, idx) => {
-          if (g.type === "v") {
-            const x = g.x * vp.zoom + vp.x;
-            const y1 = g.y1 * vp.zoom + vp.y;
-            const y2 = g.y2 * vp.zoom + vp.y;
-            return (
-              <line
-                key={`v-${idx}`}
-                x1={x}
-                y1={y1}
-                x2={x}
-                y2={y2}
-                stroke="#ff4d4f"
-                strokeWidth="1.5"
-                strokeDasharray="4 4"
-              />
-            );
-          } else {
-            const y = g.y * vp.zoom + vp.y;
-            const x1 = g.x1 * vp.zoom + vp.x;
-            const x2 = g.x2 * vp.zoom + vp.x;
-            return (
-              <line
-                key={`h-${idx}`}
-                x1={x1}
-                y1={y}
-                x2={x2}
-                y2={y}
-                stroke="#ff4d4f"
-                strokeWidth="1.5"
-                strokeDasharray="4 4"
-              />
-            );
-          }
-        })}
-      </svg>
-    );
-  }, [smartGuides]);
-
   const alignmentBarPosition = useMemo(() => {
     if (!reactFlowRef.current || selectedNodes.length < 2) return null;
     const vp = reactFlowRef.current.getViewport();
@@ -2212,6 +2089,7 @@ function InfiniteCanvasInner({
               nodesDraggable={activeCanvasTool === "select"}
               nodesConnectable={activeCanvasTool === "select"}
               elementsSelectable={activeCanvasTool === "select"}
+              onlyRenderVisibleElements
               snapToGrid={snapGrid}
               snapGrid={[snapGridSize, snapGridSize]}
               edgesReconnectable
@@ -2267,7 +2145,22 @@ function InfiniteCanvasInner({
             </ReactFlow>
             </CanvasGraphContext.Provider>
           </CanvasActionsContext.Provider>
-          {renderedSmartGuides}
+          <svg className="canvasSmartGuidesOverlay" aria-hidden="true">
+            <line
+              ref={smartGuideVerticalRef}
+              style={{ display: "none" }}
+              stroke="#ff4d4f"
+              strokeWidth="1.5"
+              strokeDasharray="4 4"
+            />
+            <line
+              ref={smartGuideHorizontalRef}
+              style={{ display: "none" }}
+              stroke="#ff4d4f"
+              strokeWidth="1.5"
+              strokeDasharray="4 4"
+            />
+          </svg>
           {renderAlignmentBar()}
         </div>
 

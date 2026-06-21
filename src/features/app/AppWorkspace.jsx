@@ -25,8 +25,12 @@ import {
 import { cloneDefaultAdjustments } from "../../lib/imageAdjustments";
 import { DEFAULT_HEALING_BRUSH_SIZE } from "../../lib/healingBrush";
 import { PreviewPanel } from "../../components/PreviewPanel";
-import { SettingsModal } from "../../components/SettingsModal";
-import { ImageEditorModal, TemplateEditorModal } from "../../components/lazyModals";
+import {
+  ImageEditorModal,
+  preloadSettingsModal,
+  SettingsModal,
+  TemplateEditorModal
+} from "../../components/lazyModals";
 import { formatOutputTimingLabel, formatRhCoins } from "../../lib/runLog";
 import { PresetBar } from "../../components/PresetBar";
 import { RunControls } from "../../components/RunControls";
@@ -78,7 +82,7 @@ import { ComfyUiLogomark } from "../../components/icons/ComfyUiIcon";
 import { RunningHubLogomark } from "../../components/icons/RunningHubIcon";
 import { AppleShortcutsIcon } from "../../components/icons/AppleShortcutsIcon";
 import { localizeRuntimeMessage, useI18n } from "../../i18n/I18nContext";
-import { MAIN_FONT_OPTIONS, THEME_OPTIONS } from "../../constants/appearance";
+import { MAIN_FONT_OPTIONS, syncMainFontStylesheet, THEME_OPTIONS } from "../../constants/appearance";
 import { getSetting, setSetting } from "../../lib/appSettings";
 import { APP_VERSION_LABEL } from "../../constants/app";
 import { useAppUpdate } from "../../hooks/useAppUpdate";
@@ -813,9 +817,10 @@ export function AppWorkspace() {
 
   // Persist font
   useEffect(() => {
+    syncMainFontStylesheet(selectedMainFont);
     document.documentElement.style.setProperty("--main-font", selectedMainFont.family);
     setSetting("appearance.mainFont", mainFont);
-  }, [mainFont, selectedMainFont.family]);
+  }, [mainFont, selectedMainFont]);
 
   // Persist server address
   useEffect(() => {
@@ -1751,6 +1756,8 @@ export function AppWorkspace() {
           <button
             type="button"
             className={`appTopBarServer${topBarShowsRh ? " is-runninghub" : ""}`}
+            onPointerEnter={preloadSettingsModal}
+            onFocus={preloadSettingsModal}
             onClick={() => {
               setInfoOpen(false);
               setSettingsTab(
@@ -1805,7 +1812,15 @@ export function AppWorkspace() {
             ) : null}
           </button>
 
-          <button className="appTopBarButton" onClick={() => { setInfoOpen(false); setSettingsOpen(true); }} title={`${t("settings.open")} (Cmd/Ctrl + ,)`} aria-label={t("settings.open")} aria-keyshortcuts="Meta+Comma Control+Comma">
+          <button
+            className="appTopBarButton"
+            onPointerEnter={preloadSettingsModal}
+            onFocus={preloadSettingsModal}
+            onClick={() => { setInfoOpen(false); setSettingsOpen(true); }}
+            title={`${t("settings.open")} (Cmd/Ctrl + ,)`}
+            aria-label={t("settings.open")}
+            aria-keyshortcuts="Meta+Comma Control+Comma"
+          >
             <Settings2 size={15} />
           </button>
           <button
@@ -2152,7 +2167,7 @@ export function AppWorkspace() {
       </>
       )}
 
-      <SettingsModalProvider value={{
+      {settingsOpen ? <SettingsModalProvider value={{
         open: settingsOpen,
         onClose: () => setSettingsOpen(false),
         settingsTab,
@@ -2208,8 +2223,10 @@ export function AppWorkspace() {
         maxHistoryDisplay,
         setMaxHistoryDisplay
       }}>
-        <SettingsModal />
-      </SettingsModalProvider>
+        <Suspense fallback={null}>
+          <SettingsModal />
+        </Suspense>
+      </SettingsModalProvider> : null}
 
       {infoOpen ? (
         <div className="modalBackdrop infoBackdrop" role="presentation" onMouseDown={() => setInfoOpen(false)}>

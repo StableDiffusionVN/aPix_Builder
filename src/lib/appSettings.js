@@ -192,24 +192,26 @@ async function migrateLegacyStore({ key, endpoint, responseKey, merge }) {
 }
 
 async function migrateLegacyFileStores() {
-  await migrateLegacyStore({
-    key: "comfyui-build:presets:v1",
-    endpoint: "/api/workflow-presets",
-    responseKey: "presets",
-    merge: mergeWorkflowPresets
-  });
-  await migrateLegacyStore({
-    key: "image-editor-custom-presets",
-    endpoint: "/api/presets",
-    responseKey: "presets",
-    merge: mergeListsById
-  });
-  await migrateLegacyStore({
-    key: "comfyui-build:runninghub-saved-apps:v1",
-    endpoint: "/api/runninghub/saved-apps",
-    responseKey: "apps",
-    merge: mergeListsById
-  });
+  await Promise.all([
+    migrateLegacyStore({
+      key: "comfyui-build:presets:v1",
+      endpoint: "/api/workflow-presets",
+      responseKey: "presets",
+      merge: mergeWorkflowPresets
+    }),
+    migrateLegacyStore({
+      key: "image-editor-custom-presets",
+      endpoint: "/api/presets",
+      responseKey: "presets",
+      merge: mergeListsById
+    }),
+    migrateLegacyStore({
+      key: "comfyui-build:runninghub-saved-apps:v1",
+      endpoint: "/api/runninghub/saved-apps",
+      responseKey: "apps",
+      merge: mergeListsById
+    })
+  ]);
 }
 
 export function hasRhStoredSecrets(runningHub) {

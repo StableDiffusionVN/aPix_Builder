@@ -86,8 +86,9 @@ export function workflowFileName(name = "Workflow") {
   const safeName = String(name)
     .normalize("NFKD")
     .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-zA-Z0-9_ -]+/g, "-")
-    .trim()
+    .replace(/[^a-zA-Z0-9_-]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
     .slice(0, 80);
   return `${safeName || "workflow"}.apix-workflow.json`;
 }

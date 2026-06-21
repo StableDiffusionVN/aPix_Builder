@@ -359,11 +359,11 @@ export function useCanvasProject() {
   }, [loadProject, reloadLibraryWorkflows]);
 
   useEffect(() => {
-    if (!loaded || !persistEnabled.current) return undefined;
+    if (!loaded || !persistEnabled.current || interactionActiveRef.current) return undefined;
     setWorkspaceSaveState("pending");
     if (persistTimer.current) window.clearTimeout(persistTimer.current);
     persistTimer.current = window.setTimeout(() => {
-      if (interactionActiveRef.current) return;
+      persistTimer.current = null;
       setWorkspaceSaveState("saving");
       fetch("/api/canvas-project", {
         method: "POST",
@@ -390,7 +390,7 @@ export function useCanvasProject() {
   }, [nodes, edges, viewport, loaded]);
 
   useEffect(() => {
-    if (!loaded || suppressLibraryDirtyRef.current || !activeId) return;
+    if (!loaded || suppressLibraryDirtyRef.current || interactionActiveRef.current || !activeId) return;
     const baseline = libraryBaselineRef.current.get(activeId);
     const current = serializeBaseline(nodes, edges);
     if (baseline === undefined) {
@@ -409,11 +409,15 @@ export function useCanvasProject() {
   }, [nodes, edges, activeId, loaded]);
 
   const isTabUnsavedToLibrary = useCallback((projectId) => {
+    // The tick intentionally invalidates this selector after the backing Set changes.
+    void libraryDirtyTick;
     const project = projects.find(item => item.id === projectId);
     return isProjectUnsavedToLibrary(project, libraryDirtyTabsRef.current);
   }, [projects, libraryDirtyTick]);
 
   const needsCloseConfirmation = useCallback((projectId) => {
+    // The tick intentionally invalidates this selector after the backing Set changes.
+    void libraryDirtyTick;
     const project = projects.find(item => item.id === projectId);
     if (!project) return false;
     if (libraryDirtyTabsRef.current.has(projectId)) return true;

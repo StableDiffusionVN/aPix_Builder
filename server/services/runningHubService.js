@@ -57,10 +57,6 @@ export function createRunningHubService({ storage, runCoordinator, readBody, sen
     ensureRunLogSession
   } = runCoordinator;
 
-  function safeOutputName(rawName = "") {
-    return path.basename(String(rawName)).replace(/[^\w.-]+/g, "_");
-  }
-
   function normalizeRhSavedApps(raw) {
     if (!Array.isArray(raw)) return [];
     const seen = new Set();

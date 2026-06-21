@@ -32,8 +32,6 @@ export function createStorageService({ resourceRoot, dataRoot, readBody, send, h
   let outputDir;
   let outputHistoryPath;
   let personalDataDir;
-  let rhSavedAppsFilePath;
-  let rhDefaultAppsFilePath;
   let templates;
   let appSettingsPath;
   let canvasProjectPath;
@@ -42,9 +40,6 @@ export function createStorageService({ resourceRoot, dataRoot, readBody, send, h
   let presetsDir;
   let presetsFilePath;
   let workflowPresetsFilePath;
-  const legacyRhAppsDir = path.join(dataRoot, "rh-apps");
-  const legacyRhSavedAppsFilePath = path.join(legacyRhAppsDir, "apps.json");
-  const legacyRhDefaultAppsFilePath = path.join(legacyRhAppsDir, "defaults.json");
 
   function resolveStoragePath(value, fallback) {
     const trimmed = String(value || "").trim();
@@ -206,8 +201,6 @@ export function createStorageService({ resourceRoot, dataRoot, readBody, send, h
     userTemplatesDir = nextUserTemplatesDir;
     templatesRhDir = nextTemplatesRhDir;
     workflowsDir = nextWorkflowsDir;
-    rhSavedAppsFilePath = path.join(templatesRhDir, "apps.json");
-    rhDefaultAppsFilePath = path.join(configDir, "runninghub-default-apps.json");
     await applyPersonalDataPaths(normalized.personalDataDir, previousPersonalDataDir);
     templates = createTemplateService({
       configDir,

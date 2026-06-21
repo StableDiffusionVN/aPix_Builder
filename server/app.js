@@ -20,6 +20,7 @@ import { createStorageService } from "./services/storageService.js";
 import { createComfyService } from "./services/comfyService.js";
 import { createRunningHubService } from "./services/runningHubService.js";
 import { createShortcutService } from "./services/shortcutService.js";
+import { createBackendRunQueueStore } from "./lib/backendRunQueueStore.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
@@ -35,6 +36,7 @@ const backendRunQueue = [];
 let backendRunQueueActive = false;
 let backendRunQueueCurrent = null;
 let backendRunQueueWakeTimer = null;
+let backendRunQueueStore = null;
 const pendingSseClients = new Map();
 
 function broadcastRunEvent(run, message) {
@@ -81,6 +83,40 @@ const QUEUE_RUN_ENDPOINTS = new Set([
   "/api/runninghub/run",
   "/api/runninghub-wf/run"
 ]);
+
+function persistBackendRunQueue() {
+  if (!backendRunQueueStore) return Promise.resolve();
+  backendRunQueueStore.setSnapshot({
+    pending: [...backendRunQueue],
+    current: backendRunQueueCurrent
+  });
+  return backendRunQueueStore.persist();
+}
+
+async function restoreBackendRunQueueFromDisk() {
+  if (!backendRunQueueStore) return;
+  const saved = await backendRunQueueStore.load();
+  if (saved.current) {
+    const job = saved.current;
+    ensureBackendQueueLogSession(job, "running");
+    appendRunLog(job.runId, "error", "Job bị gián đoạn khi ứng dụng khởi động lại", {
+      provider: queuedJobProvider(job.endpoint, job.meta)
+    });
+    endRunLogSession(job.runId, "error", { error: "interrupted_by_restart" });
+  }
+  for (const job of saved.pending) {
+    backendRunQueue.push(job);
+    if (!isBackendQueueAlreadyLogged(job.runId)) {
+      ensureBackendQueueLogSession(job, "queued");
+      appendRunLog(job.runId, "queue", `Khôi phục hàng chờ backend: ${job.endpoint}`, {
+        provider: queuedJobProvider(job.endpoint, job.meta)
+      });
+    }
+  }
+  backendRunQueueStore.setSnapshot({ pending: backendRunQueue, current: null });
+  await backendRunQueueStore.persist();
+  drainBackendRunQueue();
+}
 
 function queuedJobProvider(endpoint, meta = {}) {
   if (meta.provider) return meta.provider;
@@ -157,6 +193,7 @@ async function executeQueuedBackendRun(job) {
   const runId = job.body?.runId || job.runId;
   const provider = queuedJobProvider(job.endpoint, job.meta);
   backendRunQueueCurrent = job;
+  void persistBackendRunQueue();
   updateRunLogSession(runId, { status: "running" });
   appendRunLog(runId, "info", `Backend queue dispatch: ${job.endpoint}`, { provider });
   try {
@@ -193,11 +230,13 @@ function drainBackendRunQueue() {
     return;
   }
   backendRunQueue.shift();
+  void persistBackendRunQueue();
   backendRunQueueActive = true;
   void executeQueuedBackendRun(job)
     .finally(() => {
       if (backendRunQueueCurrent?.runId === job.runId) backendRunQueueCurrent = null;
       backendRunQueueActive = false;
+      void persistBackendRunQueue();
       queueMicrotask(drainBackendRunQueue);
     });
 }
@@ -211,6 +250,7 @@ function cancelQueuedBackendRun(runId) {
     provider: queuedJobProvider(job.endpoint, job.meta)
   });
   endRunLogSession(runId, "cancelled");
+  void persistBackendRunQueue();
   return true;
 }
 
@@ -228,6 +268,7 @@ function clearQueuedBackendRuns(filter = null) {
     });
     endRunLogSession(runId, "cancelled");
   }
+  void persistBackendRunQueue();
   return removed.length;
 }
 
@@ -313,6 +354,7 @@ async function handleRunQueueSubmit(req, res) {
     }
     accepted.push(queuedRunSummary(queued));
   }
+  void persistBackendRunQueue();
   drainBackendRunQueue();
   send(res, 200, { accepted: accepted.length, jobs: accepted });
 }
@@ -603,6 +645,11 @@ export async function initializeServerRuntime() {
   await initRunLogStore();
   await storage.init();
   runningHub.syncPaths();
+  const { personalDataDir } = storage.getPaths();
+  backendRunQueueStore = createBackendRunQueueStore({
+    filePath: path.join(personalDataDir, "backend-run-queue.json")
+  });
+  await restoreBackendRunQueueFromDisk();
 }
 
 export const routeContext = {

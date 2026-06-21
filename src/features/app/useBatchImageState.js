@@ -2,7 +2,6 @@ import { useCallback } from "react";
 import {
   expandImageBatchByKeys,
   expandImageBatchValues,
-  flattenInputs,
   requestPayload
 } from "../../lib/template";
 import { expandFolderImageValues } from "../../lib/localImageFolder.js";

@@ -30,6 +30,16 @@ const dataRoot = path.resolve(process.env.APIX_DATA_ROOT || root);
 const frontendDir = path.join(resourceRoot, "dist");
 
 export const port = Number(process.env.PORT || 8787);
+let listeningPort = port;
+
+/** OS-assigned port after listen(); differs from `port` when PORT=0 (Electron). */
+export function setListeningPort(nextPort) {
+  listeningPort = Number(nextPort) || port;
+}
+
+export function getListeningPort() {
+  return listeningPort;
+}
 
 const activeRuns = new Map();
 const activeRhRuns = new Map();
@@ -197,7 +207,7 @@ async function executeQueuedBackendRun(job) {
   updateRunLogSession(runId, { status: "running" });
   appendRunLog(runId, "info", `Backend queue dispatch: ${job.endpoint}`, { provider });
   try {
-    const response = await fetch(`http://127.0.0.1:${port}${job.endpoint}`, {
+    const response = await fetch(`http://127.0.0.1:${getListeningPort()}${job.endpoint}`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(job.body || {})

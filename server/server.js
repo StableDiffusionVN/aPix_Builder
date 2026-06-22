@@ -1,5 +1,12 @@
 import http from "node:http";
-import { cleanupUploads, initializeServerRuntime, port, routeContext, serveFrontend } from "./app.js";
+import {
+  cleanupUploads,
+  initializeServerRuntime,
+  port,
+  routeContext,
+  serveFrontend,
+  setListeningPort
+} from "./app.js";
 import { createImagesRoutes } from "./routes/images.js";
 import { createPresetsRoutes } from "./routes/presets.js";
 import { createRunLogRoutes } from "./routes/run-log.js";
@@ -62,6 +69,7 @@ export const serverReady = initializeServerRuntime()
       server.off("error", reject);
       const address = server.address();
       const activePort = typeof address === "object" && address ? address.port : port;
+      setListeningPort(activePort);
       console.log(`ComfyUI YAML app server listening on http://127.0.0.1:${activePort}`);
       cleanupUploads().catch(console.error);
       setInterval(() => cleanupUploads().catch(console.error), 6 * 60 * 60 * 1000).unref();

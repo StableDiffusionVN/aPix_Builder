@@ -44,6 +44,7 @@ import { usePresets } from "../../hooks/usePresets";
 import { useServerList } from "../../hooks/useServerList";
 import { useWorkspace } from "../../hooks/useWorkspace";
 import { useImageViewer } from "../../hooks/useImageViewer";
+import { notifyWorkflowCompleted, notifyWorkflowStarted } from "../../lib/browserNotify.js";
 import { useRunOrchestration } from "../../hooks/useRunOrchestration";
 import { useSidebarLayout } from "../../hooks/useSidebarLayout";
 import { useRunLogHistory } from "../../hooks/useRunLogHistory";
@@ -276,12 +277,29 @@ export function AppWorkspace() {
     }
     setSelectedOutputIndex(0);
     if (notifyEnabled && typeof Notification !== "undefined" && Notification.permission === "granted") {
-      const body = isRunningHubMode(executionMode)
-        ? t("notify.rhComplete")
-        : t("notify.workflowComplete");
-      new Notification("aPix Builder", { body, icon: "/favicon.png" });
+      notifyWorkflowCompleted({ enabled: true, t, isRh: isRunningHubMode(executionMode) });
     }
   };
+
+  const handleCanvasRunNotify = useCallback((event) => {
+    if (!event || event.type === "error") return;
+    if (event.type === "start") {
+      notifyWorkflowStarted({
+        enabled: notifyEnabled,
+        t,
+        label: event.label || "Canvas",
+        isRh: Boolean(event.isRh)
+      });
+      return;
+    }
+    if (event.type === "complete") {
+      notifyWorkflowCompleted({
+        enabled: notifyEnabled,
+        t,
+        isRh: Boolean(event.isRh)
+      });
+    }
+  }, [notifyEnabled, t]);
 
   const {
     running, activeRunId, runQueue,
@@ -1650,6 +1668,7 @@ export function AppWorkspace() {
             restoreHistory={restoreHistory}
             logRhApiKey={rhPrimaryApiKey}
             onRuntimeStateChange={handleCanvasRuntimeChange}
+            onRunNotify={handleCanvasRunNotify}
             workflowToolbarHost={workflowToolbarHost}
             smartGuide={canvasSmartGuide}
             snapGrid={canvasSnapGrid}

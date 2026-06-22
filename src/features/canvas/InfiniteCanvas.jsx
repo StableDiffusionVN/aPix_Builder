@@ -84,6 +84,7 @@ import {
 import { useCanvasRunSync } from "./useCanvasRunSync.js";
 import {
   createCanvasRunJob,
+  snapshotHasRhSteps,
   snapshotRhApiKeyReady
 } from "./canvasRunSnapshot.js";
 import { expandCanvasRunJobImageBatches } from "./canvasBatchImages.js";
@@ -94,6 +95,7 @@ import {
   resolveConnectionOutputColorIndex,
   resolveEdgeOutputColorIndex
 } from "./canvasOutputColors.js";
+import { canvasMultiSelectKeyCode } from "./canvasSelection.js";
 
 const nodeTypes = { step: StepNode, source: SourceNode };
 const EMPTY_INPUT_IMAGES = [];
@@ -171,6 +173,7 @@ function InfiniteCanvasInner({
   restoreHistory,
   logRhApiKey,
   onRuntimeStateChange,
+  onRunNotify = NOOP,
   workflowToolbarHost = null,
   smartGuide = true,
   snapGrid = false,
@@ -543,18 +546,6 @@ function InfiniteCanvasInner({
         };
       });
     }, { history: true });
-  }, [setNodes]);
-
-  const handleNodeClick = useCallback((event, node) => {
-    if (event.shiftKey) {
-      event.preventDefault();
-      event.stopPropagation();
-      setNodes(currentNodes =>
-        currentNodes.map(n =>
-          n.id === node.id ? { ...n, selected: !n.selected } : n
-        )
-      );
-    }
   }, [setNodes]);
 
   // Keyboard shortcut listener for Cmd+C, Cmd+V, and Delete/Backspace
@@ -994,6 +985,17 @@ function InfiniteCanvasInner({
     }
   }, [updateNodeData]);
 
+  const onRunNotifyRef = useRef(onRunNotify);
+  useEffect(() => { onRunNotifyRef.current = onRunNotify; }, [onRunNotify]);
+
+  const notifyCanvasRun = useCallback((event) => {
+    onRunNotifyRef.current?.(event);
+  }, []);
+
+  const isRhSnapshot = useCallback((snapshot) => (
+    snapshotHasRhSteps(snapshot)
+  ), []);
+
   const isLocalCanvasRun = useCallback((runId) => (
     Boolean(runId)
     && activeRunIdRef.current === runId
@@ -1024,6 +1026,7 @@ function InfiniteCanvasInner({
       runQueueRef.current.some(job => job.runId === runId)
       || backendQueuedRunIdsRef.current.has(runId)
     ),
+    onRunNotify: notifyCanvasRun,
     onRunSettled: onCanvasRunSettled
   });
 
@@ -1195,6 +1198,11 @@ function InfiniteCanvasInner({
 
     setNodeRunning(true);
     pipelineCancelledRef.current = false;
+    const liveNode = snapshot.nodes.find(item => item.id === id);
+    const runLabel = liveNode?.data?.name || id;
+    const runIsRh = isRhSnapshot(snapshot);
+    notifyCanvasRun({ type: "start", label: runLabel, isRh: runIsRh });
+    let completed = false;
     try {
       const live = snapshot.nodes.map(item => ({ ...item, data: { ...item.data } }));
       const node = live.find(item => item.id === id);
@@ -1323,6 +1331,7 @@ function InfiniteCanvasInner({
         await runTarget();
       }
       refreshOutputHistory?.();
+      completed = true;
     } catch (err) {
       if (err.name === "AbortError" || pipelineCancelledRef.current) {
         updateNodeData(id, { status: "idle", error: "" });
@@ -1333,6 +1342,9 @@ function InfiniteCanvasInner({
         error: err.message
       });
     } finally {
+      if (completed) {
+        notifyCanvasRun({ type: "complete", isRh: runIsRh });
+      }
       setNodeRunning(false);
       runLockRef.current = false;
       queueMicrotask(() => drainRunQueueRef.current());
@@ -1342,7 +1354,9 @@ function InfiniteCanvasInner({
     updateNodeData,
     runStepInLive,
     applyStepSuccess,
-    refreshOutputHistory
+    refreshOutputHistory,
+    notifyCanvasRun,
+    isRhSnapshot
   ]);
 
   const executeGraphRun = useCallback(async (job) => {
@@ -1353,8 +1367,15 @@ function InfiniteCanvasInner({
     const order = topoOrder(live, runEdges);
     pipelineCancelledRef.current = false;
     setGraphRunning(true);
+    const runIsRh = isRhSnapshot(snapshot);
+    notifyCanvasRun({
+      type: "start",
+      label: job.jobLabel || "Canvas pipeline",
+      isRh: runIsRh
+    });
 
     let pipelineIntroLogged = false;
+    let completed = false;
     try {
       for (const id of order) {
         if (pipelineCancelledRef.current) break;
@@ -1390,8 +1411,12 @@ function InfiniteCanvasInner({
       }
       if (!pipelineCancelledRef.current) {
         refreshOutputHistory?.();
+        completed = true;
       }
     } finally {
+      if (completed) {
+        notifyCanvasRun({ type: "complete", isRh: runIsRh });
+      }
       setGraphRunning(false);
       runLockRef.current = false;
       if (pipelineCancelledRef.current) {
@@ -1406,7 +1431,9 @@ function InfiniteCanvasInner({
     updateNodeData,
     refreshOutputHistory,
     syncLiveToRefs,
-    resetRunningNodes
+    resetRunningNodes,
+    notifyCanvasRun,
+    isRhSnapshot
   ]);
 
   executeNodeRunRef.current = executeNodeRun;
@@ -1973,10 +2000,6 @@ function InfiniteCanvasInner({
         color: "var(--color-text, #fff)",
         pointerEvents: "auto"
       }}>
-        <div style={{ fontSize: "12px", fontWeight: "600", marginRight: "8px", opacity: 0.8, borderRight: "1px solid var(--color-border, rgba(255, 255, 255, 0.15))", paddingRight: "10px", display: "flex", alignItems: "center", height: "20px" }}>
-          {t("canvas.align.title", { count: selectedNodes.length })}
-        </div>
-
         <button
           onClick={() => alignSelectedNodes("left")}
           style={{ background: "none", border: "none", padding: "6px", borderRadius: "4px", color: "inherit", cursor: "pointer", display: "flex" }}
@@ -2059,22 +2082,20 @@ function InfiniteCanvasInner({
 
         <button
           onClick={() => alignSelectedNodes("syncTallest")}
-          style={{ background: "none", border: "none", padding: "6px", borderRadius: "4px", color: "inherit", cursor: "pointer", display: "flex", alignItems: "center", gap: "4px", fontSize: "11px", fontWeight: 500 }}
+          style={{ background: "none", border: "none", padding: "6px", borderRadius: "4px", color: "inherit", cursor: "pointer", display: "flex" }}
           className="alignmentBarBtn"
           title={t("canvas.align.syncTallest")}
         >
-          <Maximize2 size={14} />
-          <span>{t("canvas.align.tallest")}</span>
+          <Maximize2 size={16} />
         </button>
 
         <button
           onClick={() => alignSelectedNodes("syncShortest")}
-          style={{ background: "none", border: "none", padding: "6px", borderRadius: "4px", color: "inherit", cursor: "pointer", display: "flex", alignItems: "center", gap: "4px", fontSize: "11px", fontWeight: 500 }}
+          style={{ background: "none", border: "none", padding: "6px", borderRadius: "4px", color: "inherit", cursor: "pointer", display: "flex" }}
           className="alignmentBarBtn"
           title={t("canvas.align.syncShortest")}
         >
-          <Minimize2 size={14} />
-          <span>{t("canvas.align.shortest")}</span>
+          <Minimize2 size={16} />
         </button>
       </div>
     );
@@ -2195,7 +2216,6 @@ function InfiniteCanvasInner({
                 applyStoredViewport(instance, viewport);
               }}
               onNodesChange={handleNodesChange}
-              onNodeClick={handleNodeClick}
               onNodeDragStart={handleNodeDragStart}
               onNodeDragStop={handleNodeDragStop}
               onEdgesChange={onEdgesChange}
@@ -2230,7 +2250,7 @@ function InfiniteCanvasInner({
               connectionRadius={24}
               panOnDrag={true}
               selectionOnDrag={false}
-              selectionKeyCode="Shift"
+              selectionKeyCode={canvasMultiSelectKeyCode()}
               multiSelectionKeyCode={null}
               selectionMode="partial"
               nodesDraggable={activeCanvasTool === "select"}

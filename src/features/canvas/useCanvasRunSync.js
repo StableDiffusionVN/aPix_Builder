@@ -49,10 +49,12 @@ export function useCanvasRunSync({
   reconciledStaleRunIdsRef,
   isLocalRun,
   isQueuedLocally,
+  onRunNotify,
   onRunSettled
 }) {
   const syncRunWatchersRef = useRef(new Map());
   const completingRunIdsRef = useRef(new Set());
+  const notifiedStartRunIdsRef = useRef(new Set());
   const syncingRef = useRef(false);
   const lastSyncAtRef = useRef(0);
   const syncTimerRef = useRef(null);
@@ -61,10 +63,12 @@ export function useCanvasRunSync({
   const activeIdRef = useRef(activeId);
   const syncWithBackendRef = useRef(async () => {});
   const onRunSettledRef = useRef(onRunSettled);
+  const onRunNotifyRef = useRef(onRunNotify);
 
   useEffect(() => { runLogSessionsRef.current = runLogSessions || []; }, [runLogSessions]);
   useEffect(() => { activeIdRef.current = activeId; }, [activeId]);
   useEffect(() => { onRunSettledRef.current = onRunSettled; }, [onRunSettled]);
+  useEffect(() => { onRunNotifyRef.current = onRunNotify; }, [onRunNotify]);
 
   const notifyRunSettled = useCallback(() => {
     onRunSettledRef.current?.();
@@ -91,9 +95,21 @@ export function useCanvasRunSync({
       setNodeRunning(true);
       setGraphRunning(false);
     }
+    if (
+      !isLocalRun?.(session.runId)
+      && !notifiedStartRunIdsRef.current.has(session.runId)
+    ) {
+      notifiedStartRunIdsRef.current.add(session.runId);
+      onRunNotifyRef.current?.({
+        type: "start",
+        label: session.jobLabel || session.canvasNodeName || "Canvas",
+        isRh: session.provider === "runninghub"
+      });
+    }
   }, [
     activeRunIdRef,
     activeRunKindRef,
+    isLocalRun,
     nodesRef,
     setActiveRunId,
     setGraphRunning,
@@ -116,6 +132,12 @@ export function useCanvasRunSync({
         durationMs: historyItem?.durationMs ?? null,
         rhCoins: historyItem?.rhCoins ?? null
       });
+      if (!isLocalRun?.(session.runId)) {
+        onRunNotifyRef.current?.({
+          type: "complete",
+          isRh: session.provider === "runninghub"
+        });
+      }
       observedActiveRunIdsRef.current.delete(session.runId);
       if (activeRunIdRef.current === session.runId) {
         activeRunIdRef.current = "";
@@ -133,6 +155,7 @@ export function useCanvasRunSync({
     activeRunIdRef,
     activeRunKindRef,
     cleanupWatcher,
+    isLocalRun,
     nodesRef,
     notifyRunSettled,
     refreshOutputHistory,

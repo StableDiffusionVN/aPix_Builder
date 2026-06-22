@@ -138,7 +138,27 @@ export function CanvasWorkflowToolbar({
 
   const disabled = Boolean(busyAction) || closeDialogBusy;
   const activeInLibrary = Boolean(isTabInLibrary?.(activeId));
-  const libraryDotClass = activeInLibrary ? "is-library-saved" : "is-library-unsaved";
+  const dirtyToLibrary = Boolean(isTabUnsavedToLibrary?.(activeId));
+  const statusDot = (() => {
+    if (saveState === "error") {
+      return {
+        className: "is-error",
+        title: t("canvas.workflow.saveState.error")
+      };
+    }
+    if (!activeInLibrary || dirtyToLibrary) {
+      return {
+        className: "is-library-unsaved",
+        title: dirtyToLibrary
+          ? t("canvas.workflow.unsavedSuffix")
+          : t("canvas.workflow.notInLibrary")
+      };
+    }
+    return {
+      className: "is-library-saved",
+      title: t("canvas.workflow.inLibrary")
+    };
+  })();
 
   return (
     <>
@@ -266,19 +286,10 @@ export function CanvasWorkflowToolbar({
           {busyAction === "save-file" ? <Loader2 size={14} className="spin" /> : <FolderOutput size={14} />}
         </button>
         <span
-          className={`canvasWorkflowSessionDot ${libraryDotClass}`}
-          title={
-            activeInLibrary
-              ? t("canvas.workflow.inLibrary")
-              : t("canvas.workflow.notInLibrary")
-          }
-          aria-hidden="true"
-        />
-        <span
-          className={`canvasWorkflowSaveState is-${saveState}`}
-          title={t(`canvas.workflow.saveState.${saveState}`)}
+          className={`canvasWorkflowSessionDot ${statusDot.className}`}
+          title={statusDot.title}
           role="status"
-          aria-label={t(`canvas.workflow.saveState.${saveState}`)}
+          aria-label={statusDot.title}
         />
       </section>
 

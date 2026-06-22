@@ -141,5 +141,3 @@ export function downloadWorkflowFile(payload, name = "Workflow") {
   anchor.remove();
   window.setTimeout(() => URL.revokeObjectURL(url), 0);
 }
-
-export const WORKFLOW_FILE_BASENAME = "workflow.apix-workflow.json";

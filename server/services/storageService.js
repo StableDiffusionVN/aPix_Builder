@@ -344,14 +344,124 @@ export function createStorageService({ resourceRoot, dataRoot, readBody, send, h
     return payload;
   }
 
-  const CANVAS_WORKFLOW_FILE = "workflow.apix-workflow.json";
+  const CANVAS_WORKFLOW_FILE_EXT = ".apix-workflow.json";
+  const CANVAS_WORKFLOW_LEGACY_FILE = "workflow.apix-workflow.json";
 
-  async function readCanvasWorkflowLibraryEntry(slug) {
+  function canvasWorkflowLibraryFileName(name = "Workflow") {
+    const safeName = String(name)
+      .normalize("NFKD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-zA-Z0-9_-]+/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "")
+      .slice(0, 80);
+    return `${safeName || "workflow"}${CANVAS_WORKFLOW_FILE_EXT}`;
+  }
+
+  function canvasWorkflowSlugFromName(name) {
+    return canvasWorkflowLibraryFileName(name).slice(0, -CANVAS_WORKFLOW_FILE_EXT.length);
+  }
+
+  function canvasWorkflowLibraryPathForSlug(slug) {
+    const safeSlug = String(slug || "").trim();
+    if (!safeSlug) return "";
+    return path.join(workflowsDir, `${safeSlug}${CANVAS_WORKFLOW_FILE_EXT}`);
+  }
+
+  async function removeCanvasWorkflowLibraryEntry(slug) {
+    const safeSlug = String(slug || "").trim();
+    if (!safeSlug) return;
+    const filePath = canvasWorkflowLibraryPathForSlug(safeSlug);
+    assertWritableTemplatePath(configDir, filePath);
+    await rm(filePath, { force: true });
+    const legacyDir = path.join(workflowsDir, safeSlug);
+    assertWritableTemplatePath(configDir, legacyDir);
+    await rm(legacyDir, { recursive: true, force: true });
+  }
+
+  async function tryMigrateLegacyWorkflowFolder(slug) {
     const safeSlug = String(slug || "").trim();
     if (!safeSlug) return null;
-    const targetDir = path.join(workflowsDir, safeSlug);
-    assertWritableTemplatePath(configDir, targetDir);
-    const filePath = path.join(targetDir, CANVAS_WORKFLOW_FILE);
+    const legacyDir = path.join(workflowsDir, safeSlug);
+    const legacyFile = path.join(legacyDir, CANVAS_WORKFLOW_LEGACY_FILE);
+    try {
+      await access(legacyFile);
+    } catch {
+      return null;
+    }
+    const raw = JSON.parse(await readFile(legacyFile, "utf8"));
+    const workflow = raw?.workflow && typeof raw.workflow === "object" ? raw.workflow : raw;
+    if (!workflow || !Array.isArray(workflow.nodes) || !Array.isArray(workflow.edges)) {
+      return null;
+    }
+    const name = String(workflow.name || safeSlug).trim() || safeSlug;
+    const nextSlug = canvasWorkflowSlugFromName(name);
+    const nextPath = canvasWorkflowLibraryPathForSlug(nextSlug);
+    assertWritableTemplatePath(configDir, nextPath);
+    await atomicWriteFile(nextPath, `${JSON.stringify(raw, null, 2)}\n`);
+    await chmod(nextPath, 0o600);
+    await rm(legacyDir, { recursive: true, force: true });
+    return nextSlug;
+  }
+
+  async function migrateLegacyWorkflowFolders() {
+    let entries = [];
+    try {
+      entries = await readdir(workflowsDir, { withFileTypes: true });
+    } catch (error) {
+      if (error?.code === "ENOENT") return;
+      throw error;
+    }
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        await tryMigrateLegacyWorkflowFolder(entry.name);
+      }
+    }
+  }
+
+  async function resolveCanvasWorkflowLibraryPath(slug) {
+    const safeSlug = String(slug || "").trim();
+    if (!safeSlug) return null;
+
+    const directPath = canvasWorkflowLibraryPathForSlug(safeSlug);
+    assertWritableTemplatePath(configDir, directPath);
+    try {
+      await access(directPath);
+      return { slug: safeSlug, filePath: directPath };
+    } catch {
+      /* try legacy folder or case-insensitive match */
+    }
+
+    const migratedSlug = await tryMigrateLegacyWorkflowFolder(safeSlug);
+    if (migratedSlug) {
+      const migratedPath = canvasWorkflowLibraryPathForSlug(migratedSlug);
+      return { slug: migratedSlug, filePath: migratedPath };
+    }
+
+    let entries = [];
+    try {
+      entries = await readdir(workflowsDir, { withFileTypes: true });
+    } catch (error) {
+      if (error?.code === "ENOENT") return null;
+      throw error;
+    }
+
+    const target = `${safeSlug}${CANVAS_WORKFLOW_FILE_EXT}`.toLowerCase();
+    for (const entry of entries) {
+      if (!entry.isFile() || !entry.name.endsWith(CANVAS_WORKFLOW_FILE_EXT)) continue;
+      if (entry.name.toLowerCase() !== target) continue;
+      const resolvedSlug = entry.name.slice(0, -CANVAS_WORKFLOW_FILE_EXT.length);
+      return { slug: resolvedSlug, filePath: path.join(workflowsDir, entry.name) };
+    }
+
+    return null;
+  }
+
+  async function readCanvasWorkflowLibraryEntry(slug) {
+    const resolved = await resolveCanvasWorkflowLibraryPath(slug);
+    if (!resolved) return null;
+
+    const { slug: resolvedSlug, filePath } = resolved;
     const raw = JSON.parse(await readFile(filePath, "utf8"));
     const workflow = raw?.workflow && typeof raw.workflow === "object" ? raw.workflow : raw;
     if (!workflow || !Array.isArray(workflow.nodes) || !Array.isArray(workflow.edges)) {
@@ -359,8 +469,8 @@ export function createStorageService({ resourceRoot, dataRoot, readBody, send, h
     }
     const fileStat = await stat(filePath);
     return {
-      slug: safeSlug,
-      name: String(workflow.name || safeSlug).trim() || safeSlug,
+      slug: resolvedSlug,
+      name: String(workflow.name || resolvedSlug).trim() || resolvedSlug,
       updatedAt: fileStat.mtime.toISOString(),
       nodeCount: workflow.nodes.length,
       edgeCount: workflow.edges.length,
@@ -369,6 +479,7 @@ export function createStorageService({ resourceRoot, dataRoot, readBody, send, h
   }
 
   async function listCanvasWorkflowLibrary() {
+    await migrateLegacyWorkflowFolders();
     let entries = [];
     try {
       entries = await readdir(workflowsDir, { withFileTypes: true });
@@ -378,9 +489,10 @@ export function createStorageService({ resourceRoot, dataRoot, readBody, send, h
     }
     const workflows = [];
     for (const entry of entries) {
-      if (!entry.isDirectory()) continue;
+      if (!entry.isFile() || !entry.name.endsWith(CANVAS_WORKFLOW_FILE_EXT)) continue;
+      const slug = entry.name.slice(0, -CANVAS_WORKFLOW_FILE_EXT.length);
       try {
-        const item = await readCanvasWorkflowLibraryEntry(entry.name);
+        const item = await readCanvasWorkflowLibraryEntry(slug);
         if (item) workflows.push(item);
       } catch {
         /* skip invalid entries */
@@ -466,9 +578,7 @@ export function createStorageService({ resourceRoot, dataRoot, readBody, send, h
         send(res, 400, { error: "Thiếu slug workflow" });
         return;
       }
-      const targetDir = path.join(workflowsDir, slug);
-      assertWritableTemplatePath(configDir, targetDir);
-      await rm(targetDir, { recursive: true, force: true });
+      await removeCanvasWorkflowLibraryEntry(slug);
       const store = await readCanvasProjectsStore();
       await detachLibrarySlugFromSession(store, slug);
       send(res, 200, {
@@ -612,17 +722,20 @@ export function createStorageService({ resourceRoot, dataRoot, readBody, send, h
         return;
       }
       const name = String(workflow.name || body.name || "Workflow").trim() || "Workflow";
-      const slug = slugifyTemplateId(name);
-      const targetDir = path.join(workflowsDir, slug);
-      assertWritableTemplatePath(configDir, targetDir);
-      const fileName = CANVAS_WORKFLOW_FILE;
-      const filePath = path.join(targetDir, fileName);
-      await mkdir(targetDir, { recursive: true });
-      await writeFile(filePath, `${JSON.stringify(file, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
-      await chmod(filePath, 0o600);
+      const slug = canvasWorkflowSlugFromName(name);
+      const fileName = canvasWorkflowLibraryFileName(name);
+      const filePath = canvasWorkflowLibraryPathForSlug(slug);
+      assertWritableTemplatePath(configDir, filePath);
 
       const projectId = String(body.projectId || store.activeId).trim();
       const project = store.projects[projectId];
+      if (project?.savedSlug && project.savedSlug !== slug) {
+        await removeCanvasWorkflowLibraryEntry(project.savedSlug);
+      }
+
+      await atomicWriteFile(filePath, `${JSON.stringify(file, null, 2)}\n`);
+      await chmod(filePath, 0o600);
+
       if (project) {
         project.savedSlug = slug;
         project.librarySaved = true;

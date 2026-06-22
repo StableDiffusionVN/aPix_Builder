@@ -2251,7 +2251,7 @@ function InfiniteCanvasInner({
               panOnDrag={true}
               selectionOnDrag={false}
               selectionKeyCode={canvasMultiSelectKeyCode()}
-              multiSelectionKeyCode={null}
+              multiSelectionKeyCode={canvasMultiSelectKeyCode()}
               selectionMode="partial"
               nodesDraggable={activeCanvasTool === "select"}
               nodesConnectable={activeCanvasTool === "select"}

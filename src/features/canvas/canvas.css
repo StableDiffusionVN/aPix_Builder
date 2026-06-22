@@ -345,33 +345,13 @@
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.25);
 }
 
+.canvasWorkflowSessionDot.is-saving {
+  background: var(--warning);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.25);
+}
+
 .canvasWorkflowSessionDot.is-error {
   background: var(--danger-text);
-}
-
-.canvasWorkflowSaveState {
-  width: 6px;
-  height: 6px;
-  flex: 0 0 auto;
-  border-radius: 50%;
-  background: var(--text-muted);
-  opacity: 0.55;
-}
-
-.canvasWorkflowSaveState.is-pending,
-.canvasWorkflowSaveState.is-saving {
-  background: var(--warning);
-  opacity: 1;
-}
-
-.canvasWorkflowSaveState.is-saved {
-  background: var(--success);
-  opacity: 1;
-}
-
-.canvasWorkflowSaveState.is-error {
-  background: var(--danger-text);
-  opacity: 1;
 }
 
 .canvasWorkflowCloseBackdrop {

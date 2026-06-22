@@ -200,6 +200,7 @@ export function useCanvasRunSync({
       if (activeRunsOk) {
         for (const session of trackedSessions) {
           if (session.status !== "queued") continue;
+          if (String(session.runKind || "").startsWith("canvas")) continue;
           if (activeRunIds.has(session.runId)) continue;
           if (isQueuedLocally?.(session.runId)) continue;
           if (!sessionStartedPastGrace(session, QUEUED_BACKEND_GRACE_MS)) continue;

@@ -319,12 +319,14 @@ function reconcileBackendRunLogState() {
   }
 
   const queueRunIds = new Set([
-    ...backendRunQueue.map(job => job.runId),
-    backendRunQueueCurrent?.runId
+    ...backendRunQueue.map(job => job.body?.runId || job.runId),
+    backendRunQueueCurrent?.body?.runId || backendRunQueueCurrent?.runId
   ].filter(Boolean));
   for (const session of getRunLogSessions()) {
     const runKind = String(session.runKind || "");
-    const isBackendQueuedKind = runKind === "form" || runKind.startsWith("canvas");
+    // Canvas queued jobs may live in the browser queue; only form orphans are reconciled here.
+    if (runKind.startsWith("canvas")) continue;
+    const isBackendQueuedKind = runKind === "form";
     if (!isBackendQueuedKind || session.status !== "queued") continue;
     if (queueRunIds.has(session.runId)) continue;
     if (activeRuns.has(session.runId) || activeRhRuns.has(session.runId)) {

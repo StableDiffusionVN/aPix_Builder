@@ -1508,27 +1508,43 @@ function InfiniteCanvasInner({
   }, [buildBackendQueueJob, buildRunJob, hasBackendCanvasActivity, submitBackendQueueJobs, updateNodeData]);
   submitNextPendingBackendNodeJobRef.current = submitNextPendingBackendNodeJob;
 
+  const submitRunnableToBackendQueue = useCallback(async (jobs) => {
+    const nodeJobs = jobs.map(job => (
+      job.type === "node" ? job : graphJobAsSingleNodeJob(job)
+    ));
+    if (!nodeJobs.every(Boolean)) return false;
+    const queueJobs = (await Promise.all(nodeJobs.map(buildBackendQueueJob))).filter(Boolean);
+    if (queueJobs.length !== jobs.length) return false;
+    await submitBackendQueueJobs(queueJobs);
+    return true;
+  }, [buildBackendQueueJob, graphJobAsSingleNodeJob, submitBackendQueueJobs]);
+
   const enqueueRunJobs = useCallback(async (jobs) => {
     if (!jobs.length) return;
     const nodeJobs = jobs.map(job => (
       job.type === "node" ? job : graphJobAsSingleNodeJob(job)
     ));
+    let remaining = jobs;
     if (nodeJobs.every(Boolean)) {
       try {
         const queueJobs = (await Promise.all(nodeJobs.map(buildBackendQueueJob))).filter(Boolean);
-        if (queueJobs.length === jobs.length) {
+        if (queueJobs.length) {
           await submitBackendQueueJobs(queueJobs);
-          return;
+          const submittedIds = new Set(
+            queueJobs.map(job => String(job.body?.runId || "").trim()).filter(Boolean)
+          );
+          remaining = jobs.filter(job => !submittedIds.has(job.runId));
+          if (!remaining.length) return;
         }
       } catch {
-        // Fall back to in-browser queue below.
+        // Fall back to in-browser queue for jobs that were not submitted.
       }
     }
 
-    const next = [...runQueueRef.current, ...jobs];
+    const next = [...runQueueRef.current, ...remaining];
     runQueueRef.current = next;
     setRunQueue(next);
-    for (const job of jobs) {
+    for (const job of remaining) {
       runLogStartSession?.({
         runId: job.runId,
         template: "",
@@ -1555,19 +1571,23 @@ function InfiniteCanvasInner({
   const startOrQueueRunJobs = useCallback((jobs) => {
     const runnable = jobs.filter(job => snapshotRhApiKeyReady(job.snapshot));
     if (!runnable.length) return;
-    if (runLockRef.current || runQueueRef.current.length > 0) {
-      void enqueueRunJobs(runnable);
-      return;
-    }
-    const [first, ...queued] = runnable;
-    if (queued.length) void enqueueRunJobs(queued);
-    runLockRef.current = true;
-    if (first.type === "node") {
-      void executeNodeRunRef.current?.(first);
-    } else {
-      void executeGraphRunRef.current?.(first);
-    }
-  }, [enqueueRunJobs]);
+    void (async () => {
+      if (await submitRunnableToBackendQueue(runnable)) return;
+
+      if (runLockRef.current || runQueueRef.current.length > 0) {
+        await enqueueRunJobs(runnable);
+        return;
+      }
+      const [first, ...queued] = runnable;
+      if (queued.length) await enqueueRunJobs(queued);
+      runLockRef.current = true;
+      if (first.type === "node") {
+        void executeNodeRunRef.current?.(first);
+      } else {
+        void executeGraphRunRef.current?.(first);
+      }
+    })();
+  }, [enqueueRunJobs, submitRunnableToBackendQueue]);
 
   const drainRunQueue = useCallback(() => {
     if (pipelineCancelledRef.current) return;
@@ -1605,6 +1625,9 @@ function InfiniteCanvasInner({
     try {
       const jobs = await expandCanvasRunJobImageBatches(job, { rootNodeId: id });
       const queueJobs = (await Promise.all(jobs.map(buildBackendQueueJob))).filter(Boolean);
+      if (queueJobs.length !== jobs.length) {
+        throw new Error(`Không tạo được hàng chờ backend cho ${jobs.length - queueJobs.length}/${jobs.length} batch`);
+      }
       await submitBackendQueueJobs(queueJobs);
     } catch (err) {
       updateNodeData(id, { status: "error", error: err.message || "Không tạo được hàng chờ ảnh" });
@@ -1630,6 +1653,9 @@ function InfiniteCanvasInner({
           return;
         }
         const queueJobs = (await Promise.all(validNodeJobs.map(buildBackendQueueJob))).filter(Boolean);
+        if (queueJobs.length !== validNodeJobs.length) {
+          throw new Error(`Không tạo được hàng chờ backend cho ${validNodeJobs.length - queueJobs.length}/${validNodeJobs.length} batch`);
+        }
         await submitBackendQueueJobs(queueJobs);
         return;
       }

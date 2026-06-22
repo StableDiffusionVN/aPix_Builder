@@ -7,6 +7,35 @@ import { randomUUID } from "node:crypto";
 const SKIPPED_TYPES = new Set(["note", "checkpoints"]);
 const NUMBER_TYPES = new Set(["int", "float", "seed"]);
 const ASAR_SEGMENT = `${path.sep}app.asar${path.sep}`;
+const SHORTCUT_WORKFLOW_TYPES = [
+  "QuickActions",
+  "ActionExtension",
+  "WFWorkflowTypeShowInSearch"
+];
+const SHORTCUT_QUICK_ACTION_SURFACES = ["Services"];
+const SHORTCUT_IMAGE_INPUT_CLASSES = [
+  "WFAppContentItem",
+  "WFGenericFileContentItem",
+  "WFImageContentItem",
+  "WFPDFContentItem",
+  "WFRichTextContentItem",
+  "WFSafariWebPageContentItem",
+  "WFStringContentItem"
+];
+const SHORTCUT_TEXT_INPUT_CLASSES = [
+  "WFGenericFileContentItem",
+  "WFStringContentItem",
+  "WFRichTextContentItem"
+];
+
+export function applyShortcutPresentationSettings(workflow, { hasImageInput = false } = {}) {
+  workflow.WFWorkflowImportQuestions = [];
+  workflow.WFWorkflowTypes = SHORTCUT_WORKFLOW_TYPES;
+  workflow.WFQuickActionSurfaces = SHORTCUT_QUICK_ACTION_SURFACES;
+  workflow.WFWorkflowInputContentItemClasses = hasImageInput
+    ? SHORTCUT_IMAGE_INPUT_CLASSES
+    : SHORTCUT_TEXT_INPUT_CLASSES;
+}
 
 export function resolveShortcutAssetsDir(resourceRoot) {
   const envDir = String(process.env.APIX_SHORTCUT_ASSETS_DIR || "").trim();
@@ -331,6 +360,37 @@ function setConfigString(items, key, value) {
   };
 }
 
+export function usesEmbeddedWorkflowJson(config) {
+  return config?.runninghub?.saveWorkflowJson === true;
+}
+
+function setRequestStringField(items, key, value) {
+  const item = dictionaryItem(items, key);
+  if (!item) throw new Error(`Shortcut template request key missing: ${key}`);
+  item.WFItemType = 0;
+  item.WFValue = {
+    Value: { string: String(value) },
+    WFSerializationType: "WFTextTokenString"
+  };
+}
+
+function addRequestStringField(items, key, value, prototypeKey = "instanceType") {
+  if (dictionaryItem(items, key)) {
+    setRequestStringField(items, key, value);
+    return;
+  }
+  const prototype = dictionaryItem(items, prototypeKey);
+  if (!prototype) throw new Error(`Shortcut template request prototype missing: ${prototypeKey}`);
+  const item = structuredClone(prototype);
+  item.WFKey = { Value: { string: key }, WFSerializationType: "WFTextTokenString" };
+  item.WFItemType = 0;
+  item.WFValue = {
+    Value: { string: String(value) },
+    WFSerializationType: "WFTextTokenString"
+  };
+  items.push(item);
+}
+
 export function buildRunningHubShortcut(template, config, apiKey, options = {}) {
   const { kind, resourceId } = detectRunningHubResource(config, options.kind, options.resourceId);
   const controls = collectShortcutControls(config);
@@ -381,10 +441,16 @@ export function buildRunningHubShortcut(template, config, apiKey, options = {}) 
     return node;
   });
 
-  workflow.WFWorkflowImportQuestions = [];
-  workflow.WFWorkflowTypes = ["WFWorkflowTypeShowInSearch"];
-  workflow.WFQuickActionSurfaces = [];
-  if (imageControl) workflow.WFWorkflowInputContentItemClasses = ["WFImageContentItem"];
+  if (kind === "workflow" && usesEmbeddedWorkflowJson(config)) {
+    const embeddedWorkflow = options.embeddedWorkflow;
+    if (!embeddedWorkflow || typeof embeddedWorkflow !== "object") {
+      throw new Error("Template lưu JSON nhưng thiếu workflow api.json khi export Shortcut.");
+    }
+    addRequestStringField(requestItems, "workflow", JSON.stringify(embeddedWorkflow));
+  }
+
+  applyShortcutPresentationSettings(workflow, { hasImageInput: Boolean(imageControl) });
+  workflow.WFWorkflowName = appName;
 
   return {
     workflow,
@@ -416,7 +482,8 @@ export async function createSignedRunningHubShortcut({
   outputPath,
   assetsDir,
   kind,
-  resourceId
+  resourceId,
+  workflow: embeddedWorkflow
 }) {
   if (process.platform !== "darwin") {
     throw new Error("Export Shortcut requires macOS.");
@@ -437,7 +504,10 @@ export async function createSignedRunningHubShortcut({
     const unsignedPath = path.join(tempDir, "generated.unsigned.shortcut");
     await run("/usr/bin/plutil", ["-convert", "json", "-o", templateJsonPath, templatePath]);
     const template = JSON.parse(await readFile(templateJsonPath, "utf8"));
-    const result = buildRunningHubShortcut(template, config, apiKey.trim(), resource);
+    const result = buildRunningHubShortcut(template, config, apiKey.trim(), {
+      ...resource,
+      embeddedWorkflow
+    });
     await writeFile(generatedJsonPath, JSON.stringify(result.workflow), { mode: 0o600 });
     await run("/usr/bin/plutil", ["-convert", "binary1", "-o", unsignedPath, generatedJsonPath]);
     await run("/usr/bin/shortcuts", [

@@ -1393,6 +1393,26 @@ export function AppWorkspace() {
     setError("");
     setStatus(t("rh.exportShortcutSigning"));
     try {
+      let embeddedWorkflow = null;
+      if (isWorkflow && rhWfConfig?.runninghub?.saveWorkflowJson === true) {
+        if (!rhWfSelectedTemplate) {
+          throw new Error(t("error.rhWfMissingTemplateShort"));
+        }
+        const editorResponse = await fetch(
+          `/api/template-editor?template=${encodeURIComponent(rhWfSelectedTemplate)}&scope=runninghub-wf`
+        );
+        const editorData = await editorResponse.json().catch(() => ({}));
+        if (!editorResponse.ok) {
+          throw new Error(
+            localizeRuntimeMessage(editorData.error, locale) || t("error.rhWfShortcutMissingWorkflow")
+          );
+        }
+        if (!editorData.workflow) {
+          throw new Error(t("error.rhWfShortcutMissingWorkflow"));
+        }
+        embeddedWorkflow = editorData.workflow;
+      }
+
       const payload = {
         kind,
         resourceId: isWorkflow
@@ -1402,7 +1422,8 @@ export function AppWorkspace() {
           ? rhWfConfig?.app?.name || rhWfSelectedTemplate
           : selectedRunningHubName,
         config: configToExport,
-        apiKey
+        apiKey,
+        ...(embeddedWorkflow ? { workflow: embeddedWorkflow } : {})
       };
       let response;
       if (typeof window.apixDesktop?.exportRunningHubShortcut === "function") {

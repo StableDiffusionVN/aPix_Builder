@@ -5662,9 +5662,13 @@ html[data-theme="light"] .logTaskInspectLine {
   line-height: 1.4;
 }
 
-.storageSettingsFields {
+.settingsPaneFields.storageSettingsFields {
   grid-template-columns: 1fr;
   gap: 11px;
+}
+
+.settingsPaneFields.storageSettingsFields .storagePathField {
+  grid-column: 1 / -1;
 }
 
 .storagePathField {

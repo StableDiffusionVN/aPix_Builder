@@ -45,7 +45,8 @@ export function createShortcutService({ readBody, send, resourceRoot }) {
         outputPath,
         assetsDir: shortcutAssetsDir,
         kind: body.kind,
-        resourceId: body.resourceId
+        resourceId: body.resourceId,
+        workflow: body.workflow
       });
       const data = await readFile(outputPath);
       res.writeHead(200, {

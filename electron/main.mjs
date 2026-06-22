@@ -187,7 +187,8 @@ function registerIpcHandlers() {
         outputPath,
         assetsDir: shortcutAssetsDir,
         kind: payload.kind,
-        resourceId: payload.resourceId
+        resourceId: payload.resourceId,
+        workflow: payload.workflow
       });
       await fs.chmod(outputPath, 0o600);
       return { ok: true, ...result };

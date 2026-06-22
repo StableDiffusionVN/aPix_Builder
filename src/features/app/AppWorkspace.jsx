@@ -1,13 +1,12 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Coins,
+  FolderOutput,
   Info,
   Loader2,
   Maximize2,
   Minimize2,
-  Settings2,
-  Wifi,
-  WifiOff
+  Settings2
 } from "lucide-react";
 import { DynamicField } from "../../components/DynamicField";
 import { OutputGallery } from "../../components/OutputGallery";
@@ -258,6 +257,7 @@ export function AppWorkspace() {
     fetchNodes: fetchRhNodes
   } = useRunningHub();
   const [shortcutExporting, setShortcutExporting] = useState(false);
+  const [templateFolderExporting, setTemplateFolderExporting] = useState(false);
   const { history, setHistory, loadOutputHistory, deleteHistoryItem } = useHistory();
   const { inputImages, setInputImages, refreshInputImages } = useInputImages();
   const { getStoredValues, saveValues, getLastTemplate } = useWorkspace();
@@ -1332,6 +1332,39 @@ export function AppWorkspace() {
     });
   }
 
+  async function handleExportTemplateFolder({ scope = "local", templateId, templateName }) {
+    if (!templateId) return;
+    setTemplateFolderExporting(true);
+    setError("");
+    setStatus(t("template.exportFolderPreparing"));
+    try {
+      const params = new URLSearchParams({ template: templateId });
+      if (scope && scope !== "local") params.set("scope", scope);
+      const response = await fetch(`/api/templates/export?${params}`);
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error || t("template.exportFolderFailed"));
+      }
+      const blob = await response.blob();
+      const disposition = response.headers.get("content-disposition") || "";
+      const filename = disposition.match(/filename="([^"]+)"/i)?.[1] || `${templateId}.tar.gz`;
+      const downloadUrl = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = downloadUrl;
+      anchor.download = filename;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(downloadUrl);
+      setStatus(t("template.exportFolderDone", { name: templateName || templateId }));
+    } catch (error) {
+      setError(localizeRuntimeMessage(error.message, locale));
+      setStatus(t("template.exportFolderFailed"));
+    } finally {
+      setTemplateFolderExporting(false);
+    }
+  }
+
   async function handleExportRunningHubShortcut(kind) {
     if (!shortcutExportAvailable) {
       setError(t("rh.exportShortcutWindowsDisabled"));
@@ -1713,16 +1746,32 @@ export function AppWorkspace() {
               <div className="settingsHeader">
                 <Settings2 size={16} />
                 <h2>RunningHub Workflow</h2>
-                <button
-                  type="button"
-                  className="rhWebappActionBtn rhExportShortcutBtn"
-                  onClick={() => handleExportRunningHubShortcut("workflow")}
-                  disabled={!shortcutExportAvailable || shortcutExporting || !rhWfConfig || !rhPrimaryApiKey}
-                  title={shortcutExportAvailable ? t("rh.exportShortcut") : t("rh.exportShortcutWindowsDisabled")}
-                  aria-label={t("rh.exportShortcut")}
-                >
-                  {shortcutExporting ? <Loader2 size={14} className="spin" /> : <AppleShortcutsIcon size={16} />}
-                </button>
+                <div className="settingsHeaderActions">
+                  <button
+                    type="button"
+                    className="rhWebappActionBtn rhExportFolderBtn"
+                    onClick={() => handleExportTemplateFolder({
+                      scope: "runninghub-wf",
+                      templateId: rhWfSelectedTemplate,
+                      templateName: rhWfTemplates.find(item => item.id === rhWfSelectedTemplate)?.name
+                    })}
+                    disabled={templateFolderExporting || shortcutExporting || !rhWfSelectedTemplate || !rhWfConfig}
+                    title={t("template.exportFolderTitle")}
+                    aria-label={t("template.exportFolder")}
+                  >
+                    {templateFolderExporting ? <Loader2 size={14} className="spin" /> : <FolderOutput size={14} />}
+                  </button>
+                  <button
+                    type="button"
+                    className="rhWebappActionBtn rhExportShortcutBtn"
+                    onClick={() => handleExportRunningHubShortcut("workflow")}
+                    disabled={!shortcutExportAvailable || shortcutExporting || templateFolderExporting || !rhWfConfig || !rhPrimaryApiKey}
+                    title={shortcutExportAvailable ? t("rh.exportShortcut") : t("rh.exportShortcutWindowsDisabled")}
+                    aria-label={t("rh.exportShortcut")}
+                  >
+                    {shortcutExporting ? <Loader2 size={14} className="spin" /> : <AppleShortcutsIcon size={16} />}
+                  </button>
+                </div>
               </div>
               <TemplateSelector
                 templates={rhWfTemplates}
@@ -1782,13 +1831,21 @@ export function AppWorkspace() {
               <div className="settingsHeader">
                 <Settings2 size={16} />
                 <h2>API Workflow</h2>
-                <span className={`healthDot health-${healthStatus}`} title={
-                  healthStatus === "online" ? `ComfyUI online · ${discoverySystem?.comfyui_version || ""}` :
-                  healthStatus === "loading" ? t("health.connecting") : t("health.comfyOffline")
-                } aria-label={healthStatus === "online" ? "Online" : healthStatus === "loading" ? t("health.connectingShort") : "Offline"}>
-                  {healthStatus === "loading" ? <Loader2 size={10} className="spin" /> :
-                   healthStatus === "online" ? <Wifi size={10} /> : <WifiOff size={10} />}
-                </span>
+                <div className="settingsHeaderActions">
+                  <button
+                    type="button"
+                    className="rhWebappActionBtn rhExportFolderBtn"
+                    onClick={() => handleExportTemplateFolder({
+                      templateId: selectedTemplate,
+                      templateName: templates.find(item => item.id === selectedTemplate)?.name
+                    })}
+                    disabled={templateFolderExporting || !selectedTemplate || !config}
+                    title={t("template.exportFolderTitle")}
+                    aria-label={t("template.exportFolder")}
+                  >
+                    {templateFolderExporting ? <Loader2 size={14} className="spin" /> : <FolderOutput size={14} />}
+                  </button>
+                </div>
               </div>
               <TemplateSelector
                 templates={templates}

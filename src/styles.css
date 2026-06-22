@@ -1007,6 +1007,7 @@ body.sidebar-layout-resizing {
 
 .settingsHeader h2,
 .panelTitle h3 {
+  flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   color: var(--muted);
@@ -9776,8 +9777,16 @@ html:not([data-theme="dark"]):not([data-theme="light"]) .appShell.is-runninghub 
   background: rgba(var(--accent-rgb), 0.1);
 }
 
-.settingsHeader .rhExportShortcutBtn {
+.settingsHeaderActions {
   margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+
+.settingsHeader .rhExportShortcutBtn {
+  margin-left: 0;
 }
 
 .rhAppSaveHint {

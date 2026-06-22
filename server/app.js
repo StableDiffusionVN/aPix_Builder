@@ -21,6 +21,7 @@ import { createComfyService } from "./services/comfyService.js";
 import { createRunningHubService } from "./services/runningHubService.js";
 import { createShortcutService } from "./services/shortcutService.js";
 import { backendQueueHasRunId, createBackendRunQueueStore } from "./lib/backendRunQueueStore.js";
+import { archiveTemplateDirectory } from "./lib/templateArchive.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
@@ -566,6 +567,25 @@ async function handleTemplateEditor(req, res, url) {
   });
 }
 
+async function handleTemplateExport(req, res, url) {
+  const scope = templateScopeFromUrl(url);
+  const templateId = url.searchParams.get("template");
+  try {
+    const source = await storage.getTemplates().getTemplateExportSource(templateId, scope);
+    const archive = await archiveTemplateDirectory(source.baseDir, source.folderName);
+    const fileName = `${source.folderName}.tar.gz`;
+    res.writeHead(200, {
+      "content-type": "application/gzip",
+      "content-disposition": `attachment; filename="${fileName}"`,
+      "content-length": archive.length,
+      "cache-control": "no-store"
+    });
+    res.end(archive);
+  } catch (error) {
+    send(res, 400, { error: error.message || "Không export được thư mục template" });
+  }
+}
+
 async function handleTemplateDelete(req, res, url) {
   const body = JSON.parse(await readBody(req) || "{}");
   const scope = storage.getTemplates().normalizeScope(body.scope || url?.searchParams?.get("scope"));
@@ -766,6 +786,7 @@ export const routeContext = {
   handleStorageSettings: storage.handleStorageSettings,
   handleTemplateDelete,
   handleTemplateEditor,
+  handleTemplateExport,
   handleTemplateSave,
   listInputImages: storage.listInputImages,
   normalizeComfyTarget: comfy.normalizeComfyTarget,

@@ -106,8 +106,17 @@ describe("canvas runtime sync", () => {
 
   test("maps output history items to node outputs", () => {
     expect(historyItemToOutputs({
-      outputs: [{ url: "/api/output-image?name=a.png", filename: "a.png" }]
-    })).toEqual([{ url: "/api/output-image?name=a.png", filename: "a.png" }]);
+      outputs: [{
+        url: "/api/output-image?name=a.png",
+        filename: "a.png",
+        nodeId: "9"
+      }]
+    })).toEqual([{
+      url: "/api/output-image?name=a.png",
+      filename: "a.png",
+      nodeId: "9",
+      key: undefined
+    }]);
   });
 
   test("indexes individual runs nested in a grouped canvas history item", () => {

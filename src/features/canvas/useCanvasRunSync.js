@@ -108,7 +108,8 @@ export function useCanvasRunSync({
       cleanupWatcher(session.runId);
       const nodeId = matchCanvasNodeForSession(nodesRef.current, session);
       if (nodeId) {
-        updateNodeData(nodeId, buildNodeSuccessPatch(session, historyItem));
+        const node = nodesRef.current.find(item => item.id === nodeId);
+        updateNodeData(nodeId, buildNodeSuccessPatch(session, historyItem, node));
       }
       runLogEndSession?.(session.runId, "success", {
         taskId: historyItem?.promptId || session.taskId || "",

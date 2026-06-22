@@ -349,6 +349,31 @@
   background: var(--danger-text);
 }
 
+.canvasWorkflowSaveState {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--text-muted);
+  opacity: 0.55;
+}
+
+.canvasWorkflowSaveState.is-pending,
+.canvasWorkflowSaveState.is-saving {
+  background: var(--warning);
+  opacity: 1;
+}
+
+.canvasWorkflowSaveState.is-saved {
+  background: var(--success);
+  opacity: 1;
+}
+
+.canvasWorkflowSaveState.is-error {
+  background: var(--danger-text);
+  opacity: 1;
+}
+
 .canvasWorkflowCloseBackdrop {
   z-index: 40;
 }
@@ -1584,7 +1609,6 @@
 
 .canvasInputRow.hasOutputHandle > .canvasHandle.react-flow__handle-right {
   top: 7px;
-  right: 0;
   transform: translate(50%, -50%);
 }
 
@@ -2260,6 +2284,44 @@
 .canvasHandle.type-choice { background: #06b6d4; }
 .canvasHandle.type-any { background: #94a3b8; }
 
+.canvasHandle.out.output-color-0 { background: var(--accent); filter: none; }
+.canvasHandle.out.output-color-1 { background: #f59e0b; filter: none; }
+.canvasHandle.out.output-color-2 { background: #22c55e; filter: none; }
+.canvasHandle.out.output-color-3 { background: #06b6d4; filter: none; }
+.canvasHandle.out.output-color-4 { background: #a78bfa; filter: none; }
+.canvasHandle.out.output-color-5 { background: #f472b6; filter: none; }
+
+.canvasHandle.react-flow__handle.out.output-color-0:hover,
+.canvasHandle.react-flow__handle.out.output-color-0.connectingto,
+.canvasHandle.react-flow__handle.out.output-color-0.connectingfrom {
+  box-shadow: 0 0 0 2px rgba(var(--accent-rgb), 0.28);
+}
+.canvasHandle.react-flow__handle.out.output-color-1:hover,
+.canvasHandle.react-flow__handle.out.output-color-1.connectingto,
+.canvasHandle.react-flow__handle.out.output-color-1.connectingfrom {
+  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.35);
+}
+.canvasHandle.react-flow__handle.out.output-color-2:hover,
+.canvasHandle.react-flow__handle.out.output-color-2.connectingto,
+.canvasHandle.react-flow__handle.out.output-color-2.connectingfrom {
+  box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.35);
+}
+.canvasHandle.react-flow__handle.out.output-color-3:hover,
+.canvasHandle.react-flow__handle.out.output-color-3.connectingto,
+.canvasHandle.react-flow__handle.out.output-color-3.connectingfrom {
+  box-shadow: 0 0 0 2px rgba(6, 182, 212, 0.35);
+}
+.canvasHandle.react-flow__handle.out.output-color-4:hover,
+.canvasHandle.react-flow__handle.out.output-color-4.connectingto,
+.canvasHandle.react-flow__handle.out.output-color-4.connectingfrom {
+  box-shadow: 0 0 0 2px rgba(167, 139, 250, 0.35);
+}
+.canvasHandle.react-flow__handle.out.output-color-5:hover,
+.canvasHandle.react-flow__handle.out.output-color-5.connectingto,
+.canvasHandle.react-flow__handle.out.output-color-5.connectingfrom {
+  box-shadow: 0 0 0 2px rgba(244, 114, 182, 0.35);
+}
+
 .canvasInputRow .react-flow__handle-left { left: 0; top: calc(50% + 8.5px); }
 
 .canvasContextMenu {
@@ -2313,16 +2375,79 @@
   animation: none;
 }
 
+.canvasWorkspace .react-flow__edge.canvas-edge-out-0 .react-flow__edge-path {
+  stroke: rgba(var(--accent-rgb), 0.55);
+}
+.canvasWorkspace .react-flow__edge.canvas-edge-out-1 .react-flow__edge-path {
+  stroke: rgba(245, 158, 11, 0.55);
+}
+.canvasWorkspace .react-flow__edge.canvas-edge-out-2 .react-flow__edge-path {
+  stroke: rgba(34, 197, 94, 0.55);
+}
+.canvasWorkspace .react-flow__edge.canvas-edge-out-3 .react-flow__edge-path {
+  stroke: rgba(6, 182, 212, 0.55);
+}
+.canvasWorkspace .react-flow__edge.canvas-edge-out-4 .react-flow__edge-path {
+  stroke: rgba(167, 139, 250, 0.55);
+}
+.canvasWorkspace .react-flow__edge.canvas-edge-out-5 .react-flow__edge-path {
+  stroke: rgba(244, 114, 182, 0.55);
+}
+
 .canvasWorkspace .react-flow__edge.selected .react-flow__edge-path,
 .canvasWorkspace .react-flow__edge:hover .react-flow__edge-path {
   stroke: rgba(var(--accent-rgb), 0.95);
   stroke-width: 2;
 }
 
+.canvasWorkspace .react-flow__edge.canvas-edge-out-0.selected .react-flow__edge-path,
+.canvasWorkspace .react-flow__edge.canvas-edge-out-0:hover .react-flow__edge-path {
+  stroke: rgba(var(--accent-rgb), 0.95);
+}
+.canvasWorkspace .react-flow__edge.canvas-edge-out-1.selected .react-flow__edge-path,
+.canvasWorkspace .react-flow__edge.canvas-edge-out-1:hover .react-flow__edge-path {
+  stroke: rgba(245, 158, 11, 0.95);
+}
+.canvasWorkspace .react-flow__edge.canvas-edge-out-2.selected .react-flow__edge-path,
+.canvasWorkspace .react-flow__edge.canvas-edge-out-2:hover .react-flow__edge-path {
+  stroke: rgba(34, 197, 94, 0.95);
+}
+.canvasWorkspace .react-flow__edge.canvas-edge-out-3.selected .react-flow__edge-path,
+.canvasWorkspace .react-flow__edge.canvas-edge-out-3:hover .react-flow__edge-path {
+  stroke: rgba(6, 182, 212, 0.95);
+}
+.canvasWorkspace .react-flow__edge.canvas-edge-out-4.selected .react-flow__edge-path,
+.canvasWorkspace .react-flow__edge.canvas-edge-out-4:hover .react-flow__edge-path {
+  stroke: rgba(167, 139, 250, 0.95);
+}
+.canvasWorkspace .react-flow__edge.canvas-edge-out-5.selected .react-flow__edge-path,
+.canvasWorkspace .react-flow__edge.canvas-edge-out-5:hover .react-flow__edge-path {
+  stroke: rgba(244, 114, 182, 0.95);
+}
+
 .canvasWorkspace .react-flow__connection-path {
   stroke: rgba(var(--accent-rgb), 0.7);
   stroke-width: 1.5;
   fill: none;
+}
+
+.canvasWorkspace .react-flow__connection.canvas-connection-out-0 .react-flow__connection-path {
+  stroke: rgba(var(--accent-rgb), 0.7);
+}
+.canvasWorkspace .react-flow__connection.canvas-connection-out-1 .react-flow__connection-path {
+  stroke: rgba(245, 158, 11, 0.7);
+}
+.canvasWorkspace .react-flow__connection.canvas-connection-out-2 .react-flow__connection-path {
+  stroke: rgba(34, 197, 94, 0.7);
+}
+.canvasWorkspace .react-flow__connection.canvas-connection-out-3 .react-flow__connection-path {
+  stroke: rgba(6, 182, 212, 0.7);
+}
+.canvasWorkspace .react-flow__connection.canvas-connection-out-4 .react-flow__connection-path {
+  stroke: rgba(167, 139, 250, 0.7);
+}
+.canvasWorkspace .react-flow__connection.canvas-connection-out-5 .react-flow__connection-path {
+  stroke: rgba(244, 114, 182, 0.7);
 }
 
 .react-flow__attribution { display: none; }

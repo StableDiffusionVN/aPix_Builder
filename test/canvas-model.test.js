@@ -3,7 +3,10 @@ import {
   arePortsCompatible,
   beginNodeExecutionPatch,
   buildNodeRunCache,
+  cloneImageValueForSource,
   deriveStepPorts,
+  filenameFromImageUrl,
+  finalizeCanvasImageValue,
   findLinkedImageSource,
   findNodeInputImageUrl,
   getNodeRunCache,
@@ -11,6 +14,8 @@ import {
   linkedImageInputsMissingSource,
   nodeOutputUrl,
   nodeOutputValue,
+  normalizeStepOutputs,
+  nodeRunCachePatch,
   portTypeForUi,
   resolveEffectiveImageSource,
   resolveEffectiveNodeOutputUrl,
@@ -103,6 +108,47 @@ describe("canvas image cache validation", () => {
     };
 
     await expect(isNodeRunCacheReady(node)).resolves.toBe(false);
+  });
+});
+
+describe("canvas multi-output mapping", () => {
+  const nodeContext = {
+    ports: {
+      outputs: [
+        { key: "image", label: "Image", type: "image" },
+        { key: "mask", label: "Mask", type: "image" }
+      ]
+    },
+    config: {
+      output: {
+        image: { id: "9" },
+        mask: { id: "12" }
+      }
+    }
+  };
+
+  test("maps backend nodeId rows onto declared output port keys", () => {
+    expect(normalizeStepOutputs([
+      { nodeId: "9", url: "/api/output-image?name=image.png", filename: "image.png" },
+      { nodeId: "12", url: "/api/output-image?name=mask.png", filename: "mask.png" }
+    ], nodeContext)).toEqual([
+      { nodeId: "9", key: "image", url: "/api/output-image?name=image.png", filename: "image.png" },
+      { nodeId: "12", key: "mask", url: "/api/output-image?name=mask.png", filename: "mask.png" }
+    ]);
+  });
+
+  test("stores keyed outputs in run cache and resolves each output handle", () => {
+    const patch = nodeRunCachePatch([
+      { nodeId: "9", url: "/api/output-image?name=image.png", filename: "image.png" },
+      { nodeId: "12", url: "/api/output-image?name=mask.png", filename: "mask.png" }
+    ], "run-1", {}, {
+      type: "step",
+      data: nodeContext
+    });
+    const node = { type: "step", data: { ...nodeContext, ...patch } };
+
+    expect(nodeOutputUrl(node, "out:image")).toBe("/api/output-image?name=image.png");
+    expect(nodeOutputUrl(node, "out:mask")).toBe("/api/output-image?name=mask.png");
   });
 });
 
@@ -664,6 +710,50 @@ describe("restoreInputSourceOnRemove", () => {
     expect(result.edges).toHaveLength(0);
   });
 
+  test("restores upstream link when deleting a piped input split node", () => {
+    const nodes = [
+      {
+        id: "step-up",
+        type: "step",
+        data: {
+          ports: { outputs: [{ key: "mask", type: "image" }] },
+          runCache: { outputs: [{ key: "mask", url: "/api/output-image?name=mask.png" }] }
+        }
+      },
+      {
+        id: "step-down",
+        type: "step",
+        data: {
+          ports: { inputs: [{ key: "mask", valueKey: "mask", type: "image" }] },
+          values: { mask: "" }
+        }
+      },
+      {
+        id: "src-pipe",
+        type: "source",
+        data: {
+          passthroughFromInput: true,
+          passthroughTargetNodeId: "step-down",
+          passthroughInputValueKey: "mask",
+          values: { main: "" }
+        }
+      }
+    ];
+    const edges = [
+      { id: "e-up-pipe", source: "step-up", target: "src-pipe", sourceHandle: "out:mask", targetHandle: "in:main" },
+      { id: "e-pipe-down", source: "src-pipe", target: "step-down", sourceHandle: "out:main", targetHandle: "in:mask" }
+    ];
+    const result = restoreInputSourceOnRemove(nodes, edges, "src-pipe");
+    expect(result?.edges).toEqual([{
+      id: "e-step-up-step-down-restored",
+      source: "step-up",
+      target: "step-down",
+      sourceHandle: "out:mask",
+      targetHandle: "in:mask"
+    }]);
+    expect(result?.nodes.find(node => node.id === "step-down")?.data.values.mask).toBe("");
+  });
+
   test("returns null for non-passthrough source nodes", () => {
     const { nodes, edges } = makeGraph();
     const plainSource = { id: "src-plain", type: "source", data: { values: { main: "/api/input-image?name=other.png" } } };
@@ -760,5 +850,105 @@ describe("resolveEffectiveImageSource traverses passthrough output nodes", () =>
     expect(missing).toHaveLength(1);
     expect(missing[0].source.id).toBe("step-1");
     expect(missing[0].canAutoRun).toBe(true);
+  });
+});
+
+describe("canvas input pipe sources", () => {
+  const upstream = {
+    id: "step-up",
+    type: "step",
+    data: {
+      ports: {
+        outputs: [
+          { key: "image", label: "Image", type: "image" },
+          { key: "mask", label: "Mask", type: "image" }
+        ]
+      },
+      runCache: {
+        outputs: [
+          { key: "image", url: "/api/output-image?name=image.png" },
+          { key: "mask", url: "/api/output-image?name=mask.png" }
+        ],
+        primary: { key: "image", url: "/api/output-image?name=image.png" }
+      }
+    }
+  };
+  const pipe = {
+    id: "src-pipe",
+    type: "source",
+    data: {
+      sourceType: "image",
+      passthroughFromInput: true,
+      passthroughTargetNodeId: "step-down",
+      passthroughInputValueKey: "mask",
+      values: { main: "" }
+    }
+  };
+  const downstream = {
+    id: "step-down",
+    type: "step",
+    data: {
+      ports: { inputs: [{ key: "mask", valueKey: "mask", type: "image" }] },
+      values: { mask: "" }
+    }
+  };
+  const edges = [
+    { id: "e-up-pipe", source: "step-up", target: "src-pipe", sourceHandle: "out:mask", targetHandle: "in:main" },
+    { id: "e-pipe-down", source: "src-pipe", target: "step-down", sourceHandle: "out:main", targetHandle: "in:mask" }
+  ];
+  const nodes = [upstream, pipe, downstream];
+
+  test("forwards live mask output through a split input source node", () => {
+    expect(nodeOutputValue(pipe, "out:main", nodes, edges)).toBe("/api/output-image?name=mask.png");
+    expect(resolveEffectiveImageSource("src-pipe", "out:main", nodes, edges)?.node?.id).toBe("step-up");
+  });
+
+  test("filenameFromImageUrl reads api refs", () => {
+    expect(filenameFromImageUrl("/api/input-image?name=photo.png")).toBe("photo.png");
+    expect(filenameFromImageUrl("/api/output-image?name=mask.png")).toBe("mask.png");
+    expect(filenameFromImageUrl("https://app.test/api/input-image?name=lib%20a.png")).toBe("lib a.png");
+  });
+
+  test("finalizeCanvasImageValue keeps mask overlays on embedded step inputs", () => {
+    expect(finalizeCanvasImageValue({
+      kind: "input-image",
+      url: "/api/input-image?name=photo.png",
+      maskDataUrl: "data:image/png;base64,abc"
+    })).toEqual({
+      kind: "input-image",
+      url: "/api/input-image?name=photo.png",
+      name: "photo.png",
+      maskDataUrl: "data:image/png;base64,abc"
+    });
+    expect(finalizeCanvasImageValue("/api/input-image?name=photo.png")).toEqual({
+      kind: "input-image",
+      url: "/api/input-image?name=photo.png",
+      name: "photo.png"
+    });
+    expect(finalizeCanvasImageValue("/api/output-image?name=mask.png")).toBe("/api/output-image?name=mask.png");
+  });
+
+  test("cloneImageValueForSource keeps mask overlays and filename", () => {
+    expect(cloneImageValueForSource({
+      kind: "input-image",
+      name: "photo.png",
+      url: "/api/input-image?name=photo.png",
+      maskDataUrl: "data:image/png;base64,abc"
+    })).toEqual({
+      kind: "input-image",
+      name: "photo.png",
+      url: "/api/input-image?name=photo.png",
+      maskDataUrl: "data:image/png;base64,abc"
+    });
+    expect(cloneImageValueForSource({
+      kind: "input-image",
+      url: "/api/input-image?name=photo.png",
+      maskDataUrl: "data:image/png;base64,abc"
+    })).toEqual({
+      kind: "input-image",
+      name: "photo.png",
+      url: "/api/input-image?name=photo.png",
+      maskDataUrl: "data:image/png;base64,abc"
+    });
   });
 });

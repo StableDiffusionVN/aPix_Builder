@@ -88,6 +88,12 @@ import {
 } from "./canvasRunSnapshot.js";
 import { expandCanvasRunJobImageBatches } from "./canvasBatchImages.js";
 import { calculateSmartGuides } from "./canvasSmartGuides.js";
+import {
+  connectionLineClass,
+  outputEdgeClass,
+  resolveConnectionOutputColorIndex,
+  resolveEdgeOutputColorIndex
+} from "./canvasOutputColors.js";
 
 const nodeTypes = { step: StepNode, source: SourceNode };
 const EMPTY_INPUT_IMAGES = [];
@@ -146,6 +152,7 @@ function canvasHistoryContextForJob(job, node) {
 
 function InfiniteCanvasInner({
   rhSettings,
+  comfyAddress = "",
   inputImages,
   refreshInputImages,
   updateInputImages,
@@ -175,6 +182,7 @@ function InfiniteCanvasInner({
   const {
     nodes, edges,
     orderedTabs, activeId, activeName, viewport,
+    workspaceSaveState,
     canUndo, canRedo,
     onNodesChange, onEdgesChange, onConnect, setNodes, setEdges,
     addNode, updateNodeData, updateNodeSize, commitNodeResize, removeNode, removeEdge,
@@ -198,6 +206,7 @@ function InfiniteCanvasInner({
   const [contextMenu, setContextMenu] = useState(null);
   const [paletteDropActive, setPaletteDropActive] = useState(false);
   const [canvasInteracting, setCanvasInteracting] = useState(false);
+  const [connectionLineClassName, setConnectionLineClassName] = useState("");
 
   const nodesRef = useRef(nodes);
   const edgesRef = useRef(edges);
@@ -1052,7 +1061,8 @@ function InfiniteCanvasInner({
         runId,
         signal: abortController.signal,
         onLog: log,
-        historyContext
+        historyContext,
+        comfyAddress
       });
       if (pipelineCancelledRef.current) {
         throw new DOMException("Cancelled", "AbortError");
@@ -1088,7 +1098,7 @@ function InfiniteCanvasInner({
       }
       abortControllerRef.current = null;
     }
-  }, [activeId, makeRunLogger, runLogStartSession, runLogEndSession]);
+  }, [activeId, comfyAddress, makeRunLogger, runLogStartSession, runLogEndSession]);
 
   const cancelCanvasRun = useCallback(async () => {
     pipelineCancelledRef.current = true;
@@ -1146,7 +1156,7 @@ function InfiniteCanvasInner({
   const applyStepSuccess = useCallback((live, stepId, outputs, runId = "", metadata = {}) => {
     const index = live.findIndex(item => item.id === stepId);
     if (index < 0) return;
-    const patch = nodeRunCachePatch(outputs, runId, metadata);
+    const patch = nodeRunCachePatch(outputs, runId, metadata, live[index]);
     live[index] = { ...live[index], data: { ...live[index].data, ...patch } };
     updateNodeData(stepId, patch);
     syncLiveToRefs(live);
@@ -1430,7 +1440,8 @@ function InfiniteCanvasInner({
       rhAuth: snapshot.rhAuth,
       runId: job.runId,
       onLog: null,
-      historyContext: canvasHistoryContextForJob(job, node)
+      historyContext: canvasHistoryContextForJob(job, node),
+      comfyAddress
     });
     return {
       endpoint: request.endpoint,
@@ -1448,7 +1459,7 @@ function InfiniteCanvasInner({
         )
       }
     };
-  }, [activeId]);
+  }, [activeId, comfyAddress]);
 
   const hasBackendCanvasActivity = useCallback(() => (
     Boolean(activeRunIdRef.current)
@@ -1797,7 +1808,7 @@ function InfiniteCanvasInner({
         durationMs: historyItem.durationMs ?? historyItem.result?.durationMs ?? null,
         rhCoins: historyItem.rhCoins ?? historyItem.result?.rhCoins ?? null,
         provider: historyItem.provider || historyItem.result?.provider || ""
-      });
+      }, node);
 
       // A previous history result may be restored while this same node is
       // running again. Keep the active state until the new run is complete.
@@ -1809,7 +1820,7 @@ function InfiniteCanvasInner({
   // React Flow creates a new node object on every drag frame. Keep the graph
   // context identity stable while only positions/selection change so memoized
   // custom nodes that are not being dragged do not render again.
-  const graphContextRef = useRef({ nodes, edges, nodeData: new Map() });
+  const graphContextRef = useRef({ nodes, edges, nodeData: new Map(), nodeById: new Map() });
   const previousGraph = graphContextRef.current;
   const graphDataChanged = previousGraph.edges !== edges
     || previousGraph.nodes.length !== nodes.length
@@ -1818,7 +1829,8 @@ function InfiniteCanvasInner({
     graphContextRef.current = {
       nodes,
       edges,
-      nodeData: new Map(nodes.map(node => [node.id, node.data]))
+      nodeData: new Map(nodes.map(node => [node.id, node.data])),
+      nodeById: new Map(nodes.map(node => [node.id, node]))
     };
   } else {
     // Consumers that render for their own React Flow prop change still read
@@ -1827,21 +1839,47 @@ function InfiniteCanvasInner({
   }
   const graphContextValue = graphContextRef.current;
 
-  const renderedEdges = useMemo(() => edges.map(edge => (
-    edge.type === "default" && edge.animated === false
+  const renderedEdges = useMemo(() => edges.map(edge => {
+    const base = edge.type === "default" && edge.animated === false
       ? edge
-      : { ...edge, type: "default", animated: false }
-  )), [edges]);
+      : { ...edge, type: "default", animated: false };
+    const colorIndex = resolveEdgeOutputColorIndex(edge, nodes, edges);
+    const edgeClass = outputEdgeClass(colorIndex);
+    if (!edgeClass) return base;
+    const mergedClass = [edge.className, edgeClass].filter(Boolean).join(" ");
+    return { ...base, className: mergedClass };
+  }), [edges, nodes]);
 
-  const connectedInputs = useCallback((id) => {
-    const map = {};
-    for (const edge of edgesRef.current) {
-      if (edge.target !== id) continue;
+  const connectedInputsByNodeRef = useRef(new Map());
+  if (previousGraph.edges !== edges) {
+    const nextConnectedInputs = new Map();
+    for (const edge of edges) {
       const handle = edge.targetHandle || "";
       const key = handle.startsWith("in:") ? handle.slice(3) : handle;
-      if (key) map[key] = true;
+      if (!key) continue;
+      const targetInputs = nextConnectedInputs.get(edge.target) || {};
+      targetInputs[key] = true;
+      nextConnectedInputs.set(edge.target, targetInputs);
     }
-    return map;
+    connectedInputsByNodeRef.current = nextConnectedInputs;
+  }
+
+  const connectedInputs = useCallback((id) => {
+    return connectedInputsByNodeRef.current.get(id) || {};
+  }, []);
+
+  const handleConnectStart = useCallback((_event, params) => {
+    if (params?.handleType !== "source" || !params.nodeId) {
+      setConnectionLineClassName("");
+      return;
+    }
+    const node = nodesRef.current.find(item => item.id === params.nodeId);
+    const colorIndex = resolveConnectionOutputColorIndex(node, params.handleId, nodesRef.current, edgesRef.current);
+    setConnectionLineClassName(connectionLineClass(colorIndex));
+  }, []);
+
+  const handleConnectEnd = useCallback(() => {
+    setConnectionLineClassName("");
   }, []);
 
   const isValidConnection = useCallback((connection) => {
@@ -2087,6 +2125,7 @@ function InfiniteCanvasInner({
               isTabUnsavedToLibrary={isTabUnsavedToLibrary}
               isTabInLibrary={isTabInLibrary}
               needsCloseConfirmation={needsCloseConfirmation}
+              saveState={workspaceSaveState}
               onSwitchTab={switchProject}
               onRename={renameProject}
               onNewTab={openNewTab}
@@ -2161,6 +2200,8 @@ function InfiniteCanvasInner({
               onNodeDragStop={handleNodeDragStop}
               onEdgesChange={onEdgesChange}
               onConnect={onConnect}
+              onConnectStart={handleConnectStart}
+              onConnectEnd={handleConnectEnd}
               onReconnect={(oldEdge, newConnection) => {
                 setEdges(current => reconnectEdge(oldEdge, newConnection, current));
               }}
@@ -2210,6 +2251,7 @@ function InfiniteCanvasInner({
                 style: { strokeWidth: 1.5 }
               }}
               connectionLineStyle={{ strokeWidth: 1.5 }}
+              connectionLineClassName={connectionLineClassName}
               noDragClassName="nodrag"
               noWheelClassName="nowheel"
               deleteKeyCode={["Backspace", "Delete"]}

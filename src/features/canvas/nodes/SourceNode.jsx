@@ -9,7 +9,9 @@ import {
   findLinkedImageSource,
   findNodeInputImageUrl,
   getNodeRunCache,
+  isInputPipeSource,
   resolveEffectiveNodeOutputUrl,
+  sourceIncomingEdge,
   withImageCacheBust
 } from "../canvasModel.js";
 import { useCanvasActions, useCanvasGraph } from "../canvasContext.js";
@@ -35,7 +37,7 @@ function SourceNodeComponent({ id, data, selected }) {
     openContextMenu,
     outputMetadataByRunId
   } = useCanvasActions();
-  const { nodes, edges } = useCanvasGraph();
+  const { nodes, edges, nodeById } = useCanvasGraph();
   const sourceType = data.sourceType || data.port?.type || "any";
   const uiType = String(data.port?.uiType || "").toLowerCase();
   const hasChoices = Boolean(data.port?.choices?.length);
@@ -43,34 +45,42 @@ function SourceNodeComponent({ id, data, selected }) {
   const Icon = hasChoices ? List : (uiType === "checkpoints" || uiType === "checkpoint" || uiType === "loras" || uiType === "lora")
     ? Database
     : meta.Icon;
-  const isPassthrough = Boolean(data.passthroughFromOutput);
-  const badgeLabel = isPassthrough
-    ? t("canvas.preview.output")
-    : hasChoices
-    ? "Menu"
-    : uiType === "checkpoints" || uiType === "checkpoint"
-      ? "Checkpoint"
-      : uiType === "loras" || uiType === "lora"
-        ? "Lora"
-        : uiType === "int"
-          ? t("canvas.node.type.integer")
-          : uiType === "float"
-            ? t("canvas.node.type.float")
-            : sourceType === "image"
-              ? t("canvas.node.type.image")
-              : sourceType === "number"
-                ? t("canvas.node.type.number")
-                : sourceType === "any"
-                  ? t("canvas.node.type.value")
-                  : meta.label;
   const value = data.values?.main;
-  const node = nodes?.find(item => item.id === id);
-  const stepNode = isPassthrough
-    ? nodes?.find(item => item.id === data.passthroughSourceNodeId)
+  const node = nodeById?.get(id);
+  const isOutputPassthrough = Boolean(data.passthroughFromOutput);
+  const incomingEdge = sourceIncomingEdge(id, edges || []);
+  const isInputPipe = isInputPipeSource(node, edges || []);
+  const isPassthrough = isOutputPassthrough || isInputPipe;
+  const badgeLabel = isInputPipe
+    ? t("canvas.preview.input")
+    : isOutputPassthrough
+      ? t("canvas.preview.output")
+      : hasChoices
+        ? "Menu"
+        : uiType === "checkpoints" || uiType === "checkpoint"
+          ? "Checkpoint"
+          : uiType === "loras" || uiType === "lora"
+            ? "Lora"
+            : uiType === "int"
+              ? t("canvas.node.type.integer")
+              : uiType === "float"
+                ? t("canvas.node.type.float")
+                : sourceType === "image"
+                  ? t("canvas.node.type.image")
+                  : sourceType === "number"
+                    ? t("canvas.node.type.number")
+                    : sourceType === "any"
+                      ? t("canvas.node.type.value")
+                      : meta.label;
+  const stepNode = isOutputPassthrough
+    ? nodeById?.get(data.passthroughSourceNodeId)
     : null;
   const outputKey = data.passthroughOutputKey || "main";
   const stepRunCache = stepNode ? getNodeRunCache(stepNode) : null;
-  const outputUrl = isPassthrough
+  const pipePreviewUrl = isInputPipe && incomingEdge
+    ? resolveEffectiveNodeOutputUrl(incomingEdge.source, incomingEdge.sourceHandle, nodes || [], edges || [])
+    : "";
+  const outputUrl = isOutputPassthrough
     ? resolveEffectiveNodeOutputUrl(
       data.passthroughSourceNodeId,
       `out:${outputKey}`,
@@ -85,7 +95,10 @@ function SourceNodeComponent({ id, data, selected }) {
     inputImageUrl,
     linkedCache?.runAt || inputImageUrl
   );
-  const outputPreviewUrl = withImageCacheBust(outputUrl, stepRunCache?.runAt || outputUrl);
+  const outputPreviewUrl = withImageCacheBust(
+    isInputPipe ? pipePreviewUrl : outputUrl,
+    stepRunCache?.runAt || pipePreviewUrl || outputUrl
+  );
   const historyMetadata = outputMetadataByRunId?.[stepRunCache?.runId] || {};
   const outputTimingLabel = formatOutputTimingLabel({
     durationMs: stepRunCache?.durationMs ?? historyMetadata.durationMs,
@@ -141,7 +154,7 @@ function SourceNodeComponent({ id, data, selected }) {
               position={Position.Left}
               id="in:main"
               className={`canvasHandle in type-${sourceType}`}
-              isConnectable
+              isConnectable={isInputPipe}
             />
             <div className="canvasField">
               <span className="canvasFieldLabel">{data.name || meta.label}</span>

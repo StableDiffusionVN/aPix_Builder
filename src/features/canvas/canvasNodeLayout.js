@@ -137,6 +137,7 @@ export function estimateStepNodeMinHeight(node, edges = [], nodes = []) {
       );
     });
   }
+
   height += bodyHeight;
 
   height += estimateOutputPreviewBlockHeight(node, width, nodes, edges);
@@ -222,10 +223,13 @@ export function normalizeOutputSplitNodes(nodes, edges) {
         stepId: node.data.passthroughTargetNodeId,
         valueKey: node.data.passthroughInputValueKey
       };
-      const linked = stepId && valueKey && edgeList.some(edge => (
+      const linkedToStep = stepId && valueKey && edgeList.some(edge => (
         edge.source === node.id && edge.target === stepId && edge.targetHandle === `in:${valueKey}`
       ));
-      if (!linked) {
+      const linkedFromUpstream = edgeList.some(edge => (
+        edge.target === node.id && edge.targetHandle === "in:main"
+      ));
+      if (!linkedToStep && !linkedFromUpstream) {
         const rest = { ...node.data };
         delete rest.passthroughFromInput;
         delete rest.passthroughTargetNodeId;
@@ -246,9 +250,19 @@ export function restoreInputSourceOnRemove(nodes, edges, sourceId) {
   const valueKey = source.data.passthroughInputValueKey;
   if (!stepId || !valueKey) return null;
 
-  const value = source.data?.values?.main ?? "";
+  const upstreamEdge = edges.find(edge => edge.target === sourceId && edge.targetHandle === "in:main");
+  const value = upstreamEdge ? "" : (source.data?.values?.main ?? "");
 
-  const nextEdges = edges.filter(edge => edge.source !== sourceId && edge.target !== sourceId);
+  let nextEdges = edges.filter(edge => edge.source !== sourceId && edge.target !== sourceId);
+  if (upstreamEdge) {
+    nextEdges = nextEdges.concat({
+      ...upstreamEdge,
+      id: `e-${upstreamEdge.source}-${stepId}-restored`,
+      target: stepId,
+      targetHandle: `in:${valueKey}`
+    });
+  }
+
   const nextNodes = nodes
     .filter(node => node.id !== sourceId)
     .map(node => {

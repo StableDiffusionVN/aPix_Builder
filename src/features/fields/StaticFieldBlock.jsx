@@ -1,3 +1,16 @@
+import { useMemo } from "react";
+import DOMPurify from "dompurify";
+
+const STATIC_HTML_SANITIZE_OPTIONS = {
+  USE_PROFILES: { html: true },
+  FORBID_TAGS: ["base", "button", "embed", "form", "iframe", "input", "link", "meta", "object", "script", "style", "textarea"],
+  FORBID_ATTR: ["style"]
+};
+
+export function sanitizeStaticHtml(value = "") {
+  return DOMPurify.sanitize(String(value || ""), STATIC_HTML_SANITIZE_OPTIONS);
+}
+
 function safeLinkHref(href = "") {
   const trimmed = String(href).trim();
   return /^(https?:|mailto:|tel:)/i.test(trimmed) ? trimmed : "";
@@ -96,6 +109,10 @@ function renderMarkdown(markdown = "") {
 
 export function StaticFieldBlock({ item }) {
   const ui = item.ui || {};
+  const sanitizedHtml = useMemo(
+    () => (ui.type === "html" ? sanitizeStaticHtml(ui.value) : ""),
+    [ui.type, ui.value]
+  );
   if (ui.type === "note" || ui.type === "markdown") {
     return (
       <section className="workflowNote">
@@ -104,7 +121,7 @@ export function StaticFieldBlock({ item }) {
     );
   }
   if (ui.type === "html") {
-    return <div className="note" dangerouslySetInnerHTML={{ __html: ui.value }} />;
+    return <div className="note" dangerouslySetInnerHTML={{ __html: sanitizedHtml }} />;
   }
   return null;
 }

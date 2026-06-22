@@ -7,6 +7,7 @@ import { parseDataUrl } from "../lib/comfyClient.js";
 import { scanLocalImageFolder } from "../lib/localImageFolder.js";
 import { createTemplateService } from "../lib/templateService.js";
 import { normalizeCanvasHistory } from "../lib/canvasHistory.js";
+import { atomicWriteFile, readJsonFileWithBackup } from "../lib/atomicFile.js";
 
 const maxImageBodyBytes = Number(process.env.MAX_IMAGE_BODY_BYTES || 512 * 1024 * 1024);
 const maxOutputHistoryItems = 500;
@@ -213,17 +214,12 @@ export function createStorageService({ resourceRoot, dataRoot, readBody, send, h
   }
 
   async function loadStorageSettings() {
-    try {
-      const raw = await readFile(storageSettingsPath, "utf8");
-      return normalizeStorageSettings(JSON.parse(raw));
-    } catch {
-      return normalizeStorageSettings();
-    }
+    const loaded = await readJsonFileWithBackup(storageSettingsPath);
+    return normalizeStorageSettings(loaded.value || {});
   }
 
   async function writeStorageSettings(settings) {
-    await mkdir(dataRoot, { recursive: true });
-    await writeFile(storageSettingsPath, JSON.stringify(settings, null, 2), "utf8");
+    await atomicWriteFile(storageSettingsPath, `${JSON.stringify(settings, null, 2)}\n`);
   }
 
   function normalizeAppSettings(value) {
@@ -231,11 +227,8 @@ export function createStorageService({ resourceRoot, dataRoot, readBody, send, h
   }
 
   async function readAppSettings() {
-    try {
-      return normalizeAppSettings(JSON.parse(await readFile(appSettingsPath, "utf8")));
-    } catch {
-      return {};
-    }
+    const loaded = await readJsonFileWithBackup(appSettingsPath);
+    return normalizeAppSettings(loaded.value || {});
   }
 
   async function writeAppSettings(settings) {
@@ -246,12 +239,7 @@ export function createStorageService({ resourceRoot, dataRoot, readBody, send, h
       if (Object.keys(canvas).length) normalized.canvas = canvas;
       else delete normalized.canvas;
     }
-    await mkdir(path.dirname(appSettingsPath), { recursive: true });
-    await writeFile(appSettingsPath, JSON.stringify(normalized, null, 2), {
-      encoding: "utf8",
-      mode: 0o600
-    });
-    await chmod(appSettingsPath, 0o600);
+    await atomicWriteFile(appSettingsPath, `${JSON.stringify(normalized, null, 2)}\n`);
     return normalized;
   }
 
@@ -266,34 +254,34 @@ export function createStorageService({ resourceRoot, dataRoot, readBody, send, h
   }
 
   async function readCanvasProjectsStore() {
-    try {
-      const parsed = JSON.parse(await readFile(canvasProjectsPath, "utf8"));
+    const loaded = await readJsonFileWithBackup(canvasProjectsPath);
+    if (loaded.value) {
+      const parsed = loaded.value;
       const store = normalizeCanvasProjectsStore(parsed);
       if (!Object.keys(store.projects).length) throw new Error("empty store");
       return store;
-    } catch {
-      let legacy = { nodes: [], edges: [] };
-      try {
-        legacy = JSON.parse(await readFile(canvasProjectPath, "utf8"));
-      } catch {}
-      const store = {
-        activeId: "p_default",
-        projects: {
-          p_default: {
-            id: "p_default",
-            name: "Workflow 1",
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-            nodes: Array.isArray(legacy?.nodes) ? legacy.nodes : [],
-            edges: Array.isArray(legacy?.edges) ? legacy.edges : [],
-            librarySaved: false,
-            savedSlug: null
-          }
-        }
-      };
-      await writeCanvasProjectsStore(store);
-      return store;
     }
+    let legacy = { nodes: [], edges: [] };
+    try {
+      legacy = JSON.parse(await readFile(canvasProjectPath, "utf8"));
+    } catch {}
+    const store = {
+      activeId: "p_default",
+      projects: {
+        p_default: {
+          id: "p_default",
+          name: "Workflow 1",
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          nodes: Array.isArray(legacy?.nodes) ? legacy.nodes : [],
+          edges: Array.isArray(legacy?.edges) ? legacy.edges : [],
+          librarySaved: false,
+          savedSlug: null
+        }
+      }
+    };
+    await writeCanvasProjectsStore(store);
+    return store;
   }
 
   function normalizeCanvasProjectsStore(raw = {}) {
@@ -352,12 +340,7 @@ export function createStorageService({ resourceRoot, dataRoot, readBody, send, h
 
   async function writeCanvasProjectsStore(store) {
     const payload = normalizeCanvasProjectsStore(store);
-    await mkdir(personalDataDir, { recursive: true });
-    await writeFile(canvasProjectsPath, JSON.stringify(payload), {
-      encoding: "utf8",
-      mode: 0o600
-    });
-    await chmod(canvasProjectsPath, 0o600);
+    await atomicWriteFile(canvasProjectsPath, `${JSON.stringify(payload)}\n`);
     return payload;
   }
 
@@ -512,21 +495,22 @@ export function createStorageService({ resourceRoot, dataRoot, readBody, send, h
       if (req.method === "POST") {
         const body = JSON.parse(await readBody(req) || "{}");
         const store = await readCanvasProjectsStore();
-        const active = store.projects[store.activeId];
-        if (!active) {
-          send(res, 404, { error: "Không tìm thấy workflow đang mở" });
+        const projectId = String(body.projectId || store.activeId).trim();
+        const project = store.projects[projectId];
+        if (!project) {
+          send(res, 404, { error: "Không tìm thấy workflow cần lưu" });
           return;
         }
-        active.nodes = Array.isArray(body.nodes) ? body.nodes : [];
-        active.edges = Array.isArray(body.edges) ? body.edges : [];
+        project.nodes = Array.isArray(body.nodes) ? body.nodes : [];
+        project.edges = Array.isArray(body.edges) ? body.edges : [];
         if (body.viewport !== undefined) {
-          active.viewport = normalizeCanvasViewport(body.viewport);
+          project.viewport = normalizeCanvasViewport(body.viewport);
         }
-        active.updatedAt = new Date().toISOString();
+        project.updatedAt = new Date().toISOString();
         await writeCanvasProjectsStore(store);
         send(res, 200, {
           success: true,
-          activeId: store.activeId,
+          activeId: projectId,
           projects: summarizeCanvasProjects(store)
         });
         return;

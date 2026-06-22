@@ -156,7 +156,7 @@ export function createComfyService({ storage, runCoordinator, readBody, send }) 
   
   async function handleCancel(req, res) {
     const body = JSON.parse(await readBody(req) || "{}");
-    if (cancelQueuedBackendRun(body.runId)) {
+    if (await cancelQueuedBackendRun(body.runId)) {
       send(res, 200, { cancelled: true, queued: true, message: "Removed from backend queue" });
       return;
     }

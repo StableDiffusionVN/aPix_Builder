@@ -235,8 +235,11 @@ export function AppWorkspace() {
     colorAdjustReloadToken, setColorAdjustReloadToken
   } = useColorAdjustContext();
 
+  const shouldDiscoverComfy = isCanvasView
+    ? (canvasRuntime.hasLocalNodes || canvasRuntime.activeKind === "local")
+    : executionMode === "local";
   const { discovery, discoveryLoading } = useDiscovery(
-    !isCanvasView && executionMode === "local" ? comfyAddress : ""
+    shouldDiscoverComfy ? comfyAddress : ""
   );
   const {
     settings: rhSettings,
@@ -1628,6 +1631,7 @@ export function AppWorkspace() {
         <Suspense fallback={<div className="canvasView" />}>
           <InfiniteCanvas
             rhSettings={rhSettings}
+            comfyAddress={comfyAddress}
             inputImages={inputImages}
             refreshInputImages={refreshInputImages}
             updateInputImages={setInputImages}

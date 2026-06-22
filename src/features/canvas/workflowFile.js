@@ -1,5 +1,8 @@
 export const APIX_WORKFLOW_FORMAT = "apix-builder-workflow";
 export const APIX_WORKFLOW_VERSION = 1;
+export const APIX_WORKFLOW_MAX_BYTES = 20 * 1024 * 1024;
+export const APIX_WORKFLOW_MAX_NODES = 10_000;
+export const APIX_WORKFLOW_MAX_EDGES = 50_000;
 
 function normalizedViewport(value) {
   if (!value || typeof value !== "object") return null;
@@ -30,9 +33,45 @@ function workflowPayload(value) {
     : value;
 }
 
+function validatedGraph(workflow) {
+  if (!Array.isArray(workflow.nodes) || !Array.isArray(workflow.edges)) {
+    throw new Error("Workflow phải chứa đầy đủ danh sách nodes và edges.");
+  }
+  if (workflow.nodes.length > APIX_WORKFLOW_MAX_NODES || workflow.edges.length > APIX_WORKFLOW_MAX_EDGES) {
+    throw new Error("Workflow vượt quá giới hạn số lượng nodes hoặc edges.");
+  }
+
+  const nodeIds = new Set();
+  for (const node of workflow.nodes) {
+    const id = String(node?.id || "").trim();
+    if (!node || typeof node !== "object" || Array.isArray(node) || !id || nodeIds.has(id)) {
+      throw new Error("Workflow chứa node không hợp lệ hoặc trùng ID.");
+    }
+    nodeIds.add(id);
+  }
+  const edgeIds = new Set();
+  for (const edge of workflow.edges) {
+    const id = String(edge?.id || "").trim();
+    const source = String(edge?.source || "").trim();
+    const target = String(edge?.target || "").trim();
+    if (
+      !edge || typeof edge !== "object" || Array.isArray(edge)
+      || !id || edgeIds.has(id)
+      || !nodeIds.has(source) || !nodeIds.has(target)
+    ) {
+      throw new Error("Workflow chứa edge không hợp lệ hoặc tham chiếu node không tồn tại.");
+    }
+    edgeIds.add(id);
+  }
+  return { nodes: workflow.nodes, edges: workflow.edges };
+}
+
 export function parseWorkflowFile(value, { defaultName = "Workflow nhập" } = {}) {
   let parsed = value;
   if (typeof value === "string") {
+    if (new Blob([value]).size > APIX_WORKFLOW_MAX_BYTES) {
+      throw new Error("Tệp workflow vượt quá giới hạn dung lượng.");
+    }
     try {
       parsed = JSON.parse(value);
     } catch {
@@ -41,14 +80,12 @@ export function parseWorkflowFile(value, { defaultName = "Workflow nhập" } = {
   }
 
   const workflow = workflowPayload(parsed);
-  if (!Array.isArray(workflow.nodes) || !Array.isArray(workflow.edges)) {
-    throw new Error("Workflow phải chứa đầy đủ danh sách nodes và edges.");
-  }
+  const graph = validatedGraph(workflow);
 
   return {
     name: String(workflow.name || defaultName).trim() || defaultName,
-    nodes: workflow.nodes,
-    edges: workflow.edges,
+    nodes: graph.nodes,
+    edges: graph.edges,
     viewport: normalizedViewport(workflow.viewport)
   };
 }

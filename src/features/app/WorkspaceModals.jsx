@@ -2,10 +2,10 @@ import { Suspense } from "react";
 import {
   ImageEditorModal,
   SettingsModal,
-  TemplateEditorModal
+  TemplateEditorModal,
+  WorkspaceInfoModal
 } from "../../components/lazyModals";
 import { SettingsModalProvider } from "../../providers/SettingsModalProvider.jsx";
-import { WorkspaceInfoModal } from "./WorkspaceInfoModal.jsx";
 
 export function WorkspaceModals({
   settingsOpen,
@@ -47,20 +47,24 @@ export function WorkspaceModals({
         </SettingsModalProvider>
       ) : null}
 
-      <WorkspaceInfoModal
-        open={infoOpen}
-        onClose={closeInfo}
-        infoModeLabel={infoModeLabel}
-        infoTemplateLabel={infoTemplateLabel}
-        infoTargetLabel={infoTargetLabel}
-        isDesktop={isDesktop}
-        updateChecking={updateChecking}
-        updateCheckError={updateCheckError}
-        updateUpToDate={updateUpToDate}
-        availableUpdate={availableUpdate}
-        checkForUpdates={checkForUpdates}
-        downloadUpdate={downloadUpdate}
-      />
+      {infoOpen ? (
+        <Suspense fallback={null}>
+          <WorkspaceInfoModal
+            open
+            onClose={closeInfo}
+            infoModeLabel={infoModeLabel}
+            infoTemplateLabel={infoTemplateLabel}
+            infoTargetLabel={infoTargetLabel}
+            isDesktop={isDesktop}
+            updateChecking={updateChecking}
+            updateCheckError={updateCheckError}
+            updateUpToDate={updateUpToDate}
+            availableUpdate={availableUpdate}
+            checkForUpdates={checkForUpdates}
+            downloadUpdate={downloadUpdate}
+          />
+        </Suspense>
+      ) : null}
 
       {templateEditorOpen ? (
         <Suspense fallback={null}>

@@ -13,7 +13,7 @@ describe("workflow JSON files", () => {
       id: "p_123",
       name: "Ảnh chân dung",
       nodes: [{ id: "n1", data: { values: { prompt: "test" } } }],
-      edges: [{ id: "e1", source: "n1", target: "n2" }],
+      edges: [{ id: "e1", source: "n1", target: "n1" }],
       viewport: { x: 10, y: -20, zoom: 1.25 },
       exportedAt: "2026-06-21T00:00:00.000Z"
     });
@@ -49,6 +49,16 @@ describe("workflow JSON files", () => {
     expect(() => parseWorkflowFile({ format: "other", nodes: [], edges: [] })).toThrow("Định dạng");
     expect(() => parseWorkflowFile({ format: APIX_WORKFLOW_FORMAT, version: 999, workflow: { nodes: [], edges: [] } })).toThrow("Phiên bản");
     expect(() => parseWorkflowFile({ name: "Missing graph" })).toThrow("nodes và edges");
+    expect(() => parseWorkflowFile({
+      name: "Dangling edge",
+      nodes: [{ id: "n1" }],
+      edges: [{ id: "e1", source: "n1", target: "missing" }]
+    })).toThrow("tham chiếu node");
+    expect(() => parseWorkflowFile({
+      name: "Duplicate nodes",
+      nodes: [{ id: "n1" }, { id: "n1" }],
+      edges: []
+    })).toThrow("trùng ID");
   });
 
   test("creates a safe workflow filename", () => {

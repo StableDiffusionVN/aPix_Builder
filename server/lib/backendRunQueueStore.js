@@ -1,5 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import path from "node:path";
+import { atomicWriteFile, readJsonFileWithBackup } from "./atomicFile.js";
 
 const STORE_VERSION = 1;
 
@@ -30,16 +29,27 @@ export function normalizeBackendRunQueueSnapshot(raw = {}) {
   };
 }
 
+export function backendQueueHasRunId(runId, {
+  pending = [],
+  current = null,
+  activeRunIds = [],
+  sessions = []
+} = {}) {
+  const id = String(runId || "").trim();
+  if (!id) return false;
+  return pending.some(job => String(job?.body?.runId || job?.runId || "") === id)
+    || String(current?.body?.runId || current?.runId || "") === id
+    || activeRunIds.some(activeId => String(activeId) === id)
+    || sessions.some(session => String(session?.runId || "") === id);
+}
+
 export function createBackendRunQueueStore({ filePath }) {
   let snapshot = normalizeBackendRunQueueSnapshot();
   let persistChain = Promise.resolve();
 
   async function load() {
-    try {
-      snapshot = normalizeBackendRunQueueSnapshot(JSON.parse(await readFile(filePath, "utf8")));
-    } catch {
-      snapshot = normalizeBackendRunQueueSnapshot();
-    }
+    const loaded = await readJsonFileWithBackup(filePath);
+    snapshot = normalizeBackendRunQueueSnapshot(loaded.value || {});
     return snapshot;
   }
 
@@ -57,10 +67,9 @@ export function createBackendRunQueueStore({ filePath }) {
 
   function persist() {
     const payload = snapshot;
-    persistChain = persistChain.then(async () => {
-      await mkdir(path.dirname(filePath), { recursive: true });
-      await writeFile(filePath, JSON.stringify(payload, null, 2), "utf8");
-    }).catch(() => {});
+    persistChain = persistChain.catch(() => {}).then(async () => {
+      await atomicWriteFile(filePath, `${JSON.stringify(payload, null, 2)}\n`);
+    });
     return persistChain;
   }
 

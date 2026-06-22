@@ -1,9 +1,10 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
 import {
   createBackendRunQueueStore,
+  backendQueueHasRunId,
   normalizeBackendRunQueueSnapshot
 } from "../server/lib/backendRunQueueStore.js";
 
@@ -53,5 +54,39 @@ describe("backendRunQueueStore", () => {
     const raw = JSON.parse(await readFile(store.filePath, "utf8"));
     expect(raw.version).toBe(1);
     expect(raw.pending[0].runId).toBe("queued-1");
+  });
+
+  test("recovers the last valid queue from backup", async () => {
+    const store = await createTempStore();
+    store.setSnapshot({
+      pending: [{ runId: "queued-1", endpoint: "/api/run", body: { runId: "queued-1" } }]
+    });
+    await store.persist();
+    await writeFile(store.filePath, "{broken", "utf8");
+
+    const recovered = await store.load();
+    expect(recovered.pending.map(job => job.runId)).toEqual(["queued-1"]);
+  });
+
+  test("does not silently replace an unrecoverable queue", async () => {
+    const store = await createTempStore();
+    await writeFile(store.filePath, "{broken", "utf8");
+    await writeFile(`${store.filePath}.bak`, "{also-broken", "utf8");
+    await expect(store.load()).rejects.toThrow("backend-run-queue.json");
+  });
+
+  test("recognizes run ids across pending, active, and completed state", () => {
+    expect(backendQueueHasRunId("pending", {
+      pending: [{ runId: "pending" }]
+    })).toBe(true);
+    expect(backendQueueHasRunId("active", {
+      activeRunIds: ["active"]
+    })).toBe(true);
+    expect(backendQueueHasRunId("done", {
+      sessions: [{ runId: "done", status: "success" }]
+    })).toBe(true);
+    expect(backendQueueHasRunId("new", {
+      pending: [{ runId: "pending" }]
+    })).toBe(false);
   });
 });

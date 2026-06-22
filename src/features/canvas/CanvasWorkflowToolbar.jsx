@@ -11,6 +11,7 @@ export function CanvasWorkflowToolbar({
   isTabUnsavedToLibrary,
   isTabInLibrary,
   needsCloseConfirmation,
+  saveState = "idle",
   onSwitchTab,
   onRename,
   onNewTab,
@@ -272,6 +273,12 @@ export function CanvasWorkflowToolbar({
               : t("canvas.workflow.notInLibrary")
           }
           aria-hidden="true"
+        />
+        <span
+          className={`canvasWorkflowSaveState is-${saveState}`}
+          title={t(`canvas.workflow.saveState.${saveState}`)}
+          role="status"
+          aria-label={t(`canvas.workflow.saveState.${saveState}`)}
         />
       </section>
 

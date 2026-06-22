@@ -20,7 +20,7 @@ import { createStorageService } from "./services/storageService.js";
 import { createComfyService } from "./services/comfyService.js";
 import { createRunningHubService } from "./services/runningHubService.js";
 import { createShortcutService } from "./services/shortcutService.js";
-import { createBackendRunQueueStore } from "./lib/backendRunQueueStore.js";
+import { backendQueueHasRunId, createBackendRunQueueStore } from "./lib/backendRunQueueStore.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
@@ -193,8 +193,6 @@ function queuedJobWaitsForActiveRun(job) {
 async function executeQueuedBackendRun(job) {
   const runId = job.body?.runId || job.runId;
   const provider = queuedJobProvider(job.endpoint, job.meta);
-  backendRunQueueCurrent = job;
-  void persistBackendRunQueue();
   updateRunLogSession(runId, { status: "running" });
   appendRunLog(runId, "info", `Backend queue dispatch: ${job.endpoint}`, { provider });
   try {
@@ -216,7 +214,7 @@ async function executeQueuedBackendRun(job) {
   }
 }
 
-function drainBackendRunQueue() {
+async function drainBackendRunQueue() {
   if (backendRunQueueActive) return;
   if (activeRuns.size || activeRhRuns.size) return;
   const job = backendRunQueue[0];
@@ -225,42 +223,71 @@ function drainBackendRunQueue() {
     if (!backendRunQueueWakeTimer) {
       backendRunQueueWakeTimer = setTimeout(() => {
         backendRunQueueWakeTimer = null;
-        drainBackendRunQueue();
+        void drainBackendRunQueue();
       }, 1000);
     }
     return;
   }
   backendRunQueue.shift();
-  void persistBackendRunQueue();
+  backendRunQueueCurrent = job;
   backendRunQueueActive = true;
+  try {
+    await persistBackendRunQueue();
+  } catch (error) {
+    backendRunQueue.unshift(job);
+    backendRunQueueCurrent = null;
+    backendRunQueueActive = false;
+    appendRunLog(job.runId, "error", `Không thể lưu hàng chờ backend: ${error.message || error}`, {
+      provider: queuedJobProvider(job.endpoint, job.meta)
+    });
+    return;
+  }
   void executeQueuedBackendRun(job)
-    .finally(() => {
+    .finally(async () => {
       if (backendRunQueueCurrent?.runId === job.runId) backendRunQueueCurrent = null;
       backendRunQueueActive = false;
-      void persistBackendRunQueue();
-      setImmediate(() => drainBackendRunQueue());
+      try {
+        await persistBackendRunQueue();
+        setImmediate(() => void drainBackendRunQueue());
+      } catch (error) {
+        appendRunLog(job.runId, "error", `Không thể cập nhật hàng chờ backend: ${error.message || error}`, {
+          provider: queuedJobProvider(job.endpoint, job.meta)
+        });
+      }
     });
 }
 
-function cancelQueuedBackendRun(runId) {
+async function cancelQueuedBackendRun(runId) {
   if (!runId) return false;
   const index = backendRunQueue.findIndex(job => job.runId === runId || job.body?.runId === runId);
   if (index < 0) return false;
   const [job] = backendRunQueue.splice(index, 1);
+  try {
+    await persistBackendRunQueue();
+  } catch (error) {
+    backendRunQueue.splice(index, 0, job);
+    throw error;
+  }
   appendRunLog(runId, "warn", "Đã xóa khỏi hàng chờ backend", {
     provider: queuedJobProvider(job.endpoint, job.meta)
   });
   endRunLogSession(runId, "cancelled");
-  void persistBackendRunQueue();
   return true;
 }
 
-function clearQueuedBackendRuns(filter = null) {
+async function clearQueuedBackendRuns(filter = null) {
   const removed = [];
   for (let index = backendRunQueue.length - 1; index >= 0; index -= 1) {
     const job = backendRunQueue[index];
     if (filter && !filter(job)) continue;
     removed.unshift(...backendRunQueue.splice(index, 1));
+  }
+  try {
+    await persistBackendRunQueue();
+  } catch (error) {
+    backendRunQueue.push(...removed);
+    backendRunQueue.sort((a, b) => String(a.queuedAt || "").localeCompare(String(b.queuedAt || "")));
+    throw error;
   }
   for (const job of removed) {
     const runId = job.runId || job.body?.runId;
@@ -269,7 +296,6 @@ function clearQueuedBackendRuns(filter = null) {
     });
     endRunLogSession(runId, "cancelled");
   }
-  void persistBackendRunQueue();
   return removed.length;
 }
 
@@ -342,11 +368,23 @@ async function handleRunQueueSubmit(req, res) {
   const body = JSON.parse(await readBody(req) || "{}");
   const jobs = Array.isArray(body.jobs) ? body.jobs : [];
   const accepted = [];
+  const existing = [];
   for (const item of jobs) {
     const endpoint = String(item?.endpoint || "");
     const jobBody = item?.body && typeof item.body === "object" ? item.body : null;
     const runId = String(jobBody?.runId || item?.runId || "").trim();
     if (!QUEUE_RUN_ENDPOINTS.has(endpoint) || !jobBody || !runId) continue;
+    if (backendQueueHasRunId(runId, {
+      pending: backendRunQueue,
+      current: backendRunQueueCurrent,
+      activeRunIds: [...activeRuns.keys(), ...activeRhRuns.keys()],
+      sessions: getRunLogSessions()
+    })) {
+      const queued = backendRunQueue.find(job => job.runId === runId || job.body?.runId === runId)
+        || (backendRunQueueCurrent?.runId === runId ? backendRunQueueCurrent : null);
+      existing.push(queued ? queuedRunSummary(queued) : { runId, status: "existing" });
+      continue;
+    }
     const meta = item.meta && typeof item.meta === "object" ? item.meta : {};
     const queuedAt = new Date().toISOString();
     const queued = {
@@ -358,24 +396,39 @@ async function handleRunQueueSubmit(req, res) {
       queuedAt
     };
     backendRunQueue.push(queued);
-    if (!isBackendQueueAlreadyLogged(runId)) {
-      ensureBackendQueueLogSession(queued, "queued");
-      appendRunLog(runId, "queue", `Đã gửi vào hàng chờ backend: ${endpoint}`, {
-        provider: queuedJobProvider(endpoint, meta)
-      });
-    }
     accepted.push(queuedRunSummary(queued));
   }
-  void persistBackendRunQueue();
-  drainBackendRunQueue();
-  send(res, 200, { accepted: accepted.length, jobs: accepted });
+  try {
+    if (accepted.length) await persistBackendRunQueue();
+  } catch (error) {
+    const acceptedIds = new Set(accepted.map(job => job.runId));
+    for (let index = backendRunQueue.length - 1; index >= 0; index -= 1) {
+      if (acceptedIds.has(backendRunQueue[index].runId)) backendRunQueue.splice(index, 1);
+    }
+    throw error;
+  }
+  for (const summary of accepted) {
+    const queued = backendRunQueue.find(job => job.runId === summary.runId);
+    if (!queued || isBackendQueueAlreadyLogged(summary.runId)) continue;
+    ensureBackendQueueLogSession(queued, "queued");
+    appendRunLog(summary.runId, "queue", `Đã gửi vào hàng chờ backend: ${queued.endpoint}`, {
+      provider: queuedJobProvider(queued.endpoint, queued.meta)
+    });
+  }
+  void drainBackendRunQueue();
+  send(res, 200, {
+    accepted: accepted.length,
+    existing: existing.length,
+    acknowledged: accepted.length + existing.length,
+    jobs: [...accepted, ...existing]
+  });
 }
 
 async function handleRunQueueClear(req, res) {
   const body = JSON.parse(await readBody(req) || "{}");
   const runKind = String(body.runKind || "").trim();
   const runKindPrefix = String(body.runKindPrefix || "").trim();
-  const cleared = clearQueuedBackendRuns(
+  const cleared = await clearQueuedBackendRuns(
     runKindPrefix
       ? job => String(job.meta?.runKind || "").startsWith(runKindPrefix)
       : runKind

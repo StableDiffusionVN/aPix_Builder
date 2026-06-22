@@ -192,8 +192,33 @@ function mimeTypeForFile(filename) {
   return "image/png";
 }
 
-async function inputImageToUpload(inputDir, value) {
-  const filename = path.basename(value.name || value.filename || "");
+export function resolveInputImageFilename(value) {
+  let filename = path.basename(value?.name || value?.filename || "");
+  if (!filename && value?.url) {
+    try {
+      const parsed = new URL(value.url, "http://localhost");
+      const raw = parsed.searchParams.get("name") || "";
+      filename = path.basename(decodeURIComponent(raw));
+    } catch {
+      // Fall through to the missing-filename error below.
+    }
+  }
+  return filename;
+}
+
+async function inputImageToUpload(inputDir, value, options = {}) {
+  const filename = resolveInputImageFilename(value);
+  if (!filename && typeof value?.url === "string" && value.url.startsWith("data:")) {
+    const parsed = options.parseDataUrl?.(value.url);
+    if (parsed) {
+      return {
+        kind: "upload",
+        index: Date.now(),
+        mimeType: parsed.mimeType,
+        buffer: parsed.buffer
+      };
+    }
+  }
   if (!filename) throw new Error("Input image is missing filename");
   const filePath = path.join(inputDir, filename);
   if (!filePath.startsWith(inputDir)) throw new Error("Invalid input image path");
@@ -257,7 +282,7 @@ export async function setWorkflowValue(workflow, id, value, target, signal, opti
   }
 
   if (value?.kind === "input-image") {
-    const upload = await inputImageToUpload(inputDir, value);
+    const upload = await inputImageToUpload(inputDir, value, options);
     if (section === "inputs" && field.toLowerCase() === "url") {
       const uploaded = await uploadImageToComfy(target, upload, signal);
       if ("Load_url" in nodeInputs) nodeInputs.Load_url = true;

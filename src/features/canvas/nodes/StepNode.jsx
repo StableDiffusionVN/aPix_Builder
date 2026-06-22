@@ -1,4 +1,4 @@
-import { memo } from "react";
+import { Fragment, memo } from "react";
 import { Handle, Position } from "@xyflow/react";
 import { Loader2, Play, Trash2, AlertCircle, CheckCircle2 } from "lucide-react";
 import {
@@ -16,6 +16,10 @@ import { useCanvasActions, useCanvasGraph } from "../canvasContext.js";
 import { handleNodeBodyWheel } from "../canvasWheel.js";
 import { formatOutputTimingLabel } from "../../../lib/runLog.js";
 import { localizeRuntimeMessage, useI18n } from "../../../i18n/I18nContext.jsx";
+import {
+  OUTPUT_HANDLE_GAP,
+  outputColorClass
+} from "../canvasOutputColors.js";
 
 const KIND_BADGE = {
   local: { label: "ComfyUI", className: "kind-local" },
@@ -47,7 +51,7 @@ function StepNodeComponent({ id, data, selected }) {
     queuedNodeCounts,
     outputMetadataByRunId
   } = useCanvasActions();
-  const { nodes, edges } = useCanvasGraph();
+  const { nodes, edges, nodeById } = useCanvasGraph();
   const badge = KIND_BADGE[data.kind] || { label: data.kind, className: "" };
   const connected = connectedInputs(id);
   const inputs = data.ports?.inputs || [];
@@ -56,8 +60,11 @@ function StepNodeComponent({ id, data, selected }) {
   const primaryOutputKey = outputs[0]?.key || "main";
   const outputDetached = isStepOutputDetached(id, primaryOutputKey, nodes || [], edges || []);
   const runCache = getNodeRunCache({ id, data, type: "step" });
-  const outputUrl = runCache?.primary?.url || runCache?.outputs?.[0]?.url || "";
-  const node = nodes?.find(item => item.id === id);
+  const outputUrl = runCache?.outputs?.find(item => item.key === primaryOutputKey)?.url
+    || runCache?.primary?.url
+    || runCache?.outputs?.[0]?.url
+    || "";
+  const node = nodeById?.get(id);
   const inputImageUrl = findNodeInputImageUrl(node, nodes || [], edges || []);
   const linkedSource = findLinkedImageSource(node, nodes || [], edges || []);
   const linkedCache = linkedSource ? getNodeRunCache(linkedSource) : null;
@@ -80,6 +87,35 @@ function StepNodeComponent({ id, data, selected }) {
     event.preventDefault();
     event.stopPropagation();
     convertOutputToSource(id, outputKey);
+  };
+
+  const renderOutputHandles = () => {
+    if (!outputs.length) return null;
+    return outputs.map((port, index) => {
+      const insetSlots = outputs.length - 1 - index;
+      const rightPx = insetSlots * OUTPUT_HANDLE_GAP;
+      const colorClass = outputColorClass(index);
+      return (
+        <Fragment key={port.key}>
+          <Handle
+            type="source"
+            position={Position.Right}
+            id={`out:${port.key}`}
+            className={`canvasHandle out nodrag nopan ${colorClass}`}
+            style={{ right: rightPx, top: 7 }}
+            isConnectable
+            title={port.label || t("canvas.node.split", { name: port.key })}
+            onDoubleClick={event => handleOutputSplit(event, port.key)}
+          />
+          <span
+            className="canvasOutputHandleHit nodrag nopan"
+            style={{ right: rightPx - 6 }}
+            title={port.label || t("canvas.node.split", { name: port.key })}
+            onDoubleClick={event => handleOutputSplit(event, port.key)}
+          />
+        </Fragment>
+      );
+    });
   };
 
   const menuActions = {
@@ -129,11 +165,10 @@ function StepNodeComponent({ id, data, selected }) {
       <div className="canvasNodeBody" onWheelCapture={handleNodeBodyWheel}>
         {inputs.map((port, index) => {
           const isLinked = Boolean(connected[port.valueKey]);
-          const showOutput = index === 0 && outputs.length > 0;
-          const outputPort = outputs[0];
+          const showOutputs = index === 0 && outputs.length > 0;
           return (
             <div
-              className={`canvasInputRow hasHandle${showOutput ? " hasOutputHandle" : ""}`}
+              className={`canvasInputRow hasHandle${showOutputs ? " hasOutputHandle" : ""}`}
               key={port.key}
             >
               <Handle
@@ -166,24 +201,7 @@ function StepNodeComponent({ id, data, selected }) {
                   t
                 }))}
               />
-              {showOutput ? (
-                <>
-                  <Handle
-                    type="source"
-                    position={Position.Right}
-                    id={`out:${outputPort.key}`}
-                    className="canvasHandle out nodrag nopan"
-                    isConnectable
-                    title={t("canvas.node.split", { name: outputPort.label })}
-                    onDoubleClick={event => handleOutputSplit(event, outputPort.key)}
-                  />
-                  <span
-                    className="canvasOutputHandleHit nodrag nopan"
-                    title={t("canvas.node.split", { name: outputPort.label })}
-                    onDoubleClick={event => handleOutputSplit(event, outputPort.key)}
-                  />
-                </>
-              ) : null}
+              {showOutputs ? renderOutputHandles() : null}
             </div>
           );
         })}
@@ -192,23 +210,7 @@ function StepNodeComponent({ id, data, selected }) {
             <div className="canvasField">
               <span className="canvasFieldLabel">{outputs[0].label}</span>
             </div>
-            {outputs.map(port => (
-              <Handle
-                key={port.key}
-                type="source"
-                position={Position.Right}
-                id={`out:${port.key}`}
-                className="canvasHandle out nodrag nopan"
-                isConnectable
-                title={t("canvas.node.split", { name: port.label })}
-                onDoubleClick={event => handleOutputSplit(event, port.key)}
-              />
-            ))}
-            <span
-              className="canvasOutputHandleHit nodrag nopan"
-              title={t("canvas.node.split", { name: outputs[0].label })}
-              onDoubleClick={event => handleOutputSplit(event, outputs[0].key)}
-            />
+            {renderOutputHandles()}
           </div>
         ) : null}
         {!inputs.length && !outputs.length ? <p className="canvasNodeEmpty">{t("canvas.node.noInput")}</p> : null}

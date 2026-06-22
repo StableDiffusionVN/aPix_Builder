@@ -9,6 +9,19 @@ export const STEP_KINDS = {
   RH_APP: "runninghub-app"
 };
 
+const nodeIndexCache = new WeakMap();
+const incomingEdgeIndexCache = new WeakMap();
+
+function nodeById(nodes, nodeId) {
+  if (!Array.isArray(nodes)) return null;
+  let index = nodeIndexCache.get(nodes);
+  if (!index) {
+    index = new Map(nodes.map(node => [node.id, node]));
+    nodeIndexCache.set(nodes, index);
+  }
+  return index.get(nodeId) || null;
+}
+
 /** Map a YAML ui.type to a canonical port data type. */
 export function portTypeForUi(uiType) {
   const type = String(uiType || "").toLowerCase();
@@ -170,14 +183,24 @@ export function topoOrder(nodes, edges) {
 
 /** Edges that feed a given node's input ports → { [valueKey]: edge }. */
 export function incomingEdgesByInput(nodeId, edges) {
-  const map = {};
-  for (const edge of edges) {
-    if (edge.target !== nodeId) continue;
-    const handle = edge.targetHandle || "";
-    const key = handle.startsWith("in:") ? handle.slice(3) : handle;
-    if (key) map[key] = edge;
+  if (!Array.isArray(edges)) return {};
+  let index = incomingEdgeIndexCache.get(edges);
+  if (!index) {
+    index = new Map();
+    for (const edge of edges) {
+      const handle = edge.targetHandle || "";
+      const key = handle.startsWith("in:") ? handle.slice(3) : handle;
+      if (!key) continue;
+      let targetInputs = index.get(edge.target);
+      if (!targetInputs) {
+        targetInputs = {};
+        index.set(edge.target, targetInputs);
+      }
+      targetInputs[key] = edge;
+    }
+    incomingEdgeIndexCache.set(edges, index);
   }
-  return map;
+  return index.get(nodeId) || {};
 }
 
 function isBypassedStep(node) {
@@ -190,7 +213,7 @@ function isBypassedStep(node) {
 export function resolveEffectiveImageSource(nodeId, sourceHandle, nodes, edges, visited = new Set()) {
   if (!nodeId || visited.has(nodeId)) return null;
   visited.add(nodeId);
-  const node = nodes.find(item => item.id === nodeId);
+  const node = nodeById(nodes, nodeId);
   if (!node) return null;
 
   if (isBypassedStep(node)) {
@@ -214,6 +237,13 @@ export function resolveEffectiveImageSource(nodeId, sourceHandle, nodes, edges, 
     return resolveEffectiveImageSource(upstreamId, `out:${outputKey}`, nodes, edges, visited);
   }
 
+  if (node.type === "source" && edges) {
+    const incoming = sourceIncomingEdge(nodeId, edges);
+    if (incoming) {
+      return resolveEffectiveImageSource(incoming.source, incoming.sourceHandle, nodes, edges, visited);
+    }
+  }
+
   return { node, sourceHandle };
 }
 
@@ -223,7 +253,7 @@ export function resolveEffectiveNodeOutputValue(targetPort, edge, nodes, edges, 
   const sourceId = edge.source;
   if (visited.has(sourceId)) return undefined;
   visited.add(sourceId);
-  const source = nodes.find(item => item.id === sourceId);
+  const source = nodeById(nodes, sourceId);
   if (!source) return undefined;
 
   if (isBypassedStep(source)) {
@@ -247,7 +277,7 @@ export function resolveEffectiveNodeOutputValue(targetPort, edge, nodes, edges, 
     return undefined;
   }
 
-  return nodeOutputValue(source, edge.sourceHandle, nodes);
+  return nodeOutputValue(source, edge.sourceHandle, nodes, edges);
 }
 
 export function resolveEffectiveNodeOutputUrl(nodeId, sourceHandle, nodes, edges, visited = new Set()) {
@@ -318,7 +348,57 @@ export function getNodeRunCache(node) {
   return null;
 }
 
-export function buildNodeRunCache(outputs, runId = "", metadata = {}) {
+export function buildOutputNodeIdMap(configOutput = {}) {
+  const map = new Map();
+  for (const [key, item] of Object.entries(configOutput || {})) {
+    if (item?.id != null && item.id !== "") {
+      map.set(String(item.id), key);
+    }
+  }
+  return map;
+}
+
+/** Map backend output rows (nodeId) onto declared canvas output port keys. */
+export function normalizeStepOutputs(rawOutputs = [], { ports, config } = {}) {
+  const nodeIdToKey = buildOutputNodeIdMap(config?.output);
+  const portKeys = (ports?.outputs || []).map(port => port.key);
+  const usedKeys = new Set();
+  const normalized = [];
+
+  for (const output of rawOutputs) {
+    const url = output?.url || output?.src || "";
+    if (!url) continue;
+
+    let key = String(output.key || "").trim();
+    if (!key || key === "main") {
+      if (output.nodeId != null && nodeIdToKey.has(String(output.nodeId))) {
+        key = nodeIdToKey.get(String(output.nodeId));
+      } else {
+        key = portKeys.find(portKey => !usedKeys.has(portKey)) || "";
+      }
+    }
+    if (!key) key = `output_${normalized.length}`;
+
+    let uniqueKey = key;
+    let suffix = 2;
+    while (usedKeys.has(uniqueKey)) {
+      uniqueKey = `${key}_${suffix++}`;
+    }
+    usedKeys.add(uniqueKey);
+
+    normalized.push({
+      url,
+      filename: output.filename || "",
+      key: uniqueKey,
+      ...(output.nodeId != null ? { nodeId: output.nodeId } : {})
+    });
+  }
+
+  return normalized;
+}
+
+export function buildNodeRunCache(outputs, runId = "", metadata = {}, { ports } = {}) {
+  const portKeys = (ports?.outputs || []).map(port => port.key);
   const list = (outputs || [])
     .filter(item => item?.url)
     .map(item => ({
@@ -326,9 +406,12 @@ export function buildNodeRunCache(outputs, runId = "", metadata = {}) {
       key: item.key || "main",
       filename: item.filename || ""
     }));
+  const primary = (portKeys.length
+    ? list.find(item => item.key === portKeys[0])
+    : null) || list[0] || null;
   return {
     outputs: list,
-    primary: list[0] || null,
+    primary,
     runAt: Date.now(),
     runId: runId || "",
     durationMs: Number.isFinite(metadata.durationMs) ? metadata.durationMs : null,
@@ -338,8 +421,14 @@ export function buildNodeRunCache(outputs, runId = "", metadata = {}) {
 }
 
 /** Patch node.data after a successful run — writes runCache + mirrored output fields. */
-export function nodeRunCachePatch(outputs, runId = "", metadata = {}) {
-  const runCache = buildNodeRunCache(outputs, runId, metadata);
+export function nodeRunCachePatch(outputs, runId = "", metadata = {}, node = null) {
+  const normalized = normalizeStepOutputs(outputs, {
+    ports: node?.data?.ports,
+    config: node?.data?.config
+  });
+  const runCache = buildNodeRunCache(normalized, runId, metadata, {
+    ports: node?.data?.ports
+  });
   return {
     runCache,
     output: runCache.primary,
@@ -368,15 +457,19 @@ export function beginNodeExecutionPatch() {
 }
 
 /** Read an upstream node's cached output URL from a source handle id. */
-export function nodeOutputUrl(node, sourceHandle, nodes) {
+export function nodeOutputUrl(node, sourceHandle, nodes, edges = null) {
   if (!node) return "";
   if (node.type === "source") {
     if (node.data?.passthroughFromOutput && node.data?.passthroughSourceNodeId && nodes) {
-      const upstream = nodes.find(item => item.id === node.data.passthroughSourceNodeId);
+      const upstream = nodeById(nodes, node.data.passthroughSourceNodeId);
       if (upstream) {
         const key = node.data.passthroughOutputKey || "main";
-        return nodeOutputUrl(upstream, `out:${key}`, nodes);
+        return nodeOutputUrl(upstream, `out:${key}`, nodes, edges);
       }
+    }
+    const incoming = edges ? sourceIncomingEdge(node.id, edges) : null;
+    if (incoming && nodes) {
+      return resolveEffectiveNodeOutputUrl(incoming.source, incoming.sourceHandle, nodes, edges);
     }
     return coerceImageRef(node.data?.values?.main);
   }
@@ -391,24 +484,113 @@ export function nodeOutputUrl(node, sourceHandle, nodes) {
   return coerceImageRef(cache.primary?.url || outputs[0]?.url);
 }
 
+export function sourceIncomingEdge(nodeId, edges = []) {
+  return (edges || []).find(edge => edge.target === nodeId && edge.targetHandle === "in:main") || null;
+}
+
+export function isInputPipeSource(node, edges = []) {
+  return node?.type === "source"
+    && Boolean(node.data?.passthroughFromInput)
+    && Boolean(sourceIncomingEdge(node.id, edges));
+}
+
+/** Preserve image field values (including mask overlays) when splitting to a source node. */
+export function cloneImageValueForSource(value) {
+  if (!value) return "";
+  if (typeof value === "string") return value;
+  if (typeof value === "object") {
+    if (value.kind === "input-image") {
+      const name = value.name || value.filename || filenameFromImageUrl(value.url || "");
+      return {
+        kind: "input-image",
+        url: value.url || "",
+        ...(name ? { name } : {}),
+        ...(value.maskDataUrl ? { maskDataUrl: value.maskDataUrl } : {})
+      };
+    }
+    const url = coerceImageRef(value);
+    if (!url) return "";
+    if (value.maskDataUrl) {
+      const name = value.name || value.filename || filenameFromImageUrl(url);
+      return {
+        kind: "input-image",
+        url,
+        ...(name ? { name } : {}),
+        maskDataUrl: value.maskDataUrl
+      };
+    }
+    return url;
+  }
+  return "";
+}
+
 /** Read a typed output value. Step outputs remain image URLs; source outputs preserve their raw value. */
-export function nodeOutputValue(node, sourceHandle, nodes) {
+export function nodeOutputValue(node, sourceHandle, nodes, edges = null) {
   if (!node) return undefined;
   if (node.type === "source") {
     if (node.data?.passthroughFromOutput && node.data?.passthroughSourceNodeId && nodes) {
-      const upstream = nodes.find(item => item.id === node.data.passthroughSourceNodeId);
+      const upstream = nodeById(nodes, node.data.passthroughSourceNodeId);
       if (upstream) {
         const key = node.data.passthroughOutputKey || "main";
-        return nodeOutputValue(upstream, `out:${key}`, nodes);
+        return nodeOutputValue(upstream, `out:${key}`, nodes, edges);
       }
+    }
+    const incoming = edges ? sourceIncomingEdge(node.id, edges) : null;
+    if (incoming && nodes) {
+      const port = { type: node.data?.port?.type || node.data?.sourceType || "image" };
+      return resolveEffectiveNodeOutputValue(port, incoming, nodes, edges);
     }
     return node.data?.values?.main;
   }
-  return nodeOutputUrl(node, sourceHandle, nodes) || undefined;
+  return nodeOutputUrl(node, sourceHandle, nodes, edges) || undefined;
 }
 
 export function hasNodeImageOutput(node, sourceHandle) {
   return Boolean(nodeOutputUrl(node, sourceHandle));
+}
+
+/** Basename from /api/input-image or /api/output-image refs (path or absolute URL). */
+export function filenameFromImageUrl(url) {
+  if (!url || typeof url !== "string") return "";
+  try {
+    const parsed = url.startsWith("/")
+      ? new URL(url, "http://localhost")
+      : new URL(url, typeof window !== "undefined" ? window.location.href : "http://localhost");
+    if (parsed.pathname !== "/api/input-image" && parsed.pathname !== "/api/output-image") return "";
+    const raw = parsed.searchParams.get("name") || "";
+    const decoded = (() => {
+      try { return decodeURIComponent(raw); } catch { return raw; }
+    })();
+    const parts = decoded.split(/[/\\]/);
+    return parts[parts.length - 1] || "";
+  } catch {
+    return "";
+  }
+}
+
+/** Ensure canvas image field values include filename + mask metadata for the backend. */
+export function finalizeCanvasImageValue(value) {
+  if (value == null || value === "") return value;
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed || !trimmed.includes("/api/input-image")) return value;
+    const name = filenameFromImageUrl(trimmed);
+    return name ? { kind: "input-image", url: trimmed, name } : value;
+  }
+  if (typeof value !== "object") return value;
+
+  const maskDataUrl = typeof value.maskDataUrl === "string" ? value.maskDataUrl : "";
+  const url = coerceImageRef(value) || (typeof value.url === "string" ? value.url.trim() : "");
+  const shouldWrap = Boolean(maskDataUrl) || value.kind === "input-image";
+  if (!shouldWrap) return value;
+
+  const name = value.name || value.filename || filenameFromImageUrl(url);
+  return {
+    kind: "input-image",
+    url,
+    ...(name ? { name } : {}),
+    ...(maskDataUrl ? { maskDataUrl } : {})
+  };
 }
 
 /** Local server path for output/input image refs (strips preview cache-bust ?v=). */
@@ -578,7 +760,7 @@ export async function upstreamStepsNeedingRunAsync(targetId, nodes, edges, visit
  */
 export async function upstreamStepsWithStaleFilesAsync(targetId, nodes, edges, visited = new Set()) {
   const ordered = [];
-  const node = nodes.find(item => item.id === targetId);
+  const node = nodeById(nodes, targetId);
   if (!node) return ordered;
 
   const incoming = incomingEdgesByInput(targetId, edges);
@@ -603,7 +785,7 @@ export async function upstreamStepsWithStaleFilesAsync(targetId, nodes, edges, v
 /** Sync variant — cache URL only, no file check (used where async is unavailable). */
 export function upstreamStepsNeedingRun(targetId, nodes, edges, visited = new Set()) {
   const ordered = [];
-  const node = nodes.find(item => item.id === targetId);
+  const node = nodeById(nodes, targetId);
   if (!node) return ordered;
 
   const incoming = incomingEdgesByInput(targetId, edges);
@@ -640,7 +822,7 @@ export function linkedImageInputsMissingSource(node, nodes, edges) {
     const edge = incoming[port.valueKey];
     if (!edge) continue;
     const resolved = resolveEffectiveImageSource(edge.source, edge.sourceHandle, nodes, edges);
-    const source = resolved?.node || nodes.find(item => item.id === edge.source);
+    const source = resolved?.node || nodeById(nodes, edge.source);
     if (!source) continue;
     const sourceHandle = resolved?.sourceHandle || edge.sourceHandle;
     if (hasNodeImageOutput(source, sourceHandle)) continue;

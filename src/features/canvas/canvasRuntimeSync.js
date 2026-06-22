@@ -152,17 +152,22 @@ export function matchCanvasNodeForSession(nodes = [], session) {
 
 export function historyItemToOutputs(historyItem) {
   return (historyItem?.outputs || [])
-    .map(output => ({ url: output.url || output.src || "", filename: output.filename }))
+    .map(output => ({
+      url: output.url || output.src || "",
+      filename: output.filename,
+      nodeId: output.nodeId,
+      key: output.key
+    }))
     .filter(output => output.url);
 }
 
-export function buildNodeSuccessPatch(session, historyItem) {
+export function buildNodeSuccessPatch(session, historyItem, node = null) {
   const outputs = historyItemToOutputs(historyItem);
   return nodeRunCachePatch(outputs, session.runId, {
     durationMs: historyItem?.durationMs ?? null,
     rhCoins: historyItem?.rhCoins ?? null,
     provider: session.provider || historyItem?.provider || "local"
-  });
+  }, node);
 }
 
 function formatRunEvent(message) {

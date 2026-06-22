@@ -7,7 +7,6 @@ import { initFieldTooltips } from "./lib/fieldTooltips.js";
 import "./styles.css";
 import "./styles/tokens.css";
 import "./styles/refined-ui.css";
-import "./styles/modals.css";
 
 async function bootstrap() {
   initFieldTooltips();

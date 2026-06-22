@@ -1,6 +1,6 @@
 import { flattenInputs, requestPayload } from "../../lib/template.js";
 import { buildRunningHubJob, buildRunningHubWfJob } from "../../hooks/useRunningHubExecution.js";
-import { incomingEdgesByInput, resolveEffectiveNodeOutputValue, resolveEffectiveImageSource, coerceImageRef, STEP_KINDS, portTypeForUi, toServerImagePath, serverImageFileExists } from "./canvasModel.js";
+import { incomingEdgesByInput, resolveEffectiveNodeOutputValue, resolveEffectiveImageSource, coerceImageRef, STEP_KINDS, portTypeForUi, toServerImagePath, serverImageFileExists, finalizeCanvasImageValue } from "./canvasModel.js";
 import { nodeFieldKey } from "../../hooks/useRunningHub.js";
 
 function previewValue(value) {
@@ -66,28 +66,43 @@ function normalizeServerImageRef(url) {
   return toServerImagePath(url);
 }
 
+function buildInputImagePayload(value, resolvedUrl, maskDataUrl = "") {
+  const base = typeof value === "object" && value ? { ...value } : {};
+  if (resolvedUrl) base.url = resolvedUrl;
+  if (maskDataUrl) base.maskDataUrl = maskDataUrl;
+  if (!base.kind) base.kind = "input-image";
+  return finalizeCanvasImageValue(base);
+}
+
 async function resolveUpstreamValue(value, onLog) {
+  const maskDataUrl = typeof value === "object" && value?.maskDataUrl ? value.maskDataUrl : "";
   const url = coerceImageRef(value);
-  if (!url) return "";
-  if (url.startsWith("data:")) return url;
+  if (!url) {
+    return maskDataUrl ? buildInputImagePayload(value, "", maskDataUrl) : "";
+  }
+  if (url.startsWith("data:")) {
+    return maskDataUrl || value?.kind === "input-image"
+      ? buildInputImagePayload(value, url, maskDataUrl)
+      : url;
+  }
 
   const serverRef = normalizeServerImageRef(url);
+  let resolved = url;
   if (serverRef) {
     onLog?.("info", `Truyền ref server-local: ${previewValue(serverRef)}`);
-    return serverRef;
-  }
-
-  if (url.startsWith("/")) {
+    resolved = serverRef;
+  } else if (url.startsWith("/")) {
     onLog?.("info", `Truyền path local: ${previewValue(url)}`);
-    return url;
-  }
-
-  if (/^https?:\/\//i.test(url)) {
+    resolved = url;
+  } else if (/^https?:\/\//i.test(url)) {
     onLog?.("info", `Ảnh remote (server sẽ tải): ${previewValue(url)}`);
-    return url;
+    resolved = url;
   }
 
-  return url;
+  if (maskDataUrl || value?.kind === "input-image") {
+    return buildInputImagePayload(value, resolved, maskDataUrl);
+  }
+  return resolved;
 }
 
 /** Merge a node's own values with typed upstream outputs resolved from edges. */
@@ -158,17 +173,31 @@ function buildCanvasRunningHubJob({ runId, rhAuth, webappId, nodes, values }) {
   };
 }
 
+function finalizeStepImageValues(node, values) {
+  for (const port of node.data?.ports?.inputs || []) {
+    const type = port.type || portTypeForUi(port.uiType);
+    if (type !== "image") continue;
+    const key = port.valueKey;
+    const current = values[key];
+    if (!current) continue;
+    values[key] = finalizeCanvasImageValue(current);
+  }
+}
+
 function validateResolvedLinkedImages(node, values, edges, onLog) {
   const incoming = incomingEdgesByInput(node.id, edges);
   for (const port of node.data?.ports?.inputs || []) {
     const type = port.type || portTypeForUi(port.uiType);
     if (type !== "image") continue;
     if (!incoming[port.valueKey]) continue;
-    const resolved = coerceImageRef(values[port.valueKey]);
+    const current = values[port.valueKey];
+    const resolved = coerceImageRef(current);
     if (!resolved) {
       throw new Error(`Input ảnh "${port.label}" trống — node upstream chưa tạo output hợp lệ`);
     }
-    values[port.valueKey] = resolved;
+    if (!(typeof current === "object" && (current?.maskDataUrl || current?.kind === "input-image"))) {
+      values[port.valueKey] = resolved;
+    }
     onLog?.("info", `Input "${port.valueKey}" resolved → ${previewValue(resolved)}`);
   }
 }
@@ -181,7 +210,7 @@ async function validateResolvedLinkedImagesAsync(node, values, edges, onLog) {
     if (type !== "image") continue;
     if (!incoming[port.valueKey]) continue;
     const resolved = values[port.valueKey];
-    const serverRef = normalizeServerImageRef(resolved);
+    const serverRef = normalizeServerImageRef(coerceImageRef(resolved));
     if (!serverRef) continue;
     const exists = await serverImageFileExists(serverRef);
     if (exists === true) {
@@ -202,7 +231,12 @@ function parseOutputs(data) {
   const fromResult = data?.outputs || data?.result?.outputs;
   const outputs = Array.isArray(fromHistory) ? fromHistory : Array.isArray(fromResult) ? fromResult : [];
   return outputs
-    .map(output => ({ url: output.url || output.src || "", filename: output.filename }))
+    .map(output => ({
+      url: output.url || output.src || "",
+      filename: output.filename,
+      nodeId: output.nodeId,
+      key: output.key
+    }))
     .filter(output => output.url);
 }
 
@@ -288,7 +322,8 @@ export async function prepareCanvasNodeRunRequest({
   rhAuth,
   onLog,
   runId: runIdInput,
-  historyContext
+  historyContext,
+  comfyAddress = ""
 }) {
   const log = (level, message) => onLog?.(level, message);
   const kind = node.data.kind;
@@ -296,6 +331,7 @@ export async function prepareCanvasNodeRunRequest({
 
   log("info", `── Bắt đầu: ${name} (${kind}) ──`);
   const values = await resolveInputValues(node, nodes, edges, log);
+  finalizeStepImageValues(node, values);
   await validateResolvedLinkedImagesAsync(node, values, edges, log);
   const runId = runIdInput || crypto.randomUUID();
 
@@ -304,7 +340,7 @@ export async function prepareCanvasNodeRunRequest({
     const body = withCanvasHistoryContext({
       runId,
       template: node.data.ref,
-      address: node.data.serverAddress || values.__address || undefined,
+      address: node.data.serverAddress || values.__address || comfyAddress || undefined,
       values: requestPayload(items, values),
       queuedAt: new Date().toISOString()
     }, historyContext);
@@ -360,7 +396,17 @@ export async function prepareCanvasNodeRunRequest({
  * Execute a single canvas node, injecting upstream outputs into image inputs.
  * @returns {Promise<{outputs: Array<{url:string, filename?:string}>, raw:object}>}
  */
-export async function runCanvasNode({ node, nodes, edges, rhAuth, onLog, runId: runIdInput, signal, historyContext }) {
+export async function runCanvasNode({
+  node,
+  nodes,
+  edges,
+  rhAuth,
+  onLog,
+  runId: runIdInput,
+  signal,
+  historyContext,
+  comfyAddress = ""
+}) {
   const log = (level, message) => onLog?.(level, message);
   const name = node.data.name || node.id;
   const request = await prepareCanvasNodeRunRequest({
@@ -370,7 +416,8 @@ export async function runCanvasNode({ node, nodes, edges, rhAuth, onLog, runId: 
     rhAuth,
     onLog,
     runId: runIdInput,
-    historyContext
+    historyContext,
+    comfyAddress
   });
   const result = await executePreparedCanvasRunRequest(request, log, signal);
   log("success", `Xong ${name}: ${result.outputs.length} output`);

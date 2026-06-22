@@ -44,4 +44,123 @@ describe("canvas runner history metadata", () => {
       canvasBatchTotal: 2
     });
   });
+
+  test("uses the workspace ComfyUI address when the node has no server override", async () => {
+    const node = {
+      id: "node-2",
+      type: "step",
+      data: {
+        kind: STEP_KINDS.LOCAL,
+        ref: "demo",
+        name: "Node Two",
+        config: { input: {} },
+        ports: { inputs: [] },
+        values: {},
+        serverAddress: ""
+      }
+    };
+    const request = await prepareCanvasNodeRunRequest({
+      node,
+      nodes: [node],
+      edges: [],
+      rhAuth: {},
+      comfyAddress: "http://192.168.1.50:8188"
+    });
+
+    expect(request.body.address).toBe("http://192.168.1.50:8188");
+  });
+
+  test("linked input-image values keep filename for backend upload", async () => {
+    const upstream = {
+      id: "src-1",
+      type: "source",
+      data: {
+        values: {
+          main: {
+            kind: "input-image",
+            url: "/api/input-image?name=photo.png",
+            maskDataUrl: "data:image/png;base64,abc"
+          }
+        }
+      }
+    };
+    const node = {
+      id: "step-1",
+      type: "step",
+      data: {
+        kind: STEP_KINDS.LOCAL,
+        ref: "tester",
+        name: "Tester",
+        config: {
+          input: {
+            image: { id: "1-image", ui: { type: "image" } }
+          }
+        },
+        ports: {
+          inputs: [{ valueKey: "1-image", label: "Image", type: "image", uiType: "image" }]
+        },
+        values: {}
+      }
+    };
+    const edges = [{
+      id: "e-1",
+      source: "src-1",
+      target: "step-1",
+      sourceHandle: "out:main",
+      targetHandle: "in:1-image"
+    }];
+    const request = await prepareCanvasNodeRunRequest({
+      node,
+      nodes: [upstream, node],
+      edges,
+      rhAuth: {},
+      comfyAddress: "http://127.0.0.1:8188"
+    });
+    expect(request.body.values["1-image"]).toEqual({
+      kind: "input-image",
+      url: "/api/input-image?name=photo.png",
+      name: "photo.png",
+      maskDataUrl: "data:image/png;base64,abc"
+    });
+  });
+
+  test("embedded image inputs with mask are finalized before run", async () => {
+    const node = {
+      id: "step-2",
+      type: "step",
+      data: {
+        kind: STEP_KINDS.LOCAL,
+        ref: "tester",
+        name: "Tester",
+        config: {
+          input: {
+            image: { id: "1-image", ui: { type: "image" } }
+          }
+        },
+        ports: {
+          inputs: [{ valueKey: "1-image", label: "Image", type: "image", uiType: "image" }]
+        },
+        values: {
+          "1-image": {
+            kind: "input-image",
+            url: "/api/input-image?name=photo.png",
+            maskDataUrl: "data:image/png;base64,abc"
+          }
+        }
+      }
+    };
+    const request = await prepareCanvasNodeRunRequest({
+      node,
+      nodes: [node],
+      edges: [],
+      rhAuth: {},
+      comfyAddress: "http://127.0.0.1:8188"
+    });
+    expect(request.body.values["1-image"]).toEqual({
+      kind: "input-image",
+      url: "/api/input-image?name=photo.png",
+      name: "photo.png",
+      maskDataUrl: "data:image/png;base64,abc"
+    });
+  });
 });

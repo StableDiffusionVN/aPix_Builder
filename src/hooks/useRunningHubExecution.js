@@ -24,7 +24,7 @@ async function submitRunningHubBackendQueueJob(job, { waitForRunId = "" } = {}) 
     })
   });
   const data = await response.json().catch(() => ({}));
-  if (!response.ok || !data.accepted) throw new Error(data.error || "Queue submit failed");
+  if (!response.ok || !data.acknowledged) throw new Error(data.error || "Queue submit failed");
 }
 
 async function clearFormBackendQueue() {

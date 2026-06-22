@@ -7,6 +7,7 @@ import { compactStepNodeSize, growStepNodesToFit, isStepOutputDetached, normaliz
 import { canvasViewportsEqual, normalizeCanvasViewport } from "./canvasViewport.js";
 import { createWorkflowFile, parseWorkflowFile } from "./workflowFile.js";
 import { useI18n } from "../../i18n/I18nContext.jsx";
+import { createSerialProjectSaver } from "./canvasProjectPersistence.js";
 
 const CANVAS_HISTORY_LIMIT = 80;
 
@@ -143,6 +144,12 @@ export function useCanvasProject() {
   const [historyAvailability, setHistoryAvailability] = useState({ canUndo: false, canRedo: false });
   const persistTimer = useRef(null);
   const persistEnabled = useRef(false);
+  const persistQueueRef = useRef(null);
+  if (!persistQueueRef.current) {
+    persistQueueRef.current = createSerialProjectSaver(payload => (
+      postCanvasProject("/api/canvas-project", payload)
+    ));
+  }
   const viewportRef = useRef(null);
   const nodesRef = useRef(nodes);
   const edgesRef = useRef(edges);
@@ -207,15 +214,42 @@ export function useCanvasProject() {
     });
   }, []);
 
-  const flushActiveSession = useCallback(async () => {
-    if (!persistEnabled.current || !activeIdRef.current) return;
-    if (persistTimer.current) window.clearTimeout(persistTimer.current);
-    await postCanvasProject("/api/canvas-project", {
-      nodes: nodesRef.current.map(serializeNode),
-      edges: edgesRef.current,
-      viewport: viewportRef.current
+  const saveProjectSnapshot = useCallback((projectId, nextNodes, nextEdges, nextViewport) => {
+    if (!projectId) return Promise.resolve(null);
+    const queue = persistQueueRef.current;
+    const { sequence, promise } = queue.enqueue({
+      projectId,
+      nodes: nextNodes.map(serializeNode),
+      edges: nextEdges,
+      viewport: nextViewport
     });
+    return promise.then(data => {
+        if (queue.isLatest(sequence) && activeIdRef.current === projectId) {
+          if (Array.isArray(data.projects)) setProjects(data.projects);
+          setWorkspaceSaveState("saved");
+        }
+        return data;
+      });
   }, []);
+
+  const flushActiveSession = useCallback(async () => {
+    const projectId = activeIdRef.current;
+    if (!projectId) return;
+    if (persistTimer.current) window.clearTimeout(persistTimer.current);
+    persistTimer.current = null;
+    setWorkspaceSaveState("saving");
+    try {
+      await saveProjectSnapshot(
+        projectId,
+        nodesRef.current,
+        edgesRef.current,
+        viewportRef.current
+      );
+    } catch (error) {
+      setWorkspaceSaveState("error");
+      throw error;
+    }
+  }, [saveProjectSnapshot]);
 
   const currentSnapshot = useCallback(() => (
     snapshotCanvasState(nodesRef.current, edgesRef.current)
@@ -360,34 +394,23 @@ export function useCanvasProject() {
 
   useEffect(() => {
     if (!loaded || !persistEnabled.current || interactionActiveRef.current) return undefined;
+    const projectId = activeIdRef.current;
+    if (!projectId) return undefined;
     setWorkspaceSaveState("pending");
     if (persistTimer.current) window.clearTimeout(persistTimer.current);
     persistTimer.current = window.setTimeout(() => {
       persistTimer.current = null;
       setWorkspaceSaveState("saving");
-      fetch("/api/canvas-project", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          nodes: nodes.map(serializeNode),
-          edges,
-          viewport: viewportRef.current
-        })
-      })
-        .then(res => res.json())
-        .then(data => {
-          if (Array.isArray(data.projects)) setProjects(data.projects);
-          setWorkspaceSaveState("saved");
-        })
+      saveProjectSnapshot(projectId, nodes, edges, viewportRef.current)
         .catch(error => {
           console.error("Could not save canvas project:", error);
-          setWorkspaceSaveState("error");
+          if (activeIdRef.current === projectId) setWorkspaceSaveState("error");
         });
     }, 400);
     return () => {
       if (persistTimer.current) window.clearTimeout(persistTimer.current);
     };
-  }, [nodes, edges, viewport, loaded]);
+  }, [nodes, edges, viewport, loaded, saveProjectSnapshot]);
 
   useEffect(() => {
     if (!loaded || suppressLibraryDirtyRef.current || interactionActiveRef.current || !activeId) return;
@@ -695,6 +718,10 @@ export function useCanvasProject() {
     const node = currentNodes.find(item => item.id === nodeId);
     if (!node || node.type !== "step") return;
 
+    const incoming = currentEdges.find(edge => (
+      edge.target === nodeId && edge.targetHandle === `in:${valueKey}`
+    ));
+
     const { sourceType, value, label, port } = resolveFieldValueForSource(
       node,
       valueKey,
@@ -714,12 +741,39 @@ export function useCanvasProject() {
         sourceType,
         name: label,
         port,
-        values: { main: value },
+        values: { main: incoming ? "" : value },
         passthroughFromInput: true,
         passthroughTargetNodeId: nodeId,
         passthroughInputValueKey: valueKey
       }
     };
+
+    const nextEdges = [
+      ...currentEdges.filter(edge => !(
+        edge.target === nodeId && edge.targetHandle === `in:${valueKey}`
+      )),
+      {
+        id: `e-${newId}-${nodeId}`,
+        source: newId,
+        target: nodeId,
+        sourceHandle: "out:main",
+        targetHandle: `in:${valueKey}`,
+        type: "default",
+        animated: false
+      }
+    ];
+
+    if (incoming) {
+      nextEdges.push({
+        id: `e-${incoming.source}-${newId}`,
+        source: incoming.source,
+        target: newId,
+        sourceHandle: incoming.sourceHandle,
+        targetHandle: "in:main",
+        type: incoming.type || "default",
+        animated: incoming.animated ?? false
+      });
+    }
 
     applyCanvasState(currentNodes
       .map(item => (
@@ -733,20 +787,7 @@ export function useCanvasProject() {
           }
           : item
       ))
-      .concat(newNode), [
-      ...currentEdges.filter(edge => !(
-        edge.target === nodeId && edge.targetHandle === `in:${valueKey}`
-      )),
-      {
-        id: `e-${newId}-${nodeId}`,
-        source: newId,
-        target: nodeId,
-        sourceHandle: "out:main",
-        targetHandle: `in:${valueKey}`,
-        type: "default",
-        animated: false
-      }
-    ]);
+      .concat(newNode), nextEdges);
   }, [applyCanvasState, t]);
 
   const convertOutputToSource = useCallback((nodeId, outputKey = "main") => {

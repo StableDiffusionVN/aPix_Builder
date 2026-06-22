@@ -26,7 +26,7 @@ export const CanvasActionsContext = createContext({
   updateInputImages: () => {}
 });
 
-export const CanvasGraphContext = createContext({ nodes: [], edges: [] });
+export const CanvasGraphContext = createContext({ nodes: [], edges: [], nodeById: new Map() });
 
 export function useCanvasActions() {
   return useContext(CanvasActionsContext);

@@ -4,6 +4,7 @@ import {
   incomingEdgesByInput,
   nodeOutputUrl,
   nodeOutputValue,
+  cloneImageValueForSource,
   resolveEffectiveImageSource,
   resolveEffectiveNodeOutputUrl,
   portTypeForUi
@@ -58,11 +59,13 @@ export function buildNodeContextMenuItems({
       onClick: () => toggleNodeBypass?.(node.id)
     });
     const outputs = node.data?.ports?.outputs || [];
-    if (outputs.length && !isStepOutputDetached(node.id, outputs[0].key, nodes, edges || [])) {
+    for (const port of outputs) {
+      if (isStepOutputDetached(node.id, port.key, nodes, edges || [])) continue;
+      const splitLabel = translate(t, "canvas.menu.splitImage", "Tách thành node Ảnh");
       items.push({
-        id: "convert-output-source",
-        label: translate(t, "canvas.menu.splitImage", "Tách thành node Ảnh"),
-        onClick: () => convertOutputToSource?.(node.id, outputs[0].key)
+        id: `convert-output-source-${port.key}`,
+        label: outputs.length > 1 ? `${splitLabel}: ${port.label}` : splitLabel,
+        onClick: () => convertOutputToSource?.(node.id, port.key)
       });
     }
   }
@@ -336,10 +339,12 @@ export function resolveFieldValueForSource(node, valueKey, nodes, edges, t) {
     const resolved = resolveEffectiveImageSource(incoming.source, incoming.sourceHandle, nodes, edges);
     const upstream = resolved?.node || nodes.find(item => item.id === incoming.source);
     if (upstream?.type === "source") {
-      value = upstream.data?.values?.main ?? value;
+      value = nodeOutputValue(upstream, incoming.sourceHandle, nodes, edges) ?? value;
     } else {
-      value = nodeOutputUrl(upstream, resolved?.sourceHandle || incoming.sourceHandle) || value;
+      value = nodeOutputValue(upstream, resolved?.sourceHandle || incoming.sourceHandle, nodes, edges) || value;
     }
+  } else if (sourceType === "image") {
+    value = cloneImageValueForSource(value);
   } else {
     value = imageDisplayUrl(value) || value;
   }

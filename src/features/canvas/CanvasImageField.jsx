@@ -16,15 +16,20 @@ import {
   uploadInputImageFile
 } from "../../lib/inputImageActions.js";
 import { useInputImageField } from "../../hooks/useInputImageField.js";
-import { imageDisplayUrl } from "./canvasModel.js";
+import { imageDisplayUrl, filenameFromImageUrl } from "./canvasModel.js";
 import { useCanvasActions } from "./canvasContext.js";
 
-const InputLibraryModal = lazy(() => import("../../components/InputLibraryModal.jsx").then(module => ({
-  default: module.InputLibraryModal
-})));
-const MaskEditorModal = lazy(() => import("../../components/MaskEditorModal.jsx").then(module => ({
-  default: module.MaskEditorModal
-})));
+function loadCanvasModal(path) {
+  return Promise.all([
+    import("../../styles/modals.css"),
+    path()
+  ]).then(([, module]) => module);
+}
+
+const InputLibraryModal = lazy(() => loadCanvasModal(() => import("../../components/InputLibraryModal.jsx"))
+  .then(module => ({ default: module.InputLibraryModal })));
+const MaskEditorModal = lazy(() => loadCanvasModal(() => import("../../components/MaskEditorModal.jsx"))
+  .then(module => ({ default: module.MaskEditorModal })));
 
 function readCanvasImageValues(value) {
   if (readLocalFolderValue(value)) return [];
@@ -279,9 +284,20 @@ export function CanvasImageField({ label, value, onChange, onContextMenu }) {
   }
 
   function handleSaveMask(nextMaskDataUrl) {
-    const imageValue = activeImage && typeof activeImage === "object"
+    let imageValue = activeImage && typeof activeImage === "object"
       ? activeImage
       : { kind: "input-image", url: preview };
+    if (imageValue.kind !== "input-image") {
+      const name = imageValue.name || filenameFromImageUrl(preview);
+      imageValue = {
+        kind: "input-image",
+        url: preview || imageValue.url || "",
+        ...(name ? { name } : {})
+      };
+    } else if (!imageValue.name) {
+      const name = filenameFromImageUrl(imageValue.url || preview);
+      if (name) imageValue = { ...imageValue, name };
+    }
     const next = [...selectedImages];
     if (nextMaskDataUrl) {
       next[activeImageIndex] = { ...imageValue, maskDataUrl: nextMaskDataUrl };

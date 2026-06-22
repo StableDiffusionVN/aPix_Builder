@@ -15,8 +15,9 @@
     "test:watch": "vitest",
     "typecheck": "tsc -p tsconfig.check.json",
     "lint": "eslint src server shared test",
-    "check": "npm run test && npm run typecheck && npm run lint && npm run build",
+    "check": "npm run test && npm run typecheck && npm run lint && npm run build && npm run sizecheck",
     "build": "vite build",
+    "sizecheck": "node scripts/check-bundle-size.mjs",
     "preview": "vite preview --host 0.0.0.0",
     "desktop": "npm run build && electron .",
     "sync:brand": "node scripts/sync-brand-assets.mjs",
@@ -24,6 +25,8 @@
     "dist:win": "npm run sync:brand && npm run build && node scripts/build-win-portable.mjs"
   },
   "dependencies": {
+    "@xyflow/react": "^12.11.0",
+    "dompurify": "^3.4.11",
     "jimp": "^1.6.1",
     "potrace": "^2.1.8",
     "ws": "^8.21.0",

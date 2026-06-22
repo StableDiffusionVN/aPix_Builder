@@ -4,6 +4,7 @@ export function createTemplateRoutes(context) {
     assertTemplateWorkflow,
     handleTemplateDelete,
     handleTemplateEditor,
+    handleTemplateExport,
     handleTemplateSave,
     send,
     templateScopeFromUrl,
@@ -42,6 +43,10 @@ export function createTemplateRoutes(context) {
     }
     if (req.method === "GET" && url.pathname === "/api/template-editor") {
       await handleTemplateEditor(req, res, url);
+      return true;
+    }
+    if (req.method === "GET" && url.pathname === "/api/templates/export") {
+      await handleTemplateExport(req, res, url);
       return true;
     }
     if (req.method === "POST" && url.pathname === "/api/templates/save") {

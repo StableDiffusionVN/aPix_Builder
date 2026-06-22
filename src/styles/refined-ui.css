@@ -11,7 +11,8 @@ html[data-theme="light"] {
 html[data-theme="dark"] .appShell,
 html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .appShell,
 html[data-theme="light"] .appShell {
-  gap: var(--space-2);
+  column-gap: var(--space-2);
+  row-gap: 0;
   padding: var(--space-3);
 }
 
@@ -380,32 +381,20 @@ html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .thumbAction
   box-shadow: none;
 }
 
-html[data-theme="dark"] .inputLibraryActions,
-html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .inputLibraryActions,
-html[data-theme="light"] .inputLibraryActions {
-  border-color: var(--border-subtle);
-  background: var(--surface-1);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.24);
-}
-
-html[data-theme="light"] .inputLibraryActions {
-  box-shadow: 0 4px 14px rgba(15, 15, 18, 0.12);
-}
-
 html[data-theme="dark"] .inputLibraryActions button,
 html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .inputLibraryActions button,
 html[data-theme="light"] .inputLibraryActions button {
-  border-color: var(--border-subtle);
-  background: var(--surface-2);
-  color: var(--text-secondary);
+  border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(7, 8, 16, 0.76);
+  color: rgba(255, 255, 255, 0.82);
 }
 
 html[data-theme="dark"] .inputLibraryActions button:hover,
 html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .inputLibraryActions button:hover,
 html[data-theme="light"] .inputLibraryActions button:hover {
-  border-color: var(--border-default);
-  background: var(--surface-3);
-  color: var(--text-primary);
+  border-color: rgba(var(--accent-rgb), 0.68);
+  color: #fff;
+  background: rgba(var(--accent-rgb), 0.32);
 }
 
 html[data-theme="light"] .saveTemplateButton,
@@ -429,6 +418,43 @@ html[data-theme="light"] .rhActionRow .runButton,
 html[data-theme="light"] .rhActionRow .stopButton {
   border-radius: var(--radius);
   min-height: 36px;
+}
+
+html[data-theme="dark"] .runMenuWrap .runButton,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .runMenuWrap .runButton,
+html[data-theme="light"] .runMenuWrap .runButton,
+html[data-theme="dark"] .rhActionRow .runMenuWrap .runButton,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .rhActionRow .runMenuWrap .runButton,
+html[data-theme="light"] .rhActionRow .runMenuWrap .runButton {
+  border-radius: var(--radius) 0 0 var(--radius);
+  box-shadow: none;
+}
+
+html[data-theme="dark"] .runMenuToggle,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .runMenuToggle,
+html[data-theme="dark"] .rhActionRow .runMenuToggle,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .rhActionRow .runMenuToggle {
+  border-color: rgba(var(--accent-rgb), 0.35);
+  border-left-color: rgba(0, 0, 0, 0.16);
+  background: var(--accent);
+  color: #ffffff;
+}
+
+html[data-theme="light"] .runMenuToggle,
+html[data-theme="light"] .rhActionRow .runMenuToggle {
+  border-color: rgba(var(--accent-rgb), 0.35);
+  border-left-color: rgba(255, 255, 255, 0.18);
+  background: var(--accent);
+  color: #ffffff;
+}
+
+html[data-theme="dark"] .runMenuToggle:hover:not(:disabled),
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .runMenuToggle:hover:not(:disabled),
+html[data-theme="light"] .runMenuToggle:hover:not(:disabled),
+html[data-theme="dark"] .runMenuWrap.isOpen .runMenuToggle,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .runMenuWrap.isOpen .runMenuToggle,
+html[data-theme="light"] .runMenuWrap.isOpen .runMenuToggle {
+  background: var(--accent-hover);
 }
 
 /* ── Status (frameless) ─────────────────────────────────── */
@@ -560,21 +586,30 @@ html[data-theme="light"] .appTopBar .executionModeIndicator {
     0 1px 2px rgba(15, 15, 18, 0.08);
 }
 
-html[data-theme="dark"] .appTopBar .executionModeToggle button,
-html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .appTopBar .executionModeToggle button,
-html[data-theme="light"] .appTopBar .executionModeToggle button {
+html[data-theme="dark"] .appTopBar .executionModeToggle .executionModeCanvasToggle,
+html[data-theme="dark"] .appTopBar .executionModeToggle .executionModeFormOption,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .appTopBar .executionModeToggle .executionModeCanvasToggle,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .appTopBar .executionModeToggle .executionModeFormOption,
+html[data-theme="light"] .appTopBar .executionModeToggle .executionModeCanvasToggle,
+html[data-theme="light"] .appTopBar .executionModeToggle .executionModeFormOption {
   color: var(--text-tertiary);
 }
 
-html[data-theme="dark"] .appTopBar .executionModeToggle button.active,
-html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .appTopBar .executionModeToggle button.active,
-html[data-theme="light"] .appTopBar .executionModeToggle button.active {
+html[data-theme="dark"] .appTopBar .executionModeToggle .executionModeCanvasToggle.active,
+html[data-theme="dark"] .appTopBar .executionModeToggle .executionModeFormOption.active,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .appTopBar .executionModeToggle .executionModeCanvasToggle.active,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .appTopBar .executionModeToggle .executionModeFormOption.active,
+html[data-theme="light"] .appTopBar .executionModeToggle .executionModeCanvasToggle.active,
+html[data-theme="light"] .appTopBar .executionModeToggle .executionModeFormOption.active {
   color: var(--text-primary);
 }
 
-html[data-theme="dark"] .appTopBar .executionModeToggle button:hover:not(.active),
-html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .appTopBar .executionModeToggle button:hover:not(.active),
-html[data-theme="light"] .appTopBar .executionModeToggle button:hover:not(.active) {
+html[data-theme="dark"] .appTopBar .executionModeToggle .executionModeCanvasToggle:hover:not(.active),
+html[data-theme="dark"] .appTopBar .executionModeToggle .executionModeFormOption:hover:not(.active),
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .appTopBar .executionModeToggle .executionModeCanvasToggle:hover:not(.active),
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .appTopBar .executionModeToggle .executionModeFormOption:hover:not(.active),
+html[data-theme="light"] .appTopBar .executionModeToggle .executionModeCanvasToggle:hover:not(.active),
+html[data-theme="light"] .appTopBar .executionModeToggle .executionModeFormOption:hover:not(.active) {
   color: var(--text-secondary);
 }
 

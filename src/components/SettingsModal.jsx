@@ -5,7 +5,8 @@ import {
   Palette,
   Wifi,
   WifiOff,
-  X
+  X,
+  Grid
 } from "lucide-react";
 import { ConnectionPanel, SavedServerList, AddServerForm } from "./ConnectionPanel";
 import { RunningHubSettings } from "./RunningHubSettings";
@@ -68,7 +69,15 @@ export function SettingsModal() {
     rhTotalCoins,
     setRhTestResult,
     setRhAccount,
-    setRhAccountError
+    setRhAccountError,
+    canvasSmartGuide,
+    setCanvasSmartGuide,
+    canvasSnapGrid,
+    setCanvasSnapGrid,
+    canvasSnapGridSize,
+    setCanvasSnapGridSize,
+    maxHistoryDisplay,
+    setMaxHistoryDisplay
   } = useSettingsModalContext();
 
   if (!open) return null;
@@ -121,6 +130,13 @@ export function SettingsModal() {
                 <small>{t("settings.rhDesc")}</small>
               </span>
             </button>
+            <button type="button" role="tab" aria-selected={settingsTab === "canvas"} className={settingsTab === "canvas" ? "active" : ""} onClick={() => setSettingsTab("canvas")}>
+              <Grid size={17} />
+              <span>
+                <b>{t("settings.canvas.tab")}</b>
+                <small>{t("settings.canvas.tabHint")}</small>
+              </span>
+            </button>
           </nav>
 
           <div className="settingsTabContent">
@@ -171,6 +187,18 @@ export function SettingsModal() {
                       <option value="vi">{t("language.vi")}</option>
                       <option value="en">{t("language.en")}</option>
                     </select>
+                  </label>
+
+                  <label className="field">
+                    <span>{t("settings.history.maxDisplay")}</span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={1000}
+                      step={1}
+                      value={maxHistoryDisplay}
+                      onChange={event => setMaxHistoryDisplay(Number(event.target.value))}
+                    />
                   </label>
                 </div>
               </section>
@@ -291,6 +319,59 @@ export function SettingsModal() {
                   <p>{t("storage.description")}</p>
                 </header>
                 <StorageSettings />
+              </section>
+            ) : null}
+
+            {settingsTab === "canvas" ? (
+              <section className="settingsPane canvasSettingsPane" role="tabpanel">
+                <header className="settingsPaneHeader">
+                  <h3>{t("settings.canvas.title")}</h3>
+                  <p>{t("settings.canvas.desc")}</p>
+                </header>
+                <div className="canvasSettingsPanel">
+                  <div className="canvasSettingsOptions">
+                    <label className="canvasSettingsOption">
+                      <input
+                        type="checkbox"
+                        checked={canvasSmartGuide}
+                        onChange={event => setCanvasSmartGuide(event.target.checked)}
+                      />
+                      <span className="canvasSettingsOptionText">
+                        <strong>{t("settings.canvas.smartGuide")}</strong>
+                        <small>{t("settings.canvas.smartGuideHint")}</small>
+                      </span>
+                    </label>
+
+                    <label className="canvasSettingsOption">
+                      <input
+                        type="checkbox"
+                        checked={canvasSnapGrid}
+                        onChange={event => setCanvasSnapGrid(event.target.checked)}
+                      />
+                      <span className="canvasSettingsOptionText">
+                        <strong>{t("settings.canvas.snapGrid")}</strong>
+                        <small>{t("settings.canvas.snapGridHint")}</small>
+                      </span>
+                    </label>
+                  </div>
+
+                  {canvasSnapGrid ? (
+                    <label className="field canvasSettingsGridField">
+                      <span>{t("settings.canvas.gridSize")}</span>
+                      <select
+                        value={canvasSnapGridSize}
+                        onChange={event => setCanvasSnapGridSize(Number(event.target.value))}
+                      >
+                        <option value="5">5 px</option>
+                        <option value="10">10 px</option>
+                        <option value="15">15 px ({t("settings.canvas.gridSizeDefault")})</option>
+                        <option value="20">20 px</option>
+                        <option value="25">25 px</option>
+                        <option value="30">30 px</option>
+                      </select>
+                    </label>
+                  ) : null}
+                </div>
               </section>
             ) : null}
           </div>

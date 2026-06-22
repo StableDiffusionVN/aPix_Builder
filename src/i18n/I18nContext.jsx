@@ -61,6 +61,11 @@ const messages = {
     "template.deleteConfirm": "Bạn có chắc muốn xóa {name}? Thư mục template và file YAML/JSON sẽ bị xóa vĩnh viễn.",
     "template.deleting": "Đang xóa...",
     "template.deleteError": "Không xóa được template",
+    "template.exportFolder": "Export folder",
+    "template.exportFolderTitle": "Tải thư mục template đang mở dưới dạng .tar.gz",
+    "template.exportFolderPreparing": "Đang đóng gói thư mục template...",
+    "template.exportFolderDone": "Đã tải thư mục template · {name}",
+    "template.exportFolderFailed": "Không export được thư mục template",
     "preset.none": "Chưa chọn preset",
     "preset.name": "Tên preset...",
     "preset.confirm": "Xác nhận lưu",
@@ -68,7 +73,7 @@ const messages = {
     "preset.update": "Cập nhật \"{name}\" với giá trị hiện tại",
     "preset.delete": "Xóa preset đang chọn",
     "preset.exists": "\"{name}\" đã tồn tại",
-    "run.queue": "Thêm hàng chờ",
+    "run.queue": "Add",
     "run.queueTitle": "Thêm vào hàng chờ (⌘/Ctrl+Enter)",
     "connection.hide": "Ẩn ComfyUI address",
     "connection.show": "Hiện ComfyUI address",
@@ -225,6 +230,7 @@ const messages = {
     "field.chooseInput": "Chọn ảnh từ thư mục input",
     "field.inputLibrary": "Ảnh trong thư mục input",
     "field.imageCount": "{visible} / {total} ảnh",
+    "field.libraryLoading": "Đang tải thư viện Input…",
     "field.chooseImage": "Chọn ảnh này",
     "field.toggleImage": "Bật/tắt chọn ảnh này",
     "field.multiSelectOn": "Chọn nhiều ảnh",
@@ -374,6 +380,11 @@ const messages = {
     "template.deleteConfirm": "Are you sure you want to delete {name}? Its template folder and YAML/JSON files will be permanently removed.",
     "template.deleting": "Deleting...",
     "template.deleteError": "Could not delete the template",
+    "template.exportFolder": "Export folder",
+    "template.exportFolderTitle": "Download the open template folder as a .tar.gz archive",
+    "template.exportFolderPreparing": "Packaging template folder...",
+    "template.exportFolderDone": "Template folder downloaded · {name}",
+    "template.exportFolderFailed": "Could not export the template folder",
     "preset.none": "No preset selected",
     "preset.name": "Preset name...",
     "preset.confirm": "Save preset",
@@ -381,7 +392,7 @@ const messages = {
     "preset.update": "Update \"{name}\" with the current values",
     "preset.delete": "Delete selected preset",
     "preset.exists": "\"{name}\" already exists",
-    "run.queue": "Add to queue",
+    "run.queue": "Add",
     "run.queueTitle": "Add to queue (⌘/Ctrl+Enter)",
     "connection.hide": "Hide ComfyUI address",
     "connection.show": "Show ComfyUI address",
@@ -538,6 +549,7 @@ const messages = {
     "field.chooseInput": "Choose from the input folder",
     "field.inputLibrary": "Images in the input folder",
     "field.imageCount": "{visible} / {total} images",
+    "field.libraryLoading": "Loading input library…",
     "field.chooseImage": "Choose this image",
     "field.toggleImage": "Toggle this image",
     "field.multiSelectOn": "Select multiple images",
@@ -675,6 +687,32 @@ const ENGLISH_RUNTIME_MESSAGES = new Map([
   ["Đã nhận kết quả từ RunningHub", "Received the result from RunningHub"],
   ["Task RunningHub thất bại", "RunningHub task failed"],
   ["Timeout khi chờ kết quả từ RunningHub", "Timed out waiting for the RunningHub result"],
+  ["Thao tác workflow thất bại.", "The workflow action failed."],
+  ["Không thể đóng workflow.", "Could not close the workflow."],
+  ["Không thể lưu workflow.", "Could not save the workflow."],
+  ["Không thể tải xuống workflow JSON.", "Could not download the workflow JSON."],
+  ["Tệp không chứa dữ liệu workflow hợp lệ.", "The file does not contain valid workflow data."],
+  ["Định dạng tệp không phải workflow của aPix Builder.", "The file is not an aPix Builder workflow."],
+  ["Phiên bản workflow mới hơn phiên bản aPix Builder hiện tại.", "The workflow requires a newer version of aPix Builder."],
+  ["Không thể đọc tệp JSON workflow.", "Could not read the workflow JSON file."],
+  ["Workflow phải chứa đầy đủ danh sách nodes và edges.", "The workflow must include both node and edge lists."],
+  ["Không thể import workflow.", "Could not import the workflow."],
+  ["Đã hủy", "Cancelled"],
+  ["Thiếu RunningHub API key", "RunningHub API key is missing"],
+  ["Node bypass không thể gửi vào backend queue", "A bypassed node cannot be submitted to the backend queue"],
+  ["Không gửi được hàng chờ backend", "Could not submit the backend queue"],
+  ["Không tạo được hàng chờ ảnh", "Could not create the image queue"],
+  ["Không thể xóa workflow.", "Could not delete the workflow."],
+  ["Thiếu slug workflow", "The workflow slug is missing"],
+  ["Không tìm thấy workflow trong thư viện", "The workflow was not found in the library"],
+  ["Không tìm thấy workflow đang mở", "The open workflow was not found"],
+  ["Không tìm thấy workflow", "The workflow was not found"],
+  ["Thiếu tên workflow", "The workflow name is missing"],
+  ["Thiếu dữ liệu workflow JSON", "The workflow JSON data is missing"],
+  ["Không thể đổi thư mục khi workflow đang chạy", "The folder cannot be changed while a workflow is running"],
+  ["Phiên không còn trên server — đánh dấu đã hủy", "The session is no longer on the server — marked as cancelled"],
+  ["Thiếu RunningHub API key — vào Settings để nhập lại", "RunningHub API key is missing — enter it again in Settings"],
+  ["(trống)", "(empty)"],
   ["API key hiện tại không có quyền chạy RunningHub App này. Kiểm tra App ID và quyền truy cập trên RunningHub.", "The current API key cannot run this RunningHub App. Check the App ID and access permissions on RunningHub."],
   ["API key hiện tại không có quyền chạy workflow RunningHub này. Kiểm tra Workflow ID, lưu/chạy thử workflow trên RunningHub, hoặc quyền truy cập.", "The current API key cannot run this RunningHub workflow. Check the Workflow ID, save/run the workflow on RunningHub, or your access permissions."]
 ]);
@@ -685,6 +723,34 @@ export function localizeRuntimeMessage(message, locale) {
   if (ENGLISH_RUNTIME_MESSAGES.has(text)) return ENGLISH_RUNTIME_MESSAGES.get(text);
   return text
     .replace(/^Node (.+) lỗi:/, "Node $1 error:")
+    .replace(/^Truyền ref server-local: (.+)$/, "Passing server-local ref: $1")
+    .replace(/^Truyền path local: (.+)$/, "Passing local path: $1")
+    .replace(/^Ảnh remote \(server sẽ tải\): (.+)$/, "Remote image (the server will download it): $1")
+    .replace(/^Input "(.+)": không tìm thấy node nguồn (.+)$/, "Input \"$1\": source node $2 was not found")
+    .replace(/^Input "(.+)": node "(.+)" chưa có output$/, "Input \"$1\": node \"$2\" has no output yet")
+    .replace(/^Input "(.+)": lỗi resolve — (.+)$/, "Input \"$1\": resolve error — $2")
+    .replace(/^Input ảnh "(.+)" trống — node upstream chưa tạo output hợp lệ$/, "Image input \"$1\" is empty — the upstream node has not produced a valid output")
+    .replace(/^Input "(.+)": xác nhận file tồn tại trên server$/, "Input \"$1\": confirmed that the file exists on the server")
+    .replace(/^Input ảnh "(.+)": file không tồn tại trên server \(404\) — chạy lại node upstream$/, "Image input \"$1\": the file does not exist on the server (404) — rerun the upstream node")
+    .replace(/^Input "(.+)": không kiểm tra được file — tiếp tục với cache URL$/, "Input \"$1\": could not verify the file — continuing with the cached URL")
+    .replace(/^Task hoàn tất: (.+)$/, "Task completed: $1")
+    .replace(/^Phản hồi OK từ (.+)$/, "OK response from $1")
+    .replace(/^Bypass: (.+) \(không có ảnh input\)$/, "Bypass: $1 (no input image)")
+    .replace(/^── Bắt đầu: (.+) \((.+)\) ──$/, "── Started: $1 ($2) ──")
+    .replace(/^Xong (.+): (\d+) output$/, "Completed $1: $2 output(s)")
+    .replace(/^Đang chờ RunningHub…$/, "Waiting for RunningHub…")
+    .replace(/^Tải lại output \(lần (.+)\)$/, "Reloading output (attempt $1)")
+    .replace(/^Tự chạy node upstream \(chưa có cache output\): (.+)$/, "Auto-running upstream node (no cached output): $1")
+    .replace(/^Tự chạy lại node upstream \(file output đã mất\): (.+)$/, "Rerunning upstream node (output file is missing): $1")
+    .replace(/^Pipeline: (\d+) node theo thứ tự topo$/, "Pipeline: $1 node(s) in topological order")
+    .replace(/^Input ảnh "(.+)" thiếu ảnh từ "(.+)" — thêm ảnh vào node nguồn trước$/, "Image input \"$1\" is missing an image from \"$2\" — add an image to the source node first")
+    .replace(/^Input ảnh "(.+)" thiếu ảnh từ "(.+)" — chạy node "(.+)" trước hoặc chạy pipeline$/, "Image input \"$1\" is missing an image from \"$2\" — run node \"$3\" first or run the pipeline")
+    .replace(/^Input ảnh "(.+)" thiếu ảnh từ "(.+)" — node nguồn "(.+)" chưa có ảnh$/, "Image input \"$1\" is missing an image from \"$2\" — source node \"$3\" has no image")
+    .replace(/^Input ảnh "(.+)" vẫn thiếu từ "(.+)" sau khi chạy upstream$/, "Image input \"$1\" is still missing from \"$2\" after running the upstream node")
+    .replace(/^Đang chuẩn bị dữ liệu workflow\.\.\.$/, "Preparing workflow data...")
+    .replace(/^Đang gửi workflow lên RunningHub\.\.\.$/, "Submitting workflow to RunningHub...")
+    .replace(/^Đang chuẩn bị (\d+) input cho workflow\.\.\.$/, "Preparing $1 workflow input(s)...")
+    .replace(/^Đang gửi workflow lên RunningHub \((\d+) field\)\.\.\.$/, "Submitting workflow to RunningHub ($1 field(s))...")
     .replace(/^Đang upload (.+)\.\.\.$/, "Uploading $1...")
     .replace(/^API key đang xử lý 1 task khác, đang chờ hoàn tất\.\.\.$/, "The API key is processing another task; waiting for it to finish...")
     .replace(/^API key đang xử lý (\d+) task khác, đang chờ slot trống\.\.\.$/, "The API key is processing $1 other tasks; waiting for an available slot...")

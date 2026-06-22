@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronRight, Copy, Download, ImageIcon, Loader2, ScrollText, Trash2, X } from "lucide-react";
+import { ChevronRight, Copy, Download, ImageIcon, Loader2, RefreshCcw, ScrollText, Trash2, X } from "lucide-react";
 import {
   copyToClipboard,
   describeJob,
@@ -29,6 +29,8 @@ const LOG_BUTTON_HEIGHT = 34;
 const LOG_DOCK_GAP = 8;
 const LOG_DOCK_TOP_MARGIN = 8;
 const LOG_DOCK_CHROME = LOG_DOCK_BOTTOM + LOG_BUTTON_HEIGHT + LOG_DOCK_GAP + LOG_DOCK_TOP_MARGIN;
+const LOG_CANVAS_ZOOM_BAR = 38;
+const LOG_CANVAS_DOCK_CHROME = LOG_DOCK_BOTTOM + LOG_CANVAS_ZOOM_BAR + LOG_DOCK_GAP + LOG_DOCK_TOP_MARGIN;
 const LOG_ROW_HEIGHT = 22;
 const LOG_OVERSCAN = 8;
 
@@ -37,9 +39,12 @@ function clampLogHeight(height, maxHeight = MAX_LOG_HEIGHT) {
 }
 
 function measureMaxLogHeight(dockEl) {
-  const container = dockEl?.closest(".previewArea");
+  const container = dockEl?.closest(".previewArea") || dockEl?.closest(".canvasStage");
   if (!container) return MAX_LOG_HEIGHT;
-  const available = container.clientHeight - LOG_DOCK_CHROME;
+  const chrome = dockEl?.classList.contains("outputLogDockNoToggle")
+    ? LOG_CANVAS_DOCK_CHROME
+    : LOG_DOCK_CHROME;
+  const available = container.clientHeight - chrome;
   return Math.max(MIN_LOG_HEIGHT, Math.min(MAX_LOG_HEIGHT, available));
 }
 
@@ -64,6 +69,14 @@ function sessionTarget(session) {
   if (session.template) return `tpl=${session.template}`;
   if (session.webappId) return `app=${session.webappId}`;
   return session.jobLabel || "—";
+}
+
+function sessionMatchesQueueScope(session, queueRunKind) {
+  if (!queueRunKind) return true;
+  const kind = String(session.runKind || "");
+  if (!kind) return true;
+  if (queueRunKind === "canvas") return kind.startsWith("canvas");
+  return kind === queueRunKind;
 }
 
 function confirmAction(message) {
@@ -359,13 +372,16 @@ export function RunLogPanel({
   outputHistory = [],
   onDeleteSession,
   onClearHistory,
+  onRefresh,
   onRestoreOutput,
   onRhTaskInspected,
   runQueue = [],
   activeRunId = "",
   status = "",
   running = false,
-  rhApiKey = ""
+  rhApiKey = "",
+  queueRunKind = "",
+  hideToggleButton = false
 }) {
   const { t } = useI18n();
   const panelRef = useRef(null);
@@ -380,6 +396,7 @@ export function RunLogPanel({
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [providerFilter, setProviderFilter] = useState("all");
+  const [refreshing, setRefreshing] = useState(false);
 
   const historyByRunId = useMemo(() => {
     const map = new Map();
@@ -390,10 +407,15 @@ export function RunLogPanel({
     return map;
   }, [outputHistory]);
 
-  const filteredSessions = useMemo(
-    () => filterRunLogSessions(sessions, { query: searchQuery, status: statusFilter, provider: providerFilter }),
-    [sessions, searchQuery, statusFilter, providerFilter]
-  );
+  const filteredSessions = useMemo(() => {
+    const filtered = filterRunLogSessions(sessions, {
+      query: searchQuery,
+      status: statusFilter,
+      provider: providerFilter
+    });
+    if (statusFilter === "queued") return filtered;
+    return filtered.filter(session => session.status !== "queued");
+  }, [sessions, searchQuery, statusFilter, providerFilter]);
 
   const totalRhCoins = useMemo(() => sumRhCoins(sessions), [sessions]);
 
@@ -515,6 +537,16 @@ export function RunLogPanel({
     setTaskInspectMap({});
   }
 
+  async function handleRefresh() {
+    if (!onRefresh || refreshing) return;
+    setRefreshing(true);
+    try {
+      await onRefresh();
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
   function handleExportSession(session) {
     if (!session) return;
     downloadTextFile(`run-log-${formatRunId(session.runId, false)}.log`, exportSessionAsText(session));
@@ -609,9 +641,46 @@ export function RunLogPanel({
     }
   }
 
-  const queueCount = runQueue.length;
-  const hasActivity = running || queueCount > 0 || sessions.length > 0;
-  const liveTag = running ? "RUN" : queueCount ? "QUE" : "IDL";
+  const queueEntries = useMemo(() => {
+    const localRunIds = new Set(runQueue.map(job => job?.runId).filter(Boolean));
+    const localEntries = runQueue.map((job, index) => ({
+      id: job.runId || `local-${index}`,
+      runId: job.runId || "",
+      label: describeJob(job),
+      queuedAt: job.queuedAt || "",
+      source: "local"
+    }));
+    const backendEntries = sessions
+      .filter(session => (
+        session.status === "queued"
+        && session.runId
+        && !localRunIds.has(session.runId)
+        && sessionMatchesQueueScope(session, queueRunKind)
+      ))
+      .map(session => ({
+        id: session.id || session.runId,
+        runId: session.runId,
+        label: sessionTarget(session),
+        queuedAt: session.startedAt || "",
+        source: "backend"
+      }));
+    return [...localEntries, ...backendEntries];
+  }, [queueRunKind, runQueue, sessions]);
+  const runningSessions = useMemo(
+    () => sessions.filter(session => session.status === "running" && sessionMatchesQueueScope(session, queueRunKind)),
+    [queueRunKind, sessions]
+  );
+  const queueCount = queueEntries.length;
+  const showQueuePanel = queueCount > 0 && statusFilter !== "queued";
+  const hasLiveRunning = running || runningSessions.length > 0;
+  const liveRunId = activeRunId || runningSessions[0]?.runId || "";
+  const liveStatus = running
+    ? (status || "processing...")
+    : runningSessions[0]
+      ? `processing ${sessionTarget(runningSessions[0])}`
+      : "";
+  const hasActivity = hasLiveRunning || queueCount > 0 || sessions.length > 0;
+  const liveTag = hasLiveRunning ? "RUN" : queueCount ? "QUE" : "IDL";
   const focusedSession = filteredSessions.find(session => session.id === focusedSessionId) || null;
 
   const clampedPopupHeight = clampLogHeight(popupHeight, maxLogHeight);
@@ -619,7 +688,7 @@ export function RunLogPanel({
   return (
     <div
       ref={dockRef}
-      className="outputLogDock"
+      className={`outputLogDock${hideToggleButton ? " outputLogDockNoToggle" : ""}`}
       onWheel={(event) => event.stopPropagation()}
       onPointerDown={(event) => event.stopPropagation()}
     >
@@ -655,6 +724,15 @@ export function RunLogPanel({
               {totalRhCoins > 0 ? <span className="logHeaderMeta">rh_total={totalRhCoins}</span> : null}
             </div>
             <div className="logHeaderActions">
+              <button
+                type="button"
+                className="logAction logActionIcon"
+                onClick={handleRefresh}
+                title="Reload run state"
+                disabled={refreshing}
+              >
+                <RefreshCcw size={12} className={refreshing ? "spin" : ""} />
+              </button>
               {focusedSession ? (
                 <button type="button" className="logAction" onClick={() => handleExportSession(focusedSession)} title={t("log.exportFocused")}>
                   <Download size={12} />
@@ -699,19 +777,20 @@ export function RunLogPanel({
 
           <div className="logLive">
             <span className={`logLiveTag ${liveTag.toLowerCase()}`}>{liveTag}</span>
-            {running ? <Loader2 size={11} className="spin logLiveSpin" /> : null}
-            <span className="logLiveText">{running ? (status || "processing...") : queueCount ? `queue_depth=${queueCount}` : "idle"}</span>
-            {running && activeRunId ? <span className="logLiveMeta">run={formatRunId(activeRunId)}</span> : null}
+            {hasLiveRunning ? <Loader2 size={11} className="spin logLiveSpin" /> : null}
+            <span className="logLiveText">{hasLiveRunning ? liveStatus : queueCount ? `queue_depth=${queueCount}` : "idle"}</span>
+            {liveRunId ? <span className="logLiveMeta">run={formatRunId(liveRunId)}</span> : null}
           </div>
 
-          {queueCount ? (
+          {showQueuePanel ? (
             <div className="logQueue">
-              {runQueue.map((job, index) => (
-                <div key={job.runId || `${index}`} className="logQueueLine">
+              {queueEntries.map((entry, index) => (
+                <div key={entry.id || `${index}`} className="logQueueLine">
                   <span className="logCol logColQueue">Q{index + 1}</span>
-                  <span className="logCol logColRun">run={formatRunId(job.runId)}</span>
-                  <span className="logCol logColTarget">job={describeJob(job)}</span>
-                  {job.queuedAt ? <span className="logCol logColTime">at={formatTechTimestamp(job.queuedAt)}</span> : null}
+                  <span className="logCol logColRun">run={formatRunId(entry.runId)}</span>
+                  <span className="logCol logColTarget">job={entry.label}</span>
+                  {entry.queuedAt ? <span className="logCol logColTime">at={formatTechTimestamp(entry.queuedAt)}</span> : null}
+                  {entry.source === "backend" ? <span className="logCol logColTime">src=backend</span> : null}
                 </div>
               ))}
             </div>
@@ -758,19 +837,21 @@ export function RunLogPanel({
         </section>
       ) : null}
 
-      <button
-        type="button"
-        className={`outputLogButton ${hasActivity ? "hasActivity" : ""} ${open ? "active" : ""}`}
-        onClick={onToggle}
-        title="run.log (`)"
-        aria-expanded={open}
-        aria-keyshortcuts="Backquote"
-      >
-        <ScrollText size={15} />
-        {(running || queueCount > 0) ? (
-          <span className="outputLogBadge">{queueCount + (running ? 1 : 0)}</span>
-        ) : null}
-      </button>
+      {hideToggleButton ? null : (
+        <button
+          type="button"
+          className={`outputLogButton ${hasActivity ? "hasActivity" : ""} ${open ? "active" : ""}`}
+          onClick={onToggle}
+          title="run.log (`)"
+          aria-expanded={open}
+          aria-keyshortcuts="Backquote"
+        >
+          <ScrollText size={15} />
+          {(running || queueCount > 0) ? (
+            <span className="outputLogBadge">{queueCount + (running ? 1 : 0)}</span>
+          ) : null}
+        </button>
+      )}
     </div>
   );
 }

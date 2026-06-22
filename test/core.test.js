@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
   mapValuesToRequest,
+  resolveInputImageFilename,
   resolveWorkflowInput,
   validateWorkflowMappings
 } from "../server/lib/workflowPatcher.js";
@@ -57,6 +58,18 @@ describe("workflowPatcher", () => {
       input: { prompt: { id: "2-prompt" } },
       output: {}
     }, workflow)).toThrow(/node 2/);
+  });
+
+  test("resolveInputImageFilename falls back to url query name", () => {
+    expect(resolveInputImageFilename({
+      kind: "input-image",
+      url: "/api/input-image?name=library%20shot.png"
+    })).toBe("library shot.png");
+    expect(resolveInputImageFilename({
+      kind: "input-image",
+      name: "explicit.png",
+      url: "/api/input-image?name=other.png"
+    })).toBe("explicit.png");
   });
 });
 

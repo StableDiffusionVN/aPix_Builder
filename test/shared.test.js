@@ -11,10 +11,13 @@ import {
   normalizeLocalPathInput
 } from "../shared/localImagePath.js";
 import {
+  applyShortcutPresentationSettings,
   buildRunningHubShortcut,
   collectShortcutControls,
+  createSignedRunningHubShortcut,
   detectRunningHubResource,
-  resolveShortcutAssetsDir
+  resolveShortcutAssetsDir,
+  usesEmbeddedWorkflowJson
 } from "../electron/runninghub-shortcut.mjs";
 import { execFileSync } from "node:child_process";
 import path from "node:path";
@@ -116,4 +119,182 @@ test("advanced Shortcut menus display labels and submit mapped values", () => {
     .toBe(actions[chooseIndex].WFWorkflowActionParameters.UUID);
   expect(setVariable.WFWorkflowActionParameters.WFInput.Value.OutputUUID)
     .toBe(lookup.WFWorkflowActionParameters.UUID);
+});
+
+function shortcutRequestItems(workflow) {
+  const action = workflow.WFWorkflowActions.find(item => (
+    item?.WFWorkflowActionParameters?.WFJSONValues?.Value?.WFDictionaryFieldValueItems
+  ));
+  return action.WFWorkflowActionParameters.WFJSONValues.Value.WFDictionaryFieldValueItems;
+}
+
+test("usesEmbeddedWorkflowJson follows saveWorkflowJson flag", () => {
+  expect(usesEmbeddedWorkflowJson({ runninghub: { saveWorkflowJson: true } })).toBe(true);
+  expect(usesEmbeddedWorkflowJson({ runninghub: { saveWorkflowJson: false } })).toBe(false);
+  expect(usesEmbeddedWorkflowJson({ runninghub: {} })).toBe(false);
+});
+
+test("exported shortcut surfaces match Share Sheet, Spotlight, and Services quick action", () => {
+  const templatePath = path.join(
+    process.cwd(),
+    "electron/shortcut-assets/workflow-template.unsigned.shortcut"
+  );
+  const json = execFileSync("/usr/bin/plutil", ["-convert", "json", "-o", "-", templatePath], {
+    encoding: "utf8"
+  });
+  const config = {
+    app: { name: "Surface Test" },
+    input: {
+      prompt: { id: "6-text", ui: { type: "text", label: "Prompt", value: "hello" } }
+    },
+    runninghub: { workflowId: "workflow-123" }
+  };
+  const result = buildRunningHubShortcut(JSON.parse(json), config, "hidden-test-key");
+  expect(result.workflow.WFWorkflowTypes).toEqual([
+    "QuickActions",
+    "ActionExtension",
+    "WFWorkflowTypeShowInSearch"
+  ]);
+  expect(result.workflow.WFQuickActionSurfaces).toEqual(["Services"]);
+  expect(result.workflow.WFWorkflowInputContentItemClasses).toEqual([
+    "WFGenericFileContentItem",
+    "WFStringContentItem",
+    "WFRichTextContentItem"
+  ]);
+});
+
+test("image workflow shortcuts accept share sheet and services input classes", () => {
+  const templatePath = path.join(
+    process.cwd(),
+    "electron/shortcut-assets/workflow-template.unsigned.shortcut"
+  );
+  const json = execFileSync("/usr/bin/plutil", ["-convert", "json", "-o", "-", templatePath], {
+    encoding: "utf8"
+  });
+  const config = {
+    app: { name: "Routine Flatlay" },
+    input: {
+      image: { id: "48-image", ui: { type: "image", label: "Image" } },
+      prompt: { id: "6-text", ui: { type: "text", label: "Prompt", value: "hello" } }
+    },
+    runninghub: { workflowId: "workflow-123" }
+  };
+  const result = buildRunningHubShortcut(JSON.parse(json), config, "hidden-test-key");
+  expect(result.workflow.WFWorkflowName).toBe("Routine Flatlay");
+  expect(result.workflow.WFWorkflowInputContentItemClasses).toEqual([
+    "WFAppContentItem",
+    "WFGenericFileContentItem",
+    "WFImageContentItem",
+    "WFPDFContentItem",
+    "WFRichTextContentItem",
+    "WFSafariWebPageContentItem",
+    "WFStringContentItem"
+  ]);
+});
+
+test("workflow shortcut template ships with share surfaces enabled", () => {
+  const templatePath = path.join(
+    process.cwd(),
+    "electron/shortcut-assets/workflow-template.unsigned.shortcut"
+  );
+  const json = execFileSync("/usr/bin/plutil", ["-convert", "json", "-o", "-", templatePath], {
+    encoding: "utf8"
+  });
+  const workflow = JSON.parse(json);
+  expect(workflow.WFWorkflowTypes).toEqual([
+    "QuickActions",
+    "ActionExtension",
+    "WFWorkflowTypeShowInSearch"
+  ]);
+  expect(workflow.WFQuickActionSurfaces).toEqual(["Services"]);
+  expect(workflow.WFWorkflowInputContentItemClasses).toContain("WFGenericFileContentItem");
+});
+
+test("embedded workflow JSON is embedded in shortcut request body", () => {
+  const templatePath = path.join(
+    process.cwd(),
+    "electron/shortcut-assets/workflow-template.unsigned.shortcut"
+  );
+  const json = execFileSync("/usr/bin/plutil", ["-convert", "json", "-o", "-", templatePath], {
+    encoding: "utf8"
+  });
+  const config = {
+    app: { name: "Embedded WF" },
+    input: {
+      prompt: { id: "6-text", ui: { type: "text", label: "Prompt", value: "hello" } }
+    },
+    runninghub: { workflowId: "workflow-123", saveWorkflowJson: true }
+  };
+  const embeddedWorkflow = {
+    6: { class_type: "CLIPTextEncode", inputs: { text: "default" } }
+  };
+  const result = buildRunningHubShortcut(JSON.parse(json), config, "hidden-test-key", { embeddedWorkflow });
+  const requestItems = shortcutRequestItems(result.workflow);
+  const workflowItem = requestItems.find(item => item?.WFKey?.Value?.string === "workflow");
+  expect(workflowItem).toBeTruthy();
+  expect(JSON.parse(workflowItem.WFValue.Value.string)).toEqual(embeddedWorkflow);
+  const nodeInfoList = requestItems.find(item => item?.WFKey?.Value?.string === "nodeInfoList");
+  expect(nodeInfoList?.WFValue?.Value).toHaveLength(1);
+});
+
+test("embedded workflow shortcut export requires api.json", () => {
+  const templatePath = path.join(
+    process.cwd(),
+    "electron/shortcut-assets/workflow-template.unsigned.shortcut"
+  );
+  const json = execFileSync("/usr/bin/plutil", ["-convert", "json", "-o", "-", templatePath], {
+    encoding: "utf8"
+  });
+  const config = {
+    app: { name: "Embedded WF" },
+    input: {
+      prompt: { id: "6-text", ui: { type: "text", label: "Prompt", value: "hello" } }
+    },
+    runninghub: { workflowId: "workflow-123", saveWorkflowJson: true }
+  };
+  expect(() => buildRunningHubShortcut(JSON.parse(json), config, "hidden-test-key", {}))
+    .toThrow(/api\.json/);
+});
+
+test("signed shortcut round-trip keeps share surfaces metadata", async () => {
+  const shortcutSign = "/tmp/shortcut-sign-full/build/usr/bin/shortcut-sign";
+  if (process.platform !== "darwin" || !require("node:fs").existsSync(shortcutSign)) return;
+
+  const { createSignedRunningHubShortcut, resolveShortcutAssetsDir } = await import("../electron/runninghub-shortcut.mjs");
+  const templatePath = path.join(
+    process.cwd(),
+    "electron/shortcut-assets/workflow-template.unsigned.shortcut"
+  );
+  const json = execFileSync("/usr/bin/plutil", ["-convert", "json", "-o", "-", templatePath], {
+    encoding: "utf8"
+  });
+  const config = {
+    app: { name: "Signed Surface Test" },
+    input: {
+      image: { id: "48-image", ui: { type: "image", label: "Image" } }
+    },
+    runninghub: { workflowId: "workflow-123" }
+  };
+  const unsignedDir = require("node:fs").mkdtempSync(path.join(require("node:os").tmpdir(), "apix-signed-"));
+  const signedPath = path.join(unsignedDir, "signed.shortcut");
+  const extractedPath = path.join(unsignedDir, "extracted.plist");
+  await createSignedRunningHubShortcut({
+    config,
+    apiKey: "hidden-test-key",
+    outputPath: signedPath,
+    assetsDir: resolveShortcutAssetsDir(process.cwd()),
+    kind: "workflow",
+    resourceId: "workflow-123"
+  });
+  execFileSync(shortcutSign, ["extract", "-i", signedPath, "-o", extractedPath]);
+  const extracted = JSON.parse(execFileSync("/usr/bin/plutil", ["-convert", "json", "-o", "-", extractedPath], {
+    encoding: "utf8"
+  }));
+  expect(extracted.WFWorkflowTypes).toEqual([
+    "QuickActions",
+    "ActionExtension",
+    "WFWorkflowTypeShowInSearch"
+  ]);
+  expect(extracted.WFQuickActionSurfaces).toEqual(["Services"]);
+  expect(extracted.WFWorkflowInputContentItemClasses).toContain("WFGenericFileContentItem");
 });

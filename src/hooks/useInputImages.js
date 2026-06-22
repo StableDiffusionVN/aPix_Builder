@@ -1,16 +1,24 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
+import {
+  fetchInputImages,
+  getCachedInputImages,
+  setCachedInputImages
+} from "../lib/inputImagesCache.js";
 
 export function useInputImages() {
-  const [inputImages, setInputImages] = useState([]);
+  const [inputImages, setInputImagesState] = useState(() => getCachedInputImages());
 
-  async function refreshInputImages() {
-    try {
-      const res = await fetch("/api/input-images");
-      if (!res.ok) return;
-      const data = await res.json();
-      setInputImages(data.images || []);
-    } catch { setInputImages([]); }
-  }
+  const refreshInputImages = useCallback(async (options = {}) => {
+    const images = await fetchInputImages(options);
+    setInputImagesState(images);
+    return images;
+  }, []);
+
+  const setInputImages = useCallback((images) => {
+    const list = setCachedInputImages(images);
+    setInputImagesState(list);
+    return list;
+  }, []);
 
   return { inputImages, setInputImages, refreshInputImages };
 }

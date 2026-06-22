@@ -1,5 +1,4 @@
 import { RefreshCcw } from "lucide-react";
-import { EditorRange } from "../../components/ImageAdjustmentControls.jsx";
 import {
   canonicalDynamicType,
   dynamicFieldChoices,
@@ -10,6 +9,10 @@ import {
   parseMenuChoices,
   resolveMenuStoredValue
 } from "../../../shared/menuChoices.js";
+import { DropdownField } from "./DropdownField.jsx";
+import { SeedField } from "./SeedField.jsx";
+import { SliderField } from "./SliderField.jsx";
+import { TextField } from "./TextField.jsx";
 
 function tooltipProps(description, extraClass = "") {
   const text = String(description || "").trim();
@@ -19,69 +22,80 @@ function tooltipProps(description, extraClass = "") {
     : { className };
 }
 
+function choicesSignature(rawChoices, choices) {
+  if (choices?.length) {
+    return choices.map(choice => `${choice.value}:${choice.label}`).join("|");
+  }
+  return (rawChoices || []).join("|");
+}
+
 const renderers = {
-  seed({ ui, label, description, value, onChange, t }) {
-    const isRandomSeed = value === "random_seed" || value === "";
+  seed({ item, ui, label, description, value, onChange, t }) {
     return (
-      <label {...tooltipProps(description, "compact")}>
-        <span>{label}</span>
-        <div className="inlineControl">
-          <input
-            type="number"
-            min={ui.minimum ?? 0}
-            max={ui.maximum}
-            step={ui.step ?? 1}
-            placeholder={isRandomSeed ? t("field.randomSeed") : ""}
-            value={isRandomSeed ? "" : value}
-            onChange={event => {
-              if (event.target.value === "") return onChange("random_seed");
-              const next = Math.max(ui.minimum ?? 0, Math.trunc(Number(event.target.value)));
-              onChange(Number.isFinite(next) ? next : "random_seed");
-            }}
-          />
-          <button type="button" className="fieldResetButton" onClick={() => onChange("random_seed")} title={t("field.randomSeed")}>
-            <RefreshCcw size={13} />
-          </button>
-        </div>
-      </label>
+      <SeedField
+        fieldKey={item?.key || label}
+        label={label}
+        description={description}
+        value={value}
+        minimum={ui.minimum ?? 0}
+        maximum={ui.maximum}
+        step={ui.step ?? 1}
+        randomSeedLabel={t("field.randomSeed")}
+        onChange={onChange}
+        choicesSignature=""
+      />
     );
   },
-  text({ ui, label, description, value, onChange }) {
+  text({ item, ui, label, description, value, onChange }) {
     return (
-      <label {...tooltipProps(description)}>
-        <span>{label}</span>
-        <textarea rows={ui.lines || 3} placeholder={ui.placeholder || ""} value={value} onChange={event => onChange(event.target.value)} />
-      </label>
+      <TextField
+        fieldKey={item?.key || label}
+        label={label}
+        description={description}
+        value={value}
+        multiline
+        rows={ui.lines || 3}
+        placeholder={ui.placeholder || ""}
+        onChange={onChange}
+        choicesSignature=""
+      />
     );
   },
-  string({ ui, label, description, display, value, onChange }) {
+  string({ item, ui, label, description, display, value, onChange }) {
     const multiline = display === "multiline" || ui.multiline === true || Number(ui.lines || ui.rows || 1) > 1;
     return (
-      <label {...tooltipProps(description)}>
-        <span>{label}</span>
-        {multiline
-          ? <textarea rows={ui.lines || ui.rows || 3} placeholder={ui.placeholder || ""} value={value} onChange={event => onChange(event.target.value)} />
-          : <input type="text" placeholder={ui.placeholder || ""} value={value} onChange={event => onChange(event.target.value)} />}
-      </label>
+      <TextField
+        fieldKey={item?.key || label}
+        label={label}
+        description={description}
+        value={value}
+        multiline={multiline}
+        rows={ui.lines || ui.rows || 3}
+        placeholder={ui.placeholder || ""}
+        onChange={onChange}
+        choicesSignature=""
+      />
     );
   },
-  slider({ ui, label, description, value, onChange, parseNumber, resetValue }) {
+  slider({ item, ui, label, description, value, onChange, parseNumber, resetValue }) {
     return (
-      <div {...tooltipProps(description)}>
-        <EditorRange
-          label={label}
-          value={value}
-          min={ui.minimum}
-          max={ui.maximum}
-          step={ui.step || 1}
-          resetValue={resetValue}
-          onChange={next => onChange(parseNumber(next))}
-        />
-      </div>
+      <SliderField
+        fieldKey={item?.key || label}
+        label={label}
+        description={description}
+        value={value}
+        minimum={ui.minimum}
+        maximum={ui.maximum}
+        step={ui.step || 1}
+        resetValue={resetValue}
+        parseNumber={parseNumber}
+        onChange={onChange}
+        choicesSignature=""
+      />
     );
   },
   dropdown(context) {
-    const { ui, label, description, value, onChange, discovery, discoveryLoading, t } = context;
+    const { item, ui, label, description, value, onChange, discovery, discoveryLoading, t } = context;
     const dynamicKind = canonicalDynamicType(ui.type);
     const dynamic = isDynamicFieldType(ui.type);
     const rawChoices = dynamic ? dynamicFieldChoices(discovery, dynamicKind) : ui.choices || [];
@@ -93,15 +107,19 @@ const renderers = {
       ? (rawChoices.includes(value) ? value : "")
       : resolveMenuStoredValue(value, rawChoices, options);
     return (
-      <label {...tooltipProps(description)}>
-        <span>{label}</span>
-        <div className="fieldSelectWrap">
-          <select value={selected} onChange={event => onChange(event.target.value)} disabled={dynamic && discoveryLoading}>
-            {dynamic && !rawChoices.length ? <option value="">{discoveryLoading ? t("field.scanning") : t("field.noData")}</option> : null}
-            {choices.map(choice => <option key={choice.value} value={choice.value}>{choice.label}</option>)}
-          </select>
-        </div>
-      </label>
+      <DropdownField
+        fieldKey={item?.key || label}
+        label={label}
+        description={description}
+        value={value}
+        choices={choices}
+        selected={selected}
+        discoveryLoading={dynamic && discoveryLoading}
+        emptyLabel={dynamic ? t("field.noData") : t("field.noChoices")}
+        loadingLabel={t("field.scanning")}
+        onChange={onChange}
+        choicesSignature={choicesSignature(rawChoices, choices)}
+      />
     );
   },
   radio({ ui, label, description, value, onChange }) {
@@ -157,8 +175,19 @@ const renderers = {
   date({ label, description, value, onChange }) {
     return <label {...tooltipProps(description, "compact")}><span>{label}</span><input type="date" value={value || ""} onChange={event => onChange(event.target.value)} /></label>;
   },
-  json({ label, description, value, onChange }) {
-    return <label {...tooltipProps(description)}><span>{label}</span><textarea rows={5} value={value} onChange={event => onChange(event.target.value)} /></label>;
+  json({ item, label, description, value, onChange }) {
+    return (
+      <TextField
+        fieldKey={item?.key || label}
+        label={label}
+        description={description}
+        value={value}
+        multiline
+        rows={5}
+        onChange={onChange}
+        choicesSignature=""
+      />
+    );
   }
 };
 

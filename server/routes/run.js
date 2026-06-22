@@ -1,6 +1,7 @@
 export function createRunRoutes(context) {
   const {
     cancelQueueItems,
+    handleActiveRuns,
     handleCancel,
     handleComfyDiscovery,
     handleComfyHealth,
@@ -8,6 +9,9 @@ export function createRunRoutes(context) {
     handleComfyView,
     handleRun,
     handleRunEvents,
+    handleRunQueueClear,
+    handleRunQueueSubmit,
+    handleRunState,
     normalizeComfyTarget,
     readBody,
     send
@@ -18,8 +22,24 @@ export function createRunRoutes(context) {
       await handleRun(req, res);
       return true;
     }
+    if (req.method === "POST" && url.pathname === "/api/run-queue/submit") {
+      await handleRunQueueSubmit(req, res);
+      return true;
+    }
+    if (req.method === "POST" && url.pathname === "/api/run-queue/clear") {
+      await handleRunQueueClear(req, res);
+      return true;
+    }
     if (req.method === "POST" && url.pathname === "/api/cancel") {
       await handleCancel(req, res);
+      return true;
+    }
+    if (req.method === "GET" && url.pathname === "/api/active-runs") {
+      handleActiveRuns(req, res);
+      return true;
+    }
+    if (req.method === "GET" && url.pathname === "/api/run-state") {
+      handleRunState(req, res);
       return true;
     }
     if (req.method === "GET" && url.pathname === "/api/run-events") {

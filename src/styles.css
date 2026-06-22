@@ -17,8 +17,9 @@
   --success: #7dd3a8;
   --shadow: 0 20px 45px rgba(var(--accent-rgb), 0.16);
   --radius: 16px;
-  --canvas-bg: rgba(2, 3, 11, 0.56);
-  --canvas-checker: rgba(255, 255, 255, 0.045);
+  --canvas-bg: rgba(26, 26, 26, 0.92);
+  --canvas-checker: rgba(255, 255, 255, 0.035);
+  --canvas-dot: #383838;
   --cursor-color-pick: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none'%3E%3Cpath d='M12 2v9.5' stroke='%23fff' stroke-width='3.5' stroke-linecap='round'/%3E%3Cpath d='M12 2v9.5' stroke='%23111827' stroke-width='1.75' stroke-linecap='round'/%3E%3Cpath d='M18 4.5 9 13.5' stroke='%23fff' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M18 4.5 9 13.5' stroke='%23111827' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M9 13.5 4 18.5' stroke='%23fff' stroke-width='3.5' stroke-linecap='round'/%3E%3Cpath d='M9 13.5 4 18.5' stroke='%23111827' stroke-width='1.75' stroke-linecap='round'/%3E%3Ccircle cx='12' cy='19' r='2.5' stroke='%23fff' stroke-width='3.5'/%3E%3Ccircle cx='12' cy='19' r='2.5' stroke='%23111827' stroke-width='1.75'/%3E%3C/svg%3E") 4 20, crosshair;
   --main-font: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI";
   font-family: var(--main-font), sans-serif;
@@ -90,7 +91,8 @@ p {
   display: grid;
   grid-template-columns: var(--sidebar-width, clamp(340px, 32vw, 430px)) minmax(0, 1fr);
   grid-template-rows: 38px minmax(0, 1fr);
-  gap: 10px;
+  column-gap: 10px;
+  row-gap: 0;
   width: auto;
   max-width: 100vw;
   height: 100vh;
@@ -375,6 +377,17 @@ p {
   background: var(--accent);
 }
 
+.appTopBarStatus.health-running {
+  background: var(--accent);
+  box-shadow: 0 0 0 2px rgba(var(--accent-rgb), 0.14);
+  animation: appTopBarStatusPulse 1.15s ease-in-out infinite;
+}
+
+@keyframes appTopBarStatusPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.45; transform: scale(0.92); }
+}
+
 .appTopBarStatus.health-offline {
   background: var(--danger);
 }
@@ -439,11 +452,333 @@ p {
   color: var(--accent-hover);
 }
 
-.appTopBarIdentity > .executionModeToggle {
+.appTopBarIdentity > .appTopBarModeCluster {
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+  flex: 1 1 auto;
+  gap: 8px;
+  height: 36px !important;
+}
+
+/* Ensure consistent height and styling for both panels inside the topbar mode cluster */
+html[data-theme] .appTopBar .executionModeToggle {
   justify-content: flex-start;
   width: auto;
+  margin: 0 !important;
+  height: 36px !important;
+  display: flex !important;
+  align-items: stretch !important;
+}
+
+.appTopBarModeCluster .executionModeToggle {
+  justify-content: flex-start;
+  align-items: stretch;
+  width: auto;
   margin: 0;
-  transform: translateY(5px);
+  flex: 0 0 auto;
+  height: 36px !important;
+}
+
+.appTopBarWorkflowHost {
+  display: flex;
+  align-items: stretch;
+  align-self: center;
+  min-width: 0;
+  overflow: hidden;
+  height: 32px !important;
+}
+
+.appTopBar .executionModeTrackStage {
+  position: relative;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: min(1000px, calc(100vw - 360px));
+  overflow: hidden;
+}
+
+.appTopBar .executionModeTrackPanels {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.appTopBar .executionModeTrackPanel {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  width: max-content;
+  max-width: 100%;
+  display: flex;
+  align-items: stretch;
+  overflow: hidden;
+  transition:
+    transform 0.34s cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 0.22s ease;
+  will-change: transform;
+}
+
+.appTopBar .executionModeTrackStage.is-form .executionModeTrackPanelForm {
+  position: relative;
+  transform: translateX(0);
+  opacity: 1;
+}
+
+.appTopBar .executionModeTrackStage.is-form .executionModeTrackPanelCanvas {
+  transform: translateX(108%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.appTopBar .executionModeTrackStage.is-canvas .executionModeTrackPanelForm {
+  transform: translateX(-108%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.appTopBar .executionModeTrackStage.is-canvas .executionModeTrackPanelCanvas {
+  position: relative;
+  transform: translateX(0);
+  opacity: 1;
+}
+
+.appTopBar .executionModeTrackPanelForm .executionModeFormOptions {
+  position: relative;
+  display: inline-flex;
+  align-items: stretch;
+  gap: 2px;
+  max-width: none;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.appTopBar .executionModeTrackPanelForm .executionModeFormOptions .executionModeIndicator {
+  top: 0px;
+  bottom: 0px;
+}
+
+.appTopBar .executionModeTrackPanelCanvas .appTopBarWorkflowHost {
+  flex: 0 1 auto;
+  width: auto;
+  max-width: 100%;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.appTopBarModeCluster.is-canvas-view {
+  gap: 0 !important;
+}
+
+/* Ensure the Track and the Toolbar have EXACTLY the same dimensions, backgrounds and borders */
+html[data-theme] .appTopBar .executionModeTrack {
+  border: 1px solid var(--border-subtle) !important;
+  border-radius: 8px !important;
+  background: var(--surface-2) !important;
+  box-sizing: border-box !important;
+  height: 36px !important;
+  display: inline-flex !important;
+  align-items: stretch !important;
+  padding: 2px !important;
+  gap: 2px !important;
+  max-width: min(1500px, calc(100vw - 320px));
+}
+
+.appTopBarModeCluster.is-canvas-view .executionModeTrack {
+  align-self: center;
+}
+
+.appTopBar .canvasWorkflowToolbar.isAppTopBar {
+  position: static;
+  width: auto;
+  min-width: 0;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  height: 32px !important;
+  box-sizing: border-box !important;
+  align-self: center;
+  align-items: center;
+  flex: 0 0 auto;
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  gap: 2px;
+}
+
+/* Theme overrides for topbar toolbar background and border colors */
+
+.appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasWorkflowTabs {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: min(50vw, 1000px);
+  align-items: center;
+}
+
+.appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasWorkflowTab {
+  border-radius: 6px;
+  background: transparent;
+  border-color: transparent;
+  min-height: 32px !important;
+  height: 32px !important;
+  overflow: hidden;
+  flex-shrink: 1;
+}
+
+html[data-theme="dark"] .appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasWorkflowTab,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasWorkflowTab,
+html[data-theme="light"] .appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasWorkflowTab {
+  color: var(--text-tertiary);
+}
+
+html[data-theme="dark"] .appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasWorkflowTab:hover,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasWorkflowTab:hover,
+html[data-theme="light"] .appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasWorkflowTab:hover {
+  color: var(--text-secondary);
+  background: rgba(var(--accent-rgb), 0.08);
+}
+
+.appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasWorkflowTab.active {
+  flex: 1 1 140px;
+  max-width: 180px;
+  min-width: 96px;
+  border-color: transparent;
+  flex-shrink: 0;
+}
+
+html[data-theme="dark"] .appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasWorkflowTab.active,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasWorkflowTab.active {
+  color: #ffffff;
+  background: var(--surface-1);
+  box-shadow: none;
+}
+
+html[data-theme="dark"] .appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasWorkflowTab.active .canvasWorkflowTabSelect,
+html[data-theme="dark"] .appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasWorkflowTab.active .canvasWorkflowTabLabel,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasWorkflowTab.active .canvasWorkflowTabSelect,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasWorkflowTab.active .canvasWorkflowTabLabel {
+  color: #ffffff;
+}
+
+html[data-theme="light"] .appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasWorkflowTab.active {
+  color: var(--text-primary);
+  background: var(--surface-1);
+  box-shadow: none;
+}
+
+html[data-theme="light"] .appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasWorkflowTab.active .canvasWorkflowTabSelect,
+html[data-theme="light"] .appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasWorkflowTab.active .canvasWorkflowTabLabel {
+  color: var(--text-primary);
+}
+
+/* Hide execution indicator on left when in canvas mode and style form toggle as inactive */
+.appTopBarModeCluster.is-canvas-view .executionModeIndicator {
+  display: none !important;
+  opacity: 0 !important;
+}
+
+html[data-theme="dark"] .appTopBarModeCluster.is-canvas-view .executionModeCanvasToggle.active,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .appTopBarModeCluster.is-canvas-view .executionModeCanvasToggle.active,
+html[data-theme="light"] .appTopBarModeCluster.is-canvas-view .executionModeCanvasToggle.active {
+  color: var(--text-tertiary) !important;
+  font-weight: 500 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+html[data-theme="dark"] .appTopBarModeCluster.is-canvas-view .executionModeCanvasToggle.active:hover,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .appTopBarModeCluster.is-canvas-view .executionModeCanvasToggle.active:hover,
+html[data-theme="light"] .appTopBarModeCluster.is-canvas-view .executionModeCanvasToggle.active:hover {
+  color: var(--text-secondary) !important;
+  background: rgba(var(--accent-rgb), 0.08) !important;
+}
+
+/* Style for inactive executionModeToggle buttons when in canvas-view */
+
+/* Align and pad text inputs properly inside top bar workspace tabs */
+.appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasWorkflowTabSelect {
+  padding: 0 0 0 8px;
+  align-self: center;
+  min-width: 0;
+}
+
+.appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasWorkflowTabLabel {
+  min-width: 0;
+}
+
+.appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasWorkflowTabClose {
+  flex: 0 0 20px;
+  width: 20px;
+  min-width: 20px;
+  opacity: 0.72;
+  position: relative;
+  z-index: 2;
+}
+
+.appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasWorkflowTab:hover .canvasWorkflowTabClose,
+.appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasWorkflowTab.active .canvasWorkflowTabClose {
+  opacity: 0.92;
+}
+
+.appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasWorkflowTabNew {
+  width: 32px !important;
+  min-height: 32px !important;
+  height: 32px !important;
+  flex: 0 0 32px !important;
+  border-radius: 6px !important;
+}
+
+html[data-theme="dark"] .appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasWorkflowTabNew,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasWorkflowTabNew,
+html[data-theme="light"] .appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasWorkflowTabNew {
+  color: var(--text-tertiary);
+}
+
+html[data-theme="dark"] .appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasWorkflowTabNew:hover,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasWorkflowTabNew:hover,
+html[data-theme="light"] .appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasWorkflowTabNew:hover {
+  color: var(--text-secondary);
+  border-color: transparent;
+  background: rgba(var(--accent-rgb), 0.08);
+}
+
+.appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasZoomBtn {
+  width: 32px !important;
+  height: 32px !important;
+  min-height: 32px !important;
+  border-radius: 6px !important;
+  border-color: transparent;
+  background: transparent;
+}
+
+html[data-theme="dark"] .appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasZoomBtn,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasZoomBtn,
+html[data-theme="light"] .appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasZoomBtn {
+  color: var(--text-tertiary);
+}
+
+html[data-theme="dark"] .appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasZoomBtn:hover,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasZoomBtn:hover,
+html[data-theme="light"] .appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasZoomBtn:hover,
+html[data-theme="dark"] .appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasZoomBtn:focus-visible,
+html[data-theme]:not([data-theme="dark"]):not([data-theme="light"]) .appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasZoomBtn:focus-visible,
+html[data-theme="light"] .appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasZoomBtn:focus-visible {
+  border-color: transparent;
+  background: rgba(var(--accent-rgb), 0.08);
+  color: var(--text-secondary);
+}
+
+.appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasZoomDivider {
+  align-self: center;
+  height: 18px;
+  margin: 0 1px;
+  background: var(--border-subtle);
+}
+
+.appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasWorkflowSessionDot {
+  margin-right: 6px;
 }
 
 .appTopBar .executionModeTrack {
@@ -464,7 +799,8 @@ p {
     0 1px 3px rgba(0, 0, 0, 0.2);
 }
 
-.appTopBar .executionModeToggle button {
+.appTopBar .executionModeToggle .executionModeCanvasToggle,
+.appTopBar .executionModeToggle .executionModeFormOption {
   min-height: 26px;
   padding: 3px 10px;
   border-radius: 6px;
@@ -474,15 +810,47 @@ p {
   font-weight: 600;
 }
 
-.appTopBar .executionModeToggle button.active {
+.appTopBar .executionModeToggle .executionModeCanvasToggle.active,
+.appTopBar .executionModeToggle .executionModeFormOption.active {
   background: transparent;
   color: var(--text);
   font-weight: 700;
 }
 
-.appTopBar .executionModeToggle button:hover:not(.active) {
+.appTopBar .executionModeToggle .executionModeCanvasToggle:hover:not(.active),
+.appTopBar .executionModeToggle .executionModeFormOption:hover:not(.active) {
   background: rgba(var(--execution-brand-rgb), 0.1);
   color: var(--text);
+}
+
+/* Toolbar buttons live inside executionModeTrack — undo executionModeToggle button defaults */
+.appTopBar .executionModeToggle .canvasWorkflowToolbar button {
+  position: static;
+  z-index: auto;
+  padding: 0;
+  min-height: unset;
+  font-size: inherit;
+  font-weight: inherit;
+  letter-spacing: normal;
+  line-height: normal;
+  white-space: nowrap;
+  color: inherit;
+}
+
+.appTopBar .executionModeToggle .canvasWorkflowToolbar .canvasWorkflowTabSelect {
+  display: flex;
+  align-items: center;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0 0 0 8px;
+}
+
+.appTopBar .executionModeToggle .canvasWorkflowToolbar .canvasWorkflowTabClose,
+.appTopBar .executionModeToggle .canvasWorkflowToolbar .canvasWorkflowTabNew,
+.appTopBar .executionModeToggle .canvasWorkflowToolbar .canvasZoomBtn {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
 }
 
 .sidebar,
@@ -639,6 +1007,7 @@ body.sidebar-layout-resizing {
 
 .settingsHeader h2,
 .panelTitle h3 {
+  flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   color: var(--muted);
@@ -1430,8 +1799,26 @@ html[data-theme="light"] .workflowNoteContent a:hover {
   pointer-events: none;
 }
 
-.multiImageOrder,
-.multiImageMask {
+.imageMaskOverlay {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: block;
+  width: 100%;
+  height: 100%;
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.imageMaskOverlay.is-cover {
+  object-fit: cover;
+}
+
+.imageMaskOverlay.is-contain {
+  object-fit: contain;
+}
+
+.multiImageOrder {
   position: absolute;
   z-index: 2;
   display: grid;
@@ -1449,11 +1836,6 @@ html[data-theme="light"] .workflowNoteContent a:hover {
 
 .multiImageOrder {
   top: 6px;
-  left: 6px;
-}
-
-.multiImageMask {
-  bottom: 6px;
   left: 6px;
 }
 
@@ -1797,7 +2179,7 @@ html[data-theme="light"] .workflowNoteContent a:hover {
 .imageLightbox {
   position: fixed;
   inset: 0;
-  z-index: 1000;
+  z-index: 1300;
   display: grid;
   place-items: center;
   padding: 48px 72px;
@@ -1843,36 +2225,87 @@ html[data-theme="light"] .workflowNoteContent a:hover {
   user-select: none;
 }
 
-.imageLightboxClose {
+.imageLightboxActions {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.imageLightboxNav {
   position: absolute;
-  top: -4px;
-  right: -56px;
-  z-index: 2;
+  top: 50%;
+  z-index: 3;
   display: grid;
   place-items: center;
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
+  padding: 0;
   border: 1px solid var(--border);
-  border-radius: 12px;
-  background: rgba(8, 8, 18, 0.88);
-  color: var(--muted);
+  border-radius: 50%;
+  background: rgba(8, 8, 18, 0.82);
+  color: #fff;
+  cursor: pointer;
+  transform: translateY(-50%);
+}
+
+.imageLightboxNav.previous { left: -62px; }
+.imageLightboxNav.next { right: -62px; }
+
+.imageLightboxNav:hover {
+  border-color: rgba(var(--accent-rgb), 0.55);
+  background: rgba(var(--accent-rgb), 0.28);
+}
+
+.imageLightboxCounter {
+  position: absolute;
+  left: 50%;
+  bottom: -38px;
+  z-index: 3;
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgba(8, 8, 18, 0.82);
+  color: #fff;
+  font-size: 12px;
+  transform: translateX(-50%);
+}
+
+.imageLightboxClose,
+.imageLightboxAction {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 6px;
+  background: rgba(8, 8, 18, 0.94);
+  color: rgba(255, 255, 255, 0.88);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.24);
   cursor: pointer;
 }
 
-.imageLightboxClose:hover {
+.imageLightboxClose:hover,
+.imageLightboxAction:hover {
   border-color: rgba(var(--accent-rgb), 0.4);
   color: var(--accent-hover);
   background: rgba(var(--accent-rgb), 0.1);
 }
 
-html[data-theme="light"] .imageLightboxClose {
+html[data-theme="light"] .imageLightboxClose,
+html[data-theme="light"] .imageLightboxAction {
   border-color: rgba(23, 23, 23, 0.18);
   background: rgba(255, 255, 255, 0.94);
   color: #171717;
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.2);
 }
 
-html[data-theme="light"] .imageLightboxClose:hover {
+html[data-theme="light"] .imageLightboxClose:hover,
+html[data-theme="light"] .imageLightboxAction:hover {
   border-color: rgba(23, 23, 23, 0.32);
   background: #ffffff;
   color: #000000;
@@ -3276,6 +3709,27 @@ html[data-theme="light"] .curvesCanvasWrapper {
   object-fit: cover;
 }
 
+.inputLibraryThumb.isBroken {
+  display: grid;
+  place-items: center;
+}
+
+.inputLibraryThumbFallback {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  color: var(--muted);
+  font-size: 22px;
+  font-weight: 700;
+  text-transform: uppercase;
+  user-select: none;
+}
+
+.canvasInputLibraryModal {
+  z-index: 1200;
+}
+
 .inputLibraryMeta {
   display: none;
 }
@@ -3292,33 +3746,34 @@ html[data-theme="light"] .curvesCanvasWrapper {
   position: absolute;
   top: 6px;
   right: 6px;
-  left: 6px;
   z-index: 3;
   display: flex;
   justify-content: flex-end;
   gap: 4px;
-  padding: 4px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius, 6px);
-  background: var(--panel);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
   opacity: 0;
-  transform: translateY(-4px);
-  transition: opacity 0.16s ease, transform 0.16s ease;
+  transform: translateY(-2px);
+  transition: opacity 0.14s ease, transform 0.14s ease;
   pointer-events: none;
 }
 
 .inputLibraryActions button {
   display: grid;
-  width: 28px;
-  height: 28px;
+  width: 25px;
+  height: 25px;
   min-height: 0;
+  padding: 0;
   place-items: center;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm, 4px);
-  background: var(--panel-soft);
-  color: var(--text-secondary);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 7px;
+  background: rgba(7, 8, 16, 0.76);
+  color: rgba(255, 255, 255, 0.82);
   cursor: pointer;
+  backdrop-filter: blur(8px);
 }
 
 .inputLibraryItem:hover .inputLibraryActions,
@@ -3329,9 +3784,9 @@ html[data-theme="light"] .curvesCanvasWrapper {
 }
 
 .inputLibraryActions button:hover {
-  border-color: var(--border-strong);
-  color: var(--text-primary);
-  background: var(--surface-3, var(--panel-strong));
+  border-color: rgba(var(--accent-rgb), 0.68);
+  color: #fff;
+  background: rgba(var(--accent-rgb), 0.32);
 }
 
 .inputLibraryButton:hover {
@@ -3341,16 +3796,18 @@ html[data-theme="light"] .curvesCanvasWrapper {
 }
 
 .inputLibraryActions button.isFavorite {
-  border-color: rgba(var(--accent-rgb), 0.42);
-  color: #ffffff;
-  background: var(--accent);
-  box-shadow: none;
+  border-color: rgba(255, 206, 84, 0.92);
+  color: #151000;
+  background: linear-gradient(135deg, #ffd45a, #f59e0b);
+  box-shadow:
+    0 0 0 1px rgba(255, 212, 90, 0.24),
+    0 4px 12px rgba(245, 158, 11, 0.26);
 }
 
 .inputLibraryActions button.isFavorite:hover {
-  border-color: rgba(var(--accent-rgb), 0.55);
-  color: #ffffff;
-  background: var(--accent-hover);
+  border-color: rgba(255, 221, 112, 0.98);
+  color: #151000;
+  background: linear-gradient(135deg, #ffe083, #fbbf24);
 }
 
 .inputLibraryEmpty {
@@ -3437,9 +3894,87 @@ html[data-theme="light"] .curvesCanvasWrapper {
 
 .actionRow {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 96px;
+  grid-template-columns: minmax(0, 1fr);
   gap: 6px;
   padding-top: 2px;
+}
+
+.runMenuWrap {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 32px;
+  border-radius: 9px;
+  box-shadow: var(--shadow);
+}
+
+.runMenuWrap .runButton {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+  box-shadow: none;
+}
+
+.runMenuToggle {
+  display: grid;
+  place-items: center;
+  min-height: 36px;
+  border: 1px solid rgba(var(--accent-rgb), 0.42);
+  border-left: 0;
+  border-radius: 0 9px 9px 0;
+  background: linear-gradient(135deg, var(--accent), var(--accent-hover));
+  color: #151000;
+  cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease, color 0.2s ease;
+}
+
+.runMenuToggle:hover:not(:disabled),
+.runMenuWrap.isOpen .runMenuToggle {
+  background: var(--accent-hover);
+}
+
+.runMenu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 6px);
+  z-index: 50;
+  display: grid;
+  min-width: 160px;
+  padding: 5px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--canvas-popover-bg, var(--panel-strong));
+  box-shadow: var(--canvas-popover-shadow, var(--shadow));
+}
+
+.runMenu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.runMenu button:hover:not(:disabled) {
+  background: rgba(var(--accent-rgb), 0.12);
+}
+
+.runMenu button.danger {
+  color: var(--danger-text);
+}
+
+.runMenu button.danger:hover:not(:disabled) {
+  background: var(--danger-muted);
+}
+
+.runMenu button:disabled {
+  cursor: default;
+  opacity: 0.45;
 }
 
 .runButton,
@@ -3476,7 +4011,26 @@ html[data-theme="light"] .runButton {
   box-shadow: 0 10px 22px rgba(0, 0, 0, 0.12);
 }
 
+html[data-theme="light"] .runMenuWrap {
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.12);
+}
+
+html[data-theme="light"] .runMenuWrap .runButton {
+  box-shadow: none;
+}
+
+html[data-theme="light"] .runMenuToggle {
+  border-color: rgba(23, 23, 23, 0.22);
+  background: #171717;
+  color: #ffffff;
+}
+
 html[data-theme="light"] .runButton:hover:not(:disabled) {
+  background: #000000;
+}
+
+html[data-theme="light"] .runMenuToggle:hover:not(:disabled),
+html[data-theme="light"] .runMenuWrap.isOpen .runMenuToggle {
   background: #000000;
 }
 
@@ -4815,7 +5369,7 @@ html[data-theme="light"] .logTaskInspectLine {
 
 .compareOutputImage {
   z-index: 2;
-  clip-path: inset(0 calc(100% - var(--compare-position, 50%)) 0 0);
+  clip-path: inset(0 0 0 var(--compare-position, 50%));
 }
 
 .compareDivider {
@@ -4848,6 +5402,8 @@ html[data-theme="light"] .logTaskInspectLine {
 
 .historyItem {
   position: relative;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 77px;
   display: grid;
   grid-template-columns: 52px minmax(0, 1fr) 24px;
   align-items: center;
@@ -5106,9 +5662,13 @@ html[data-theme="light"] .logTaskInspectLine {
   line-height: 1.4;
 }
 
-.storageSettingsFields {
+.settingsPaneFields.storageSettingsFields {
   grid-template-columns: 1fr;
   gap: 11px;
+}
+
+.settingsPaneFields.storageSettingsFields .storagePathField {
+  grid-column: 1 / -1;
 }
 
 .storagePathField {
@@ -5275,6 +5835,7 @@ html[data-theme="light"] .logTaskInspectLine {
 }
 
 .infoModal {
+  position: relative;
   width: calc(100vw - 24px);
   max-width: 1400px;
   max-height: calc(100vh - 24px);
@@ -5287,10 +5848,20 @@ html[data-theme="light"] .logTaskInspectLine {
   line-height: 1.42;
 }
 
+.infoModalClose {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 2;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+}
+
 .infoModalHeader {
   display: grid;
   gap: 10px;
-  padding: 14px 18px;
+  padding: 14px 44px 14px 18px;
   border-bottom: 1px solid var(--border);
 }
 
@@ -5318,10 +5889,8 @@ html[data-theme="light"] .logTaskInspectLine {
 }
 
 .infoModalHeaderMain {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px;
+  display: block;
+  min-width: 0;
 }
 
 .infoModalTitle {
@@ -7311,6 +7880,9 @@ html[data-theme="light"] .saveTemplateButton:hover:not(:disabled) {
     max-height: calc(100vh - 96px);
   }
 
+  .imageLightboxNav.previous { left: 8px; }
+  .imageLightboxNav.next { right: 8px; }
+
   .inputLibraryModal {
     padding: 14px;
   }
@@ -7341,9 +7913,9 @@ html[data-theme="light"] .saveTemplateButton:hover:not(:disabled) {
     min-width: 0;
   }
 
-  .imageLightboxClose {
-    top: -44px;
-    right: 0;
+  .imageLightboxActions {
+    top: 8px;
+    right: 8px;
   }
 }
 
@@ -7390,7 +7962,8 @@ html[data-theme="light"] .saveTemplateButton:hover:not(:disabled) {
 @media (max-width: 680px) {
   .appShell {
     --app-shell-padding: 10px;
-    gap: 10px;
+    column-gap: 10px;
+    row-gap: 0;
     padding: var(--app-shell-padding);
   }
 
@@ -7431,11 +8004,17 @@ html[data-theme="light"] .saveTemplateButton:hover:not(:disabled) {
     display: none;
   }
 
+  .appTopBarModeCluster .executionModeToggle,
   .appTopBarIdentity > .executionModeToggle {
     min-width: 0;
   }
 
-  .appTopBar .executionModeToggle button {
+  .appTopBar .executionModeTrackStage {
+    max-width: min(420px, calc(100vw - 280px));
+  }
+
+  .appTopBar .executionModeToggle .executionModeCanvasToggle,
+  .appTopBar .executionModeToggle .executionModeFormOption {
     padding-inline: 6px;
   }
 
@@ -7445,7 +8024,7 @@ html[data-theme="light"] .saveTemplateButton:hover:not(:disabled) {
   }
 
   .infoModalHeader {
-    padding: 10px 12px;
+    padding: 10px 40px 10px 12px;
   }
 
   .infoModalBody {
@@ -8822,6 +9401,38 @@ html:not([data-theme="dark"]):not([data-theme="light"]) .appShell.is-runninghub 
   margin: 0 0 12px;
 }
 
+.executionModeToggle.mode-canvas {
+  --execution-brand-rgb: var(--accent-rgb);
+}
+
+.executionModeToggle.is-canvas-only .executionModeTrack {
+  min-width: 0;
+}
+
+.executionModeFormOptions {
+  position: relative;
+  display: inline-flex;
+  align-items: stretch;
+  gap: 2px;
+  overflow: hidden;
+  max-width: 420px;
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .appTopBar .executionModeTrackPanel {
+    transition: none;
+  }
+}
+
+.executionModeToggle.is-form-mode .executionModeCanvasToggle:not(.active) {
+  color: var(--muted);
+}
+
+.executionModeToggle.is-form-mode .executionModeCanvasToggle:not(.active):hover {
+  color: var(--text);
+}
+
 .executionModeToggle.mode-local {
   --execution-brand-rgb: var(--comfy-brand-rgb);
 }
@@ -9170,8 +9781,16 @@ html:not([data-theme="dark"]):not([data-theme="light"]) .appShell.is-runninghub 
   background: rgba(var(--accent-rgb), 0.1);
 }
 
-.settingsHeader .rhExportShortcutBtn {
+.settingsHeaderActions {
   margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+
+.settingsHeader .rhExportShortcutBtn {
+  margin-left: 0;
 }
 
 .rhAppSaveHint {
@@ -9382,6 +10001,22 @@ html:not([data-theme="dark"]):not([data-theme="light"]) .appShell.is-runninghub 
 .rhActionRow .stopButton {
   min-height: 36px;
   border-radius: var(--radius, 6px);
+}
+
+.rhActionRow .runMenuWrap {
+  grid-template-columns: minmax(0, 1fr) 36px;
+  border-radius: var(--radius, 6px);
+}
+
+.rhActionRow .runMenuWrap .runButton {
+  border-radius: var(--radius, 6px) 0 0 var(--radius, 6px);
+}
+
+.rhActionRow .runMenuToggle {
+  min-height: 36px;
+  border-radius: 0 var(--radius, 6px) var(--radius, 6px) 0;
+  border-color: rgba(var(--accent-rgb), 0.42);
+  border-left-color: rgba(0, 0, 0, 0.16);
 }
 
 .runningHubSettings {

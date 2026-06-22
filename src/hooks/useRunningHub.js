@@ -19,7 +19,7 @@ import {
   normalizeRhSettings,
   syncPrimaryApiKey
 } from "../lib/rhTokenPool.js";
-import { getSetting, setSetting } from "../lib/appSettings.js";
+import { getSetting, isSettingsReady, setSetting } from "../lib/appSettings.js";
 
 export { DEFAULT_RH_WEBAPP_ID } from "../lib/rhSavedApps.js";
 export const DEFAULT_RH_WF_ID = "2064644362323189762";
@@ -91,14 +91,21 @@ export function useRunningHub() {
   const [nodesLoading, setNodesLoading] = useState(false);
   const [nodesError, setNodesError] = useState("");
   const webappOptions = listRhAppOptions(defaultApps, savedWebapps);
+  const primaryApiKey = getPrimaryRhApiKey(settings);
 
   useEffect(() => {
     savedWebappsRef.current = savedWebapps;
   }, [savedWebapps]);
 
-  useEffect(() => {
-    setSetting("runningHub", settings);
-  }, [settings]);
+  const updateSettings = useCallback((patch) => {
+    setSettings(current => {
+      const next = syncPrimaryApiKey({ ...current, ...patch });
+      if (isSettingsReady()) {
+        setSetting("runningHub", next);
+      }
+      return next;
+    });
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -118,7 +125,7 @@ export function useRunningHub() {
   }, []);
 
   useEffect(() => {
-    const apiKey = getPrimaryRhApiKey(settings);
+    const apiKey = primaryApiKey;
     if (!apiKey?.trim()) return undefined;
 
     let cancelled = false;
@@ -134,7 +141,7 @@ export function useRunningHub() {
     return () => {
       cancelled = true;
     };
-  }, [settings]);
+  }, [primaryApiKey]);
 
   useEffect(() => {
     let cancelled = false;
@@ -174,10 +181,6 @@ export function useRunningHub() {
     return persisted;
   }, []);
 
-  const updateSettings = useCallback((patch) => {
-    setSettings(current => syncPrimaryApiKey({ ...current, ...patch }));
-  }, []);
-
   const restoreNodes = useCallback((nextNodes = []) => {
     setNodes(Array.isArray(nextNodes) ? nextNodes : []);
     setNodesError("");
@@ -192,7 +195,7 @@ export function useRunningHub() {
   }, []);
 
   const fetchNodes = useCallback(async (override = {}) => {
-    const apiKey = override.apiKey ?? getPrimaryRhApiKey(settings);
+    const apiKey = override.apiKey ?? primaryApiKey;
     const webappId = override.webappId ?? settings.webappId;
     const shouldThrow = override.throwOnError === true;
     if (!apiKey?.trim()) {
@@ -248,7 +251,7 @@ export function useRunningHub() {
     } finally {
       setNodesLoading(false);
     }
-  }, [locale, settings, settings.webappId, t]);
+  }, [locale, primaryApiKey, settings.webappId, t]);
 
   const saveCurrentWebapp = useCallback(async () => {
     if (!savedAppsReady) {

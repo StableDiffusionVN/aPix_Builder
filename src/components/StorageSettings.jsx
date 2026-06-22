@@ -3,7 +3,7 @@ import { FolderOpen, Loader2, RotateCcw, Save } from "lucide-react";
 import { useI18n } from "../i18n/I18nContext";
 
 const EMPTY_SETTINGS = { inputDir: "", outputDir: "", configDir: "", personalDataDir: "" };
-const EMPTY_PATHS = { appSettings: "", colorPresets: "", workflowPresets: "", uploads: "" };
+const EMPTY_PATHS = { appSettings: "", colorPresets: "", workflowPresets: "", uploads: "", canvasWorkspace: "", workflows: "" };
 
 function PathField({ fieldKey, label, hint, settings, defaults, onChange, onOpen }) {
   const { t } = useI18n();
@@ -210,6 +210,19 @@ export function StorageSettings() {
           <b>{t("storage.bundledDefaults")}</b>
           <span>{t("storage.bundledDefaultsHint")}</span>
           {bundledConfigDir ? <code>{bundledConfigDir}</code> : null}
+        </div>
+        <div className="storageResolvedPaths">
+          {[
+            ["workflows", t("storage.pathWorkflows")],
+            ["canvasWorkspace", t("storage.pathCanvasWorkspace")]
+          ].map(([key, label]) => (
+            resolvedPaths[key] ? (
+              <div className="storageResolvedPathRow" key={key}>
+                <span>{label}</span>
+                <code>{resolvedPaths[key]}</code>
+              </div>
+            ) : null
+          ))}
         </div>
       </section>
 

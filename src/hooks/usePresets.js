@@ -85,11 +85,11 @@ export function usePresets() {
     };
   }, [bump, t]);
 
-  function getPresets(templateId) {
+  const getPresets = useCallback((templateId) => {
     return dataRef.current[templateId] || [];
-  }
+  }, []);
 
-  function savePreset(templateId, name, values) {
+  const savePreset = useCallback((templateId, name, values) => {
     const trimmed = name.trim() || "Preset";
     const presets = getPresets(templateId);
     if (presets.some(p => p.name === trimmed)) return null;
@@ -105,19 +105,19 @@ export function usePresets() {
     };
     queuePersist(next);
     return id;
-  }
+  }, [getPresets, queuePersist]);
 
-  function updatePreset(templateId, presetId, values) {
+  const updatePreset = useCallback((templateId, presetId, values) => {
     const presets = getPresets(templateId).map(p =>
       p.id === presetId ? { ...p, values: sanitizePresetValues(values) } : p
     );
     queuePersist({ ...dataRef.current, [templateId]: presets });
-  }
+  }, [getPresets, queuePersist]);
 
-  function deletePreset(templateId, presetId) {
+  const deletePreset = useCallback((templateId, presetId) => {
     const presets = getPresets(templateId).filter(p => p.id !== presetId);
     queuePersist({ ...dataRef.current, [templateId]: presets });
-  }
+  }, [getPresets, queuePersist]);
 
   return {
     getPresets,

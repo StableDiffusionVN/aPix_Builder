@@ -43,6 +43,7 @@ function matchesTimeFilter(value, filter) {
 
 export function OutputGallery({
   history = [],
+  maxHistoryDisplay = 100,
   onDownload,
   onRestore,
   onItemClick,
@@ -75,6 +76,10 @@ export function OutputGallery({
     if (templateFilter !== "all" && (item.templateId || item.templateName) !== templateFilter) return false;
     return matchesTimeFilter(item.createdAt || item.completedAt || item.submittedAt, timeFilter);
   }), [favorites, favoritesOnly, history, templateFilter, timeFilter]);
+  const displayHistory = useMemo(
+    () => visibleHistory.slice(0, maxHistoryDisplay),
+    [maxHistoryDisplay, visibleHistory]
+  );
 
   function toggleFavorite(id) {
     if (!id) return;
@@ -151,7 +156,7 @@ export function OutputGallery({
             </div>
           </article>
         ) : null}
-        {visibleHistory.map(item => {
+        {displayHistory.map(item => {
           const primaryOutput = item.outputs?.[0];
           const isSelected = selectedIds?.has?.(item.id);
           const isActive = activeId && item.id === activeId;
@@ -184,7 +189,15 @@ export function OutputGallery({
               }}
             >
               <span className="historyThumb">
-                {primaryOutput ? <img src={primaryOutput.url} alt={primaryOutput.filename || item.templateName} draggable="false" /> : null}
+                {primaryOutput ? (
+                  <img
+                    src={primaryOutput.url}
+                    alt={primaryOutput.filename || item.templateName}
+                    draggable="false"
+                    loading="lazy"
+                    decoding="async"
+                  />
+                ) : null}
                 {isSelected ? <span className="historySelectBadge" aria-hidden="true">✓</span> : null}
               </span>
               <div className="historyMeta">
@@ -219,7 +232,7 @@ export function OutputGallery({
             </article>
           );
         })}
-        {!visibleHistory.length && !pending ? (
+        {!displayHistory.length && !pending ? (
           <div className="emptyHistory">
             <span className="emptyHistoryIcon" aria-hidden="true">
               <History size={16} />

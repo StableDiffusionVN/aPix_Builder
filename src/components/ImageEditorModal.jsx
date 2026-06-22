@@ -397,7 +397,7 @@ function applyHealingStroke(ctx, stroke, scale) {
   let imgData;
   try {
     imgData = ctx.getImageData(minX, minY, boxW, boxH);
-  } catch (e) {
+  } catch (_error) {
     return;
   }
   const maskData = mctx.getImageData(0, 0, boxW, boxH);
@@ -751,7 +751,7 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
     return () => {
       cancelled = true;
     };
-  }, [source]);
+  }, [source, t]);
 
   // Applies all colour/geometry adjustments via the shared Lightroom-style pipeline.
   const applyAdjustments = useCallback((targetCanvas, { fullResolution = false, ignoreCrop = false, interactive = false } = {}) => {
@@ -888,9 +888,9 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
       drawOriginalGeometry(origCanvas, meta);
 
       const splitX = (editorComparePosition / 100) * canvas.width;
-      // Match output compare: adjusted image on the left, original on the right.
-      ctx.drawImage(tmp, 0, 0, splitX, canvas.height, 0, 0, splitX, canvas.height);
-      ctx.drawImage(origCanvas, splitX, 0, canvas.width - splitX, canvas.height, splitX, 0, canvas.width - splitX, canvas.height);
+      // Match output compare: original (input) on the left, adjusted on the right.
+      ctx.drawImage(origCanvas, 0, 0, splitX, canvas.height, 0, 0, splitX, canvas.height);
+      ctx.drawImage(tmp, splitX, 0, canvas.width - splitX, canvas.height, splitX, 0, canvas.width - splitX, canvas.height);
     } else {
       ctx.drawImage(tmp, 0, 0);
     }
@@ -1016,12 +1016,12 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
     isSliderDraggingRef.current = true;
   }
 
-  function commitCurrent() {
+  const commitCurrent = useCallback(() => {
     isSliderDraggingRef.current = false;
     commitHistory(adjustments, brush, strokes);
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
     rafRef.current = requestAnimationFrame(() => renderPreview({ interactive: false }));
-  }
+  }, [adjustments, brush, commitHistory, renderPreview, strokes]);
 
   function getHistogramZone(event) {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -1072,7 +1072,7 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
     }
   }
 
-  function handleHistogramPointerLeave(event) {
+  function handleHistogramPointerLeave() {
     if (!histogramDragRef.current) {
       setHoveredZone(null);
     }
@@ -1513,6 +1513,9 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
       window.removeEventListener("keydown", handleKeyDown, true);
       window.removeEventListener("keyup", handleKeyUp, true);
     };
+  // Tool helpers are render-local and intentionally sampled with the current
+  // editor state. Adding them would detach/attach global listeners every render.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTool, canRedo, canUndo, history, historyIndex, restore]);
 
   // ── Pen tool helpers (normalized [0,1] coordinates) ──────────────────────

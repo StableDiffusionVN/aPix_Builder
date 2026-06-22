@@ -18,7 +18,8 @@ const DEFAULT_SETTINGS = {
   runningHub: {},
   workspace: {
     selectedTemplate: "",
-    valuesByTemplate: {}
+    valuesByTemplate: {},
+    view: "form"
   },
   layout: {
     sidebar: { side: "left", width: 430 },
@@ -29,13 +30,54 @@ const DEFAULT_SETTINGS = {
     history: [],
     inputImages: []
   },
+  history: {
+    maxDisplay: 100
+  },
   migration: {
     localStorageImported: false
+  },
+  canvas: {
+    minimapOpen: false,
+    tool: "select"
   }
 };
 
-let settings = structuredClone(DEFAULT_SETTINGS);
-let persistQueue = Promise.resolve();
+const SETTINGS_PERSIST_DEBOUNCE_MS = 200;
+
+function createSettingsStore() {
+  if (import.meta.hot?.data?.apixSettingsStore) {
+    return import.meta.hot.data.apixSettingsStore;
+  }
+  const store = {
+    settings: structuredClone(DEFAULT_SETTINGS),
+    ready: false,
+    loadedFromServer: false,
+    persistQueue: Promise.resolve(),
+    persistTimer: null
+  };
+  if (import.meta.hot) {
+    import.meta.hot.data.apixSettingsStore = store;
+  }
+  return store;
+}
+
+const store = createSettingsStore();
+
+function createSensitiveSnapshot() {
+  if (import.meta.hot?.data?.apixSensitiveSnapshot) {
+    return import.meta.hot.data.apixSensitiveSnapshot;
+  }
+  const snapshot = {
+    runningHub: null,
+    connection: null
+  };
+  if (import.meta.hot) {
+    import.meta.hot.data.apixSensitiveSnapshot = snapshot;
+  }
+  return snapshot;
+}
+
+const sensitiveSnapshot = createSensitiveSnapshot();
 
 function isObject(value) {
   return value && typeof value === "object" && !Array.isArray(value);
@@ -150,29 +192,150 @@ async function migrateLegacyStore({ key, endpoint, responseKey, merge }) {
 }
 
 async function migrateLegacyFileStores() {
-  await migrateLegacyStore({
-    key: "comfyui-build:presets:v1",
-    endpoint: "/api/workflow-presets",
-    responseKey: "presets",
-    merge: mergeWorkflowPresets
+  await Promise.all([
+    migrateLegacyStore({
+      key: "comfyui-build:presets:v1",
+      endpoint: "/api/workflow-presets",
+      responseKey: "presets",
+      merge: mergeWorkflowPresets
+    }),
+    migrateLegacyStore({
+      key: "image-editor-custom-presets",
+      endpoint: "/api/presets",
+      responseKey: "presets",
+      merge: mergeListsById
+    }),
+    migrateLegacyStore({
+      key: "comfyui-build:runninghub-saved-apps:v1",
+      endpoint: "/api/runninghub/saved-apps",
+      responseKey: "apps",
+      merge: mergeListsById
+    })
+  ]);
+}
+
+export function hasRhStoredSecrets(runningHub) {
+  if (!runningHub || typeof runningHub !== "object") return false;
+  if (String(runningHub.apiKey || "").trim()) return true;
+  return (runningHub.tokens || []).some(token => String(token?.apiKey || "").trim());
+}
+
+function hasStoredConnectionServers(connection) {
+  return Array.isArray(connection?.servers) && connection.servers.length > 0;
+}
+
+function hasNonDefaultComfyAddress(connection) {
+  const address = String(connection?.comfyAddress || "").trim();
+  return Boolean(address) && address !== DEFAULT_SETTINGS.connection.comfyAddress;
+}
+
+export function preserveRhSecrets(clientRh = {}, referenceRh = {}) {
+  if (hasRhStoredSecrets(clientRh)) return clientRh;
+  if (!hasRhStoredSecrets(referenceRh)) return clientRh;
+
+  const client = structuredClone(clientRh);
+  const reference = referenceRh || {};
+  const refTokensById = new Map((reference.tokens || []).map(token => [token.id, token]));
+  const refTokens = (reference.tokens || []).filter(token => String(token?.apiKey || "").trim());
+
+  client.tokens = (client.tokens || []).map((token, index) => {
+    if (String(token?.apiKey || "").trim()) return token;
+    const refToken = refTokensById.get(token.id) || refTokens[index];
+    if (refToken?.apiKey?.trim()) {
+      return { ...token, apiKey: refToken.apiKey };
+    }
+    return token;
   });
-  await migrateLegacyStore({
-    key: "image-editor-custom-presets",
-    endpoint: "/api/presets",
-    responseKey: "presets",
-    merge: mergeListsById
+
+  if (!hasRhStoredSecrets({ ...client, apiKey: client.apiKey }) && refTokens.length) {
+    client.tokens = structuredClone(refTokens);
+    client.apiKey = String(reference.apiKey || refTokens[0]?.apiKey || "").trim();
+  }
+
+  const refLegacyKey = String(reference.apiKey || "").trim();
+  if (!String(client.apiKey || "").trim() && refLegacyKey) {
+    client.apiKey = refLegacyKey;
+  }
+  return client;
+}
+
+export function preserveConnectionSecrets(clientConn = {}, referenceConn = {}) {
+  const client = structuredClone(clientConn || {});
+  const reference = referenceConn || {};
+  const clientServers = Array.isArray(client.servers) ? client.servers : [];
+  const referenceServers = Array.isArray(reference.servers) ? reference.servers : [];
+
+  if (!clientServers.length && referenceServers.length) {
+    client.servers = structuredClone(referenceServers);
+  }
+
+  const clientAddr = String(client.comfyAddress || "").trim();
+  const referenceAddr = String(reference.comfyAddress || "").trim();
+  const clientIsDefault = !clientAddr || clientAddr === DEFAULT_SETTINGS.connection.comfyAddress;
+
+  if (clientIsDefault && referenceAddr && referenceAddr !== DEFAULT_SETTINGS.connection.comfyAddress) {
+    client.comfyAddress = referenceAddr;
+  }
+
+  return client;
+}
+
+function rememberSensitiveSettings(settings) {
+  if (!settings || typeof settings !== "object") return;
+  if (hasRhStoredSecrets(settings.runningHub)) {
+    sensitiveSnapshot.runningHub = structuredClone(settings.runningHub);
+  }
+  if (hasStoredConnectionServers(settings.connection) || hasNonDefaultComfyAddress(settings.connection)) {
+    sensitiveSnapshot.connection = structuredClone(settings.connection);
+  }
+}
+
+function applySensitivePreserve(snapshot) {
+  const preservedRh = sensitiveSnapshot.runningHub
+    ? preserveRhSecrets(snapshot.runningHub, sensitiveSnapshot.runningHub)
+    : snapshot.runningHub;
+  const preservedConn = sensitiveSnapshot.connection
+    ? preserveConnectionSecrets(snapshot.connection, sensitiveSnapshot.connection)
+    : snapshot.connection;
+
+  const rhChanged = preservedRh !== snapshot.runningHub;
+  const connChanged = preservedConn !== snapshot.connection;
+  if (!rhChanged && !connChanged) return false;
+
+  snapshot.runningHub = preservedRh;
+  snapshot.connection = preservedConn;
+  store.settings = mergeDeep(store.settings, {
+    runningHub: preservedRh,
+    connection: preservedConn
   });
-  await migrateLegacyStore({
-    key: "comfyui-build:runninghub-saved-apps:v1",
-    endpoint: "/api/runninghub/saved-apps",
-    responseKey: "apps",
-    merge: mergeListsById
+  return true;
+}
+
+async function migrateCanvasProjectOffSettings(project) {
+  if (!project || typeof project !== "object") return true;
+  const nodes = Array.isArray(project.nodes) ? project.nodes : [];
+  const edges = Array.isArray(project.edges) ? project.edges : [];
+  if (!nodes.length && !edges.length) return true;
+  const response = await fetch("/api/canvas-project", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      nodes,
+      edges,
+      viewport: project.viewport
+    })
   });
+  if (!response.ok) {
+    throw new Error(`Could not migrate canvas project: HTTP ${response.status}`);
+  }
+  return true;
 }
 
 async function persistSettings() {
-  const snapshot = structuredClone(settings);
-  persistQueue = persistQueue
+  if (!store.ready || !store.loadedFromServer) return store.persistQueue;
+  const snapshot = structuredClone(store.settings);
+  applySensitivePreserve(snapshot);
+  store.persistQueue = store.persistQueue
     .catch(() => {})
     .then(async () => {
       const response = await fetch("/api/app-settings", {
@@ -181,40 +344,93 @@ async function persistSettings() {
         body: JSON.stringify({ settings: snapshot })
       });
       if (!response.ok) throw new Error(`Could not save app settings: HTTP ${response.status}`);
+      rememberSensitiveSettings(snapshot);
     })
     .catch(error => console.error(error));
-  return persistQueue;
+  return store.persistQueue;
+}
+
+function schedulePersistSettings() {
+  if (!store.ready || !store.loadedFromServer) return;
+  if (store.persistTimer) globalThis.clearTimeout(store.persistTimer);
+  store.persistTimer = globalThis.setTimeout(() => {
+    store.persistTimer = null;
+    void persistSettings();
+  }, SETTINGS_PERSIST_DEBOUNCE_MS);
+}
+
+export function isSettingsReady() {
+  return store.ready && store.loadedFromServer;
 }
 
 export async function initializeAppSettings() {
+  let strippedCanvasKey = false;
   try {
     const response = await fetch("/api/app-settings");
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
-    settings = mergeDeep(DEFAULT_SETTINGS, data.settings || {});
+    let serverSettings = data.settings && typeof data.settings === "object" ? data.settings : {};
+    if (serverSettings.canvas?.project) {
+      try {
+        await migrateCanvasProjectOffSettings(serverSettings.canvas.project);
+        strippedCanvasKey = true;
+        const canvasPrefs = { ...(serverSettings.canvas || {}) };
+        delete canvasPrefs.project;
+        serverSettings = { ...serverSettings };
+        if (Object.keys(canvasPrefs).length) {
+          serverSettings.canvas = canvasPrefs;
+        } else {
+          delete serverSettings.canvas;
+        }
+      } catch (error) {
+        console.warn("Could not migrate canvas project out of app-settings:", error);
+      }
+    }
+    store.settings = mergeDeep(DEFAULT_SETTINGS, serverSettings);
+    store.loadedFromServer = true;
+    rememberSensitiveSettings(store.settings);
   } catch (error) {
     console.error("Could not load app settings:", error);
-    settings = structuredClone(DEFAULT_SETTINGS);
+    if (!store.loadedFromServer) {
+      store.settings = mergeDeep(DEFAULT_SETTINGS, store.settings);
+    }
   }
 
-  if (!settings.migration?.localStorageImported) {
-    settings = mergeDeep(settings, legacySettingsSnapshot());
+  store.ready = true;
+
+  if (strippedCanvasKey && store.loadedFromServer) {
     await persistSettings();
+  }
+
+  if (!store.settings.migration?.localStorageImported) {
+    store.settings = mergeDeep(store.settings, legacySettingsSnapshot());
+    if (store.loadedFromServer) await persistSettings();
     try {
       await migrateLegacyFileStores();
-      settings.migration = { ...settings.migration, localStorageImported: true };
-      await persistSettings();
+      store.settings = {
+        ...store.settings,
+        migration: { ...store.settings.migration, localStorageImported: true }
+      };
+      if (store.loadedFromServer) await persistSettings();
       window.localStorage.clear();
     } catch (error) {
       console.error("Could not migrate legacy browser data:", error);
     }
   }
-  if (settings.migration?.localStorageImported) window.localStorage.clear();
+  if (store.settings.migration?.localStorageImported) window.localStorage.clear();
+}
+
+export const DEFAULT_MAX_HISTORY_DISPLAY = 100;
+
+export function getMaxHistoryDisplay() {
+  const value = Number(getSetting("history.maxDisplay", DEFAULT_MAX_HISTORY_DISPLAY));
+  if (!Number.isFinite(value) || value < 1) return DEFAULT_MAX_HISTORY_DISPLAY;
+  return Math.min(1000, Math.floor(value));
 }
 
 export function getSetting(path, fallback) {
   const keys = String(path).split(".");
-  let value = settings;
+  let value = store.settings;
   for (const key of keys) {
     if (!isObject(value) && !Array.isArray(value)) return fallback;
     value = value[key];
@@ -224,13 +440,22 @@ export function getSetting(path, fallback) {
 
 export function setSetting(path, value) {
   const keys = String(path).split(".");
-  const next = structuredClone(settings);
+  const current = getSetting(path);
+  if (Object.is(current, value)) return;
+  if (
+    current && value
+    && typeof current === "object"
+    && typeof value === "object"
+    && JSON.stringify(current) === JSON.stringify(value)
+  ) return;
+  const next = structuredClone(store.settings);
   let target = next;
   for (const key of keys.slice(0, -1)) {
     if (!isObject(target[key])) target[key] = {};
     target = target[key];
   }
   target[keys.at(-1)] = value;
-  settings = next;
-  void persistSettings();
+  store.settings = next;
+  rememberSensitiveSettings(store.settings);
+  schedulePersistSettings();
 }

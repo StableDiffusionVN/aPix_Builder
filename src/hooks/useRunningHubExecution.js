@@ -11,6 +11,31 @@ function formatDuration(ms) {
   return minutes ? `${minutes}m ${rest}s` : `${rest}s`;
 }
 
+async function submitRunningHubBackendQueueJob(job, { waitForRunId = "" } = {}) {
+  const response = await fetch("/api/run-queue/submit", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      jobs: [{
+        endpoint: job.templateId ? "/api/runninghub-wf/run" : "/api/runninghub/run",
+        body: job,
+        meta: { provider: "runninghub", runKind: "form", waitForRunId }
+      }]
+    })
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || !data.acknowledged) throw new Error(data.error || "Queue submit failed");
+}
+
+async function clearFormBackendQueue() {
+  const response = await fetch("/api/run-queue/clear", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ runKind: "form" })
+  });
+  if (!response.ok) throw new Error("Queue clear failed");
+}
+
 export function useRunningHubExecution({ onComplete, runLog } = {}) {
   const { locale, t } = useI18n();
   const [running, setRunning] = useState(false);
@@ -98,6 +123,17 @@ export function useRunningHubExecution({ onComplete, runLog } = {}) {
     for (const queuedJob of runQueueRef.current) {
       runLog?.endSession?.(queuedJob.runId, status);
     }
+  }
+
+  function clearQueue() {
+    if (runQueueRef.current.length) {
+      endQueuedSessions("cancelled");
+      setQueue([]);
+    }
+    void clearFormBackendQueue()
+      .finally(() => runLog?.refreshSessions?.());
+    setStatus(t("exec.queueCleared"));
+    appendLog("warn", t("exec.queueCleared"));
   }
 
   async function executeRun(job) {
@@ -217,6 +253,8 @@ export function useRunningHubExecution({ onComplete, runLog } = {}) {
       const [nextJob, ...remaining] = runQueueRef.current;
       setQueue(remaining);
       if (nextJob) {
+        activeRunIdRef.current = nextJob.runId;
+        setActiveRunId(nextJob.runId);
         setStatus(t("exec.nextRequest", { count: remaining.length }));
         appendLog("info", t("exec.movingToNext", { job: describeJob(nextJob) }), { runId: nextJob.runId });
         executeRun(nextJob);
@@ -229,11 +267,6 @@ export function useRunningHubExecution({ onComplete, runLog } = {}) {
 
   async function cancelWorkflow() {
     if (!activeRunIdRef.current) return;
-    if (runQueueRef.current.length) {
-      endQueuedSessions("cancelled");
-      setQueue([]);
-      appendLog("warn", t("exec.queueCleared"));
-    }
     setStatus(t("execRh.cancelling"));
     appendLog("warn", t("execRh.sendingCancel"), {
       runId: activeRunIdRef.current,
@@ -265,16 +298,29 @@ export function useRunningHubExecution({ onComplete, runLog } = {}) {
     }
   }
 
+  async function stopAllWorkflow() {
+    clearQueue();
+    await cancelWorkflow();
+  }
+
   function runWorkflow(job) {
-    if (activeRunIdRef.current) {
-      setQueue([...runQueueRef.current, job]);
-      const queueSize = runQueueRef.current.length;
+    if (activeRunIdRef.current || runQueueRef.current.length > 0) {
+      const queueSize = runQueueRef.current.length + 1;
       setStatus(t("execRh.addedToQueue", { count: queueSize }));
-      runLog?.startSession?.(job, { provider: "runninghub", status: "queued" });
-      appendLog("queue", t("execRh.queueAdded", { job: describeJob(job), position: queueSize }), { runId: job.runId });
+      void submitRunningHubBackendQueueJob(job, { waitForRunId: activeRunIdRef.current })
+        .then(() => {
+          runLog?.refreshSessions?.();
+        })
+        .catch(() => {
+          setQueue([...runQueueRef.current, job]);
+          runLog?.startSession?.(job, { provider: "runninghub", status: "queued", runKind: "form" });
+          appendLog("queue", t("execRh.queueAdded", { job: describeJob(job), position: runQueueRef.current.length }), { runId: job.runId });
+        });
       return;
     }
-    runLog?.startSession?.(job, { provider: "runninghub", status: "running" });
+    activeRunIdRef.current = job.runId;
+    setActiveRunId(job.runId);
+    runLog?.startSession?.(job, { provider: "runninghub", status: "running", runKind: "form" });
     executeRun(job);
   }
 
@@ -282,7 +328,7 @@ export function useRunningHubExecution({ onComplete, runLog } = {}) {
     running, activeRunId, activeJob, activeTaskId, taskStatus, runQueue,
     status, setStatus, error, setError,
     result, setResult, progress, setProgress,
-    runWorkflow, cancelWorkflow
+    runWorkflow, cancelWorkflow, clearQueue, stopAllWorkflow
   };
 }
 

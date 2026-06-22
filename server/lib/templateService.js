@@ -170,7 +170,14 @@ export function createTemplateService({
     return {
       scope: normalizedScope,
       default: defaultTemplate?.id || "",
-      templates: templates.map(({ yamlPath, workflowPath, baseDir, scope: templateScope, ...template }) => template)
+      templates: templates.map(template => {
+        const publicTemplate = { ...template };
+        delete publicTemplate.yamlPath;
+        delete publicTemplate.workflowPath;
+        delete publicTemplate.baseDir;
+        delete publicTemplate.scope;
+        return publicTemplate;
+      })
     };
   }
 
@@ -275,6 +282,30 @@ export function createTemplateService({
     return { targetRoot: path.join(getScopeRoot(scope), id), savedAsCopy: false };
   }
 
+  function assertExportableTemplateDir(baseDir, scope = TEMPLATE_SCOPES.local) {
+    const resolved = path.resolve(baseDir);
+    const normalizedScope = normalizeScope(scope);
+    const roots = (scopeRoots[normalizedScope] || []).map(root => path.resolve(root.dir));
+    const allowed = roots.some(root => {
+      const relative = path.relative(root, resolved);
+      return relative === "" || (relative && !relative.startsWith("..") && !path.isAbsolute(relative));
+    });
+    if (!allowed) {
+      throw new Error("Invalid template export path");
+    }
+  }
+
+  async function getTemplateExportSource(templateId, scope = TEMPLATE_SCOPES.local) {
+    const template = await resolveTemplate(templateId, scope);
+    assertExportableTemplateDir(template.baseDir, scope);
+    return {
+      id: template.id,
+      name: template.name,
+      baseDir: template.baseDir,
+      folderName: path.basename(template.baseDir)
+    };
+  }
+
   return {
     loadTemplateRegistry,
     loadConfig,
@@ -282,6 +313,7 @@ export function createTemplateService({
     deleteTemplate,
     getScopeRoot,
     resolveSaveTargetRoot,
+    getTemplateExportSource,
     normalizeScope,
     usesSavedWorkflowJson,
     runningHubTaskOptions

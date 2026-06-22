@@ -191,3 +191,57 @@
 .settingsPaneFields .themeSelectField {
   grid-column: 1 / -1;
 }
+
+.canvasSettingsPanel {
+  display: grid;
+  gap: 14px;
+}
+
+.canvasSettingsOptions {
+  display: grid;
+  gap: 8px;
+}
+
+.canvasSettingsOption {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel-soft);
+  cursor: pointer;
+  user-select: none;
+}
+
+.canvasSettingsOption input {
+  flex: 0 0 auto;
+  width: 15px;
+  height: 15px;
+  margin: 1px 0 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.canvasSettingsOptionText {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.canvasSettingsOptionText strong {
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.canvasSettingsOptionText small {
+  color: var(--muted-2);
+  font-size: 10.5px;
+  line-height: 1.35;
+}
+
+.canvasSettingsGridField {
+  max-width: 200px;
+}

@@ -219,7 +219,7 @@ export function waitForPrompt(target, promptId, clientId, run, timeoutMs, onEven
         .then(module => {
           startConnection(module.default);
         })
-        .catch(err => {
+        .catch(_err => {
           reject(new Error(
             `Node.js global WebSocket is not available (Node.js <22) and the 'ws' package is not installed. ` +
             `Please upgrade Node.js to v22+ or install the 'ws' package: npm install ws`

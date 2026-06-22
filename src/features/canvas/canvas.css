@@ -1,0 +1,2457 @@
+/* ===== Infinite Canvas mode ===== */
+
+.canvasView {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.appShell.hasUpdateBanner .canvasView {
+  grid-row: 3;
+}
+
+.appShell.is-canvas-view .canvasView {
+  margin: 0 calc(-1 * var(--app-shell-padding)) calc(-1 * var(--app-shell-padding));
+}
+
+.appShell.is-canvas-view .canvasStage {
+  border-radius: 0;
+  border-left: none;
+  border-right: none;
+  border-bottom: none;
+}
+
+/* ===== Floating dock + flyout ===== */
+
+.canvasWorkspace {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  box-sizing: border-box;
+}
+
+.canvasWorkspace .react-flow {
+  width: 100%;
+  height: 100%;
+}
+
+.canvasWorkspace.isPaletteDropTarget .react-flow__pane {
+  cursor: copy;
+}
+
+.canvasWorkspace.isPaletteDropTarget::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+  border: 1px dashed rgba(var(--accent-rgb), 0.55);
+  border-radius: 10px;
+  background: rgba(var(--accent-rgb), 0.05);
+}
+
+.canvasDock {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  z-index: 14;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--canvas-chrome-border);
+  border-radius: 10px;
+  background: var(--canvas-chrome-bg);
+  backdrop-filter: blur(10px);
+  box-shadow: var(--canvas-chrome-shadow);
+  transform: translateY(-50%);
+}
+
+.canvasDockBtn {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.canvasDockBtn:hover,
+.canvasDockBtn.active {
+  color: var(--text);
+  border-color: rgba(var(--accent-rgb), 0.45);
+  background: var(--accent-muted);
+}
+
+.canvasFlyout {
+  position: absolute;
+  left: 58px;
+  top: 58px;
+  bottom: 10px;
+  z-index: 13;
+  display: flex;
+  flex-direction: column;
+  width: min(300px, calc(100% - 70px));
+  border: 1px solid var(--canvas-chrome-border);
+  border-radius: 12px;
+  background: var(--canvas-chrome-bg-strong);
+  backdrop-filter: blur(10px);
+  box-shadow: var(--canvas-chrome-shadow);
+  pointer-events: auto;
+}
+
+.canvasFlyoutHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.canvasFlyoutHeader h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.canvasFlyoutBody {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 10px 12px 12px;
+}
+
+.canvasFlyoutEmpty {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted-2);
+  line-height: 1.45;
+}
+
+.canvasFlyoutAction {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 32px;
+  margin-bottom: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel-soft);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.canvasFlyoutAction.primary {
+  border-color: rgba(var(--accent-rgb), 0.5);
+  background: var(--accent-muted);
+}
+
+.canvasToolbarProject {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--muted);
+  max-width: 120px;
+  padding: 0 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ===== Active workflow toolbar ===== */
+
+.canvasWorkflowToolbar {
+  position: absolute;
+  left: 10px;
+  top: 10px;
+  z-index: 15;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: min(96vw, 920px);
+  padding: 4px;
+  border: 1px solid var(--canvas-chrome-border);
+  border-radius: 10px;
+  background: var(--canvas-chrome-bg);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  box-shadow: var(--canvas-chrome-shadow);
+  pointer-events: auto;
+}
+
+.canvasWorkflowTabs {
+  display: flex;
+  align-items: stretch;
+  gap: 1px;
+  min-width: 0;
+  max-width: min(52vw, 420px);
+  overflow-x: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+}
+
+.canvasWorkflowTabs::-webkit-scrollbar {
+  display: none;
+}
+
+.canvasWorkflowTab {
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+  flex: 0 1 72px;
+  max-width: 72px;
+  border: 1px solid transparent;
+  border-radius: 8px 8px 6px 6px;
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--muted);
+  transition:
+    flex-basis 0.22s ease,
+    max-width 0.22s ease,
+    min-width 0.22s ease,
+    background 0.18s ease,
+    border-color 0.18s ease,
+    color 0.18s ease;
+}
+
+.canvasWorkflowTab:hover {
+  color: var(--text);
+  background: rgba(var(--accent-rgb), 0.06);
+}
+
+.canvasWorkflowTab.active {
+  flex: 1 1 168px;
+  max-width: 220px;
+  min-width: 120px;
+  color: var(--text);
+  border-color: rgba(var(--accent-rgb), 0.42);
+  background: var(--accent-muted);
+}
+
+.canvasWorkflowTab.unsaved .canvasWorkflowTabLabel {
+  font-style: italic;
+}
+
+.canvasWorkflowTabSelect {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  flex: 1 1 auto;
+  padding: 5px 0 5px 8px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.canvasWorkflowTabLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.canvasWorkflowTabClose {
+  display: grid;
+  place-items: center;
+  flex: 0 0 22px;
+  width: 22px;
+  margin-right: 2px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  opacity: 0.55;
+  cursor: pointer;
+  pointer-events: auto;
+  position: relative;
+  z-index: 2;
+}
+
+.canvasWorkflowTab:hover .canvasWorkflowTabClose,
+.canvasWorkflowTab.active .canvasWorkflowTabClose {
+  opacity: 0.85;
+}
+
+.canvasWorkflowTabClose:hover {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.canvasWorkflowTabNew {
+  display: grid;
+  place-items: center;
+  flex: 0 0 28px;
+  width: 28px;
+  min-height: 28px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.canvasWorkflowTabNew:hover {
+  color: var(--text);
+  border-color: rgba(var(--accent-rgb), 0.35);
+  background: rgba(var(--accent-rgb), 0.08);
+}
+
+.canvasWorkflowTabRenameInput {
+  width: 100%;
+  min-width: 0;
+  padding: 2px 4px;
+  border: 1px solid rgba(var(--accent-rgb), 0.45);
+  border-radius: 5px;
+  background: var(--panel);
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.canvasWorkflowSessionDot {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  margin-left: 2px;
+  border-radius: 999px;
+  background: transparent;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.12);
+  transition: background 0.18s ease;
+}
+
+.canvasWorkflowSessionDot.is-library-unsaved {
+  background: #f0b429;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.25);
+}
+
+.canvasWorkflowSessionDot.is-library-saved {
+  background: #3ecf8e;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.25);
+}
+
+.canvasWorkflowSessionDot.is-saving {
+  background: var(--warning);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.25);
+}
+
+.canvasWorkflowSessionDot.is-error {
+  background: var(--danger-text);
+}
+
+.canvasWorkflowCloseBackdrop {
+  z-index: 40;
+}
+
+.canvasWorkflowCloseDialog {
+  width: min(440px, 100%);
+}
+
+.canvasWorkflowCloseDialog p {
+  margin: 8px 0 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.canvasWorkflowCloseDialog p strong {
+  color: var(--text);
+}
+
+.canvasWorkflowCloseDialog code {
+  font-size: 12px;
+}
+
+.canvasWorkflowCloseActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.canvasWorkflowCloseActions .primaryActionButton,
+.canvasWorkflowCloseActions .secondaryActionButton,
+.canvasWorkflowCloseActions .dangerActionButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+}
+
+.canvasWorkflowFileInput {
+  display: none;
+}
+
+/* ===== Palette (flyout content) ===== */
+
+.canvasPaletteContent {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+}
+
+.canvasPaletteToolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+  align-items: center;
+}
+
+.canvasPaletteHint {
+  margin: 0;
+  font-size: 10px;
+  line-height: 1.35;
+  color: var(--muted-2);
+}
+
+.canvasPalette {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  gap: 10px;
+}
+
+.canvasPaletteHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.canvasPaletteHeader h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.canvasPaletteSearch {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel-soft);
+  color: var(--muted-2);
+}
+
+.canvasPaletteSearch input {
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+  outline: none;
+}
+
+.canvasPaletteSources {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.canvasSourceBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 30px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--panel-soft);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: grab;
+}
+
+.canvasSourceBtn:active {
+  cursor: grabbing;
+}
+
+.canvasSourceBtn:hover {
+  color: var(--text);
+  border-color: rgba(var(--accent-rgb), 0.5);
+}
+
+.canvasSourceBtn.isPaletteDragging,
+.canvasPaletteList > li.isPaletteDragging {
+  opacity: 0.55;
+}
+
+.canvasSourceBtn[draggable="true"],
+.canvasPaletteList > li[draggable="true"] {
+  user-select: none;
+}
+
+.canvasPaletteScroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.canvasPaletteGroupTitle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted-2);
+}
+
+.canvasPaletteList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.canvasPaletteList > li {
+  cursor: grab;
+}
+
+.canvasPaletteList > li:active {
+  cursor: grabbing;
+}
+
+.canvasPaletteList > li.isPaletteDragging {
+  opacity: 0.55;
+}
+
+.canvasPaletteItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel-soft);
+  color: var(--text);
+  font-size: 12px;
+  text-align: left;
+  cursor: inherit;
+}
+
+.canvasPaletteItem:active {
+  cursor: inherit;
+}
+
+.canvasPaletteItemName {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.canvasPaletteItem > svg:last-child,
+.canvasPaletteItem > .spin:last-child {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+.canvasPaletteItem:hover {
+  border-color: rgba(var(--accent-rgb), 0.5);
+  background: var(--accent-muted);
+}
+
+.canvasPaletteItem:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.canvasPaletteEmpty,
+.canvasPaletteError {
+  font-size: 12px;
+  color: var(--muted-2);
+}
+
+.canvasPaletteError {
+  color: var(--danger-text);
+}
+
+/* ===== Stage ===== */
+
+.canvasStage {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--canvas-bg);
+}
+
+.canvasStage .react-flow {
+  background-color: transparent;
+  --xy-background-color: var(--canvas-bg);
+  --xy-background-pattern-color: var(--canvas-dot);
+}
+
+.canvasStage .react-flow__renderer,
+.canvasStage .react-flow__pane {
+  background-color: transparent;
+}
+
+.canvasStage .react-flow__background {
+  z-index: 0;
+}
+
+.canvasStage .react-flow__background-pattern.dots {
+  fill: var(--canvas-dot);
+}
+
+.canvasStage .outputLogDock {
+  right: 8px;
+  bottom: 8px;
+  z-index: 16;
+}
+
+.canvasStage .outputLogDock.outputLogDockNoToggle {
+  bottom: calc(8px + 38px + 6px);
+  pointer-events: none;
+}
+
+.canvasStage .outputLogDock.outputLogDockNoToggle .outputLogPopup {
+  pointer-events: auto;
+}
+
+.canvasStage .outputLogPopup {
+  border-color: var(--border);
+  box-shadow: var(--canvas-popover-shadow);
+}
+
+.canvasStage .outputLogPopup:focus-visible {
+  box-shadow: var(--canvas-popover-shadow), 0 0 0 1px rgba(var(--accent-rgb), 0.35);
+}
+
+.canvasStage .outputLogResizeHandle:hover::before,
+.canvasStage .outputLogResizeHandle:focus-visible::before {
+  background: var(--canvas-chrome-divider);
+}
+
+/* ===== Minimap + zoom (bottom-right) ===== */
+
+.canvasFlowPanel {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  margin: 0 8px 8px 0 !important;
+}
+
+
+.canvasFlowPanel .react-flow__minimap {
+  position: relative !important;
+  inset: auto !important;
+  margin: 0 !important;
+  border: 1px solid var(--canvas-chrome-border);
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: var(--canvas-chrome-shadow);
+  --xy-minimap-background-color-props: var(--canvas-minimap-bg);
+  --xy-minimap-mask-background-color-props: var(--canvas-minimap-mask);
+  --xy-minimap-mask-stroke-color-props: var(--canvas-minimap-mask-stroke);
+}
+
+.canvasFlowPanel .react-flow__minimap-svg {
+  display: block;
+}
+
+.canvasZoomBar {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--canvas-chrome-border);
+  border-radius: 10px;
+  background: var(--canvas-chrome-bg);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  box-shadow: var(--canvas-chrome-shadow);
+}
+
+.canvasZoomBtn {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--canvas-chrome-text);
+  cursor: pointer;
+}
+
+.canvasZoomValue {
+  width: auto;
+  min-width: 40px;
+  height: 28px;
+  padding: 0 4px;
+  color: var(--canvas-chrome-text-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  line-height: 1;
+  text-align: center;
+}
+
+.canvasZoomBtn.canvasZoomValue:hover,
+.canvasZoomBtn.canvasZoomValue:focus-visible {
+  color: var(--accent-hover);
+}
+
+.canvasZoomDivider {
+  align-self: stretch;
+  width: 1px;
+  margin: 3px 1px;
+  background: var(--canvas-chrome-divider);
+}
+
+.canvasZoomBtn:hover,
+.canvasZoomBtn:focus-visible,
+.canvasZoomBtn.active {
+  border-color: rgba(var(--accent-rgb), 0.45);
+  background: rgba(var(--accent-rgb), 0.12);
+  color: var(--accent-hover);
+  outline: none;
+}
+
+.canvasZoomBtn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.canvasZoomBtn:disabled:hover {
+  border-color: transparent;
+  background: transparent;
+  color: var(--canvas-chrome-text);
+}
+
+.canvasZoomBtn.hasActivity {
+  border-color: rgba(var(--accent-rgb), 0.38);
+}
+
+.canvasZoomLogBtn {
+  position: relative;
+}
+
+.canvasZoomLogBadge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 14px;
+  text-align: center;
+  pointer-events: none;
+}
+
+.canvasWorkspace .canvasTool-hand .react-flow__pane {
+  cursor: grab;
+}
+
+.canvasWorkspace .canvasTool-hand .react-flow__pane.dragging {
+  cursor: grabbing;
+}
+
+.canvasWorkspace .canvasTool-select .react-flow__pane {
+  cursor: grab;
+}
+
+.canvasWorkspace .canvasTool-select .react-flow__pane.dragging {
+  cursor: grabbing;
+}
+
+.canvasWorkspace .canvasTool-select .react-flow__node,
+.canvasWorkspace .canvasTool-select .canvasNodeFrame {
+  cursor: default;
+}
+
+.canvasZoomBar .actionRow.rhActionRow.compactActionRow {
+  display: inline-flex;
+  align-items: center;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  gap: 4px;
+  grid-template-columns: none;
+}
+
+.canvasZoomBar .actionRow.rhActionRow.compactActionRow .runButton,
+.canvasZoomBar .actionRow.rhActionRow.compactActionRow .runMenuToggle {
+  min-height: 28px;
+  height: 28px;
+  min-width: 0;
+  font-size: 11px;
+}
+
+.canvasZoomBar .actionRow.rhActionRow.compactActionRow .runMenuWrap {
+  grid-template-columns: minmax(0, auto) 24px;
+}
+
+.canvasZoomBar .actionRow.rhActionRow.compactActionRow .runControlRun {
+  width: auto;
+  min-width: 60px;
+  max-width: 88px;
+  flex-shrink: 0;
+  justify-content: flex-start;
+  gap: 4px;
+  padding: 0 6px;
+  box-shadow: none;
+  border-radius: 8px 0 0 8px;
+}
+
+.canvasZoomBar .actionRow.rhActionRow.compactActionRow .runMenuToggle {
+  width: 24px;
+  padding: 0;
+  border-radius: 0 8px 8px 0;
+}
+
+.canvasZoomBar .actionRow.rhActionRow.compactActionRow .runMenu {
+  bottom: calc(100% + 8px);
+}
+
+.canvasZoomBar .actionRow.rhActionRow.compactActionRow .runControlRun span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.canvasStage .react-flow {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* ===== Project panel ===== */
+
+.canvasProjectPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.canvasProjectPanelLibrary {
+  gap: 8px;
+  min-height: 0;
+}
+
+.canvasProjectLibraryLoading {
+  display: grid;
+  place-items: center;
+  padding: 16px 0;
+  color: var(--muted);
+}
+
+.canvasProjectLibraryList {
+  gap: 4px;
+}
+
+.canvasProjectLibraryItem {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px;
+  align-items: stretch;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+}
+
+.canvasProjectLibraryActions {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+}
+
+.canvasProjectLibraryOpen {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.canvasProjectLibraryOpen:hover,
+.canvasProjectLibraryOpen:focus-visible {
+  background: rgba(var(--accent-rgb), 0.08);
+  outline: none;
+}
+
+.canvasProjectLibraryName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.canvasProjectLibraryFav {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted-2);
+  cursor: pointer;
+}
+
+.canvasProjectLibraryFav:hover,
+.canvasProjectLibraryFav:focus-visible {
+  color: var(--text-secondary);
+  background: rgba(var(--accent-rgb), 0.06);
+  outline: none;
+}
+
+.canvasProjectLibraryFav.is-active {
+  color: #f0b429;
+}
+
+.canvasProjectLibraryDelete {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted-2);
+  cursor: pointer;
+}
+
+.canvasProjectLibraryDelete:hover,
+.canvasProjectLibraryDelete:focus-visible {
+  color: var(--danger-text);
+  background: rgba(248, 113, 113, 0.08);
+  outline: none;
+}
+
+.canvasProjectLibraryDelete:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.canvasProjectActive {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px;
+  border: 1px solid rgba(var(--accent-rgb), 0.35);
+  border-radius: var(--radius);
+  background: var(--accent-muted);
+}
+
+.canvasProjectActiveLabel {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.canvasProjectActive strong {
+  font-size: 14px;
+}
+
+.canvasProjectActiveMeta {
+  font-size: 11px;
+  color: var(--muted-2);
+}
+
+.canvasProjectLibraryHint {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--muted-2);
+}
+
+.canvasProjectEmpty {
+  margin: 0;
+  padding: 10px 2px;
+  color: var(--muted-2);
+  font-size: 12px;
+}
+
+.canvasProjectList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.canvasProjectItem {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel-soft);
+}
+
+.canvasProjectItem.active {
+  border-color: rgba(var(--accent-rgb), 0.5);
+}
+
+.canvasProjectOpen {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-height: 44px;
+  padding: 8px 10px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.canvasProjectName {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.canvasProjectMeta {
+  font-size: 10px;
+  color: var(--muted-2);
+}
+
+.canvasProjectItemActions {
+  display: flex;
+  gap: 2px;
+  padding-right: 4px;
+}
+
+.canvasProjectRenameForm input {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 10px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+  outline: none;
+}
+
+/* ===== Nodes list panel ===== */
+
+.canvasNodesList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.canvasNodesListItem {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel-soft);
+}
+
+.canvasNodesListMain {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 6px 8px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.canvasNodesListText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.canvasNodesListText strong,
+.canvasNodesListText small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.canvasNodesListText small {
+  font-size: 10px;
+  color: var(--muted-2);
+}
+
+.canvasNodesListIcon {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+}
+
+.canvasNodesListActions {
+  display: flex;
+  gap: 2px;
+  padding-right: 4px;
+}
+
+/* ===== History panel ===== */
+
+.canvasHistoryPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+}
+
+.canvasHistoryTabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.canvasHistoryTabs button {
+  min-height: 28px;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel-soft);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.canvasHistoryTabs button.active {
+  color: var(--text);
+  border-color: rgba(var(--accent-rgb), 0.5);
+  background: var(--accent-muted);
+}
+
+.canvasHistorySectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.canvasHistoryOutputs,
+.canvasHistoryRuns {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.canvasHistoryOutputItem {
+  padding: 0;
+  display: grid;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel-soft);
+}
+
+.canvasHistoryOutputButton {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  padding: 6px;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.canvasHistoryOutputButton:hover:not(:disabled),
+.canvasHistoryOutputButton:focus-visible {
+  background: rgba(var(--accent-rgb), 0.12);
+  outline: none;
+}
+
+.canvasHistoryOutputButton:disabled {
+  cursor: default;
+}
+
+.canvasHistoryOutputButton img {
+  width: 48px;
+  height: 48px;
+  object-fit: cover;
+  border-radius: 6px;
+}
+
+.canvasHistoryOutputPlaceholder {
+  width: 48px;
+  height: 48px;
+  border-radius: 6px;
+  background: var(--panel-strong);
+}
+
+.canvasHistoryOutputMeta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.canvasHistoryOutputMeta strong,
+.canvasHistoryOutputMeta small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+}
+
+.canvasHistoryOutputMeta small {
+  color: var(--muted-2);
+}
+
+.canvasHistoryRunItem {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel-soft);
+}
+
+.canvasHistoryRunItem strong {
+  font-size: 12px;
+}
+
+.canvasHistoryRunItem small {
+  font-size: 10px;
+  color: var(--muted-2);
+}
+
+.canvasHistoryLiveLog {
+  max-height: 320px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--canvas-history-log-bg);
+  padding: 4px 0;
+}
+
+/* ===== Nodes ===== */
+
+.canvasNode {
+  position: relative;
+  width: 348px;
+  min-width: 180px;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--canvas-node-bg);
+  box-shadow: var(--shadow);
+  font-size: 12px;
+  color: var(--text);
+}
+
+/* Expensive paint effects are visually irrelevant while the viewport or a
+   node is moving. Removing them during interaction keeps compositor work low. */
+.canvasView.is-interacting .canvasNode,
+.canvasView.is-interacting .react-flow__edge-path {
+  box-shadow: none;
+  filter: none;
+}
+
+.canvasView.is-interacting .canvasDock,
+.canvasView.is-interacting .canvasFlowPanel {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+.canvasNode.hasCustomHeight {
+  min-height: 100px;
+  overflow: clip;
+  overflow-clip-margin: 8px;
+}
+
+.canvasNode.is-bypassed {
+  border: 1px dashed var(--canvas-bypass-border);
+  background-color: var(--canvas-bypass-bg);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--warning) 18%, transparent),
+    var(--shadow);
+}
+
+.canvasNode.is-bypassed .canvasNodeHeader {
+  background: var(--canvas-bypass-header-bg);
+  border-bottom-color: color-mix(in srgb, var(--canvas-bypass-border) 70%, transparent);
+}
+
+.canvasNode.is-bypassed.is-selected {
+  border-color: var(--canvas-bypass-border);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--warning) 24%, transparent),
+    0 0 0 1px rgba(var(--accent-rgb), 0.42),
+    var(--shadow);
+}
+
+.canvasNode.hasCustomHeight:has(.canvasNodePreview) .canvasNodePreview {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.canvasNode.is-selected {
+  border-color: rgba(var(--accent-rgb), 0.7);
+}
+
+.canvasNodeResize {
+  position: absolute;
+  bottom: 0;
+  z-index: 6;
+  width: 16px;
+  height: 16px;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.canvasNode:hover .canvasNodeResize,
+.canvasNode.is-selected .canvasNodeResize {
+  opacity: 1;
+}
+
+.canvasNodeResize-sw {
+  left: 0;
+  cursor: nesw-resize;
+}
+
+.canvasNodeResize-se {
+  right: 0;
+  cursor: nwse-resize;
+}
+
+.canvasNodeResize::after {
+  content: "";
+  position: absolute;
+  bottom: 4px;
+  width: 8px;
+  height: 8px;
+  border-bottom: 2px solid rgba(var(--accent-rgb), 0.55);
+}
+
+.canvasNodeResize-sw::after {
+  left: 4px;
+  border-left: 2px solid rgba(var(--accent-rgb), 0.55);
+}
+
+.canvasNodeResize-se::after {
+  right: 4px;
+  border-right: 2px solid rgba(var(--accent-rgb), 0.55);
+}
+
+.canvasNodeHeader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 8px;
+  background: var(--surface-3);
+  border-bottom: 1px solid var(--border);
+  border-radius: 9px 9px 0 0;
+}
+
+.canvasKindBadge {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 4px;
+  padding: 2px 6px;
+  border-radius: 5px;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  line-height: 1;
+  white-space: nowrap;
+  background: var(--panel-soft);
+  color: var(--muted);
+}
+
+.canvasKindBadge.kind-local { color: var(--comfy-brand); background: rgba(var(--comfy-brand-rgb), 0.12); }
+.canvasKindBadge.kind-rhwf {
+  padding-inline: 4px;
+  font-size: 8px;
+  letter-spacing: 0.01em;
+}
+
+.canvasKindBadge.kind-rhwf,
+.canvasKindBadge.kind-rhapp { color: var(--rh-brand); background: rgba(var(--rh-brand-rgb), 0.12); }
+.canvasKindBadge.kind-source { color: var(--accent); background: var(--accent-muted); }
+
+.canvasNodeTitle {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.canvasNodeStatus {
+  display: inline-flex;
+  align-items: center;
+}
+
+.canvasStatusDone { color: var(--success); }
+.canvasStatusError { color: var(--danger-text); }
+
+.canvasNodeBtn {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: var(--surface-2);
+  color: var(--muted);
+  cursor: pointer;
+  outline: none;
+  flex-shrink: 0;
+  line-height: 0;
+}
+
+.canvasNodeBtn:hover { color: var(--text); border-color: rgba(var(--accent-rgb), 0.5); }
+.canvasNodeBtn.hasQueue {
+  color: var(--accent);
+  border-color: rgba(var(--accent-rgb), 0.5);
+}
+.canvasNodeQueueBadge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 8px;
+  font-weight: 800;
+  line-height: 14px;
+  text-align: center;
+  pointer-events: none;
+}
+.canvasNodeBtn.danger:hover { color: var(--danger-text); border-color: rgba(248, 113, 113, 0.5); }
+.canvasNodeBtn:disabled { opacity: 0.5; cursor: default; }
+
+.canvasOutputs,
+.canvasOutputRow.source {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.canvasOutputRow {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  min-height: 22px;
+}
+
+.canvasPortLabel {
+  font-size: 10px;
+  color: var(--muted-2);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.canvasNodeBody {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  flex: 0 0 auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.canvasNode.hasCustomHeight.canvasSourceNode .canvasNodeBody {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.canvasNode.hasCustomHeight:not(.canvasSourceNode) .canvasNodeBody {
+  flex: 0 0 auto;
+  min-height: 0;
+}
+
+.canvasNode.hasCustomHeight.canvasSourceNode .canvasNodeBody .canvasField {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.canvasNode.hasCustomHeight.canvasSourceNode .canvasNodeBody .canvasInputRow {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.canvasNode.hasCustomHeight.canvasSourceNode .canvasNodeBody .canvasInputRow > .canvasField {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.canvasNode.hasCustomHeight.canvasSourceNode .canvasImageField {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.canvasNode.hasCustomHeight.canvasSourceNode .canvasImageThumb {
+  flex: 1 1 auto;
+  min-height: 0;
+  aspect-ratio: unset;
+}
+
+.canvasNode.hasCustomHeight.canvasSourceNode .canvasImageThumb img {
+  flex: 0 1 auto;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.canvasInputRow {
+  position: relative;
+}
+
+.canvasInputRow.hasOutputHandle > .canvasHandle.react-flow__handle-right {
+  top: 7px;
+  transform: translate(50%, -50%);
+}
+
+.canvasOutputHandleHit {
+  position: absolute;
+  top: 0;
+  right: -6px;
+  z-index: 11;
+  width: 22px;
+  height: 28px;
+  cursor: crosshair;
+}
+
+.canvasInputRow.hasOutputHandle > .canvasHandle.react-flow__handle-right.out:hover,
+.canvasInputRow.hasOutputHandle > .canvasHandle.react-flow__handle-right.out.connectingto,
+.canvasInputRow.hasOutputHandle > .canvasHandle.react-flow__handle-right.out.connectingfrom,
+.canvasInputRow.hasOutputHandle:hover > .canvasHandle.react-flow__handle-right.out,
+.canvasInputRow.hasOutputHandle:focus-within > .canvasHandle.react-flow__handle-right.out {
+  transform: translate(50%, -50%) scale(1.12);
+}
+
+.canvasField {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.canvasFieldInline {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+}
+
+.canvasFieldLabel {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.canvasInput {
+  width: 100%;
+  min-height: 26px;
+  padding: 4px 7px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel-soft);
+  color: var(--text);
+  font-size: 12px;
+  outline: none;
+}
+
+.canvasInput:focus {
+  border-color: var(--accent);
+}
+
+.canvasTextarea {
+  resize: vertical;
+  min-height: 38px;
+  font-family: inherit;
+}
+
+.canvasImageField {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.canvasImageField.isDragging .canvasUploadBtn {
+  border-color: rgba(var(--accent-rgb), 0.7);
+  color: var(--accent);
+  background: var(--accent-muted);
+}
+
+.canvasImageUrlForm {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  gap: 4px;
+  align-items: center;
+}
+
+.canvasImageUrlIcon {
+  position: absolute;
+  left: 8px;
+  top: 50%;
+  z-index: 1;
+  display: inline-flex;
+  color: var(--muted);
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+
+.canvasImageUrlInput {
+  min-width: 0;
+  min-height: 28px;
+  padding: 0 8px 0 26px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel-soft);
+  color: var(--text);
+  font-size: 11px;
+}
+
+.canvasImageUrlInput:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.canvasImageUrlBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 28px;
+  min-height: 28px;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel-soft);
+  color: var(--muted);
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.canvasImageUrlBtn.library span {
+  font-weight: 700;
+}
+
+.canvasImageUrlBtn:hover:not(:disabled) {
+  color: var(--text);
+  border-color: rgba(var(--accent-rgb), 0.5);
+}
+
+.canvasImageUrlBtn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.canvasImageUrlError {
+  margin: 0;
+  font-size: 10px;
+  color: #fca5a5;
+}
+
+.canvasImageLibraryEmpty {
+  margin: 0;
+  padding: 16px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.canvasUploadBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 30px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 6px;
+  background: var(--panel-soft);
+  color: var(--muted);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.canvasUploadBtn:hover { color: var(--text); border-color: rgba(var(--accent-rgb), 0.5); }
+
+.canvasImageThumb {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-2);
+}
+
+.canvasImageThumb:has(.canvasNodePreview.isEmbedded) {
+  border-radius: 0;
+}
+
+.canvasImageThumb:hover .multiImageActions,
+.canvasImageThumb:focus-within .multiImageActions {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.canvasMultiImageCount {
+  position: absolute;
+  left: 6px;
+  top: 6px;
+  z-index: 2;
+  padding: 3px 7px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 7px;
+  background: rgba(7, 8, 16, 0.74);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 750;
+  line-height: 1.2;
+  backdrop-filter: blur(8px);
+}
+
+.canvasFolderSelection.localFolderSelection {
+  min-height: 92px;
+  border-radius: 6px;
+}
+
+.canvasSelectedImageStrip {
+  display: flex;
+  gap: 6px;
+  max-width: 100%;
+  padding: 2px 1px 4px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.canvasSelectedImageThumb {
+  position: relative;
+  flex: 0 0 48px;
+  width: 48px;
+  height: 48px;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 2px solid transparent;
+  border-radius: 8px;
+  background: var(--panel-soft);
+  cursor: pointer;
+}
+
+.canvasSelectedImageThumb.isActive {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px rgba(var(--accent-rgb), 0.28);
+}
+
+.canvasSelectedImageThumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+}
+
+.canvasSelectedImageThumb span {
+  position: absolute;
+  left: 3px;
+  top: 3px;
+  display: grid;
+  place-items: center;
+  min-width: 16px;
+  height: 16px;
+  border-radius: 5px;
+  background: rgba(7, 8, 16, 0.78);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.canvasImageThumb img {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+}
+
+.canvasImageThumb .canvasNodePreview.isEmbedded {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  padding: 0;
+  border-top: 0;
+}
+
+.canvasImageThumb .canvasNodePreview.isEmbedded .canvasNodePreviewStage,
+.canvasImageThumb .canvasNodePreview.isEmbedded .canvasNodeCompareStage {
+  position: relative;
+  flex: 1 1 auto;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.canvasImageThumb .canvasNodePreview.isEmbedded .canvasNodePreviewStage:not(.canvasNodeCompareStage) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.canvasImageThumb .canvasNodePreview.isEmbedded .canvasNodeCompareStage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.canvasImageThumb .canvasNodePreview.isEmbedded .canvasCompareImageFrame {
+  position: relative;
+  inset: auto;
+  flex: 0 1 auto;
+  align-self: center;
+  width: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  height: auto;
+  margin: 0;
+  overflow: hidden;
+}
+
+.canvasImageThumb .canvasNodePreview.isEmbedded .canvasNodePreviewStage > img {
+  flex: 0 1 auto;
+  align-self: center;
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  border-radius: 0;
+}
+
+.canvasImageSizeBadge {
+  position: absolute;
+  bottom: 5px;
+  left: 5px;
+  z-index: 2;
+  padding: 3px 7px;
+  border: 1px solid var(--canvas-badge-border);
+  border-radius: 6px;
+  background: var(--canvas-badge-bg);
+  backdrop-filter: blur(6px);
+  color: var(--canvas-badge-text);
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1.3;
+  pointer-events: none;
+}
+
+.canvasImageClear {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border: 0;
+  border-radius: 5px;
+  background: var(--canvas-media-overlay-bg);
+  color: var(--canvas-media-overlay-text);
+  cursor: pointer;
+}
+
+.canvasImageLinked {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 7px;
+  border: 1px solid rgba(var(--accent-rgb), 0.4);
+  border-radius: 6px;
+  background: var(--accent-muted);
+  color: var(--accent);
+  font-size: 11px;
+}
+
+.canvasNodeEmpty,
+.canvasNodeError {
+  font-size: 11px;
+  color: var(--muted-2);
+  margin: 0;
+  padding: 0 8px 8px;
+}
+
+.canvasNodeError {
+  flex: 0 0 auto;
+  color: var(--danger-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.canvasNodePreview {
+  flex: 0 0 auto;
+  padding: 8px;
+  border-top: 1px solid var(--border-subtle);
+  min-height: 0;
+}
+
+.canvasNodePreviewStage {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 72px;
+  overflow: hidden;
+  border-radius: 6px;
+  background: var(--surface-2);
+}
+
+.canvasNode.hasCustomHeight .canvasNodePreviewStage {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.canvasNodePreviewStage > img {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  border-radius: 0;
+}
+
+.canvasNode:not(.hasCustomHeight) .canvasNodePreviewStage {
+  display: block;
+  min-height: 0;
+  background: transparent;
+}
+
+.canvasNode:not(.hasCustomHeight) .canvasNodeCompareStage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface-2);
+}
+
+.canvasNode:not(.hasCustomHeight) .canvasNodePreviewStage > img {
+  width: 100%;
+  max-height: none;
+}
+
+.canvasNodePreviewCompare {
+  cursor: default;
+}
+
+.canvasNodePreviewCompare.isCompareActive,
+.canvasNodeCompareStage.isCompareActive,
+.canvasCompareImageFrame.isCompareActive {
+  cursor: ew-resize;
+}
+
+.canvasNodeCompareStage {
+  line-height: 0;
+}
+
+.canvasCompareBase,
+.canvasCompareOutput {
+  border-radius: 0;
+}
+
+.canvasCompareImageFrame {
+  position: relative;
+  inset: auto;
+  flex: 0 1 auto;
+  align-self: center;
+  width: 100%;
+  height: auto;
+  max-width: 100%;
+  max-height: 100%;
+  margin: auto;
+  overflow: hidden;
+}
+
+.canvasCompareImageFrame .canvasCompareBase,
+.canvasCompareImageFrame .canvasCompareOutput {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  object-fit: contain;
+  object-position: center center;
+}
+
+.canvasCompareBase {
+  z-index: 1;
+}
+
+.canvasCompareOutput {
+  z-index: 2;
+  clip-path: inset(0 calc(100% - var(--compare-position, 50%)) 0 0);
+}
+
+.canvasCompareDivider {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--compare-position, 50%);
+  z-index: 3;
+  width: calc(2px / var(--canvas-zoom, 1));
+  background: var(--canvas-compare-divider);
+  box-shadow:
+    0 0 0 calc(1px / var(--canvas-zoom, 1)) rgba(0, 0, 0, 0.24),
+    0 0 calc(12px / var(--canvas-zoom, 1)) rgba(var(--accent-rgb), 0.44);
+  pointer-events: none;
+  transform: translateX(-50%);
+}
+
+.canvasPreviewMetaStack {
+  position: absolute;
+  bottom: 7px;
+  z-index: 4;
+  display: grid;
+  gap: 4px;
+  justify-items: start;
+  pointer-events: none;
+}
+
+.canvasPreviewMetaStack.is-output {
+  right: 7px;
+  justify-items: end;
+}
+
+.canvasPreviewSizeBadge,
+.canvasPreviewTimingBadge {
+  padding: 3px 7px;
+  border: 1px solid var(--canvas-badge-border);
+  border-radius: 6px;
+  background: var(--canvas-badge-bg);
+  backdrop-filter: blur(6px);
+  color: var(--canvas-badge-text);
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1.3;
+  pointer-events: none;
+}
+
+.canvasPreviewSizeBadge.is-input {
+  position: absolute;
+  bottom: 7px;
+  z-index: 4;
+  left: 7px;
+}
+
+/* ===== Output preview toolbar ===== */
+
+.canvasPreviewToolbar {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 5;
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transform: translateY(-2px);
+  pointer-events: none;
+  transition: opacity 0.14s ease, transform 0.14s ease;
+}
+
+.canvasNodePreview:hover .canvasPreviewToolbar,
+.canvasNodePreview:focus-within .canvasPreviewToolbar {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.canvasPreviewToolbar button {
+  display: grid;
+  width: 25px;
+  height: 25px;
+  min-height: 0;
+  padding: 0;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 7px;
+  background: rgba(7, 8, 16, 0.76);
+  color: rgba(255, 255, 255, 0.82);
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+}
+
+.canvasPreviewToolbar button:hover {
+  border-color: rgba(var(--accent-rgb), 0.68);
+  color: #fff;
+  background: rgba(var(--accent-rgb), 0.32);
+}
+
+/* ===== Handles ===== */
+
+.canvasWorkspace .react-flow__node {
+  overflow: visible;
+}
+
+.canvasHandle.react-flow__handle {
+  width: 13px;
+  height: 13px;
+  border: 2px solid var(--canvas-handle-ring);
+  background: var(--accent);
+  pointer-events: all;
+  cursor: crosshair;
+  z-index: 12;
+  box-shadow: 0 0 0 2px rgba(var(--accent-rgb), 0.18);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 160ms ease, transform 120ms ease, box-shadow 160ms ease, filter 160ms ease;
+}
+
+/* Output ports stay visible but subdued; brighten on hover / connect. */
+.canvasHandle.react-flow__handle.out {
+  width: 10px;
+  height: 10px;
+  border-width: 1.5px;
+  opacity: 0.58;
+  pointer-events: all;
+  box-shadow: 0 0 0 1px rgba(var(--accent-rgb), 0.1);
+  filter: saturate(0.82);
+}
+
+.canvasInputRow:hover > .canvasHandle.react-flow__handle.in,
+.canvasInputRow:focus-within > .canvasHandle.react-flow__handle.in,
+.canvasOutputRow:hover > .canvasHandle.react-flow__handle,
+.canvasOutputRow:focus-within > .canvasHandle.react-flow__handle,
+.canvasHandle.react-flow__handle.in:hover,
+.canvasHandle.react-flow__handle.in.connectingto,
+.canvasHandle.react-flow__handle.in.connectingfrom {
+  opacity: 1;
+  pointer-events: all;
+}
+
+.canvasHandle.react-flow__handle.out:hover,
+.canvasHandle.react-flow__handle.out.connectingto,
+.canvasHandle.react-flow__handle.out.connectingfrom,
+.canvasInputRow:hover > .canvasHandle.react-flow__handle.out,
+.canvasInputRow:focus-within > .canvasHandle.react-flow__handle.out,
+.canvasOutputRow:hover > .canvasHandle.react-flow__handle.out,
+.canvasOutputRow:focus-within > .canvasHandle.react-flow__handle.out {
+  opacity: 1;
+  pointer-events: all;
+  filter: none;
+  box-shadow: 0 0 0 2px rgba(var(--accent-rgb), 0.22);
+}
+
+.canvasHandle.react-flow__handle.in:hover,
+.canvasHandle.react-flow__handle.in.connectingto,
+.canvasHandle.react-flow__handle.in.connectingfrom {
+  transform: translate(-50%, -50%) scale(1.15);
+}
+
+.canvasHandle.react-flow__handle.out:hover,
+.canvasHandle.react-flow__handle.out.connectingto,
+.canvasHandle.react-flow__handle.out.connectingfrom {
+  transform: translate(-50%, -50%) scale(1.12);
+}
+
+.canvasOutputRow .react-flow__handle-right {
+  right: 0;
+  transform: translate(50%, -50%);
+}
+
+.canvasOutputRow .react-flow__handle-right.out:hover,
+.canvasOutputRow .react-flow__handle-right.out.connectingto,
+.canvasOutputRow .react-flow__handle-right.out.connectingfrom {
+  transform: translate(50%, -50%) scale(1.12);
+}
+
+.canvasHandle.type-text { background: #a78bfa; }
+.canvasHandle.type-image { background: var(--accent); }
+.canvasHandle.type-number { background: #f59e0b; }
+.canvasHandle.type-boolean { background: #22c55e; }
+.canvasHandle.type-choice { background: #06b6d4; }
+.canvasHandle.type-any { background: #94a3b8; }
+
+.canvasHandle.out.output-color-0 { background: var(--accent); filter: none; }
+.canvasHandle.out.output-color-1 { background: #f59e0b; filter: none; }
+.canvasHandle.out.output-color-2 { background: #22c55e; filter: none; }
+.canvasHandle.out.output-color-3 { background: #06b6d4; filter: none; }
+.canvasHandle.out.output-color-4 { background: #a78bfa; filter: none; }
+.canvasHandle.out.output-color-5 { background: #f472b6; filter: none; }
+
+.canvasHandle.react-flow__handle.out.output-color-0:hover,
+.canvasHandle.react-flow__handle.out.output-color-0.connectingto,
+.canvasHandle.react-flow__handle.out.output-color-0.connectingfrom {
+  box-shadow: 0 0 0 2px rgba(var(--accent-rgb), 0.28);
+}
+.canvasHandle.react-flow__handle.out.output-color-1:hover,
+.canvasHandle.react-flow__handle.out.output-color-1.connectingto,
+.canvasHandle.react-flow__handle.out.output-color-1.connectingfrom {
+  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.35);
+}
+.canvasHandle.react-flow__handle.out.output-color-2:hover,
+.canvasHandle.react-flow__handle.out.output-color-2.connectingto,
+.canvasHandle.react-flow__handle.out.output-color-2.connectingfrom {
+  box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.35);
+}
+.canvasHandle.react-flow__handle.out.output-color-3:hover,
+.canvasHandle.react-flow__handle.out.output-color-3.connectingto,
+.canvasHandle.react-flow__handle.out.output-color-3.connectingfrom {
+  box-shadow: 0 0 0 2px rgba(6, 182, 212, 0.35);
+}
+.canvasHandle.react-flow__handle.out.output-color-4:hover,
+.canvasHandle.react-flow__handle.out.output-color-4.connectingto,
+.canvasHandle.react-flow__handle.out.output-color-4.connectingfrom {
+  box-shadow: 0 0 0 2px rgba(167, 139, 250, 0.35);
+}
+.canvasHandle.react-flow__handle.out.output-color-5:hover,
+.canvasHandle.react-flow__handle.out.output-color-5.connectingto,
+.canvasHandle.react-flow__handle.out.output-color-5.connectingfrom {
+  box-shadow: 0 0 0 2px rgba(244, 114, 182, 0.35);
+}
+
+.canvasInputRow .react-flow__handle-left { left: 0; top: calc(50% + 8.5px); }
+
+.canvasContextMenu {
+  position: fixed;
+  z-index: 40;
+  min-width: 180px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--canvas-popover-bg);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  box-shadow: var(--canvas-popover-shadow);
+}
+
+.canvasContextMenuItem {
+  display: block;
+  width: 100%;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.canvasContextMenuItem:hover:not(:disabled) {
+  background: rgba(var(--accent-rgb), 0.12);
+}
+
+.canvasContextMenuItem:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.canvasContextMenuItem.danger {
+  color: var(--danger-text);
+}
+
+.canvasContextMenuItem.danger:hover:not(:disabled) {
+  background: var(--danger-muted);
+}
+
+.canvasWorkspace .react-flow__edge-path {
+  stroke: rgba(var(--accent-rgb), 0.55);
+  stroke-width: 1.5;
+  fill: none;
+  stroke-dasharray: none;
+  animation: none;
+}
+
+.canvasWorkspace .react-flow__edge.canvas-edge-out-0 .react-flow__edge-path {
+  stroke: rgba(var(--accent-rgb), 0.55);
+}
+.canvasWorkspace .react-flow__edge.canvas-edge-out-1 .react-flow__edge-path {
+  stroke: rgba(245, 158, 11, 0.55);
+}
+.canvasWorkspace .react-flow__edge.canvas-edge-out-2 .react-flow__edge-path {
+  stroke: rgba(34, 197, 94, 0.55);
+}
+.canvasWorkspace .react-flow__edge.canvas-edge-out-3 .react-flow__edge-path {
+  stroke: rgba(6, 182, 212, 0.55);
+}
+.canvasWorkspace .react-flow__edge.canvas-edge-out-4 .react-flow__edge-path {
+  stroke: rgba(167, 139, 250, 0.55);
+}
+.canvasWorkspace .react-flow__edge.canvas-edge-out-5 .react-flow__edge-path {
+  stroke: rgba(244, 114, 182, 0.55);
+}
+
+.canvasWorkspace .react-flow__edge.selected .react-flow__edge-path,
+.canvasWorkspace .react-flow__edge:hover .react-flow__edge-path {
+  stroke: rgba(var(--accent-rgb), 0.95);
+  stroke-width: 2;
+}
+
+.canvasWorkspace .react-flow__edge.canvas-edge-out-0.selected .react-flow__edge-path,
+.canvasWorkspace .react-flow__edge.canvas-edge-out-0:hover .react-flow__edge-path {
+  stroke: rgba(var(--accent-rgb), 0.95);
+}
+.canvasWorkspace .react-flow__edge.canvas-edge-out-1.selected .react-flow__edge-path,
+.canvasWorkspace .react-flow__edge.canvas-edge-out-1:hover .react-flow__edge-path {
+  stroke: rgba(245, 158, 11, 0.95);
+}
+.canvasWorkspace .react-flow__edge.canvas-edge-out-2.selected .react-flow__edge-path,
+.canvasWorkspace .react-flow__edge.canvas-edge-out-2:hover .react-flow__edge-path {
+  stroke: rgba(34, 197, 94, 0.95);
+}
+.canvasWorkspace .react-flow__edge.canvas-edge-out-3.selected .react-flow__edge-path,
+.canvasWorkspace .react-flow__edge.canvas-edge-out-3:hover .react-flow__edge-path {
+  stroke: rgba(6, 182, 212, 0.95);
+}
+.canvasWorkspace .react-flow__edge.canvas-edge-out-4.selected .react-flow__edge-path,
+.canvasWorkspace .react-flow__edge.canvas-edge-out-4:hover .react-flow__edge-path {
+  stroke: rgba(167, 139, 250, 0.95);
+}
+.canvasWorkspace .react-flow__edge.canvas-edge-out-5.selected .react-flow__edge-path,
+.canvasWorkspace .react-flow__edge.canvas-edge-out-5:hover .react-flow__edge-path {
+  stroke: rgba(244, 114, 182, 0.95);
+}
+
+.canvasWorkspace .react-flow__connection-path {
+  stroke: rgba(var(--accent-rgb), 0.7);
+  stroke-width: 1.5;
+  fill: none;
+}
+
+.canvasWorkspace .react-flow__connection.canvas-connection-out-0 .react-flow__connection-path {
+  stroke: rgba(var(--accent-rgb), 0.7);
+}
+.canvasWorkspace .react-flow__connection.canvas-connection-out-1 .react-flow__connection-path {
+  stroke: rgba(245, 158, 11, 0.7);
+}
+.canvasWorkspace .react-flow__connection.canvas-connection-out-2 .react-flow__connection-path {
+  stroke: rgba(34, 197, 94, 0.7);
+}
+.canvasWorkspace .react-flow__connection.canvas-connection-out-3 .react-flow__connection-path {
+  stroke: rgba(6, 182, 212, 0.7);
+}
+.canvasWorkspace .react-flow__connection.canvas-connection-out-4 .react-flow__connection-path {
+  stroke: rgba(167, 139, 250, 0.7);
+}
+.canvasWorkspace .react-flow__connection.canvas-connection-out-5 .react-flow__connection-path {
+  stroke: rgba(244, 114, 182, 0.7);
+}
+
+.react-flow__attribution { display: none; }
+
+/* Alignment Bar and Smart Guides styles */
+.canvasSmartGuidesOverlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 1000;
+}
+
+.alignmentBarBtn {
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.alignmentBarBtn:hover {
+  background-color: rgba(255, 255, 255, 0.1) !important;
+  color: #fff !important;
+}
+
+.alignmentBarBtn:active {
+  background-color: rgba(255, 255, 255, 0.2) !important;
+}

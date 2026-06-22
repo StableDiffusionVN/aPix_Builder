@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Bookmark, Loader2, Lock, RefreshCcw, Settings2 } from "lucide-react";
+import { Bookmark, LayoutTemplate, Loader2, Lock, RefreshCcw, Settings2, Workflow } from "lucide-react";
 import { RunningHubField } from "./RunningHubField";
 import { ComfyUiLogomark } from "./icons/ComfyUiIcon";
 import { RunningHubLogomark } from "./icons/RunningHubIcon";
@@ -80,34 +80,59 @@ const EXECUTION_MODE_OPTIONS = [
   { id: "runninghub-app", label: "RH App", title: "RunningHub App (Alt/Option+3)", icon: RunningHubLogomark, iconTitle: "RunningHub", shortcut: "Alt+3" }
 ];
 
-export function ExecutionModeToggle({ mode, onChange }) {
+export function ExecutionModeToggle({ mode, onChange, canvasActive = false, onCanvasToggle, children }) {
   const { locale } = useI18n();
   const trackRef = useRef(null);
+  const formOptionsRef = useRef(null);
   const buttonRefs = useRef({});
+  const indicatorKey = canvasActive ? "canvas" : mode;
   const [indicator, setIndicator] = useState({ left: 0, width: 0, ready: false });
+  const isVi = locale === "vi";
+  const workspaceLabel = isVi ? "Chế độ làm việc" : "Workspace mode";
+  const executionLabel = isVi ? "Nền tảng thực thi" : "Execution platform";
+  const canvasToggleLabel = canvasActive
+    ? (isVi ? "Quay lại Form (Alt/Option+`)" : "Back to Form (Alt/Option+`)")
+    : (isVi ? "Chuyển sang Canvas (Alt/Option+`)" : "Switch to Canvas (Alt/Option+`)");
 
   const syncIndicator = useCallback(() => {
-    const track = trackRef.current;
-    const button = buttonRefs.current[mode];
-    if (!track || !button) return;
-    const trackRect = track.getBoundingClientRect();
+    const button = buttonRefs.current[indicatorKey];
+    if (!button) return;
+
+    if (canvasActive) {
+      const track = trackRef.current;
+      if (!track) return;
+      const trackRect = track.getBoundingClientRect();
+      const buttonRect = button.getBoundingClientRect();
+      setIndicator({
+        left: buttonRect.left - trackRect.left,
+        width: buttonRect.width,
+        ready: true
+      });
+      return;
+    }
+
+    const formOptions = formOptionsRef.current;
+    if (!formOptions) return;
+    const formRect = formOptions.getBoundingClientRect();
     const buttonRect = button.getBoundingClientRect();
     setIndicator({
-      left: buttonRect.left - trackRect.left,
+      left: buttonRect.left - formRect.left,
       width: buttonRect.width,
       ready: true
     });
-  }, [mode]);
+  }, [indicatorKey, canvasActive]);
 
   useLayoutEffect(() => {
     syncIndicator();
-  }, [syncIndicator]);
+  }, [syncIndicator, canvasActive, mode]);
 
   useEffect(() => {
     const track = trackRef.current;
-    if (!track) return undefined;
+    const formOptions = formOptionsRef.current;
+    if (!track && !formOptions) return undefined;
     const observer = new ResizeObserver(syncIndicator);
-    observer.observe(track);
+    if (track) observer.observe(track);
+    if (formOptions) observer.observe(formOptions);
     window.addEventListener("resize", syncIndicator);
     return () => {
       observer.disconnect();
@@ -116,43 +141,87 @@ export function ExecutionModeToggle({ mode, onChange }) {
   }, [syncIndicator]);
 
   return (
-    <div className={`executionModeToggle mode-${mode}`} role="tablist" aria-label={locale === "vi" ? "Chế độ thực thi" : "Execution mode"}>
+    <div
+      className={`executionModeToggle ${canvasActive ? "mode-canvas is-canvas-only" : `mode-${mode} is-form-mode`}`}
+      role="toolbar"
+      aria-label={workspaceLabel}
+    >
       <div className="executionModeTrack" ref={trackRef}>
-        <span
-          className={`executionModeIndicator ${indicator.ready ? "is-ready" : ""}`}
-          style={{
-            width: indicator.width,
-            transform: `translateX(${indicator.left}px)`
+        <button
+          type="button"
+          ref={node => {
+            buttonRefs.current.canvas = node;
           }}
-          aria-hidden="true"
-        />
-        {EXECUTION_MODE_OPTIONS.map(option => {
-          const Icon = option.icon;
-          return (
-          <button
-            key={option.id}
-            type="button"
-            role="tab"
-            ref={node => {
-              buttonRefs.current[option.id] = node;
-            }}
-            aria-selected={mode === option.id}
-            className={`${mode === option.id ? "active" : ""}${Icon ? " hasModeIcon" : ""}`}
-            title={option.title}
-            aria-keyshortcuts={option.shortcut}
-            onClick={() => onChange(option.id)}
-          >
-            {Icon ? (
-              <Icon
-                className="executionModeIcon"
-                title={option.iconTitle}
-                {...(Icon === RunningHubLogomark ? { sizedByCss: true } : { size: 12 })}
-              />
-            ) : null}
-            {option.label}
-          </button>
-          );
-        })}
+          aria-label={canvasToggleLabel}
+          className={`executionModeCanvasToggle${canvasActive ? " active" : ""} hasModeIcon`}
+          title={canvasToggleLabel}
+          aria-keyshortcuts="Alt+Backquote"
+          onClick={() => onCanvasToggle?.()}
+        >
+          {canvasActive ? (
+            <LayoutTemplate size={12} className="executionModeIcon" aria-hidden="true" />
+          ) : (
+            <Workflow size={12} className="executionModeIcon" aria-hidden="true" />
+          )}
+          {canvasActive ? "Form" : "Canvas"}
+        </button>
+        <div
+          className={`executionModeTrackStage${canvasActive ? " is-canvas" : " is-form"}`}
+          aria-hidden={false}
+        >
+          <div className="executionModeTrackPanels">
+            <div className="executionModeTrackPanel executionModeTrackPanelForm">
+              <div
+                ref={formOptionsRef}
+                className="executionModeFormOptions"
+                role="tablist"
+                aria-label={executionLabel}
+                aria-hidden={canvasActive}
+              >
+                <span
+                  className={`executionModeIndicator${indicator.ready ? " is-ready" : ""}`}
+                  style={{
+                    width: indicator.width,
+                    transform: `translateX(${indicator.left}px)`
+                  }}
+                  aria-hidden="true"
+                />
+                {EXECUTION_MODE_OPTIONS.map(option => {
+                  const Icon = option.icon;
+                  const isActive = mode === option.id;
+                  return (
+                    <button
+                      key={option.id}
+                      type="button"
+                      role="tab"
+                      ref={node => {
+                        buttonRefs.current[option.id] = node;
+                      }}
+                      aria-selected={!canvasActive && isActive}
+                      className={`executionModeFormOption${isActive ? " active" : ""}${Icon ? " hasModeIcon" : ""}`}
+                      title={option.title}
+                      aria-keyshortcuts={option.shortcut}
+                      tabIndex={canvasActive ? -1 : 0}
+                      onClick={() => onChange(option.id)}
+                    >
+                      {Icon ? (
+                        <Icon
+                          className="executionModeIcon"
+                          title={option.iconTitle}
+                          {...(Icon === RunningHubLogomark ? { sizedByCss: true } : { size: 12 })}
+                        />
+                      ) : null}
+                      {option.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="executionModeTrackPanel executionModeTrackPanelCanvas">
+              {children}
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

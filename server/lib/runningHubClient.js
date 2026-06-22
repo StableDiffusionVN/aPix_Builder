@@ -271,11 +271,17 @@ export async function uploadToRunningHub(apiKey, buffer, filename, mimeType = "i
   formData.append("apiKey", apiKey);
   formData.append("fileType", "input");
   formData.append("file", new Blob([buffer], { type: mimeType }), filename);
+  const uploadSignal = (() => {
+    const timeout = AbortSignal.timeout(120 * 1000);
+    if (!signal) return timeout;
+    if (typeof AbortSignal.any === "function") return AbortSignal.any([signal, timeout]);
+    return signal;
+  })();
   const response = await fetch(`${RUNNINGHUB_BASE}/task/openapi/upload`, {
     method: "POST",
     headers: rhHeaders(apiKey),
     body: formData,
-    signal
+    signal: uploadSignal
   });
   const data = await readRunningHubEnvelope(response);
   if (!data.data?.fileName) {
@@ -284,52 +290,180 @@ export async function uploadToRunningHub(apiKey, buffer, filename, mimeType = "i
   return data.data.fileName;
 }
 
-async function resolveImageFieldValue(apiKey, value, { inputDir, signal }) {
-  if (!value) return value;
+async function fetchRemoteImage(url, signal) {
+  try {
+    const response = await fetch(url, { signal });
+    if (!response.ok) return null;
+    const buffer = Buffer.from(await response.arrayBuffer());
+    if (!buffer.length) return null;
+    const contentType = (response.headers.get("content-type") || "").split(";")[0].trim();
+    const mimeType = contentType.startsWith("image/") ? contentType : "image/png";
+    const ext = mimeType.includes("jpeg") ? "jpg" : mimeType.split("/")[1] || "png";
+    let filename = `remote.${ext}`;
+    try {
+      const base = path.basename(new URL(url).pathname);
+      if (base) filename = base;
+    } catch {}
+    if (!path.extname(filename)) filename = `${filename}.${ext}`;
+    return { buffer, mimeType, filename };
+  } catch {
+    return null;
+  }
+}
+
+function safeBasename(rawName = "") {
+  return path.basename(String(rawName)).replace(/[^\w.-]+/g, "_");
+}
+
+function mimeFromFilename(filename = "") {
+  const ext = path.extname(filename).slice(1).toLowerCase();
+  if (ext === "jpg" || ext === "jpeg") return "image/jpeg";
+  if (ext === "webp") return "image/webp";
+  if (ext === "gif") return "image/gif";
+  return "image/png";
+}
+
+/** Parse /api/output-image or /api/input-image refs (path or absolute URL). */
+function parseLocalImageRef(value) {
+  if (!value || typeof value !== "string") return null;
+  let pathname = value;
+  let search = "";
+  if (/^https?:\/\//i.test(value)) {
+    try {
+      const parsed = new URL(value);
+      pathname = parsed.pathname;
+      search = parsed.search;
+    } catch {
+      return null;
+    }
+  } else if (!value.startsWith("/")) {
+    return null;
+  }
+  const refUrl = new URL(`${pathname}${search}`, "http://localhost");
+  if (pathname.startsWith("/api/output-image")) {
+    const name = safeBasename(refUrl.searchParams.get("name") || "");
+    return name ? { kind: "output", name } : null;
+  }
+  if (pathname.startsWith("/api/input-image")) {
+    const name = safeBasename(refUrl.searchParams.get("name") || "");
+    return name ? { kind: "input", name } : null;
+  }
+  return null;
+}
+
+async function readLocalImageFromDir(dir, name) {
+  const filePath = path.join(dir, name);
+  const resolvedDir = path.resolve(dir);
+  if (!path.resolve(filePath).startsWith(resolvedDir)) {
+    throw new Error("Invalid local image path");
+  }
+  const buffer = await readFile(filePath);
+  return { buffer, mimeType: mimeFromFilename(name), filename: name };
+}
+
+async function resolveImageFieldValue(apiKey, value, { inputDir, outputDir, signal, onProgress }) {
+  if (value == null || value === "") return "";
+  if (typeof value === "object") {
+    if (value?.kind === "input-image" && value.url) {
+      return resolveImageFieldValue(apiKey, value.url, { inputDir, outputDir, signal, onProgress });
+    }
+    if (typeof value.url === "string" && value.url) {
+      return resolveImageFieldValue(apiKey, value.url, { inputDir, outputDir, signal, onProgress });
+    }
+    return "";
+  }
   if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) return "";
+    value = trimmed;
     if (value.startsWith("api/")) return value;
+    const localRef = parseLocalImageRef(value);
+    if (localRef) {
+      const dir = localRef.kind === "output" ? outputDir : inputDir;
+      if (!dir) throw new Error(`Missing ${localRef.kind} image directory`);
+      let localImage;
+      try {
+        onProgress?.({ type: "upload", label: `Đọc ảnh ${localRef.kind}: ${localRef.name}...` });
+        localImage = await readLocalImageFromDir(dir, localRef.name);
+        if (!localImage.buffer?.length) {
+          throw new Error(`File ảnh rỗng (${localRef.name})`);
+        }
+      } catch (err) {
+        throw new Error(`Không đọc được ảnh local (${localRef.kind}/${localRef.name}): ${err.message}`);
+      }
+      const { buffer, mimeType, filename } = localImage;
+      const sizeKb = Math.max(1, Math.round(buffer.length / 1024));
+      onProgress?.({ type: "upload", label: `Upload ${sizeKb}KB lên RunningHub (${filename})...` });
+      const uploadedName = await uploadToRunningHub(apiKey, buffer, filename, mimeType, signal);
+      onProgress?.({ type: "upload", label: `Upload xong: ${filename}` });
+      return uploadedName;
+    }
     if (value.startsWith("data:")) {
       const parsed = parseDataUrl(value);
       if (!parsed) throw new Error("Ảnh upload không hợp lệ");
       const ext = parsed.mimeType.includes("jpeg") ? "jpg" : parsed.mimeType.split("/")[1] || "png";
-      return uploadToRunningHub(apiKey, parsed.buffer, `upload.${ext}`, parsed.mimeType, signal);
+      onProgress?.({ type: "upload", label: `Upload ảnh nhúng lên RunningHub (${Math.max(1, Math.round(parsed.buffer.length / 1024))}KB)...` });
+      const uploadedName = await uploadToRunningHub(apiKey, parsed.buffer, `upload.${ext}`, parsed.mimeType, signal);
+      onProgress?.({ type: "upload", label: "Upload xong ảnh nhúng" });
+      return uploadedName;
     }
-    if (value.startsWith("/api/input-image")) {
-      const url = new URL(value, "http://localhost");
-      const name = path.basename(url.searchParams.get("name") || "");
-      if (!name) throw new Error("Thiếu tên file input image");
-      const filePath = path.join(inputDir, name);
-      const buffer = await readFile(filePath);
-      const ext = path.extname(name).slice(1) || "png";
-      const mimeType = ext === "jpg" || ext === "jpeg" ? "image/jpeg" : `image/${ext}`;
-      return uploadToRunningHub(apiKey, buffer, name, mimeType, signal);
+    if (/^https?:\/\//i.test(value)) {
+      onProgress?.({ type: "upload", label: "Đang tải ảnh remote trước khi gửi RunningHub..." });
+      const downloaded = await fetchRemoteImage(value, signal);
+      if (!downloaded) return value;
+      onProgress?.({ type: "upload", label: `Upload ảnh remote lên RunningHub (${downloaded.filename})...` });
+      const uploadedName = await uploadToRunningHub(apiKey, downloaded.buffer, downloaded.filename, downloaded.mimeType, signal);
+      onProgress?.({ type: "upload", label: `Upload xong ảnh remote: ${downloaded.filename}` });
+      return uploadedName;
     }
-    if (/^https?:\/\//i.test(value)) return value;
   }
   if (value?.kind === "local-file" && value.filePath) {
     const buffer = await readFile(value.filePath);
     const ext = path.extname(value.filePath).slice(1) || "png";
     const mimeType = ext === "jpg" || ext === "jpeg" ? "image/jpeg" : `image/${ext}`;
-    return uploadToRunningHub(apiKey, buffer, value.name || path.basename(value.filePath), mimeType, signal);
+    const filename = value.name || path.basename(value.filePath);
+    onProgress?.({ type: "upload", label: `Upload file local lên RunningHub (${filename})...` });
+    const uploadedName = await uploadToRunningHub(apiKey, buffer, filename, mimeType, signal);
+    onProgress?.({ type: "upload", label: `Upload xong file local: ${filename}` });
+    return uploadedName;
   }
   if (value?.kind === "input-image" && value.url) {
-    return resolveImageFieldValue(apiKey, value.url, { inputDir, signal });
+    return resolveImageFieldValue(apiKey, value.url, { inputDir, outputDir, signal, onProgress });
   }
   if (value?.kind === "upload" && value.buffer) {
     const ext = value.mimeType?.includes("jpeg") ? "jpg" : value.mimeType?.split("/")[1] || "png";
-    return uploadToRunningHub(apiKey, value.buffer, `upload.${ext}`, value.mimeType || "image/png", signal);
+    onProgress?.({ type: "upload", label: "Upload ảnh buffer lên RunningHub..." });
+    const uploadedName = await uploadToRunningHub(apiKey, value.buffer, `upload.${ext}`, value.mimeType || "image/png", signal);
+    onProgress?.({ type: "upload", label: "Upload xong ảnh buffer" });
+    return uploadedName;
   }
   return value;
 }
 
-export async function prepareNodeInfoList(apiKey, nodes, { inputDir, signal, onProgress }) {
+export async function prepareNodeInfoList(apiKey, nodes, { inputDir, outputDir, signal, onProgress }) {
   const prepared = [];
   for (const node of nodes) {
     let fieldValue = node.fieldValue;
     const fieldType = String(node.fieldType || "").toUpperCase();
     if (fieldType === "IMAGE" || fieldType === "AUDIO" || fieldType === "VIDEO") {
+      const isEmpty = fieldValue == null
+        || fieldValue === ""
+        || (typeof fieldValue === "string" && !fieldValue.trim());
+      if (isEmpty) {
+        prepared.push({
+          nodeId: String(node.nodeId),
+          fieldName: node.fieldName,
+          fieldValue: ""
+        });
+        continue;
+      }
       onProgress?.({ type: "upload", label: `Đang upload ${node.description || node.fieldName}...` });
-      fieldValue = await resolveImageFieldValue(apiKey, fieldValue, { inputDir, signal });
+      fieldValue = await resolveImageFieldValue(apiKey, fieldValue, {
+        inputDir,
+        outputDir,
+        signal,
+        onProgress
+      });
     } else if (fieldValue === "random_seed") {
       fieldValue = String(Math.floor(Math.random() * Number.MAX_SAFE_INTEGER));
     } else if (fieldValue != null && typeof fieldValue !== "string") {

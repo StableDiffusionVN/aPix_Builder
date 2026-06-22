@@ -1,6 +1,8 @@
 import { describe, expect, test, vi } from "vitest";
 import { createSerialProjectSaver } from "../src/features/canvas/canvasProjectPersistence.js";
 
+const flushAsync = () => new Promise(resolve => setImmediate(resolve));
+
 describe("canvas project persistence queue", () => {
   test("serializes saves and preserves project ids", async () => {
     const release = [];
@@ -12,14 +14,14 @@ describe("canvas project persistence queue", () => {
 
     const first = saver.enqueue({ projectId: "p_1", nodes: [{ id: "old" }] });
     const second = saver.enqueue({ projectId: "p_2", nodes: [{ id: "new" }] });
-    await Promise.resolve();
+    await flushAsync();
     expect(calls.map(call => call.projectId)).toEqual(["p_1"]);
     expect(saver.isLatest(first.sequence)).toBe(false);
     expect(saver.isLatest(second.sequence)).toBe(true);
 
     release.shift()({ ok: true });
     await first.promise;
-    await Promise.resolve();
+    await flushAsync();
     expect(calls.map(call => call.projectId)).toEqual(["p_1", "p_2"]);
     release.shift()({ ok: true });
     await second.promise;

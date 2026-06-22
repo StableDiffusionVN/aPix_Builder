@@ -1,6 +1,6 @@
-# aPix Builder · v1 chính thức
+# aPix Builder · v1.1
 
-**Website:** [apix.sdvn.vn](https://apix.sdvn.vn) · **Release:** [v1.0.0](https://github.com/StableDiffusionVN/aPix_Builder/releases/tag/v1.0.0)
+**Website:** [apix.sdvn.vn](https://apix.sdvn.vn) · **Release:** [v1.1.0](https://github.com/StableDiffusionVN/aPix_Builder/releases/tag/v1.1.0)
 
 **English:** aPix Builder is a web/desktop app for running, managing, and editing ComfyUI and RunningHub workflows through YAML templates. It can export a selected RunningHub Workflow or App as a signed Apple Shortcut with the current API key embedded.
 
@@ -10,21 +10,22 @@
 
 ## Tải bản desktop / Desktop downloads
 
-Phiên bản hiện tại: **1.0.0** (v1 chính thức)
+Phiên bản hiện tại: **1.1.0** (v1.1)
 
 | Nền tảng | File | Ghi chú |
 | --- | --- | --- |
-| macOS (Apple Silicon) | `aPix Builder-1.0.0-arm64.dmg` | Cài như app thông thường; không cần Node.js |
-| Windows (x64) | `aPix Builder-1.0.0-x64-portable.exe` | Portable — chạy trực tiếp, không cần cài đặt |
+| macOS (Apple Silicon) | `aPix Builder-1.1.0-arm64.dmg` | Cài như app thông thường; không cần Node.js |
+| Windows (x64) | `aPix Builder-1.1.0-x64-portable.exe` | Portable — chạy trực tiếp, không cần cài đặt |
 | Adobe Photoshop (UXP) | [`aPixBuilder_v1.ccx`](https://github.com/StableDiffusionVN/aPix_builder_pts/releases) | Plugin PS 24+ — repo [aPix_builder_pts](https://github.com/StableDiffusionVN/aPix_builder_pts) |
+| Chrome Extension | [`aPix-Builder-Web-Extension-v1.1.0.zip`](https://github.com/StableDiffusionVN/aPix_builder_web_extension/releases/tag/v1.1.0) | Side panel — repo [aPix_builder_web_extension](https://github.com/StableDiffusionVN/aPix_builder_web_extension) |
 
-Tải tại [GitHub Releases — v1.0.0](https://github.com/StableDiffusionVN/aPix_Builder/releases/tag/v1.0.0) (DMG + EXE).
+Tải tại [GitHub Releases — v1.1.0](https://github.com/StableDiffusionVN/aPix_Builder/releases/tag/v1.1.0) (DMG + EXE).
 
 Bản desktop tự kiểm tra cập nhật qua `https://apix.sdvn.vn/releases/latest.json` (manifest trỏ link GitHub) và hiện banner tải bản mới (macOS DMG). Cài bản mới ghi đè lên bản cũ; settings lưu trong thư mục dữ liệu hệ điều hành (macOS: `~/Library/Application Support/aPix Builder/`).
 
 **Export Shortcut:** khả dụng trên web/backend chạy bằng macOS và bản macOS DMG. Bản Windows EXE hiển thị nút nhưng vô hiệu hóa vì Apple `shortcuts sign` không có trên Windows.
 
-**English:** Current release **1.0.0 (official v1)**. Download DMG (macOS arm64) or portable EXE (Windows x64) from [GitHub Releases](https://github.com/StableDiffusionVN/aPix_Builder/releases/tag/v1.0.0). The desktop app checks `latest.json` on apix.sdvn.vn (links to GitHub) for updates and prompts you to download a newer DMG.
+**English:** Current release **1.1.0 (v1.1)**. Download DMG (macOS arm64) or portable EXE (Windows x64) from [GitHub Releases](https://github.com/StableDiffusionVN/aPix_Builder/releases/tag/v1.1.0). The desktop app checks `latest.json` on apix.sdvn.vn (links to GitHub) for updates and prompts you to download a newer DMG.
 
 ## Video hướng dẫn / Tutorial
 
@@ -54,6 +55,7 @@ http://localhost:5173/
 
 ### Main features
 
+- **Infinity Canvas** — dựng pipeline trực quan với node RH App, RH Workflow và ComfyUI; nối output → input, chạy từng node hoặc cả đồ thị, lưu workflow vào thư viện.
 - Run ComfyUI workflows locally via HTTP/WebSocket API with a custom server address.
 - Run **RunningHub App** (hosted WebApp) and **RunningHub Workflow** (YAML template + workflow ID) in the cloud — no local GPU required.
 - Save and manage favorite RunningHub apps; support multiple API keys with rotation/failover.
@@ -135,11 +137,11 @@ Local builds use ad-hoc signing on macOS. For wide distribution, use Apple Devel
 ### Project info
 
 - **Official website:** [apix.sdvn.vn](https://apix.sdvn.vn)
-- **Downloads:** [GitHub v1.0.0](https://github.com/StableDiffusionVN/aPix_Builder/releases/tag/v1.0.0)
+- **Downloads:** [GitHub v1.1.0](https://github.com/StableDiffusionVN/aPix_Builder/releases/tag/v1.1.0)
 - Creator: [© Phạm Hưng](https://www.facebook.com/phamhungd/)
 - Community: [SDVN - AI Art Community](https://www.facebook.com/groups/stablediffusion.vn)
 - GitHub: [StableDiffusionVN](https://github.com/StableDiffusionVN/)
-- Related: [aPix Python](https://github.com/StableDiffusionVN/sdvn_apix_python) · [aPix React](https://github.com/StableDiffusionVN/sdvn_apix_react) · [Photoshop plugin](https://github.com/StableDiffusionVN/aPix_builder_pts/releases) · [Colab SDVN](https://sdvn.me)
+- Related: [aPix Python](https://github.com/StableDiffusionVN/sdvn_apix_python) · [aPix React](https://github.com/StableDiffusionVN/sdvn_apix_react) · [Photoshop plugin](https://github.com/StableDiffusionVN/aPix_builder_pts/releases) · [Chrome extension](https://github.com/StableDiffusionVN/aPix_builder_web_extension/releases) · [Colab SDVN](https://sdvn.me)
 
 ### Project structure
 
@@ -176,6 +178,7 @@ Local builds use ad-hoc signing on macOS. For wide distribution, use Apple Devel
 
 ### Tính năng chính
 
+- **Infinity Canvas** — dựng pipeline trực quan với node RH App, RH Workflow và ComfyUI; nối output → input, chạy từng node hoặc cả đồ thị, lưu workflow vào thư viện.
 - Chạy workflow ComfyUI local qua API với địa chỉ server tùy chỉnh.
 - Chạy **RunningHub App** (WebApp hosted) và **RunningHub Workflow** (template YAML + workflow ID) trên cloud — không cần GPU local.
 - Lưu và quản lý RunningHub app yêu thích; hỗ trợ nhiều API Key với xoay vòng/failover.

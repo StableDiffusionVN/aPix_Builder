@@ -6,3 +6,7 @@
 	path = aPix_builder_web_extension
 	url = https://github.com/StableDiffusionVN/aPix_builder_web_extension.git
 	branch = dev
+[submodule "aPix_builder_ios_app"]
+	path = aPix_builder_ios_app
+	url = https://github.com/StableDiffusionVN/aPix_builder_ios_app.git
+	branch = dev

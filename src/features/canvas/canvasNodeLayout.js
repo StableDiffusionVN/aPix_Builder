@@ -1,4 +1,5 @@
 import {
+  activeStepInputPorts,
   coerceImageRef,
   getNodeRunCache,
   imageDisplayUrl,
@@ -117,7 +118,7 @@ export function estimateStepNodeMinHeight(node, edges = [], nodes = []) {
 
   const width = node.data?.size?.width || CANVAS_NODE_DEFAULT_WIDTH;
   const values = node.data?.values || {};
-  const inputs = node.data?.ports?.inputs || [];
+  const inputs = activeStepInputPorts(node.data?.ports?.inputs || [], values);
   const incoming = incomingEdgesByInput(node.id, edges);
 
   let height = HEADER_HEIGHT;

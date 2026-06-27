@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import {
+  activeStepInputPorts,
   arePortsCompatible,
   beginNodeExecutionPatch,
   buildNodeRunCache,
@@ -185,6 +186,39 @@ describe("canvas typed source ports", () => {
       "Product:model-b.safetensors"
     ]);
     expect(inputs[2].menuLabelSyntax).toBe(true);
+  });
+
+  test("exposes menu-sub child ports only when their branch is active", () => {
+    const { inputs } = deriveStepPorts({
+      input: {
+        source: {
+          ui: {
+            type: "menu-sub",
+            label: "Source",
+            choices: ["Upload", "Url"],
+            value: "Upload",
+            sub: {
+              Upload: {
+                image: { id: "1-image", ui: { type: "image", label: "Image" } }
+              },
+              Url: {
+                url: { id: "1-url", ui: { type: "string", label: "Url" } }
+              }
+            }
+          }
+        }
+      }
+    });
+
+    expect(inputs.map(port => [port.label, port.valueKey, port.menuSubRole, port.menuSubChoice])).toEqual([
+      ["Source", "__menu__source", "parent", undefined],
+      ["Image", "1-image", "child", "Upload"],
+      ["Url", "1-url", "child", "Url"]
+    ]);
+    expect(activeStepInputPorts(inputs, { "__menu__source": "Upload" }).map(port => port.label))
+      .toEqual(["Source", "Image"]);
+    expect(activeStepInputPorts(inputs, { "__menu__source": "Url" }).map(port => port.label))
+      .toEqual(["Source", "Url"]);
   });
 
   test("preserves the original field descriptor when converting to a source", () => {

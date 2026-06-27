@@ -908,4 +908,6 @@ const DynamicFieldInner = memo(function DynamicFieldInner({
   return null;
 }, areDynamicFieldPropsEqual);
 
-export { DynamicFieldInner as DynamicField };
+const DynamicField = DynamicFieldInner;
+
+export { DynamicField };

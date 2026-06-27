@@ -2,6 +2,7 @@ import { Fragment, memo } from "react";
 import { Handle, Position } from "@xyflow/react";
 import { Loader2, Play, Trash2, AlertCircle, CheckCircle2 } from "lucide-react";
 import {
+  activeStepInputPorts,
   findLinkedImageSource,
   findNodeInputImageUrl,
   getNodeRunCache,
@@ -54,9 +55,9 @@ function StepNodeComponent({ id, data, selected }) {
   const { nodes, edges, nodeById } = useCanvasGraph();
   const badge = KIND_BADGE[data.kind] || { label: data.kind, className: "" };
   const connected = connectedInputs(id);
-  const inputs = data.ports?.inputs || [];
-  const outputs = data.ports?.outputs || [];
   const values = data.values || {};
+  const inputs = activeStepInputPorts(data.ports?.inputs || [], values);
+  const outputs = data.ports?.outputs || [];
   const primaryOutputKey = outputs[0]?.key || "main";
   const outputDetached = isStepOutputDetached(id, primaryOutputKey, nodes || [], edges || []);
   const runCache = getNodeRunCache({ id, data, type: "step" });

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { prepareCanvasNodeRunRequest } from "../src/features/canvas/canvasRunner.js";
-import { STEP_KINDS } from "../src/features/canvas/canvasModel.js";
+import { deriveStepPorts, STEP_KINDS } from "../src/features/canvas/canvasModel.js";
 
 describe("canvas runner history metadata", () => {
   test("forwards the command group and node identity to the backend", async () => {
@@ -161,6 +161,72 @@ describe("canvas runner history metadata", () => {
       url: "/api/input-image?name=photo.png",
       name: "photo.png",
       maskDataUrl: "data:image/png;base64,abc"
+    });
+  });
+
+  test("ignores linked inputs from inactive menu-sub canvas branches", async () => {
+    const config = {
+      input: {
+        input_source: {
+          ui: {
+            type: "menu-sub",
+            label: "Input source",
+            choices: ["Upload", "Url"],
+            value: "Upload",
+            sub: {
+              Upload: {
+                image: { id: "1-image", ui: { type: "image", label: "Image" } }
+              },
+              Url: {
+                url: { id: "1-url", ui: { type: "string", label: "Url" } }
+              }
+            }
+          }
+        }
+      }
+    };
+    const inactiveSource = {
+      id: "src-empty",
+      type: "source",
+      data: {
+        name: "Empty image source",
+        values: { main: "" }
+      }
+    };
+    const node = {
+      id: "step-menu",
+      type: "step",
+      data: {
+        kind: STEP_KINDS.LOCAL,
+        ref: "menu-template",
+        name: "Menu Template",
+        config,
+        ports: deriveStepPorts(config),
+        values: {
+          "__menu__input_source": "Url",
+          "1-url": "https://example.com/image.png"
+        }
+      }
+    };
+    const edges = [{
+      id: "e-inactive",
+      source: "src-empty",
+      target: "step-menu",
+      sourceHandle: "out:main",
+      targetHandle: "in:1-image"
+    }];
+
+    const request = await prepareCanvasNodeRunRequest({
+      node,
+      nodes: [inactiveSource, node],
+      edges,
+      rhAuth: {},
+      comfyAddress: "http://127.0.0.1:8188"
+    });
+
+    expect(request.body.values).toEqual({
+      "__menu__input_source": "Url",
+      "1-url": "https://example.com/image.png"
     });
   });
 });

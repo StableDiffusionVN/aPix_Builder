@@ -1061,6 +1061,23 @@ export function TemplateEditorModal({
     }
   }
 
+  async function handleZipUpload(file) {
+    if (!file) return;
+    setError("");
+    try {
+      const { unzipSync } = await import("fflate");
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const entries = unzipSync(bytes);
+      const files = Object.entries(entries)
+        .filter(([name]) => !name.endsWith("/"))
+        .map(([name, data]) => new File([data], name.split("/").pop() || name));
+      if (!files.length) throw new Error(l("Tệp .zip rỗng", "The .zip file is empty"));
+      await handleTemplateUpload(files);
+    } catch (err) {
+      setError(l(`Không đọc được .zip: ${err.message}`, `Could not read the .zip: ${localizeRuntimeMessage(err.message, locale)}`));
+    }
+  }
+
   async function handleJsonUpload(file) {
     if (!file) return;
     setError("");
@@ -1428,6 +1445,11 @@ export function TemplateEditorModal({
                   <Upload size={16} />
                   <span>{l("Upload thư mục", "Upload folder")}</span>
                   <input type="file" multiple webkitdirectory="" directory="" onChange={event => handleTemplateUpload(event.target.files)} />
+                </label>
+                <label className="uploadJsonButton">
+                  <Upload size={16} />
+                  <span>{l("Upload .zip", "Upload .zip")}</span>
+                  <input type="file" accept=".zip,application/zip" onChange={event => handleZipUpload(event.target.files?.[0])} />
                 </label>
               </div>
               <div className="templateEditorMetaCard">

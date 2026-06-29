@@ -226,8 +226,10 @@ export function createTemplateService({
       const uiType = String(item?.ui?.type || "").toLowerCase();
       const idStr = Array.isArray(item?.id) ? String(item.id[0] || "") : String(item?.id || "");
       let kind = null;
-      if (["checkpoints", "checkpoint", "ckpt"].includes(uiType) || /ckpt_name/i.test(idStr)) kind = "checkpoints";
-      else if (["loras", "lora"].includes(uiType) || /lora_name/i.test(idStr)) kind = "loras";
+      // CHỈ theo ui.type khai báo trong YAML — KHÔNG suy từ tên widget (lora_name/ckpt_name),
+      // để field type menu/menu-sub trỏ node SDVN không bị thêm danh sách model.
+      if (["checkpoints", "checkpoint", "ckpt"].includes(uiType)) kind = "checkpoints";
+      else if (["loras", "lora"].includes(uiType)) kind = "loras";
       if (!kind || !idStr) continue;
       const nodeId = idStr.split("-")[0];
       const classType = nodeId ? workflow?.[nodeId]?.class_type : null;

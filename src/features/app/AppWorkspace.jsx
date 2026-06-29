@@ -239,7 +239,8 @@ export function AppWorkspace() {
     ? (canvasRuntime.hasLocalNodes || canvasRuntime.activeKind === "local")
     : executionMode === "local";
   const { discovery, discoveryLoading } = useDiscovery(
-    shouldDiscoverComfy ? comfyAddress : ""
+    shouldDiscoverComfy ? comfyAddress : "",
+    config?.sdvnModelTypes
   );
   const {
     settings: rhSettings,

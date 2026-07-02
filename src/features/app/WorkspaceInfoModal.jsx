@@ -107,9 +107,10 @@ export function WorkspaceInfoModal({
                     <ShortcutRow label={t("info.shortcutModeComfy")} keys={["Alt/Option", "1"]} />
                     <ShortcutRow label={t("info.shortcutModeRhWf")} keys={["Alt/Option", "2"]} />
                     <ShortcutRow label={t("info.shortcutModeRhApp")} keys={["Alt/Option", "3"]} />
+                    <ShortcutRow label={t("info.shortcutModeCanvas")} keys={["Alt/Option", "`"]} />
                     <ShortcutRow label={t("info.shortcutRun")} keys={["Cmd/Ctrl", "Enter"]} />
                     <ShortcutRow label={t("info.shortcutFullscreen")} keys={["Cmd/Ctrl", "Shift", "F"]} />
-                    <ShortcutRow label={t("info.shortcutLog")} keys={["F1"]} />
+                    <ShortcutRow label={t("info.shortcutLog")} keys={["`"]} />
                     <ShortcutRow label={t("info.shortcutClose")} keys={["Esc"]} />
                   </div>
                 </div>
@@ -119,6 +120,7 @@ export function WorkspaceInfoModal({
                     <ShortcutRow label={t("info.shortcutResetZoom")} keys={["Space"]} />
                     <ShortcutRow label={t("info.shortcutCompare")} keys={["S"]} />
                     <ShortcutRow label={t("info.shortcutOutputNav")} keys={["←", "→"]} />
+                    <ShortcutRow label={t("info.shortcutColorPanel")} keys={["Tab"]} />
                     <ShortcutRow label={t("info.shortcutZoom")} keys={[t("info.mouseWheel")]} />
                     <ShortcutRow label={t("info.shortcutPan")} keys={[t("info.dragImage")]} />
                   </div>

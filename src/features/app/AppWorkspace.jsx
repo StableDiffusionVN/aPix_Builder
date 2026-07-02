@@ -1705,6 +1705,7 @@ export function AppWorkspace() {
           <InfiniteCanvas
             rhSettings={rhSettings}
             comfyAddress={comfyAddress}
+            discovery={discovery}
             inputImages={inputImages}
             refreshInputImages={refreshInputImages}
             updateInputImages={setInputImages}

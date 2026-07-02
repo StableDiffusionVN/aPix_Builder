@@ -139,14 +139,20 @@ const renderers = {
     );
   },
   boolean({ label, description, value, onChange }) {
+    const checked = value === true;
     return (
-      <fieldset {...tooltipProps(description, "booleanField")}>
-        <legend>{label}</legend>
-        <div className="booleanToggle">
-          <button type="button" className={value === true ? "active" : ""} onClick={() => onChange(true)}>True</button>
-          <button type="button" className={value === false ? "active" : ""} onClick={() => onChange(false)}>False</button>
-        </div>
-      </fieldset>
+      <label {...tooltipProps(description, "booleanField")}>
+        <span>{label}</span>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={checked}
+          className={`booleanSwitch${checked ? " on" : ""}`}
+          onClick={() => onChange(!checked)}
+        >
+          <span className="booleanSwitchKnob" />
+        </button>
+      </label>
     );
   },
   number({ ui, label, description, value, onChange, parseNumber, resetValue, isAtResetValue, t }) {

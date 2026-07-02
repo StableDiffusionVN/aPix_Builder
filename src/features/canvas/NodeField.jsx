@@ -1,30 +1,47 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link2 } from "lucide-react";
 import { useI18n } from "../../i18n/I18nContext.jsx";
 import { parseMenuChoices, resolveMenuStoredValue } from "../../../shared/menuChoices.js";
 import { canonicalDynamicType, dynamicFieldChoices } from "../../lib/dynamicTypes.js";
+import { fetchSdvnLibraryNames } from "../../lib/sdvnModels.js";
 import { SearchableSelect } from "../fields/SearchableSelect.jsx";
 import { portTypeForUi } from "./canvasModel.js";
 import { CanvasImageField } from "./CanvasImageField.jsx";
 import { useCanvasActions } from "./canvasContext.js";
 
-export function NodeField({ port, value, onChange, linked, onContextMenu }) {
+export function NodeField({ port, value, onChange, linked, onContextMenu, sdvnModelTypes }) {
   const { t } = useI18n();
   const { discovery } = useCanvasActions();
   const type = port.type || portTypeForUi(port.uiType);
   const staticChoices = Array.isArray(port.choices) && port.choices.length ? port.choices : null;
   // Field dynamic (checkpoints/loras/vae/samplers…) không có choices tĩnh → lấy danh sách từ discovery ComfyUI.
   const dynamicKind = staticChoices ? "" : canonicalDynamicType(port.uiType);
-  const dynamicList = useMemo(
-    () => (dynamicKind ? dynamicFieldChoices(discovery, dynamicKind) : []),
-    [dynamicKind, discovery]
-  );
+  // Quy tắc SDVN (đồng bộ với form): template có node loader SDVN cho type này → bơm thư viện SDVN.
+  const sdvnEnabled = Boolean(dynamicKind) && Array.isArray(sdvnModelTypes) && sdvnModelTypes.includes(dynamicKind);
+  const [sdvnNames, setSdvnNames] = useState(null);
+
+  useEffect(() => {
+    if (!sdvnEnabled) return;
+    let alive = true;
+    fetchSdvnLibraryNames(dynamicKind).then(names => { if (alive) setSdvnNames(names); });
+    return () => { alive = false; };
+  }, [sdvnEnabled, dynamicKind]);
+
+  const dynamicList = useMemo(() => {
+    if (!dynamicKind) return [];
+    const base = dynamicFieldChoices(discovery, dynamicKind);
+    if (!sdvnEnabled || !sdvnNames?.length) return base;
+    // Giống augmentDiscoveryWithSdvn: "None" đầu tiên, danh sách server trước, SDVN sau.
+    return [...new Set(["None", ...base, ...sdvnNames])];
+  }, [dynamicKind, discovery, sdvnEnabled, sdvnNames]);
   const choices = staticChoices || (dynamicList.length ? dynamicList : null);
 
   useEffect(() => {
     if (!dynamicKind || !dynamicList.length || linked) return;
+    // Chờ thư viện SDVN tải xong để mặc định là "None" thay vì model đầu danh sách server.
+    if (sdvnEnabled && sdvnNames === null) return;
     if (!dynamicList.includes(value)) onChange(dynamicList[0]);
-  }, [dynamicKind, dynamicList, value, linked, onChange]);
+  }, [dynamicKind, dynamicList, value, linked, onChange, sdvnEnabled, sdvnNames]);
 
   if (type === "image") {
     if (linked) {

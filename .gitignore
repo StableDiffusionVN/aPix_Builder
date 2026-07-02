@@ -17,3 +17,8 @@ test-results/
 *.blockmap
 # Landing page — repo git riêng (private), không nested trong repo chính
 website/
+
+# Cac sub-project la git doc lap, khong dong bo voi repo chinh
+aPix_builder_pts/
+aPix_builder_web_extension/
+aPix_builder_ios_app/

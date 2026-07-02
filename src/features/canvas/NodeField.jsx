@@ -3,6 +3,7 @@ import { Link2 } from "lucide-react";
 import { useI18n } from "../../i18n/I18nContext.jsx";
 import { parseMenuChoices, resolveMenuStoredValue } from "../../../shared/menuChoices.js";
 import { canonicalDynamicType, dynamicFieldChoices } from "../../lib/dynamicTypes.js";
+import { SearchableSelect } from "../fields/SearchableSelect.jsx";
 import { portTypeForUi } from "./canvasModel.js";
 import { CanvasImageField } from "./CanvasImageField.jsx";
 import { useCanvasActions } from "./canvasContext.js";
@@ -90,11 +91,7 @@ export function NodeField({ port, value, onChange, linked, onContextMenu }) {
     return (
       <label className="canvasField nodrag" onContextMenu={onContextMenu}>
         <span className="canvasFieldLabel">{port.label}</span>
-        <select className="canvasInput" value={selectedValue} onChange={event => onChange(event.target.value)}>
-          {parsedChoices.map(choice => (
-            <option key={choice.value} value={choice.value}>{choice.label}</option>
-          ))}
-        </select>
+        <SearchableSelect selected={selectedValue} choices={parsedChoices} onChange={onChange} />
       </label>
     );
   }

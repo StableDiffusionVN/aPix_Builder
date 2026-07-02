@@ -24,14 +24,14 @@ export async function fetchSdvnLibraryNames(type, signal) {
   }
 }
 
-/** Gộp danh sách model SDVN vào discovery cho các type chỉ định (server trước, SDVN sau). */
+/** Gộp danh sách model SDVN vào discovery cho các type chỉ định ("None" đầu tiên, server trước, SDVN sau). */
 export async function augmentDiscoveryWithSdvn(discovery, sdvnModelTypes, signal) {
   if (!discovery || !Array.isArray(sdvnModelTypes) || !sdvnModelTypes.length) return discovery;
   const dynamicChoices = { ...(discovery.dynamicChoices || {}) };
   for (const type of sdvnModelTypes) {
     const extra = await fetchSdvnLibraryNames(type, signal);
     if (extra.length) {
-      dynamicChoices[type] = [...new Set([...(dynamicChoices[type] || []), ...extra])];
+      dynamicChoices[type] = [...new Set(["None", ...(dynamicChoices[type] || []), ...extra])];
     }
   }
   return { ...discovery, dynamicChoices, modelLists: dynamicChoices };

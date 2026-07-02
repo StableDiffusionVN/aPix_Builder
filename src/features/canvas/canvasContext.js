@@ -23,7 +23,8 @@ export const CanvasActionsContext = createContext({
   outputMetadataByRunId: {},
   inputImages: [],
   refreshInputImages: async () => {},
-  updateInputImages: () => {}
+  updateInputImages: () => {},
+  discovery: null
 });
 
 export const CanvasGraphContext = createContext({ nodes: [], edges: [], nodeById: new Map() });

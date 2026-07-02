@@ -238,7 +238,7 @@ export function AppWorkspace() {
   const shouldDiscoverComfy = isCanvasView
     ? (canvasRuntime.hasLocalNodes || canvasRuntime.activeKind === "local")
     : executionMode === "local";
-  const { discovery, discoveryLoading } = useDiscovery(
+  const { discovery, discoveryRaw, discoveryLoading } = useDiscovery(
     shouldDiscoverComfy ? comfyAddress : "",
     config?.sdvnModelTypes
   );
@@ -1705,6 +1705,7 @@ export function AppWorkspace() {
           <InfiniteCanvas
             rhSettings={rhSettings}
             comfyAddress={comfyAddress}
+            discovery={discoveryRaw}
             inputImages={inputImages}
             refreshInputImages={refreshInputImages}
             updateInputImages={setInputImages}

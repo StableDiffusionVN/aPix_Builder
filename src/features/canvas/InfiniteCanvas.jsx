@@ -178,7 +178,8 @@ function InfiniteCanvasInner({
   smartGuide = true,
   snapGrid = false,
   snapGridSize = 15,
-  maxHistoryDisplay = 100
+  maxHistoryDisplay = 100,
+  discovery = null
 }) {
   const { locale, t } = useI18n();
   const { library, loading, error, reload } = useStepLibrary();
@@ -1937,13 +1938,14 @@ function InfiniteCanvasInner({
     outputMetadataByRunId,
     inputImages: inputImages || EMPTY_INPUT_IMAGES,
     refreshInputImages: refreshInputImages || NOOP_ASYNC,
-    updateInputImages: updateInputImages || NOOP
+    updateInputImages: updateInputImages || NOOP,
+    discovery
   }), [
     updateNodeValues, updateNodeSize, commitNodeResize, runNode, removeNode, removeEdge,
     disconnectTargetPort, toggleNodeBypass, convertInputToSource, convertOutputToSource,
     openContextMenu, closeContextMenu, connectedInputs, canvasRunning, queuedNodeCounts,
     outputMetadataByRunId,
-    inputImages, refreshInputImages, updateInputImages
+    inputImages, refreshInputImages, updateInputImages, discovery
   ]);
 
   const alignmentBarPosition = useMemo(() => {

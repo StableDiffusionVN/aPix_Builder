@@ -39,25 +39,27 @@ Local dev server:
 http://localhost:5173/
 ```
 
-![Giao diện chính aPix Builder / Main interface](website/screenshots/main_size.webp)
+Giao diện chính — form template, preview kết quả, panel chỉnh màu và lịch sử output / Main interface with template form, preview, color panel, and output history:
 
-| Infinity Canvas — dựng pipeline trực quan / Visual pipeline | Batch — chạy tự động hàng loạt theo thư mục / Folder batch runs |
+![Giao diện chính aPix Builder / Main interface](docs/screenshots/main_size.webp)
+
+| Infinity Canvas — dựng pipeline trực quan / Visual pipeline | Batch — trỏ thư mục ảnh, tự xếp hàng chờ / Folder batch queue |
 | --- | --- |
-| ![Infinity Canvas](website/screenshots/infinity-canvas.webp) | ![Chạy tự động hàng loạt](website/screenshots/run-folder.webp) |
+| ![Infinity Canvas](docs/screenshots/infinity-canvas.webp) | ![Chạy tự động hàng loạt](docs/screenshots/run-folder.webp) |
 
 | Mask Editor — chọn mask chính xác / Precise masking | Image Editor — curves, HSL, preset màu / Advanced editing |
 | --- | --- |
-| ![Mask Editor](website/screenshots/mask-editor.webp) | ![Image Editor](website/screenshots/image-editor.webp) |
+| ![Mask Editor](docs/screenshots/mask-editor.webp) | ![Image Editor](docs/screenshots/image-editor.webp) |
 
 | Multi-API — failover & xoay vòng API key / Key rotation | Template Editor — map node ↔ field, build UI từ workflow |
 | --- | --- |
-| ![Quản lý nhiều API key](website/screenshots/api-manager.webp) | ![Template Editor](website/screenshots/template-editor.webp) |
+| ![Quản lý nhiều API key](docs/screenshots/api-manager.webp) | ![Template Editor](docs/screenshots/template-editor.webp) |
 
 | Plugin Photoshop — chạy template ngay trong PS | Chrome Extension — chuột phải ảnh web, chạy trong side panel |
 | --- | --- |
-| ![Plugin Photoshop](website/screenshots/plugin-photoshop.webp) | ![Chrome Extension](website/screenshots/web-extension.webp) |
+| ![Plugin Photoshop](docs/screenshots/plugin-photoshop.webp) | ![Chrome Extension](docs/screenshots/web-extension.webp) |
 
-![Export Apple Shortcut — xuất .shortcut đã ký cho iPhone/iPad/Mac](website/screenshots/export-shortcut.webp)
+![Export Apple Shortcut — xuất .shortcut đã ký cho iPhone/iPad/Mac](docs/screenshots/export-shortcut.webp)
 
 ---
 

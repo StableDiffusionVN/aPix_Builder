@@ -1,5 +1,5 @@
 import { expandFolderImageValues, readLocalFolderValue } from "../../lib/localImageFolder.js";
-import { imageDisplayUrl, portTypeForUi } from "./canvasModel.js";
+import { activeStepInputPorts, imageDisplayUrl, portTypeForUi } from "./canvasModel.js";
 
 function batchEntriesForValue(value) {
   if (Array.isArray(value) && value.length > 0) return value;
@@ -19,11 +19,19 @@ export function canvasNodeImageValueKeys(node) {
     const type = node.data?.port?.type || portTypeForUi(node.data?.port?.uiType) || node.data?.sourceType;
     if (type === "image") keys.add("main");
   }
-  for (const port of node?.data?.ports?.inputs || []) {
+  const inputPorts = node?.type === "step"
+    ? activeStepInputPorts(node?.data?.ports?.inputs || [], values)
+    : node?.data?.ports?.inputs || [];
+  const activeImageKeys = new Set();
+  for (const port of inputPorts) {
     const type = port.type || portTypeForUi(port.uiType);
-    if (type === "image" && port.valueKey) keys.add(port.valueKey);
+    if (type === "image" && port.valueKey) {
+      keys.add(port.valueKey);
+      activeImageKeys.add(port.valueKey);
+    }
   }
   for (const [key, value] of Object.entries(values)) {
+    if (node?.type === "step" && inputPorts.length && !activeImageKeys.has(key)) continue;
     if (valueLooksLikeImageBatch(value)) keys.add(key);
   }
   return [...keys].filter(key => key in values);

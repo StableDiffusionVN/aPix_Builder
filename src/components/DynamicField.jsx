@@ -22,6 +22,7 @@ import {
   uploadInputImageFile
 } from "../lib/inputImageActions.js";
 import { StaticFieldBlock } from "../features/fields/StaticFieldBlock.jsx";
+import { SearchableSelect } from "../features/fields/SearchableSelect.jsx";
 import { renderBasicField } from "../features/fields/basicFieldRegistry.jsx";
 import { areDynamicFieldPropsEqual } from "../features/fields/fieldMemo.js";
 import { InputLibraryModal } from "./InputLibraryModal.jsx";
@@ -502,14 +503,12 @@ const DynamicFieldInner = memo(function DynamicFieldInner({
           data-field-tooltip={description || undefined}
         >
           <span>{label}</span>
-          <div className="fieldSelectWrap">
-            <select value={menuValue} onChange={event => onChange(event.target.value)}>
-              {parsedChoices.length === 0 ? <option value="">{t("field.noChoices")}</option> : null}
-              {parsedChoices.map(choice => (
-                <option key={choice.value} value={choice.value}>{choice.label}</option>
-              ))}
-            </select>
-          </div>
+          <SearchableSelect
+            selected={menuValue}
+            choices={parsedChoices}
+            placeholder={parsedChoices.length === 0 ? t("field.noChoices") : ""}
+            onChange={onChange}
+          />
         </label>
         {activeSubs.length ? (
           <div className="menuSubInputs">
@@ -908,4 +907,6 @@ const DynamicFieldInner = memo(function DynamicFieldInner({
   return null;
 }, areDynamicFieldPropsEqual);
 
-export { DynamicFieldInner as DynamicField };
+const DynamicField = DynamicFieldInner;
+
+export { DynamicField };

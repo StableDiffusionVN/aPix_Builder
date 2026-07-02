@@ -1,6 +1,12 @@
 // @ts-check
-import { flattenInputs, itemValueKey, normalizeId } from "../../lib/template.js";
+import { flattenInputs, isMenuSub, itemValueKey, normalizeId } from "../../lib/template.js";
 import { nodeFieldKey } from "../../hooks/useRunningHub.js";
+import {
+  lookupMenuSubFields,
+  menuChoiceOptions,
+  parseMenuChoices,
+  resolveMenuStoredValue
+} from "../../../shared/menuChoices.js";
 
 /** Execution mode → human label + scope used to load YAML config. */
 export const STEP_KINDS = {
@@ -69,29 +75,95 @@ export function arePortsCompatible(outputType, inputType) {
   return inputType === "any" || outputType === "any";
 }
 
+function inputItemToPort(item, extra = {}) {
+  const type = portTypeForUi(item.ui?.type);
+  const valueKey = itemValueKey(item) || normalizeId(item.id);
+  return {
+    key: item.key,
+    valueKey,
+    label: item.ui?.label || item.key,
+    uiType: item.ui?.type,
+    type,
+    choices: parseChoiceList(item.ui?.choices),
+    menuLabelSyntax: item.ui?.menuLabelSyntax === true,
+    minimum: item.ui?.minimum,
+    maximum: item.ui?.maximum,
+    step: item.ui?.step,
+    connectable: Boolean(valueKey) && isConnectablePortType(type),
+    ...extra
+  };
+}
+
+function menuSubChoiceEntries(item) {
+  const ui = item.ui || {};
+  const choices = ui.choices || [];
+  const parsed = parseMenuChoices(choices, menuChoiceOptions(ui));
+  if (parsed.length) return parsed;
+  return Object.keys(ui.sub || {}).map(choice => ({ label: choice, value: choice, raw: choice }));
+}
+
+function menuSubChildPorts(item) {
+  const ui = item.ui || {};
+  const choices = ui.choices || [];
+  const menuOpts = menuChoiceOptions(ui);
+  const parentValueKey = itemValueKey(item);
+  const ports = [];
+  for (const choice of menuSubChoiceEntries(item)) {
+    const fields = lookupMenuSubFields(ui.sub || {}, choice.value, choices, menuOpts);
+    for (const [childKey, child] of Object.entries(fields || {})) {
+      const childItem = {
+        key: `${item.key}.${choice.value}.${childKey}`,
+        parentKey: item.key,
+        choice: choice.value,
+        ...child
+      };
+      const port = inputItemToPort(childItem, {
+        menuSubRole: "child",
+        menuSubParentKey: item.key,
+        menuSubValueKey: parentValueKey,
+        menuSubChoice: choice.value,
+        menuSubChoices: choices,
+        menuSubMenuLabelSyntax: ui.menuLabelSyntax === true
+      });
+      if (port.valueKey) ports.push(port);
+    }
+  }
+  return ports;
+}
+
+export function canvasInputPortIsActive(port, values = {}) {
+  if (port?.menuSubRole !== "child") return true;
+  const selected = resolveMenuStoredValue(
+    values?.[port.menuSubValueKey],
+    port.menuSubChoices || [],
+    { labelSyntax: port.menuSubMenuLabelSyntax === true }
+  );
+  return selected === port.menuSubChoice;
+}
+
+export function activeStepInputPorts(inputs = [], values = {}) {
+  return (inputs || []).filter(port => canvasInputPortIsActive(port, values));
+}
+
 /**
  * Build input/output port descriptors from a loaded template YAML config.
  * Every editable input is exposed as a connectable port.
  */
 export function deriveStepPorts(config) {
-  const inputs = flattenInputs(config?.input || {})
-    .filter(item => item.ui && item.ui.type !== "note" && item.ui.type !== "markdown")
-    .map(item => {
-      const type = portTypeForUi(item.ui?.type);
-      return {
-        key: item.key,
-        valueKey: itemValueKey(item) || normalizeId(item.id),
-        label: item.ui?.label || item.key,
-        uiType: item.ui?.type,
-        type,
-        choices: parseChoiceList(item.ui?.choices),
-        menuLabelSyntax: item.ui?.menuLabelSyntax === true,
-        minimum: item.ui?.minimum,
-        maximum: item.ui?.maximum,
-        step: item.ui?.step,
-        connectable: isConnectablePortType(type)
-      };
-    });
+  const inputs = [];
+  for (const item of flattenInputs(config?.input || {})) {
+    if (!item.ui || item.ui.type === "note" || item.ui.type === "markdown") continue;
+    if (isMenuSub(item)) {
+      inputs.push(inputItemToPort(item, {
+        menuSubRole: "parent",
+        menuSubParentKey: item.key,
+        menuSubValueKey: itemValueKey(item)
+      }));
+      inputs.push(...menuSubChildPorts(item));
+      continue;
+    }
+    inputs.push(inputItemToPort(item));
+  }
 
   const outputEntries = Object.entries(config?.output || {});
   const outputs = outputEntries.length
@@ -687,7 +759,7 @@ export function withImageCacheBust(url, version) {
 export function findLinkedImageSource(node, nodes, edges) {
   if (!node) return null;
   const incoming = incomingEdgesByInput(node.id, edges);
-  for (const port of node.data?.ports?.inputs || []) {
+  for (const port of activeStepInputPorts(node.data?.ports?.inputs || [], node.data?.values || {})) {
     const type = port.type || portTypeForUi(port.uiType);
     if (type !== "image") continue;
     const edge = incoming[port.valueKey];
@@ -701,7 +773,7 @@ export function findLinkedImageSource(node, nodes, edges) {
 /** First image input URL for a node — linked upstream output or local field value. */
 export function findNodeInputImageUrl(node, nodes, edges) {
   if (!node) return "";
-  const inputs = node.data?.ports?.inputs || [];
+  const inputs = activeStepInputPorts(node.data?.ports?.inputs || [], node.data?.values || {});
   const incoming = incomingEdgesByInput(node.id, edges);
   const imagePorts = inputs.filter(port => (port.type || portTypeForUi(port.uiType)) === "image");
 
@@ -764,7 +836,7 @@ export async function upstreamStepsWithStaleFilesAsync(targetId, nodes, edges, v
   if (!node) return ordered;
 
   const incoming = incomingEdgesByInput(targetId, edges);
-  for (const port of node.data?.ports?.inputs || []) {
+  for (const port of activeStepInputPorts(node.data?.ports?.inputs || [], node.data?.values || {})) {
     const type = port.type || portTypeForUi(port.uiType);
     if (type !== "image") continue;
     const edge = incoming[port.valueKey];
@@ -789,7 +861,7 @@ export function upstreamStepsNeedingRun(targetId, nodes, edges, visited = new Se
   if (!node) return ordered;
 
   const incoming = incomingEdgesByInput(targetId, edges);
-  for (const port of node.data?.ports?.inputs || []) {
+  for (const port of activeStepInputPorts(node.data?.ports?.inputs || [], node.data?.values || {})) {
     const type = port.type || portTypeForUi(port.uiType);
     if (type !== "image") continue;
     const edge = incoming[port.valueKey];
@@ -816,7 +888,7 @@ export function linkedImageInputsMissingSource(node, nodes, edges) {
   const missing = [];
   if (!node) return missing;
   const incoming = incomingEdgesByInput(node.id, edges);
-  for (const port of node.data?.ports?.inputs || []) {
+  for (const port of activeStepInputPorts(node.data?.ports?.inputs || [], node.data?.values || {})) {
     const type = port.type || portTypeForUi(port.uiType);
     if (type !== "image") continue;
     const edge = incoming[port.valueKey];

@@ -1,6 +1,6 @@
 import { flattenInputs, requestPayload } from "../../lib/template.js";
 import { buildRunningHubJob, buildRunningHubWfJob } from "../../hooks/useRunningHubExecution.js";
-import { incomingEdgesByInput, resolveEffectiveNodeOutputValue, resolveEffectiveImageSource, coerceImageRef, STEP_KINDS, portTypeForUi, toServerImagePath, serverImageFileExists, finalizeCanvasImageValue } from "./canvasModel.js";
+import { activeStepInputPorts, incomingEdgesByInput, resolveEffectiveNodeOutputValue, resolveEffectiveImageSource, coerceImageRef, STEP_KINDS, portTypeForUi, toServerImagePath, serverImageFileExists, finalizeCanvasImageValue } from "./canvasModel.js";
 import { nodeFieldKey } from "../../hooks/useRunningHub.js";
 
 function previewValue(value) {
@@ -109,13 +109,22 @@ async function resolveUpstreamValue(value, onLog) {
 async function resolveInputValues(node, nodes, edges, onLog) {
   const values = { ...(node.data.values || {}) };
   const incoming = incomingEdgesByInput(node.id, edges);
-  for (const [valueKey, edge] of Object.entries(incoming)) {
+  const allPorts = node.data?.ports?.inputs || [];
+  const portsByValueKey = new Map(allPorts.map(port => [port.valueKey, port]));
+  const parentValueKeys = new Set(
+    allPorts
+      .filter(port => port.menuSubRole === "parent" || port.uiType === "menu-sub")
+      .map(port => port.valueKey)
+  );
+  const processed = new Set();
+
+  async function resolveIncomingPortValue(valueKey, edge) {
     const source = nodes.find(item => item.id === edge.source);
     if (!source) {
       onLog?.("warn", `Input "${valueKey}": không tìm thấy node nguồn ${edge.source}`);
-      continue;
+      return;
     }
-    const port = (node.data?.ports?.inputs || []).find(item => item.valueKey === valueKey);
+    const port = portsByValueKey.get(valueKey);
     const type = port?.type || portTypeForUi(port?.uiType);
     const upstreamValue = resolveEffectiveNodeOutputValue(port, edge, nodes, edges);
     const valueMissing = upstreamValue === undefined || upstreamValue === null || upstreamValue === "";
@@ -130,14 +139,14 @@ async function resolveInputValues(node, nodes, edges, onLog) {
         throw new Error(`Input ảnh "${port?.label || valueKey}" thiếu ảnh từ "${sourceName}"${hint}`);
       }
       onLog?.("warn", `Input "${valueKey}": node "${sourceName}" chưa có output`);
-      continue;
+      return;
     }
     const effective = resolveEffectiveImageSource(edge.source, edge.sourceHandle, nodes, edges);
     const labelSource = effective?.node || source;
     onLog?.("info", `Input "${valueKey}" ← "${labelSource.data?.name || labelSource.id}": ${previewValue(upstreamValue)}`);
     if (type !== "image") {
       values[valueKey] = upstreamValue;
-      continue;
+      return;
     }
     try {
       values[valueKey] = await resolveUpstreamValue(upstreamValue, onLog);
@@ -145,6 +154,18 @@ async function resolveInputValues(node, nodes, edges, onLog) {
       onLog?.("warn", `Input "${valueKey}": lỗi resolve — ${err.message}`);
       values[valueKey] = upstreamValue;
     }
+  }
+
+  for (const [valueKey, edge] of Object.entries(incoming)) {
+    if (!parentValueKeys.has(valueKey)) continue;
+    await resolveIncomingPortValue(valueKey, edge);
+    processed.add(valueKey);
+  }
+
+  const activeValueKeys = new Set(activeStepInputPorts(allPorts, values).map(port => port.valueKey));
+  for (const [valueKey, edge] of Object.entries(incoming)) {
+    if (processed.has(valueKey) || !activeValueKeys.has(valueKey)) continue;
+    await resolveIncomingPortValue(valueKey, edge);
   }
   return values;
 }
@@ -174,7 +195,7 @@ function buildCanvasRunningHubJob({ runId, rhAuth, webappId, nodes, values }) {
 }
 
 function finalizeStepImageValues(node, values) {
-  for (const port of node.data?.ports?.inputs || []) {
+  for (const port of activeStepInputPorts(node.data?.ports?.inputs || [], values)) {
     const type = port.type || portTypeForUi(port.uiType);
     if (type !== "image") continue;
     const key = port.valueKey;
@@ -186,7 +207,7 @@ function finalizeStepImageValues(node, values) {
 
 function validateResolvedLinkedImages(node, values, edges, onLog) {
   const incoming = incomingEdgesByInput(node.id, edges);
-  for (const port of node.data?.ports?.inputs || []) {
+  for (const port of activeStepInputPorts(node.data?.ports?.inputs || [], values)) {
     const type = port.type || portTypeForUi(port.uiType);
     if (type !== "image") continue;
     if (!incoming[port.valueKey]) continue;
@@ -205,7 +226,7 @@ function validateResolvedLinkedImages(node, values, edges, onLog) {
 async function validateResolvedLinkedImagesAsync(node, values, edges, onLog) {
   validateResolvedLinkedImages(node, values, edges, onLog);
   const incoming = incomingEdgesByInput(node.id, edges);
-  for (const port of node.data?.ports?.inputs || []) {
+  for (const port of activeStepInputPorts(node.data?.ports?.inputs || [], values)) {
     const type = port.type || portTypeForUi(port.uiType);
     if (type !== "image") continue;
     if (!incoming[port.valueKey]) continue;
@@ -300,7 +321,7 @@ function withCanvasHistoryContext(body, context = {}) {
 /** Pass-through outputs when a step node is bypassed. */
 export async function bypassCanvasNode({ node, nodes, edges, onLog }) {
   const values = await resolveInputValues(node, nodes, edges, onLog);
-  const inputs = node.data?.ports?.inputs || [];
+  const inputs = activeStepInputPorts(node.data?.ports?.inputs || [], values);
   let url = "";
   for (const port of inputs) {
     const type = port.type || "image";

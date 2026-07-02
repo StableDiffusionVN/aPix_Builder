@@ -211,6 +211,33 @@ export function createTemplateService({
     return String(value).trim();
   }
 
+  // Dò type checkpoints/loras mà node loader trong api.json có class_type chứa "SDVN".
+  // Client sẽ bơm thêm danh sách model SDVN cho các type này vào danh sách quét được.
+  async function computeSdvnModelTypes(config, workflowPath) {
+    if (!workflowPath) return [];
+    let workflow;
+    try {
+      workflow = JSON.parse(await readFile(workflowPath, "utf8"));
+    } catch {
+      return [];
+    }
+    const types = new Set();
+    for (const item of Object.values(config?.input || {})) {
+      const uiType = String(item?.ui?.type || "").toLowerCase();
+      const idStr = Array.isArray(item?.id) ? String(item.id[0] || "") : String(item?.id || "");
+      let kind = null;
+      // CHỈ theo ui.type khai báo trong YAML — KHÔNG suy từ tên widget (lora_name/ckpt_name),
+      // để field type menu/menu-sub trỏ node SDVN không bị thêm danh sách model.
+      if (["checkpoints", "checkpoint", "ckpt"].includes(uiType)) kind = "checkpoints";
+      else if (["loras", "lora"].includes(uiType)) kind = "loras";
+      if (!kind || !idStr) continue;
+      const nodeId = idStr.split("-")[0];
+      const classType = nodeId ? workflow?.[nodeId]?.class_type : null;
+      if (typeof classType === "string" && /sdvn/i.test(classType)) types.add(kind);
+    }
+    return [...types];
+  }
+
   async function loadConfig(templateId, scope = TEMPLATE_SCOPES.local) {
     const template = await resolveTemplate(templateId, scope);
     const raw = await readFile(template.yamlPath, "utf8");
@@ -219,6 +246,7 @@ export function createTemplateService({
       config.runninghub.workflowId = extractRunningHubWorkflowId(raw, config);
     }
     validateConfig(config, template, scope);
+    config.sdvnModelTypes = await computeSdvnModelTypes(config, template.workflowPath);
     return {
       raw,
       config,

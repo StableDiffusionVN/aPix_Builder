@@ -149,7 +149,7 @@ html[data-theme="light"] {
   --radius: 6px;
   --radius-sm: 4px;
   --radius-lg: 8px;
-  --canvas-bg: #e8e9ee;
+  --canvas-bg: #ffffff;
   --canvas-checker: rgba(15, 15, 18, 0.045);
   --canvas-dot: #c4c7ce;
   --canvas-node-bg: #ffffff;
@@ -170,7 +170,7 @@ html[data-theme="light"] {
   --canvas-history-log-bg: rgba(15, 15, 18, 0.04);
   --canvas-compare-divider: rgba(255, 255, 255, 0.95);
   --canvas-minimap-bg: rgba(255, 255, 255, 0.96);
-  --canvas-minimap-mask: rgba(232, 233, 238, 0.72);
+  --canvas-minimap-mask: rgba(255, 255, 255, 0.72);
   --canvas-minimap-mask-stroke: rgba(15, 15, 18, 0.14);
   --canvas-minimap-node-source: rgba(113, 113, 122, 0.75);
   --canvas-minimap-node-default: rgba(9, 105, 218, 0.55);

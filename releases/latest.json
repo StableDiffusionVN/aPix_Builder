@@ -1,13 +1,12 @@
 {
-  "version": "1.1.0",
-  "label": "v1.1",
-  "publishedAt": "2026-06-22T12:16:30.111Z",
+  "version": "1.2.0",
+  "label": "v1.2",
+  "publishedAt": "2026-07-02T10:07:51.219Z",
   "notes": [
-    "Fix export template từ app.asar (Mac DMG)",
-    "Fix canvas fetch failed — backend queue port (Mac + Windows)"
+    "aPix Builder v1.2"
   ],
-  "downloadUrl": "https://github.com/StableDiffusionVN/aPix_Builder/releases/download/v1.1.0/aPix.Builder-1.1.0-arm64.dmg",
-  "downloadUrlWin": "https://github.com/StableDiffusionVN/aPix_Builder/releases/download/v1.1.0/aPix.Builder-1.1.0-x64-portable.exe",
-  "releasePageUrl": "https://github.com/StableDiffusionVN/aPix_Builder/releases/tag/v1.1.0",
+  "downloadUrl": "https://github.com/StableDiffusionVN/aPix_Builder/releases/download/v1.2.0/aPix.Builder-1.2.0-arm64.dmg",
+  "downloadUrlWin": "https://github.com/StableDiffusionVN/aPix_Builder/releases/download/v1.2.0/aPix.Builder-1.2.0-x64-portable.exe",
+  "releasePageUrl": "https://github.com/StableDiffusionVN/aPix_Builder/releases/tag/v1.2.0",
   "mandatory": false
 }

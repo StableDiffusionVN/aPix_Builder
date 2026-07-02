@@ -583,9 +583,9 @@ async function handleTemplateExport(req, res, url) {
   try {
     const source = await storage.getTemplates().getTemplateExportSource(templateId, scope);
     const archive = await archiveTemplateDirectory(source.baseDir, source.folderName);
-    const fileName = `${source.folderName}.tar.gz`;
+    const fileName = `${source.folderName}.zip`;
     res.writeHead(200, {
-      "content-type": "application/gzip",
+      "content-type": "application/zip",
       "content-disposition": `attachment; filename="${fileName}"`,
       "content-length": archive.length,
       "cache-control": "no-store"

@@ -3,7 +3,7 @@
   "productName": "aPix Builder",
   "description": "ComfyUI and RunningHub workflow builder with Apple Shortcut export",
   "author": "StableDiffusionVN",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "private": true,
   "type": "module",
   "main": "electron/main.mjs",
@@ -27,6 +27,7 @@
   "dependencies": {
     "@xyflow/react": "^12.11.0",
     "dompurify": "^3.4.11",
+    "fflate": "^0.8.3",
     "jimp": "^1.6.1",
     "potrace": "^2.1.8",
     "ws": "^8.21.0",

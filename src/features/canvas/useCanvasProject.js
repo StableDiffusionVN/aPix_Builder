@@ -71,8 +71,14 @@ function normalizeNodePorts(node) {
   if (node.type !== "step" || !node.data?.ports?.inputs) return node;
   const configPorts = node.data?.config ? deriveStepPorts(node.data.config).inputs : [];
   const configPortsByValueKey = new Map(configPorts.map(port => [port.valueKey, port]));
-  const inputs = node.data.ports.inputs.map(port => {
-    const configPort = configPortsByValueKey.get(port.valueKey);
+  const existingPortsByValueKey = new Map(node.data.ports.inputs.map(port => [port.valueKey, port]));
+  const valueKeys = [
+    ...configPorts.map(port => port.valueKey),
+    ...node.data.ports.inputs.map(port => port.valueKey)
+  ].filter((valueKey, index, list) => valueKey && list.indexOf(valueKey) === index);
+  const inputs = valueKeys.map(valueKey => {
+    const port = existingPortsByValueKey.get(valueKey) || {};
+    const configPort = configPortsByValueKey.get(valueKey);
     const inferredType = portTypeForUi(configPort?.uiType || port.uiType);
     return {
       ...port,

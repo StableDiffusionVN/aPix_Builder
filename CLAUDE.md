@@ -18,7 +18,7 @@ Bộ aPix Builder của SDVN: client tạo ảnh AI qua **ComfyUI / RunningHub W
 2. **Commit sau MỖI fix/feature hoàn chỉnh** (build/test OK) — không gộp nhiều việc lớn.
 3. Thông điệp rõ ràng (tiếng Việt), kết bằng: `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`.
 4. Trước khi checkout/restore/đổi nhánh: **cảnh báo** nếu còn thay đổi chưa commit.
-5. Commit trong **đúng repo của subproject** (các subproject là submodule riêng).
+5. Commit trong **đúng repo của subproject** — mỗi subproject là **git độc lập** nằm trong thư mục repo chính (KHÔNG phải submodule; repo chính gitignore các thư mục này, tương tự `website/`).
 
 ## 4 codebase + cách verify
 

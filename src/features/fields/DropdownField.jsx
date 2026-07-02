@@ -1,5 +1,6 @@
 import { memo } from "react";
 import { fieldPropsAreEqual } from "./fieldMemo.js";
+import { SearchableSelect } from "./SearchableSelect.jsx";
 
 function tooltipProps(description) {
   const text = String(description || "").trim();
@@ -24,15 +25,13 @@ function DropdownFieldInner({
   return (
     <label {...tooltipProps(description)}>
       <span>{label}</span>
-      <div className="fieldSelectWrap">
-        <select value={selected} onChange={event => onChange(event.target.value)} disabled={discoveryLoading}>
-          {discoveryLoading && !choices.length ? <option value="">{loadingLabel}</option> : null}
-          {!discoveryLoading && !choices.length ? <option value="">{emptyLabel}</option> : null}
-          {choices.map(choice => (
-            <option key={choice.value} value={choice.value}>{choice.label}</option>
-          ))}
-        </select>
-      </div>
+      <SearchableSelect
+        selected={selected}
+        choices={choices}
+        disabled={discoveryLoading}
+        placeholder={discoveryLoading && !choices.length ? loadingLabel : (!choices.length ? emptyLabel : "")}
+        onChange={onChange}
+      />
     </label>
   );
 }

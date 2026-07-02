@@ -1,9 +1,9 @@
 {
   "version": "1.2.0",
   "label": "v1.2",
-  "publishedAt": "2026-07-02T10:07:51.219Z",
+  "publishedAt": "2026-07-02T11:41:15.465Z",
   "notes": [
-    "aPix Builder v1.2"
+    "Canvas: dropdown checkpoint/lora load danh sách model từ ComfyUI, gõ để tìm kiếm lọc, áp quy tắc thư viện SDVN như chế độ Form"
   ],
   "downloadUrl": "https://github.com/StableDiffusionVN/aPix_Builder/releases/download/v1.2.0/aPix.Builder-1.2.0-arm64.dmg",
   "downloadUrlWin": "https://github.com/StableDiffusionVN/aPix_Builder/releases/download/v1.2.0/aPix.Builder-1.2.0-x64-portable.exe",

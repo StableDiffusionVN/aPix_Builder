@@ -6536,12 +6536,34 @@ html[data-theme="light"] .themeMenuItem {
 }
 
 .templateEditorModal {
+  position: relative;
   width: min(1120px, 100%);
   max-height: min(92vh, 860px);
   grid-template-rows: auto auto minmax(0, 1fr) auto auto;
   overflow: hidden;
   gap: 12px;
   padding: 14px;
+}
+
+.templateEditorModal--dropActive {
+  border-color: rgba(var(--accent-rgb), 0.7);
+}
+
+.templateEditorDropOverlay {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 10px;
+  border: 2px dashed rgba(var(--accent-rgb), 0.7);
+  border-radius: inherit;
+  background: rgba(var(--accent-rgb), 0.12);
+  backdrop-filter: blur(2px);
+  color: var(--text);
+  font-weight: 600;
+  pointer-events: none;
 }
 
 .templateEditorToolbar {

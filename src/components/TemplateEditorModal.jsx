@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Box,
   Dices,
@@ -880,6 +880,46 @@ function preferredFile(files, names, matcher) {
     || files.find(matcher);
 }
 
+function dragHasFiles(dataTransfer) {
+  return Array.from(dataTransfer?.types || []).includes("Files");
+}
+
+function readEntryFiles(entry) {
+  return new Promise(resolve => {
+    if (entry?.isFile) {
+      entry.file(file => resolve([file]), () => resolve([]));
+      return;
+    }
+    if (entry?.isDirectory) {
+      const reader = entry.createReader();
+      const collected = [];
+      const readBatch = () => reader.readEntries(async batch => {
+        if (!batch.length) {
+          const nested = await Promise.all(collected.map(readEntryFiles));
+          resolve(nested.flat());
+          return;
+        }
+        collected.push(...batch);
+        readBatch();
+      }, () => resolve([]));
+      readBatch();
+      return;
+    }
+    resolve([]);
+  });
+}
+
+async function filesFromDataTransfer(dataTransfer) {
+  const entries = Array.from(dataTransfer?.items || [])
+    .map(item => (typeof item.webkitGetAsEntry === "function" ? item.webkitGetAsEntry() : null))
+    .filter(Boolean);
+  if (entries.length) {
+    const nested = await Promise.all(entries.map(readEntryFiles));
+    return nested.flat();
+  }
+  return Array.from(dataTransfer?.files || []);
+}
+
 function templateIdFromFile(file) {
   const relative = file?.webkitRelativePath || file?.name || "";
   const firstFolder = relative.includes("/") ? relative.split("/")[0] : "";
@@ -914,6 +954,8 @@ export function TemplateEditorModal({
   const [loadingWorkflow, setLoadingWorkflow] = useState(false);
   const [draggingInputId, setDraggingInputId] = useState("");
   const [draggingOutputId, setDraggingOutputId] = useState("");
+  const [fileDropActive, setFileDropActive] = useState(false);
+  const fileDropDepthRef = useRef(0);
   const [selectedInputId, setSelectedInputId] = useState("");
   const [editingDefaultTemplate, setEditingDefaultTemplate] = useState(false);
 
@@ -1076,6 +1118,40 @@ export function TemplateEditorModal({
     } catch (err) {
       setError(l(`Không đọc được .zip: ${err.message}`, `Could not read the .zip: ${localizeRuntimeMessage(err.message, locale)}`));
     }
+  }
+
+  function handleFileDragEnter(event) {
+    if (!dragHasFiles(event.dataTransfer)) return;
+    event.preventDefault();
+    fileDropDepthRef.current += 1;
+    setFileDropActive(true);
+  }
+
+  function handleFileDragOver(event) {
+    if (!dragHasFiles(event.dataTransfer)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+  }
+
+  function handleFileDragLeave(event) {
+    if (!dragHasFiles(event.dataTransfer)) return;
+    fileDropDepthRef.current = Math.max(0, fileDropDepthRef.current - 1);
+    if (fileDropDepthRef.current === 0) setFileDropActive(false);
+  }
+
+  async function handleFileDrop(event) {
+    if (!dragHasFiles(event.dataTransfer)) return;
+    event.preventDefault();
+    fileDropDepthRef.current = 0;
+    setFileDropActive(false);
+    const files = await filesFromDataTransfer(event.dataTransfer);
+    if (!files.length) return;
+    const zipFile = files.find(file => /\.zip$/i.test(file.name));
+    if (zipFile) {
+      await handleZipUpload(zipFile);
+      return;
+    }
+    await handleTemplateUpload(files);
   }
 
   async function handleJsonUpload(file) {
@@ -1300,7 +1376,23 @@ export function TemplateEditorModal({
 
   return (
     <div className="modalBackdrop templateEditorBackdrop" role="presentation" onMouseDown={onClose}>
-      <section className="settingsModal templateEditorModal" role="dialog" aria-modal="true" aria-label={l("Tạo hoặc sửa template", "Create or edit template")} onMouseDown={event => event.stopPropagation()}>
+      <section
+        className={`settingsModal templateEditorModal${fileDropActive ? " templateEditorModal--dropActive" : ""}`}
+        role="dialog"
+        aria-modal="true"
+        aria-label={l("Tạo hoặc sửa template", "Create or edit template")}
+        onMouseDown={event => event.stopPropagation()}
+        onDragEnter={handleFileDragEnter}
+        onDragOver={handleFileDragOver}
+        onDragLeave={handleFileDragLeave}
+        onDrop={handleFileDrop}
+      >
+        {fileDropActive && (
+          <div className="templateEditorDropOverlay" aria-hidden="true">
+            <Upload size={28} />
+            <span>{l("Thả JSON/YAML, .zip hoặc thư mục để import", "Drop JSON/YAML, .zip, or a folder to import")}</span>
+          </div>
+        )}
         <div className="modalHeader">
           <div>
             <h2>{isRhWf ? l("Tạo / sửa template RunningHub Wf", "Create / edit RunningHub Wf template") : l("Tạo / sửa YAML, JSON", "Create / edit YAML and JSON")}</h2>

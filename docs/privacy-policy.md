@@ -1,7 +1,7 @@
 # Chính sách quyền riêng tư — aPix Builder / Privacy Policy
 
 > Cần host tại: **https://apix.sdvn.vn/privacy** (URL đã nhúng trong app iOS + Android).
-> Cập nhật lần cuối / Last updated: 2026-07-04
+> Cập nhật lần cuối / Last updated: 2026-07-08
 
 ## Tiếng Việt
 
@@ -19,6 +19,22 @@ riêng tư của bạn:
   key bất kỳ lúc nào trong Cài đặt.
 - **Ảnh kết quả** lưu cục bộ trên thiết bị của bạn (và vào thư viện ảnh nếu bạn bật
   tự lưu / bấm lưu).
+
+### Dữ liệu ảnh có khuôn mặt (face data)
+Một số workflow cho phép chỉnh sửa ảnh chân dung (ví dụ: đổi phong cách, cosplay, nâng
+độ phân giải). Ứng dụng **KHÔNG trích xuất, phân tích hay lưu trữ dữ liệu sinh trắc học
+khuôn mặt** (không nhận diện khuôn mặt, không tạo face embedding/Face ID) — ảnh được xử
+lý như một tệp ảnh thông thường, không khác gì ảnh phong cảnh hay đồ vật.
+- Ảnh (có thể chứa khuôn mặt) chỉ được gửi đi khi bạn bấm Chạy, tới đúng nơi bạn chọn:
+  máy chủ ComfyUI do bạn tự cấu hình, hoặc RunningHub (bên thứ ba) nếu bạn chọn chế độ
+  RunningHub.
+- **SDVN không nhận, không lưu trữ và không xử lý ảnh của bạn trên bất kỳ máy chủ nào
+  của SDVN.**
+- Nếu gửi tới RunningHub: việc lưu trữ/xử lý tại đó tuân theo chính sách quyền riêng tư
+  của RunningHub, không do SDVN kiểm soát hay có quyền truy cập.
+- Ảnh đầu vào và ảnh kết quả chỉ lưu cục bộ trên thiết bị của bạn (và vào thư viện Ảnh
+  nếu bạn bật tự lưu/bấm lưu) — không đồng bộ lên máy chủ nào của SDVN, không có thời
+  hạn lưu trữ phía SDVN vì SDVN không giữ bản sao nào.
 
 ### Ứng dụng KHÔNG:
 - Không thu thập số liệu phân tích (analytics), không quảng cáo, không trình theo dõi.
@@ -47,6 +63,21 @@ Email hỗ trợ: sdvn@stablediffusion.vn · https://github.com/StableDiffusionV
   You can delete it anytime in Settings.
 - **Generated images** are stored locally on your device (and in your photo library if
   you enable auto-save or tap save).
+
+### Face / photo data
+Some workflows let you edit portrait photos (e.g. style transfer, cosplay-style edits,
+upscaling). The app does **NOT extract, analyze, or store any facial biometric data**
+(no face recognition, no face embeddings/Face ID data) — photos are processed as
+ordinary image files, no differently from a landscape or object photo.
+- Photos (which may contain faces) are only transmitted when you tap Run, and only to
+  the destination you choose: the ComfyUI server you configure yourself, or RunningHub
+  (a third party) if you select RunningHub mode.
+- **SDVN does not receive, store, or process your photos on any SDVN server.**
+- If sent to RunningHub: storage/processing there is governed by RunningHub's own
+  privacy policy, not controlled by or accessible to SDVN.
+- Input and output photos are stored only locally on your device (and in your Photos
+  library if you enable auto-save or tap save) — never synced to any SDVN server, and
+  SDVN has no retention period because SDVN keeps no copy at all.
 
 ### The app does NOT:
 - Collect analytics, show ads, or include any trackers.

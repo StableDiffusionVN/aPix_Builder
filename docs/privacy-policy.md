@@ -10,10 +10,12 @@ riêng tư của bạn:
 
 ### Dữ liệu ứng dụng xử lý
 - **Ảnh và prompt bạn nhập** được gửi tới: (a) **máy chủ ComfyUI do chính bạn cấu hình**
-  (địa chỉ bạn tự nhập trong Cài đặt), và/hoặc (b) **RunningHub** (dịch vụ bên thứ ba,
-  runninghub.ai) khi bạn dùng chế độ RunningHub — theo chính sách quyền riêng tư của
-  RunningHub. Ứng dụng chỉ gửi dữ liệu khi bạn bấm Chạy, và hỏi ý kiến bạn trước lần
-  gửi đầu tiên tới RunningHub.
+  (địa chỉ bạn tự nhập trong Cài đặt), và/hoặc (b) **RunningHub** (dịch vụ AI bên thứ ba,
+  runninghub.ai) khi bạn dùng chế độ RunningHub — theo [chính sách quyền riêng tư của
+  RunningHub](https://www.runninghub.ai/policy), với mức bảo vệ dữ liệu người dùng tương
+  đương chính sách này. Ứng dụng chỉ gửi dữ liệu khi bạn bấm Chạy, và **hỏi ý kiến bạn
+  (nêu rõ dữ liệu gì, gửi tới đâu) trước lần gửi đầu tiên tới RunningHub** — không có dữ
+  liệu nào được gửi trước khi bạn đồng ý.
 - **API key RunningHub** do bạn tự nhập, được lưu **mã hoá trên thiết bị** (iOS: Keychain;
   Android: EncryptedSharedPreferences) và chỉ dùng để gọi API RunningHub. Bạn có thể xoá
   key bất kỳ lúc nào trong Cài đặt.
@@ -54,10 +56,12 @@ Email hỗ trợ: sdvn@stablediffusion.vn · https://github.com/StableDiffusionV
 
 ### Data the app processes
 - **Images and prompts you enter** are sent to: (a) the **ComfyUI server you configure
-  yourself** (address entered in Settings), and/or (b) **RunningHub** (a third-party
-  service, runninghub.ai) when you use RunningHub mode — under RunningHub's privacy
-  policy. The app only transmits data when you tap Run, and asks for your consent before
-  the first transfer to RunningHub.
+  yourself** (address entered in Settings), and/or (b) **RunningHub** (a third-party AI
+  service, runninghub.ai) when you use RunningHub mode — under [RunningHub's privacy
+  policy](https://www.runninghub.ai/policy), which provides equal protection for user
+  data. The app only transmits data when you tap Run, and **asks for your explicit
+  consent (stating what data is sent and to whom) before the first transfer to
+  RunningHub** — no data is sent until you agree.
 - **Your RunningHub API key** is entered by you and stored **encrypted on device** (iOS:
   Keychain; Android: EncryptedSharedPreferences), used solely to call the RunningHub API.
   You can delete it anytime in Settings.

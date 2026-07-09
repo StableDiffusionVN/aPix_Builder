@@ -1,24 +1,22 @@
 // Bơm danh sách checkpoint/lora từ thư viện SDVN vào discovery cho các type mà
 // node loader trong workflow có class_type chứa "SDVN" (server tính sẵn config.sdvnModelTypes).
+//
+// Danh sách được fetch qua server (/api/sdvn-models) thay vì gọi thẳng
+// raw.githubusercontent.com: server cache kết quả (TTL) nên nhiều tab/nhiều máy
+// dùng chung một lần fetch tới GitHub, tránh 429 Too Many Requests.
 
-const SDVN_LIB_URLS = {
-  checkpoints: "https://raw.githubusercontent.com/StableDiffusionVN/SDVN_Comfy_node/refs/heads/main/model_lib.json",
-  loras: "https://raw.githubusercontent.com/StableDiffusionVN/SDVN_Comfy_node/refs/heads/main/lora_lib.json"
-};
 const sdvnLibCache = {};
 
-/** Tên model/lora trong thư viện SDVN (key của JSON). type: "checkpoints" | "loras".
+/** Tên model/lora trong thư viện SDVN. type: "checkpoints" | "loras".
  * Cache theo promise để nhiều field gọi cùng lúc (canvas) chỉ fetch một lần; kết quả rỗng/lỗi thì bỏ cache để thử lại. */
 export function fetchSdvnLibraryNames(type, signal) {
   if (sdvnLibCache[type]) return sdvnLibCache[type];
-  const url = SDVN_LIB_URLS[type];
-  if (!url) return Promise.resolve([]);
   const promise = (async () => {
     try {
-      const response = await fetch(url, { signal });
+      const response = await fetch(`/api/sdvn-models?type=${encodeURIComponent(type)}`, { signal });
       if (!response.ok) return [];
-      const obj = await response.json();
-      return [...new Set(Object.keys(obj || {}).filter(name => typeof name === "string" && name.trim()))];
+      const data = await response.json();
+      return Array.isArray(data?.names) ? data.names : [];
     } catch {
       return [];
     }

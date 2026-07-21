@@ -1,4 +1,7 @@
-import { contextBridge, ipcRenderer } from "electron";
+// CommonJS BẮT BUỘC: preload chạy trong sandbox (sandbox: true) không hỗ trợ ESM —
+// bản .mjs cũ fail "Cannot use import statement outside a module" ngay khi load,
+// làm window.apixDesktop không tồn tại (mất auto-update + Export Shortcut desktop).
+const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("apixDesktop", {
   platform: process.platform,

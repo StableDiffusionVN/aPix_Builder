@@ -33,7 +33,13 @@ Mỗi lần phát hành/bump phiên bản main app, LUÔN làm đủ 3 cập nh�
 5. **Website `apix.sdvn.vn`** (repo git riêng tại `website/`, gitignored) — áp dụng cho MỌI đợt cập nhật app/extension/plugin, không riêng main app:
    - Thêm **1 dòng thông tin update ngắn gọn ngay dưới tiêu đề phụ hero** (`heroLead` trong `website/index.html`, chuỗi vi/en trong `website/i18n.js`) — nêu bản mới + 1-2 điểm chính; thay dòng cũ, không chồng dòng.
    - Cập nhật **pill hero** (`hero.pill` — số version) + **toàn bộ link tải hardcode version** trong `index.html`/`heroNote` (DMG/EXE/APK/ccx/extension) + thông tin khác nếu đổi.
-   - Deploy: `website/prepare.sh` → `expect website/deploy/upload-tar.exp` (cần `source _local/apix-vps.env`); manifest update riêng bằng `upload-releases.exp`. Commit trong repo `website/`.
+   - Deploy: `bash website/prepare.sh` rồi:
+     ```bash
+     set -a; source _local/apix-vps.env; set +a   # env file KHÔNG có export — phải set -a
+     expect website/deploy/upload-tar.exp "$PWD/website/dist" "$APIX_VPS_SITE_ROOT"   # BẮT BUỘC 2 tham số
+     expect website/deploy/upload-releases.exp    # manifest latest.json (không cần tham số)
+     ```
+     Commit trong repo `website/` (nhánh `main`, có remote riêng `apix-website`).
 
 ## 4 codebase + cách verify
 

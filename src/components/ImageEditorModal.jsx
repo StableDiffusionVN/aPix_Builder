@@ -33,8 +33,7 @@ import {
   clampCrop,
   COLOR_CHANNELS,
   computeHistogram,
-  DEFAULT_CURVES,
-  DEFAULT_HSL,
+  DEFAULT_ADJUSTMENTS,
   drawCurvesCanvas,
   drawHistogram,
   getCurvePoint,
@@ -50,6 +49,7 @@ import {
   sampleCanvasPixel,
   upsertCurvePoint
 } from "../lib/imageAdjustments";
+import { applyHealingStroke, drawHealingOverlay } from "../lib/healingBrush";
 import { ColorPickButton, ColorPickCursorOverlay } from "./colorPickUi";
 import {
   AccordionSection,
@@ -105,38 +105,6 @@ const HealingIcon = ({ size = 14, ...props }) => (
     <circle cx="14.5" cy="14.5" r="0.8" fill="currentColor" stroke="none" />
   </svg>
 );
-
-const DEFAULT_ADJUSTMENTS = {
-  luminance: 0,
-  contrast: 0,
-  temperature: 0,
-  tint: 0,
-  vibrance: 0,
-  saturation: 0,
-  hue: 0,
-  highlights: 0,
-  shadows: 0,
-  whites: 0,
-  blacks: 0,
-  grain: 0,
-  grainSize: 50,
-  grainRoughness: 50,
-  clarity: 0,
-  dehaze: 0,
-  texture: 0,
-  vignette: 0,
-  blur: 0,
-  cropTop: 0,
-  cropRight: 0,
-  cropBottom: 0,
-  cropLeft: 0,
-  rotation: 0,
-  flipH: false,
-  flipV: false,
-  invert: false,
-  hsl: DEFAULT_HSL,
-  curves: DEFAULT_CURVES
-};
 
 const DEFAULT_BRUSH = {
   size: 28,
@@ -338,136 +306,6 @@ function drawStroke(ctx, stroke, width, height, scale) {
   ctx.globalAlpha = stroke.opacity / 100;
   ctx.globalCompositeOperation = isEraser ? "destination-out" : "source-over";
   ctx.drawImage(tempCanvas, 0, 0);
-  ctx.restore();
-}
-
-function applyHealingStroke(ctx, stroke, scale) {
-  if (!stroke.points || !stroke.points.length) return;
-  
-  const width = ctx.canvas.width;
-  const height = ctx.canvas.height;
-  const strokeSize = Math.max(2, stroke.size * scale);
-  
-  // Calculate bounding box of the stroke in canvas pixels
-  let minX = width, maxX = 0, minY = height, maxY = 0;
-  stroke.points.forEach(p => {
-    const x = p.x * width;
-    const y = p.y * height;
-    if (x < minX) minX = x;
-    if (x > maxX) maxX = x;
-    if (y < minY) minY = y;
-    if (y > maxY) maxY = y;
-  });
-  
-  // Expand bounding box by the stroke size to capture surroundings
-  const pad = Math.ceil(strokeSize * 1.5);
-  minX = Math.max(0, Math.floor(minX - pad));
-  maxX = Math.min(width - 1, Math.ceil(maxX + pad));
-  minY = Math.max(0, Math.floor(minY - pad));
-  maxY = Math.min(height - 1, Math.ceil(maxY + pad));
-  
-  const boxW = maxX - minX + 1;
-  const boxH = maxY - minY + 1;
-  if (boxW <= 0 || boxH <= 0) return;
-  
-  // Create offscreen canvas for the mask
-  const maskCanvas = document.createElement("canvas");
-  maskCanvas.width = boxW;
-  maskCanvas.height = boxH;
-  const mctx = maskCanvas.getContext("2d");
-  mctx.fillStyle = "black";
-  mctx.fillRect(0, 0, boxW, boxH);
-  
-  mctx.strokeStyle = "white";
-  mctx.lineWidth = strokeSize;
-  mctx.lineCap = "round";
-  mctx.lineJoin = "round";
-  
-  mctx.beginPath();
-  const first = stroke.points[0];
-  mctx.moveTo(first.x * width - minX, first.y * height - minY);
-  stroke.points.slice(1).forEach(p => {
-    mctx.lineTo(p.x * width - minX, p.y * height - minY);
-  });
-  if (stroke.points.length === 1) {
-    mctx.lineTo(first.x * width - minX + 0.01, first.y * height - minY + 0.01);
-  }
-  mctx.stroke();
-  
-  let imgData;
-  try {
-    imgData = ctx.getImageData(minX, minY, boxW, boxH);
-  } catch (_error) {
-    return;
-  }
-  const maskData = mctx.getImageData(0, 0, boxW, boxH);
-  
-  const pixels = imgData.data;
-  const maskPixels = maskData.data;
-  
-  const sourcePixels = new Uint8ClampedArray(pixels);
-  const maxSearch = Math.max(30, Math.round(strokeSize * 2));
-  
-  const dirs = [
-    [0, -1], [0, 1], [-1, 0], [1, 0],
-    [-1, -1], [1, -1], [-1, 1], [1, 1]
-  ];
-  
-  for (let y = 0; y < boxH; y++) {
-    for (let x = 0; x < boxW; x++) {
-      const idx = (y * boxW + x) * 4;
-      if (maskPixels[idx] > 128) {
-        let rSum = 0, gSum = 0, bSum = 0, wSum = 0;
-        for (let d = 0; d < 8; d++) {
-          const dx = dirs[d][0];
-          const dy = dirs[d][1];
-          let step = 1;
-          while (step <= maxSearch) {
-            const sx = x + dx * step;
-            const sy = y + dy * step;
-            if (sx < 0 || sx >= boxW || sy < 0 || sy >= boxH) break;
-            const sIdx = (sy * boxW + sx) * 4;
-            if (maskPixels[sIdx] <= 128) {
-              const dist = step;
-              const weight = 1 / (dist * dist);
-              rSum += sourcePixels[sIdx] * weight;
-              gSum += sourcePixels[sIdx + 1] * weight;
-              bSum += sourcePixels[sIdx + 2] * weight;
-              wSum += weight;
-              break;
-            }
-            step++;
-          }
-        }
-        if (wSum > 0) {
-          pixels[idx] = rSum / wSum;
-          pixels[idx + 1] = gSum / wSum;
-          pixels[idx + 2] = bSum / wSum;
-          pixels[idx + 3] = 255;
-        }
-      }
-    }
-  }
-  ctx.putImageData(imgData, minX, minY);
-}
-
-function drawHealingOverlay(ctx, stroke, width, height, scale) {
-  if (!stroke || !stroke.points || !stroke.points.length) return;
-  ctx.save();
-  ctx.globalAlpha = 0.55;
-  ctx.lineCap = "round";
-  ctx.lineJoin = "round";
-  ctx.strokeStyle = "rgba(239, 68, 68, 0.75)";
-  ctx.lineWidth = Math.max(2, stroke.size * scale);
-  
-  ctx.beginPath();
-  const first = stroke.points[0];
-  ctx.moveTo(first.x * width, first.y * height);
-  stroke.points.slice(1).forEach(point => ctx.lineTo(point.x * width, point.y * height));
-  if (stroke.points.length === 1) {
-    ctx.lineTo(first.x * width + 0.01, first.y * height + 0.01);
-  }
-  ctx.stroke();
   ctx.restore();
 }
 

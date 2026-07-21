@@ -30,6 +30,10 @@ Mỗi lần phát hành/bump phiên bản main app, LUÔN làm đủ 3 cập nh�
 2. **Bảng Info**: cập nhật `info.updateText` (CẢ vi lẫn en) trong `src/i18n/I18nContext.jsx` — danh sách tính năng mới hiển thị trong modal Info.
 3. **Manifest update**: cập nhật `releases/latest.json` (version, label, notes, `downloadUrl` DMG macOS + `downloadUrlWin` exe Windows, releasePageUrl, publishedAt) — deploy lên `apix.sdvn.vn/releases/latest.json`.
 4. **Kiểm tra auto-update THẬT trước khi phát hành**: chạy app desktop với manifest giả version cao hơn (`APIX_UPDATE_MANIFEST_URL=<url-test> npx electron .`) → banner "Có phiên bản mới" phải hiện sau ~5s và nút tải mở đúng link theo platform. Không tin code — phải thấy banner.
+5. **Website `apix.sdvn.vn`** (repo git riêng tại `website/`, gitignored) — áp dụng cho MỌI đợt cập nhật app/extension/plugin, không riêng main app:
+   - Thêm **1 dòng thông tin update ngắn gọn ngay dưới tiêu đề phụ hero** (`heroLead` trong `website/index.html`, chuỗi vi/en trong `website/i18n.js`) — nêu bản mới + 1-2 điểm chính; thay dòng cũ, không chồng dòng.
+   - Cập nhật **pill hero** (`hero.pill` — số version) + **toàn bộ link tải hardcode version** trong `index.html`/`heroNote` (DMG/EXE/APK/ccx/extension) + thông tin khác nếu đổi.
+   - Deploy: `website/prepare.sh` → `expect website/deploy/upload-tar.exp` (cần `source _local/apix-vps.env`); manifest update riêng bằng `upload-releases.exp`. Commit trong repo `website/`.
 
 ## 4 codebase + cách verify
 

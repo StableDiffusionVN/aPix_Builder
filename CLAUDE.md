@@ -37,6 +37,6 @@ Bộ aPix Builder của SDVN: client tạo ảnh AI qua **ComfyUI / RunningHub W
 - **menu-sub (conditional field):** main `src/lib/template.js` + `shared/menuChoices.js` · extension `src/lib/catalog.js` (`expandActiveFields`) + `src/components/DynamicFields.jsx` · iOS `Core/TemplateModels.swift` + `AppStore.builderRows` + `Features/Builder/BuilderView.swift`.
 - **Render field tham số:** main/ext `DynamicFields.jsx` · iOS `Features/Builder/ParameterField.swift`.
 - **Đọc template/manifest:** main/ext `src/lib/catalog.js`/`templateImport.js` · iOS `Services/YAMLLoader.swift` + `Core/TemplateModels.swift`.
-- **Chạy ComfyUI / RunningHub + failover:** main/ext `src/services/comfy.js`,`runningHub.js` · iOS `Services/ComfyUIClient.swift`,`RunningHubClient.swift` + `Core/AppStore.swift`.
+- **Chạy ComfyUI / RunningHub + failover:** main `server/lib/runningHubClient.js` + `rhTokenFailover.js` + `src/hooks/useExecution.js`/`useRunningHubExecution.js` · ext `src/services/comfy.js`,`runningHub.js` · pts `src/services/runninghub.js` (failover key pool từ 2026-07) · iOS `Services/ComfyUIClient.swift`,`RunningHubClient.swift` + `Core/AppStore.swift`.
 
 > App chính (`src/`) là tham chiếu hành vi chuẩn; extension/iOS/pts mirror theo. Khi sửa logic dùng chung, kiểm tra cả các bản port.

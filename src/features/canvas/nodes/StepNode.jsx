@@ -190,6 +190,7 @@ function StepNodeComponent({ id, data, selected }) {
                 value={values[port.valueKey]}
                 linked={isLinked}
                 sdvnModelTypes={data.config?.sdvnModelTypes}
+                sdvnModelFields={data.config?.sdvnModelFields}
                 onChange={next => updateNodeValues(id, { [port.valueKey]: next })}
                 onContextMenu={event => openContextMenu?.(event, buildFieldContextMenuItems({
                   node,

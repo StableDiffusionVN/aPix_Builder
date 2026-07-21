@@ -1,11 +1,14 @@
 import { useEffect, useState } from "react";
 import { augmentDiscoveryWithSdvn } from "../lib/sdvnModels";
 
-export function useDiscovery(comfyAddress, sdvnModelTypes) {
+export function useDiscovery(comfyAddress, sdvnModelFields) {
   const [discovery, setDiscovery] = useState(null);
   const [discoveryRaw, setDiscoveryRaw] = useState(null);
   const [discoveryLoading, setDiscoveryLoading] = useState(false);
-  const typesKey = Array.isArray(sdvnModelTypes) ? sdvnModelTypes.join(",") : "";
+  // Key ổn định cho effect dep — map field → type nhỏ (vài entry) nên stringify rẻ.
+  const fieldsKey = sdvnModelFields && Object.keys(sdvnModelFields).length
+    ? JSON.stringify(sdvnModelFields)
+    : "";
 
   useEffect(() => {
     if (!comfyAddress) { setDiscovery(null); setDiscoveryRaw(null); return; }
@@ -13,10 +16,10 @@ export function useDiscovery(comfyAddress, sdvnModelTypes) {
     setDiscoveryLoading(true);
     fetch(`/api/comfy-discovery?address=${encodeURIComponent(comfyAddress)}`, { signal: controller.signal })
       .then(res => res.ok ? res.json() : Promise.reject(new Error("Không quét được ComfyUI server")))
-      // Bơm danh sách model SDVN cho các type có node loader SDVN (server đã tính sẵn).
-      // Giữ bản thô (chưa bơm) cho canvas — mỗi node canvas tự áp quy tắc SDVN theo template của nó.
+      // Gắn thư viện SDVN theo từng field (server đã tính sẵn config.sdvnModelFields).
+      // Giữ bản thô (chưa gắn) cho canvas — mỗi node canvas tự áp quy tắc SDVN theo template của nó.
       .then(async data => {
-        const augmented = await augmentDiscoveryWithSdvn(data, typesKey ? typesKey.split(",") : [], controller.signal);
+        const augmented = await augmentDiscoveryWithSdvn(data, fieldsKey ? JSON.parse(fieldsKey) : null, controller.signal);
         if (!controller.signal.aborted) {
           setDiscoveryRaw(data);
           setDiscovery(augmented);
@@ -25,7 +28,7 @@ export function useDiscovery(comfyAddress, sdvnModelTypes) {
       .catch(err => { if (err.name !== "AbortError") { setDiscovery(null); setDiscoveryRaw(null); } })
       .finally(() => { if (!controller.signal.aborted) setDiscoveryLoading(false); });
     return () => controller.abort();
-  }, [comfyAddress, typesKey]);
+  }, [comfyAddress, fieldsKey]);
 
   return { discovery, discoveryRaw, setDiscovery, discoveryLoading };
 }

@@ -9,6 +9,8 @@ import {
   parseMenuChoices,
   resolveMenuStoredValue
 } from "../../../shared/menuChoices.js";
+import { fieldChoicesWithSdvn } from "../../lib/sdvnModels.js";
+import { normalizeId } from "../../lib/template.js";
 import { DropdownField } from "./DropdownField.jsx";
 import { SeedField } from "./SeedField.jsx";
 import { SliderField } from "./SliderField.jsx";
@@ -98,7 +100,10 @@ const renderers = {
     const { item, ui, label, description, value, onChange, discovery, discoveryLoading, t } = context;
     const dynamicKind = canonicalDynamicType(ui.type);
     const dynamic = isDynamicFieldType(ui.type);
-    const rawChoices = dynamic ? dynamicFieldChoices(discovery, dynamicKind) : ui.choices || [];
+    // Per-field SDVN: chỉ field trỏ node SDVN mới thấy thư viện SDVN ("None" đầu danh sách).
+    const rawChoices = dynamic
+      ? fieldChoicesWithSdvn(discovery, dynamicFieldChoices(discovery, dynamicKind), normalizeId(item?.id))
+      : ui.choices || [];
     const options = menuChoiceOptions(ui);
     const choices = dynamic
       ? rawChoices.map(choice => ({ label: choice, value: choice }))

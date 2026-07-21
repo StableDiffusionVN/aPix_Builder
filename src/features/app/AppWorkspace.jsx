@@ -29,6 +29,7 @@ import { RunControls } from "../../components/RunControls";
 import { TemplateSelector } from "../../components/TemplateSelector";
 import { downloadImage } from "../../lib/download";
 import { canonicalDynamicType, dynamicFieldChoices } from "../../lib/dynamicTypes";
+import { fieldChoicesWithSdvn, sdvnFieldPending } from "../../lib/sdvnModels";
 import {
   extractImageValueUrl,
   findCompareInputImage,
@@ -240,7 +241,7 @@ export function AppWorkspace() {
     : executionMode === "local";
   const { discovery, discoveryRaw, discoveryLoading } = useDiscovery(
     shouldDiscoverComfy ? comfyAddress : "",
-    config?.sdvnModelTypes
+    config?.sdvnModelFields
   );
   const {
     settings: rhSettings,
@@ -963,9 +964,13 @@ export function AppWorkspace() {
       for (const item of inputs) {
         const kind = canonicalDynamicType(item.ui?.type);
         if (!kind || !item.id) continue;
-        const choices = dynamicFieldChoices(discovery, kind);
-        if (!choices.length) continue;
         const key = normalizeId(item.id);
+        // Discovery đang là bản của template khác / augment SDVN chưa xong → không reset
+        // (tránh race ghi đè default SDVN bằng model server đầu danh sách khi đổi template).
+        if (sdvnFieldPending(discovery, config?.sdvnModelFields, key)) continue;
+        // Field có thư viện SDVN riêng: "None" đứng đầu và là giá trị hợp lệ (per-field).
+        const choices = fieldChoicesWithSdvn(discovery, dynamicFieldChoices(discovery, kind), key);
+        if (!choices.length) continue;
         if (choices.includes(next[key])) continue;
         const preferred = choices.includes(item.ui?.value) ? item.ui.value : choices[0];
         next[key] = preferred;
@@ -973,7 +978,7 @@ export function AppWorkspace() {
       }
       return changed ? next : current;
     });
-  }, [inputs, discovery, isCanvasView, setValues]);
+  }, [inputs, discovery, isCanvasView, setValues, config?.sdvnModelFields]);
 
   function selectOutput(index) {
     if (!resultOutputs.length) return;
@@ -1910,6 +1915,7 @@ export function AppWorkspace() {
                       inputImages={inputImages}
                       onRefreshInputImages={refreshInputImages}
                       onUpdateInputImages={setInputImages}
+                      sdvnModelFields={config?.sdvnModelFields}
                       discovery={discovery}
                       discoveryLoading={discoveryLoading}
                     />

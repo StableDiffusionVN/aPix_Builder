@@ -6,6 +6,7 @@ import { MaskEditorModal } from "./MaskEditorModal";
 import { defaultValue, getActiveSubInputs, isMenuSub, normalizeId } from "../lib/template";
 import { menuChoiceOptions, parseMenuChoices, resolveMenuStoredValue } from "../../shared/menuChoices.js";
 import { DYNAMIC_FIELD_TYPES, canonicalDynamicType, dynamicFieldChoices, isDynamicFieldType } from "../lib/dynamicTypes";
+import { fieldChoicesWithSdvn, sdvnFieldPending } from "../lib/sdvnModels";
 import { localizeRuntimeMessage, useI18n } from "../i18n/I18nContext";
 import { clearPickedFolderFiles, registerPickedFolderFiles } from "../lib/folderFileCache.js";
 import { isHttpImageUrl, readLocalFolderValue } from "../lib/localImageFolder.js";
@@ -133,7 +134,8 @@ const DynamicFieldInner = memo(function DynamicFieldInner({
   onRefreshInputImages,
   onUpdateInputImages,
   discovery = null,
-  discoveryLoading = false
+  discoveryLoading = false,
+  sdvnModelFields = null
 }) {
   const { locale, t } = useI18n();
   const ui = item.ui || {};
@@ -236,11 +238,16 @@ const DynamicFieldInner = memo(function DynamicFieldInner({
 
   useEffect(() => {
     if (!isDynamicList) return;
-    const choices = dynamicFieldChoices(discovery, dynamicKind);
+    const fieldKey = normalizeId(item.id);
+    // Discovery của template khác / augment SDVN chưa xong → chờ, không reset value
+    // (tránh race ghi đè default SDVN bằng model server đầu danh sách khi đổi template).
+    if (sdvnFieldPending(discovery, sdvnModelFields, fieldKey)) return;
+    // Per-field: field có thư viện SDVN riêng thì "None"/tên SDVN là giá trị hợp lệ — không bị reset.
+    const choices = fieldChoicesWithSdvn(discovery, dynamicFieldChoices(discovery, dynamicKind), fieldKey);
     if (!choices.length) return;
     const defaultChoice = choices.includes(ui.value) ? ui.value : choices[0];
     if (!choices.includes(value)) onChange(defaultChoice);
-  }, [isDynamicList, dynamicKind, discovery, ui.value, value, onChange]);
+  }, [isDynamicList, dynamicKind, discovery, ui.value, value, onChange, item.id, sdvnModelFields]);
 
   useEffect(() => {
     if (activeImageIndex >= selectedImages.length) {
@@ -525,6 +532,7 @@ const DynamicFieldInner = memo(function DynamicFieldInner({
                 onUpdateInputImages={onUpdateInputImages}
                 discovery={discovery}
                 discoveryLoading={discoveryLoading}
+                sdvnModelFields={sdvnModelFields}
               />
             ))}
           </div>

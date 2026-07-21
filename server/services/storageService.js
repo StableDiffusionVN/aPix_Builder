@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { parseDataUrl } from "../lib/comfyClient.js";
 import { scanLocalImageFolder } from "../lib/localImageFolder.js";
+import { safeFileName } from "../lib/fileNames.js";
 import { createTemplateService } from "../lib/templateService.js";
 import { normalizeCanvasHistory } from "../lib/canvasHistory.js";
 import { atomicWriteFile, readJsonFileWithBackup } from "../lib/atomicFile.js";
@@ -917,14 +918,6 @@ export function createStorageService({ resourceRoot, dataRoot, readBody, send, h
     await writeFile(workflowPresetsFilePath, JSON.stringify(presets, null, 2), "utf8");
   }
 
-  function safeInputName(rawName = "") {
-    return path.basename(String(rawName)).replace(/[^\w.-]+/g, "_");
-  }
-
-  function safeOutputName(rawName = "") {
-    return path.basename(String(rawName)).replace(/[^\w.-]+/g, "_");
-  }
-
   function inputImageUrl(filename) {
     return `/api/input-image?name=${encodeURIComponent(filename)}`;
   }
@@ -952,7 +945,7 @@ export function createStorageService({ resourceRoot, dataRoot, readBody, send, h
   function sourceFilenameFromUrl(sourceUrl, fallbackExt = "png") {
     try {
       const parsed = new URL(sourceUrl);
-      const basename = safeInputName(path.basename(parsed.pathname || ""));
+      const basename = safeFileName(path.basename(parsed.pathname || ""));
       if (basename && /\.[a-z0-9]+$/i.test(basename)) return basename;
     } catch {
       // Fall back below.
@@ -962,7 +955,7 @@ export function createStorageService({ resourceRoot, dataRoot, readBody, send, h
 
   async function saveInputImageBuffer(buffer, sourceName, mimeType = "") {
     const extFromMime = imageExtensionFromMime(mimeType);
-    const originalName = safeInputName(sourceName || `input.${extFromMime || "png"}`);
+    const originalName = safeFileName(sourceName || `input.${extFromMime || "png"}`);
     const ext = path.extname(originalName) || `.${extFromMime || "png"}`;
     const base = originalName.replace(/\.[^.]+$/, "") || "input";
     const filename = `${base}_${Date.now()}${ext}`;
@@ -1171,6 +1164,7 @@ export function createStorageService({ resourceRoot, dataRoot, readBody, send, h
     if (ext === ".jpg" || ext === ".jpeg") return "image/jpeg";
     if (ext === ".webp") return "image/webp";
     if (ext === ".gif") return "image/gif";
+    if (ext === ".avif") return "image/avif";
     return "image/png";
   }
 
@@ -1196,7 +1190,7 @@ export function createStorageService({ resourceRoot, dataRoot, readBody, send, h
   }
 
   async function handleInputImage(req, res, url) {
-    const filename = safeInputName(url.searchParams.get("name"));
+    const filename = safeFileName(url.searchParams.get("name"));
     if (!filename) {
       send(res, 400, { error: "Missing image name" });
       return;
@@ -1211,7 +1205,7 @@ export function createStorageService({ resourceRoot, dataRoot, readBody, send, h
 
   async function handleDeleteInputImage(req, res) {
     const body = JSON.parse(await readBody(req) || "{}");
-    const filename = safeInputName(body.name);
+    const filename = safeFileName(body.name);
     if (!filename) {
       send(res, 400, { error: "Missing image name" });
       return;
@@ -1260,7 +1254,7 @@ export function createStorageService({ resourceRoot, dataRoot, readBody, send, h
   }
 
   async function handleOutputImage(req, res, url) {
-    const filename = safeOutputName(url.searchParams.get("name"));
+    const filename = safeFileName(url.searchParams.get("name"));
     if (!filename) {
       send(res, 400, { error: "Missing output image name" });
       return;
@@ -1281,7 +1275,7 @@ export function createStorageService({ resourceRoot, dataRoot, readBody, send, h
     if (targetItem) {
       await Promise.all((targetItem.outputs || []).map(output => (
         output.filename
-          ? rm(path.join(outputDir, safeOutputName(output.filename)), { force: true })
+          ? rm(path.join(outputDir, safeFileName(output.filename)), { force: true })
           : Promise.resolve()
       )));
     }
@@ -1290,44 +1284,27 @@ export function createStorageService({ resourceRoot, dataRoot, readBody, send, h
   }
 
   async function replaceOutputInHistory(body, parsed, res) {
-    const historyId = body.historyId;
-    const outputFilename = body.outputFilename ? safeOutputName(body.outputFilename) : "";
-    const outputIndex = Number.isFinite(body.outputIndex) ? body.outputIndex : 0;
-    if (!historyId && !outputFilename) {
+    if (!body.historyId && !body.outputFilename) {
       send(res, 400, { error: "Missing history id" });
       return;
     }
 
+    // Dùng chung resolveHistoryOutputTarget với handleSaveColorAdjust (trước đây inline
+    // nguyên logic — refactor dở dang, sửa 1 nơi lệch nơi kia).
     const current = await readOutputHistory();
-    let itemIndex = historyId ? current.findIndex(item => item.id === historyId) : -1;
-    let resolvedOutputIndex = outputIndex;
-
-    if (itemIndex === -1 && outputFilename) {
-      itemIndex = current.findIndex(item => {
-        const outputs = item.outputs || item.result?.outputs || [];
-        const matchIndex = outputs.findIndex(output => safeOutputName(output.filename) === outputFilename);
-        if (matchIndex !== -1) {
-          resolvedOutputIndex = matchIndex;
-          return true;
-        }
-        return false;
-      });
-    }
-
-    if (itemIndex === -1) {
+    const target = await resolveHistoryOutputTarget(current, body);
+    if (!target) {
       send(res, 404, { error: "History item not found" });
       return;
     }
 
-    const item = current[itemIndex];
-    const outputs = [...(item.outputs || item.result?.outputs || [])];
-    const targetOutput = outputs[resolvedOutputIndex];
-    if (!targetOutput?.filename) {
+    const { itemIndex, item, outputs, resolvedOutputIndex, targetOutput } = target;
+    if (!targetOutput.filename) {
       send(res, 404, { error: "Output not found" });
       return;
     }
 
-    const filename = safeOutputName(targetOutput.filename);
+    const filename = safeFileName(targetOutput.filename);
     await mkdir(outputDir, { recursive: true });
     await writeFile(path.join(outputDir, filename), parsed.buffer);
 
@@ -1366,7 +1343,7 @@ export function createStorageService({ resourceRoot, dataRoot, readBody, send, h
     const runId = randomUUID();
     const completedAt = new Date().toISOString();
     const extension = parsed.mimeType.includes("jpeg") ? "jpg" : parsed.mimeType.split("/")[1] || "png";
-    const sourceName = safeOutputName(body.sourceFilename || `output.${extension}`);
+    const sourceName = safeFileName(body.sourceFilename || `output.${extension}`);
     const base = sourceName.replace(/\.[^.]+$/, "") || "output";
     const filename = `${Date.now()}_${runId}_0_${base}_edited.${extension}`;
     await writeFile(path.join(outputDir, filename), parsed.buffer);
@@ -1437,7 +1414,7 @@ export function createStorageService({ resourceRoot, dataRoot, readBody, send, h
 
   async function resolveHistoryOutputTarget(current, body) {
     const historyId = body.historyId;
-    const outputFilename = body.outputFilename ? safeOutputName(body.outputFilename) : "";
+    const outputFilename = body.outputFilename ? safeFileName(body.outputFilename) : "";
     const outputIndex = Number.isFinite(body.outputIndex) ? body.outputIndex : 0;
     let itemIndex = historyId ? current.findIndex(item => item.id === historyId) : -1;
     let resolvedOutputIndex = outputIndex;
@@ -1445,7 +1422,7 @@ export function createStorageService({ resourceRoot, dataRoot, readBody, send, h
     if (itemIndex === -1 && outputFilename) {
       itemIndex = current.findIndex(item => {
         const outputs = item.outputs || item.result?.outputs || [];
-        const matchIndex = outputs.findIndex(output => safeOutputName(output.filename) === outputFilename);
+        const matchIndex = outputs.findIndex(output => safeFileName(output.filename) === outputFilename);
         if (matchIndex !== -1) {
           resolvedOutputIndex = matchIndex;
           return true;

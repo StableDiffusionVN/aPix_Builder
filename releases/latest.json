@@ -1,12 +1,15 @@
 {
-  "version": "1.2.0",
-  "label": "v1.2",
-  "publishedAt": "2026-07-02T11:41:15.465Z",
+  "version": "1.3.0",
+  "label": "v1.3",
+  "publishedAt": "2026-07-21T19:38:07.164Z",
   "notes": [
-    "Canvas: dropdown checkpoint/lora load danh sách model từ ComfyUI, gõ để tìm kiếm lọc, áp quy tắc thư viện SDVN như chế độ Form"
+    "Sửa cơ chế tự cập nhật phiên bản trên desktop — bản Windows nhận đúng link tải exe",
+    "Thư viện SDVN chỉ bơm vào đúng field trỏ node loader SDVN; danh sách model tải qua server có cache, hết lỗi 429",
+    "Import folder/zip RunningHub Workflow không còn đòi api.json khi chạy bằng workflowId",
+    "Failover token RunningHub nhận diện thêm thông báo hết điểm"
   ],
-  "downloadUrl": "https://github.com/StableDiffusionVN/aPix_Builder/releases/download/v1.2.0/aPix.Builder-1.2.0-arm64.dmg",
-  "downloadUrlWin": "https://github.com/StableDiffusionVN/aPix_Builder/releases/download/v1.2.0/aPix.Builder-1.2.0-x64-portable.exe",
-  "releasePageUrl": "https://github.com/StableDiffusionVN/aPix_Builder/releases/tag/v1.2.0",
+  "downloadUrl": "https://github.com/StableDiffusionVN/aPix_Builder/releases/download/v1.3.0/aPix.Builder-1.3.0-arm64.dmg",
+  "downloadUrlWin": "https://github.com/StableDiffusionVN/aPix_Builder/releases/download/v1.3.0/aPix.Builder-1.3.0-x64-portable.exe",
+  "releasePageUrl": "https://github.com/StableDiffusionVN/aPix_Builder/releases/tag/v1.3.0",
   "mandatory": false
 }

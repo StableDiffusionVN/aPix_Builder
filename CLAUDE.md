@@ -20,6 +20,17 @@ Bộ aPix Builder của SDVN: client tạo ảnh AI qua **ComfyUI / RunningHub W
 4. Trước khi checkout/restore/đổi nhánh: **cảnh báo** nếu còn thay đổi chưa commit.
 5. Commit trong **đúng repo của subproject** — mỗi subproject là **git độc lập** nằm trong thư mục repo chính (KHÔNG phải submodule; repo chính gitignore các thư mục này, tương tự `website/`).
 
+## ⛔ Quy tắc UPDATE main platform (web/desktop) — BẮT BUỘC mỗi lần lên phiên bản
+
+> Auto-update từng chết im lặng (preload ESM, fix `a380ce8`) mà không ai biết vì phát hành không kiểm tra lại. KHÔNG để lặp lại.
+
+Mỗi lần phát hành/bump phiên bản main app, LUÔN làm đủ 3 cập nhật + 1 kiểm tra:
+
+1. **Version**: bump `package.json` `version` — nguồn duy nhất, tự chảy vào cả Electron (`app.getVersion()` để so sánh update) lẫn bảng Info (`VITE_APP_VERSION` qua `vite.config.js` define).
+2. **Bảng Info**: cập nhật `info.updateText` (CẢ vi lẫn en) trong `src/i18n/I18nContext.jsx` — danh sách tính năng mới hiển thị trong modal Info.
+3. **Manifest update**: cập nhật `releases/latest.json` (version, label, notes, `downloadUrl` DMG macOS + `downloadUrlWin` exe Windows, releasePageUrl, publishedAt) — deploy lên `apix.sdvn.vn/releases/latest.json`.
+4. **Kiểm tra auto-update THẬT trước khi phát hành**: chạy app desktop với manifest giả version cao hơn (`APIX_UPDATE_MANIFEST_URL=<url-test> npx electron .`) → banner "Có phiên bản mới" phải hiện sau ~5s và nút tải mở đúng link theo platform. Không tin code — phải thấy banner.
+
 ## 4 codebase + cách verify
 
 | Subproject | Thư mục | Stack | Verify nhanh |

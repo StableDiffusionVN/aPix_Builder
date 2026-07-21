@@ -397,8 +397,8 @@ export function createRunningHubService({ storage, runCoordinator, readBody, sen
     return item;
   }
   
-  async function handleRunningHubRun(req, res) {
-    const body = JSON.parse(await readBody(req) || "{}");
+  // Setup dùng chung của 2 handler run (app + workflow): context run + log session + emit SSE.
+  function createRhRunContext(body, job) {
     const runId = body.runId || randomUUID();
     const submittedAt = new Date().toISOString();
     const apiKeys = resolveRhApiKeys(body);
@@ -406,7 +406,6 @@ export function createRunningHubService({ storage, runCoordinator, readBody, sen
       ? RH_TOKEN_POLICY.ROTATE
       : RH_TOKEN_POLICY.PRIORITY;
     const rotateIndex = Number(body.rotateIndex) || 0;
-    const webappId = String(body.webappId || "").trim();
     const abortController = new AbortController();
     const run = attachRhRun(runId, abortController);
     const existingRunSession = getRunLogSessions().find(session => session.runId === runId);
@@ -414,7 +413,7 @@ export function createRunningHubService({ storage, runCoordinator, readBody, sen
       runId,
       provider: "runninghub",
       status: "running",
-      job: { webappId, queuedAt: body.queuedAt || submittedAt },
+      job: { ...job, queuedAt: body.queuedAt || submittedAt },
       meta: { runKind: body.runKind || existingRunSession?.runKind || "form" }
     });
     const emitRhStatus = (status, label, taskId = run.taskId) => {
@@ -423,7 +422,6 @@ export function createRunningHubService({ storage, runCoordinator, readBody, sen
         data: { taskId: taskId ? String(taskId) : null, status, label }
       });
     };
-  
     const onTokenWait = ({ label, status }) => {
       emitRhStatus(status || "waiting", label || "Đang chờ API key RunningHub rảnh...");
     };
@@ -434,35 +432,106 @@ export function createRunningHubService({ storage, runCoordinator, readBody, sen
     const onResourceAccessExhausted = ({ label, status }) => {
       emitRhStatus(status || "warning", label);
     };
-  
+    const failoverOptions = resourceKind => ({
+      apiKeys,
+      tokenPolicy,
+      rotateIndex,
+      resourceKind,
+      runId,
+      signal: abortController.signal,
+      onWait: onTokenWait,
+      onSwitch: onTokenSwitch,
+      onExhausted: onResourceAccessExhausted
+    });
+    return { runId, submittedAt, apiKeys, abortController, run, emitRhStatus, onTokenWait, failoverOptions };
+  }
+
+  // Mở đầu mỗi lượt thử token: chờ key rảnh + chụp số dư trước khi chạy (tính coin tiêu thụ).
+  async function beginRhAttempt(ctx, apiKey) {
+    await waitForRhApiKeyIdle(apiKey, {
+      signal: ctx.abortController.signal,
+      onWait: ctx.onTokenWait
+    });
+    return fetchAccountRemainCoins(apiKey, ctx.abortController.signal);
+  }
+
+  // Đuôi hoàn tất dùng chung sau khi submit: check promptTips, chờ outputs, tính coin,
+  // lưu history và trả response.
+  async function finishRhTask(ctx, { apiKey, coinsBefore, submitData, res, archiveExtra, responseExtra }) {
+    const { run, runId, submittedAt, abortController, emitRhStatus } = ctx;
+    const taskId = submitData.taskId;
+    if (!taskId) throw new Error("RunningHub không trả về taskId");
+    run.taskId = taskId;
+    broadcastRunEvent(run, {
+      type: "rh_task_submitted",
+      data: { taskId: String(taskId) }
+    });
+
+    const promptTips = parsePromptTips(submitData.promptTips);
+    if (promptTips?.node_errors && Object.keys(promptTips.node_errors).length > 0) {
+      const firstError = Object.entries(promptTips.node_errors)[0];
+      throw new Error(`Node ${firstError[0]} lỗi: ${JSON.stringify(firstError[1])}`);
+    }
+
+    const { outputs, rhCoins } = await waitForTaskOutputs(apiKey, taskId, {
+      timeoutMs: runningHubTimeoutMs,
+      signal: abortController.signal,
+      onStatus: ({ type, label }) => emitRhStatus(type || "waiting", label || "Đang chờ RunningHub...", taskId)
+    });
+    const resolvedRhCoins = await resolveRhTaskCoins(apiKey, {
+      outputs,
+      rhCoins,
+      coinsBefore,
+      signal: abortController.signal
+    });
+    const historyItem = await archiveRunningHubOutputs({
+      runId,
+      taskId,
+      outputs,
+      rhCoins: resolvedRhCoins,
+      submittedAt,
+      signal: abortController.signal,
+      onDownloadRetry: ({ label, attempt }) => {
+        emitRhStatus("download", label, taskId);
+        broadcastRunEvent(run, {
+          type: "output_download_retry",
+          data: { label, attempt, taskId: String(taskId) }
+        });
+      },
+      ...archiveExtra
+    });
+    send(res, 200, {
+      runId,
+      taskId: String(taskId),
+      provider: "runninghub",
+      ...responseExtra,
+      submittedAt: historyItem.submittedAt,
+      completedAt: historyItem.completedAt,
+      durationMs: historyItem.durationMs,
+      rhCoins: historyItem.rhCoins,
+      outputs: historyItem.outputs,
+      historyItem
+    });
+  }
+
+  async function handleRunningHubRun(req, res) {
+    const body = JSON.parse(await readBody(req) || "{}");
+    const webappId = String(body.webappId || "").trim();
+    const ctx = createRhRunContext(body, { webappId });
+    const { abortController, emitRhStatus, onTokenWait } = ctx;
     try {
-      if (!apiKeys.length) throw new Error("Missing RunningHub API key");
+      if (!ctx.apiKeys.length) throw new Error("Missing RunningHub API key");
       if (!webappId) throw new Error("Missing RunningHub webappId");
       if (!Array.isArray(body.nodes) || body.nodes.length === 0) {
         throw new Error("Missing RunningHub node list");
       }
-  
-      await withRhTokenFailover({
-        apiKeys,
-        tokenPolicy,
-        rotateIndex,
-        resourceKind: "app",
-        runId,
-        signal: abortController.signal,
-        onWait: onTokenWait,
-        onSwitch: onTokenSwitch,
-        onExhausted: onResourceAccessExhausted
-      }, async (apiKey) => {
-        await waitForRhApiKeyIdle(apiKey, {
-          signal: abortController.signal,
-          onWait: onTokenWait
-        });
-  
-        const coinsBefore = await fetchAccountRemainCoins(apiKey, abortController.signal);
+
+      await withRhTokenFailover(ctx.failoverOptions("app"), async (apiKey) => {
+        const coinsBefore = await beginRhAttempt(ctx, apiKey);
         emitRhStatus("upload", "Đang upload dữ liệu lên RunningHub...");
         const nodeInfoList = await prepareNodeInfoList(apiKey, body.nodes, {
-        inputDir: storage.getPaths().inputDir,
-        outputDir: storage.getPaths().outputDir,
+          inputDir: storage.getPaths().inputDir,
+          outputDir: storage.getPaths().outputDir,
           signal: abortController.signal,
           onProgress: ({ label }) => emitRhStatus("upload", label || "Đang upload dữ liệu...")
         });
@@ -472,111 +541,29 @@ export function createRunningHubService({ storage, runCoordinator, readBody, sen
           () => submitAiAppTask(apiKey, webappId, nodeInfoList, abortController.signal),
           { signal: abortController.signal, onWait: onTokenWait }
         );
-        const taskId = submitData.taskId;
-        if (!taskId) throw new Error("RunningHub không trả về taskId");
-        run.taskId = taskId;
-        broadcastRunEvent(run, {
-          type: "rh_task_submitted",
-          data: { taskId: String(taskId) }
-        });
-  
-        const promptTips = parsePromptTips(submitData.promptTips);
-        if (promptTips?.node_errors && Object.keys(promptTips.node_errors).length > 0) {
-          const firstError = Object.entries(promptTips.node_errors)[0];
-          throw new Error(`Node ${firstError[0]} lỗi: ${JSON.stringify(firstError[1])}`);
-        }
-  
-        const { outputs, rhCoins } = await waitForTaskOutputs(apiKey, taskId, {
-          timeoutMs: runningHubTimeoutMs,
-          signal: abortController.signal,
-          onStatus: ({ type, label }) => emitRhStatus(type || "waiting", label || "Đang chờ RunningHub...", taskId)
-        });
-        const resolvedRhCoins = await resolveRhTaskCoins(apiKey, {
-          outputs,
-          rhCoins,
+        await finishRhTask(ctx, {
+          apiKey,
           coinsBefore,
-          signal: abortController.signal
-        });
-        const historyItem = await archiveRunningHubOutputs({
-          runId,
-          webappId,
-          rhMode: "app",
-          taskId,
-          outputs,
-          rhCoins: resolvedRhCoins,
-          nodes: body.nodes,
-          submittedAt,
-          signal: abortController.signal,
-          onDownloadRetry: ({ label, attempt }) => {
-            emitRhStatus("download", label, taskId);
-            broadcastRunEvent(run, {
-              type: "output_download_retry",
-              data: { label, attempt, taskId: String(taskId) }
-            });
-          },
-          canvasHistory: body
-        });
-        send(res, 200, {
-          runId,
-          taskId: String(taskId),
-          provider: "runninghub",
-          rhMode: "app",
-          webappId,
-          submittedAt: historyItem.submittedAt,
-          completedAt: historyItem.completedAt,
-          durationMs: historyItem.durationMs,
-          rhCoins: historyItem.rhCoins,
-          outputs: historyItem.outputs,
-          historyItem
+          submitData,
+          res,
+          archiveExtra: { webappId, rhMode: "app", nodes: body.nodes, canvasHistory: body },
+          responseExtra: { rhMode: "app", webappId }
         });
       });
     } finally {
-      closeRhRun(run, runId);
+      closeRhRun(ctx.run, ctx.runId);
     }
   }
-  
+
   async function handleRunningHubWfRun(req, res) {
     const body = JSON.parse(await readBody(req) || "{}");
-    const runId = body.runId || randomUUID();
-    const submittedAt = new Date().toISOString();
-    const apiKeys = resolveRhApiKeys(body);
-    const tokenPolicy = body.tokenPolicy === RH_TOKEN_POLICY.ROTATE
-      ? RH_TOKEN_POLICY.ROTATE
-      : RH_TOKEN_POLICY.PRIORITY;
-    const rotateIndex = Number(body.rotateIndex) || 0;
     const templateId = String(body.templateId || "").trim();
-    const abortController = new AbortController();
-    const run = attachRhRun(runId, abortController);
-    const existingRunSession = getRunLogSessions().find(session => session.runId === runId);
-    ensureRunLogSession({
-      runId,
-      provider: "runninghub",
-      status: "running",
-      job: { templateId, queuedAt: body.queuedAt || submittedAt },
-      meta: { runKind: body.runKind || existingRunSession?.runKind || "form" }
-    });
-    const emitRhStatus = (status, label, taskId = run.taskId) => {
-      broadcastRunEvent(run, {
-        type: "rh_task_status",
-        data: { taskId: taskId ? String(taskId) : null, status, label }
-      });
-    };
-  
-    const onTokenWait = ({ label, status }) => {
-      emitRhStatus(status || "waiting", label || "Đang chờ API key RunningHub rảnh...");
-    };
-    const onTokenSwitch = ({ label, reason }) => {
-      const status = reason === "resource_access" ? "warning" : "waiting";
-      emitRhStatus(status, label || "Đang chuyển sang token RunningHub kế tiếp...");
-    };
-    const onResourceAccessExhausted = ({ label, status }) => {
-      emitRhStatus(status || "warning", label);
-    };
-  
+    const ctx = createRhRunContext(body, { templateId });
+    const { abortController, emitRhStatus, onTokenWait } = ctx;
     try {
-      if (!apiKeys.length) throw new Error("Missing RunningHub API key");
+      if (!ctx.apiKeys.length) throw new Error("Missing RunningHub API key");
       if (!templateId) throw new Error("Missing RunningHub Workflow template");
-  
+
       const { config, template } = await storage.getTemplates().loadConfig(templateId, TEMPLATE_SCOPES.runninghubWf);
       const sourceWorkflowId = String(config.runninghub?.workflowId || "").trim();
       const taskOptions = storage.getTemplates().runningHubTaskOptions(config);
@@ -584,30 +571,15 @@ export function createRunningHubService({ storage, runCoordinator, readBody, sen
       if (!sourceWorkflowId && !useSavedWorkflowJson) {
         throw new Error("Template thiếu runninghub.workflowId");
       }
-  
+
       const normalized = await normalizeValues(body.values || {});
       const request = mapValuesToRequest(config, normalized);
       if (!Object.keys(request).length) {
         throw new Error("Template chưa có input nào để gửi");
       }
-  
-      await withRhTokenFailover({
-        apiKeys,
-        tokenPolicy,
-        rotateIndex,
-        resourceKind: "workflow",
-        runId,
-        signal: abortController.signal,
-        onWait: onTokenWait,
-        onSwitch: onTokenSwitch,
-        onExhausted: onResourceAccessExhausted
-      }, async (apiKey) => {
-        await waitForRhApiKeyIdle(apiKey, {
-          signal: abortController.signal,
-          onWait: onTokenWait
-        });
-  
-        const coinsBefore = await fetchAccountRemainCoins(apiKey, abortController.signal);
+
+      await withRhTokenFailover(ctx.failoverOptions("workflow"), async (apiKey) => {
+        const coinsBefore = await beginRhAttempt(ctx, apiKey);
         emitRhStatus("upload", "Đang chuẩn bị dữ liệu workflow...");
         const emitPrepareProgress = ({ type, status, label } = {}) => {
           if (!label) return;
@@ -656,72 +628,27 @@ export function createRunningHubService({ storage, runCoordinator, readBody, sen
             { signal: abortController.signal, onWait: onTokenWait }
           );
         }
-        const taskId = submitData.taskId;
-        if (!taskId) throw new Error("RunningHub không trả về taskId");
-        run.taskId = taskId;
-        broadcastRunEvent(run, {
-          type: "rh_task_submitted",
-          data: { taskId: String(taskId) }
-        });
-  
-        const promptTips = parsePromptTips(submitData.promptTips);
-        if (promptTips?.node_errors && Object.keys(promptTips.node_errors).length > 0) {
-          const firstError = Object.entries(promptTips.node_errors)[0];
-          throw new Error(`Node ${firstError[0]} lỗi: ${JSON.stringify(firstError[1])}`);
-        }
-  
-        const { outputs, rhCoins } = await waitForTaskOutputs(apiKey, taskId, {
-          timeoutMs: runningHubTimeoutMs,
-          signal: abortController.signal,
-          onStatus: ({ type, label }) => emitRhStatus(type || "waiting", label || "Đang chờ RunningHub...", taskId)
-        });
-        const resolvedRhCoins = await resolveRhTaskCoins(apiKey, {
-          outputs,
-          rhCoins,
+        await finishRhTask(ctx, {
+          apiKey,
           coinsBefore,
-          signal: abortController.signal
-        });
-        const historyItem = await archiveRunningHubOutputs({
-          runId,
-          workflowId: sourceWorkflowId,
-          rhMode: "wf",
-          rhWfTemplateId: templateId,
-          taskId,
-          outputs,
-          rhCoins: resolvedRhCoins,
-          nodes: [],
-          values: body.values || {},
-          submittedAt,
-          signal: abortController.signal,
-          onDownloadRetry: ({ label, attempt }) => {
-            emitRhStatus("download", label, taskId);
-            broadcastRunEvent(run, {
-              type: "output_download_retry",
-              data: { label, attempt, taskId: String(taskId) }
-            });
+          submitData,
+          res,
+          archiveExtra: {
+            workflowId: sourceWorkflowId,
+            rhMode: "wf",
+            rhWfTemplateId: templateId,
+            nodes: [],
+            values: body.values || {},
+            canvasHistory: body
           },
-          canvasHistory: body
-        });
-        send(res, 200, {
-          runId,
-          taskId: String(taskId),
-          provider: "runninghub",
-          rhMode: "wf",
-          workflowId: sourceWorkflowId,
-          templateId,
-          submittedAt: historyItem.submittedAt,
-          completedAt: historyItem.completedAt,
-          durationMs: historyItem.durationMs,
-          rhCoins: historyItem.rhCoins,
-          outputs: historyItem.outputs,
-          historyItem
+          responseExtra: { rhMode: "wf", workflowId: sourceWorkflowId, templateId }
         });
       });
     } finally {
-      closeRhRun(run, runId);
+      closeRhRun(ctx.run, ctx.runId);
     }
   }
-  
+
   async function handleRunningHubCancel(req, res) {
     const body = JSON.parse(await readBody(req) || "{}");
     if (await cancelQueuedBackendRun(body.runId)) {

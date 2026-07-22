@@ -16,7 +16,7 @@ Phiên bản hiện tại: **1.3.0** (v1.3)
 | --- | --- | --- |
 | macOS (Apple Silicon) | `aPix Builder-1.3.0-arm64.dmg` | Cài như app thông thường; không cần Node.js |
 | Windows (x64) | `aPix Builder-1.3.0-x64-portable.exe` | Portable — chạy trực tiếp, không cần cài đặt |
-| Adobe Photoshop (UXP) | [`aPixBuilder_v1.2.0.ccx`](https://github.com/StableDiffusionVN/aPix_builder_pts/releases/tag/v1.2.0) | Plugin PS 24+ — repo [aPix_builder_pts](https://github.com/StableDiffusionVN/aPix_builder_pts) |
+| Adobe Photoshop (UXP) | [`aPixBuilder_v1.3.0.ccx`](https://github.com/StableDiffusionVN/aPix_builder_pts/releases/tag/v1.3.0) | Plugin PS 24+ — repo [aPix_builder_pts](https://github.com/StableDiffusionVN/aPix_builder_pts) |
 | Chrome Extension | [Chrome Web Store](https://chromewebstore.google.com/detail/apix-builder-web-extensio/nnhnedbdbgfjkbjcaacalomceeonbige) | Side panel — repo [aPix_builder_web_extension](https://github.com/StableDiffusionVN/aPix_builder_web_extension) |
 
 Tải tại [GitHub Releases — v1.3.0](https://github.com/StableDiffusionVN/aPix_Builder/releases/tag/v1.3.0) (DMG + EXE).

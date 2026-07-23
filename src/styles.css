@@ -9777,8 +9777,9 @@ html:not([data-theme="dark"]):not([data-theme="light"]) .appShell.is-runninghub 
   background: transparent;
 }
 .rhAppInfo {
-  display: grid;
-  grid-template-columns: 72px minmax(0, 1fr);
+  /* Flex để cover stretch theo chiều cao khối thông tin nhưng vẫn giữ đúng tỉ lệ 4:5 */
+  display: flex;
+  align-items: stretch;
   gap: 10px;
   margin-bottom: 10px;
   padding: 10px;
@@ -9788,10 +9789,13 @@ html:not([data-theme="dark"]):not([data-theme="light"]) .appShell.is-runninghub 
 }
 
 .rhAppInfoCover {
-  /* Cover cố định tỉ lệ 4:5 — không co giãn theo nội dung bên cạnh */
-  width: 72px;
+  /* Giữ đúng 4:5; cao tối thiểu bằng khối thông tin (stretch) nhưng có trần
+     tránh vòng lặp stretch↔width làm cover phình vô hạn */
+  flex: 0 0 auto;
   aspect-ratio: 4 / 5;
-  align-self: start;
+  min-height: 90px;
+  max-height: 148px;
+  width: auto;
   overflow: hidden;
   border-radius: 10px;
   border: 1px solid var(--border);
@@ -9810,6 +9814,7 @@ html:not([data-theme="dark"]):not([data-theme="light"]) .appShell.is-runninghub 
   /* Dòng xếp sát nhau — không giãn khoảng cách khi khối thấp hơn cover */
   align-content: start;
   gap: 6px;
+  flex: 1;
   min-width: 0;
 }
 
@@ -10822,7 +10827,7 @@ html:not([data-theme="dark"]):not([data-theme="light"]) .appShell.is-runninghub 
 .rhAppCostRow {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 4px 10px;
   margin-top: 4px;
   font-size: 11px;
   color: var(--muted);
@@ -10843,4 +10848,9 @@ html:not([data-theme="dark"]):not([data-theme="light"]) .appShell.is-runninghub 
 
 .rhAppPaidModel {
   color: var(--warning);
+}
+
+/* Coin + phí model dính nhau trên cùng một dòng */
+.rhAppCostPair {
+  white-space: nowrap;
 }

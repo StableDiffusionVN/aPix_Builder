@@ -68,9 +68,13 @@ function RunningHubAppInfo({ info, t }) {
               <span>✅ {info.runningSuccessRate}%</span>
             ) : null}
             {estimateRhCoins(info.avgRunningSeconds) ? (
-              <span>🪙 ~{estimateRhCoins(info.avgRunningSeconds)} {t("rh.estCoinsUnit")}</span>
-            ) : null}
-            {info.hasPaidModel ? (
+              <span className="rhAppCostPair">
+                🪙 ~{estimateRhCoins(info.avgRunningSeconds)} {t("rh.estCoinsUnit")}
+                {info.hasPaidModel ? (
+                  <span className="rhAppPaidModel" title={t("rh.paidModelHint")}> 💲 {t("rh.paidModel")}</span>
+                ) : null}
+              </span>
+            ) : info.hasPaidModel ? (
               <span className="rhAppPaidModel" title={t("rh.paidModelHint")}>💲 {t("rh.paidModel")}</span>
             ) : null}
           </div>

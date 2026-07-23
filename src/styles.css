@@ -9856,8 +9856,10 @@ html:not([data-theme="dark"]):not([data-theme="light"]) .appShell.is-runninghub 
 }
 
 .rhAppInfoStats {
+  /* Hẹp ngang → ẩn phần thừa, không xuống dòng */
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  overflow: hidden;
   gap: 6px 10px;
 }
 
@@ -9877,8 +9879,10 @@ html:not([data-theme="dark"]):not([data-theme="light"]) .appShell.is-runninghub 
 }
 
 .rhAppInfoTags {
+  /* Hẹp ngang → ẩn phần thừa, không xuống dòng */
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  overflow: hidden;
   gap: 6px;
 }
 
@@ -10825,8 +10829,10 @@ html:not([data-theme="dark"]):not([data-theme="light"]) .appShell.is-runninghub 
 /* ── Dự toán chi phí app RH ────────────────────────────── */
 
 .rhAppCostRow {
+  /* Hẹp ngang → ẩn phần thừa, không xuống dòng */
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  overflow: hidden;
   gap: 4px 10px;
   margin-top: 4px;
   font-size: 11px;

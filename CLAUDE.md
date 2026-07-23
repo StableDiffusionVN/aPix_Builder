@@ -31,7 +31,7 @@ Mỗi lần phát hành/bump phiên bản main app, LUÔN làm đủ 3 cập nh�
 3. **Manifest update**: cập nhật `releases/latest.json` (version, label, notes, `downloadUrl` DMG macOS + `downloadUrlWin` exe Windows, releasePageUrl, publishedAt) — deploy lên `apix.sdvn.vn/releases/latest.json`.
 4. **Kiểm tra auto-update THẬT trước khi phát hành**: chạy app desktop với manifest giả version cao hơn (`APIX_UPDATE_MANIFEST_URL=<url-test> npx electron .`) → banner "Có phiên bản mới" phải hiện sau ~5s và nút tải mở đúng link theo platform. Không tin code — phải thấy banner.
 5. **Website `apix.sdvn.vn`** (repo git riêng tại `website/`, gitignored) — áp dụng cho MỌI đợt cập nhật app/extension/plugin, không riêng main app:
-   - Thêm **1 dòng thông tin update ngắn gọn ngay dưới tiêu đề phụ hero** (`heroLead` trong `website/index.html`, chuỗi vi/en trong `website/i18n.js`) — nêu bản mới + 1-2 điểm chính; thay dòng cũ, không chồng dòng.
+   - Thêm **1 dòng thông tin update ngắn gọn ngay dưới tiêu đề phụ hero** (`heroLead`/`hero.updateNote` trong `website/index.html`, chuỗi vi/en trong `website/i18n.js`) — CHỈ nói về MAIN APP (desktop), gọn đúng 1 dòng, 2-3 điểm chính; KHÔNG liệt kê chi tiết iOS/Android/extension/pts trong dòng này; thay dòng cũ, không chồng dòng. Pill hero cũng chỉ hiển thị version main app.
    - Cập nhật **pill hero** (`hero.pill` — số version) + **toàn bộ link tải hardcode version** trong `index.html`/`heroNote` (DMG/EXE/APK/ccx/extension) + thông tin khác nếu đổi.
    - Deploy: `bash website/prepare.sh` rồi:
      ```bash

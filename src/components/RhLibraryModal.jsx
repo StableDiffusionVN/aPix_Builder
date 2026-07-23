@@ -189,7 +189,7 @@ export function RhLibraryModal({ open, onClose, onImportApp }) {
   }, [open, searchInput]);
 
   useEffect(() => {
-    if (!open || tagTree[kind]) return;
+    if (!open || kind === "comfy" || tagTree[kind]) return;
     let cancelled = false;
     (async () => {
       try {
@@ -217,6 +217,7 @@ export function RhLibraryModal({ open, onClose, onImportApp }) {
   }, [categoryId, activeCategory, activeTagIds]);
 
   const loadPage = useCallback(async (nextPage, replace) => {
+    if (kind === "comfy") return;
     const seq = ++requestSeq.current;
     setLoading(true);
     setListError("");
@@ -359,6 +360,15 @@ export function RhLibraryModal({ open, onClose, onImportApp }) {
               >
                 {t("rhLib.tabWorkflows")}
               </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={kind === "comfy"}
+                className={kind === "comfy" ? "active" : ""}
+                onClick={() => handleKindChange("comfy")}
+              >
+                {t("rhLib.tabComfy")}
+              </button>
             </div>
           </div>
           <div className="rhLibSearch">
@@ -392,6 +402,13 @@ export function RhLibraryModal({ open, onClose, onImportApp }) {
           </button>
         </header>
 
+        {kind === "comfy" ? (
+          <div className="rhLibBody rhLibComfyPlaceholder">
+            <div className="rhLibEmpty">
+              <p>{t("rhLib.comfySoon")}</p>
+            </div>
+          </div>
+        ) : (
         <div className="rhLibBody">
           <nav className="rhLibSidebar" aria-label={t("rhLib.categories")}>
             <button
@@ -472,6 +489,7 @@ export function RhLibraryModal({ open, onClose, onImportApp }) {
             />
           ) : null}
         </div>
+        )}
       </section>
     </div>,
     document.body

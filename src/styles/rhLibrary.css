@@ -175,6 +175,11 @@ html[data-theme="light"] .rhLibOverlay {
   color: var(--danger-text);
 }
 
+.rhLibComfyPlaceholder {
+  align-items: center;
+  justify-content: center;
+}
+
 .rhLibContent {
   display: flex;
   flex-direction: column;

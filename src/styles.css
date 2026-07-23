@@ -9794,7 +9794,7 @@ html:not([data-theme="dark"]):not([data-theme="light"]) .appShell.is-runninghub 
   flex: 0 0 auto;
   aspect-ratio: 2 / 3;
   min-height: 90px;
-  max-height: 118px;
+  max-height: 109px;
   width: auto;
   overflow: hidden;
   border-radius: 10px;
@@ -10854,6 +10854,13 @@ html:not([data-theme="dark"]):not([data-theme="light"]) .appShell.is-runninghub 
 
 .rhAppPaidModel {
   color: var(--warning);
+}
+
+/* Dòng giữ chỗ khi chưa có số liệu dự toán — mờ, giữ cấu trúc 5 dòng của card */
+.rhAppCostEmpty {
+  color: var(--muted-2);
+  font-style: italic;
+  opacity: 0.8;
 }
 
 /* Coin + phí model dính nhau trên cùng một dòng */

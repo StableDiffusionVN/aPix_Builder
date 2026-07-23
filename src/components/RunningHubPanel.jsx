@@ -78,11 +78,14 @@ function RunningHubAppInfo({ info, t }) {
               <span className="rhAppPaidModel" title={t("rh.paidModelHint")}>💲 {t("rh.paidModel")}</span>
             ) : null}
           </div>
-        ) : info.hasPaidModel ? (
+        ) : (
           <div className="rhAppCostRow">
-            <span className="rhAppPaidModel" title={t("rh.paidModelHint")}>💲 {t("rh.paidModel")}</span>
+            <span className="rhAppCostEmpty">{t("rh.noEstimate")}</span>
+            {info.hasPaidModel ? (
+              <span className="rhAppPaidModel" title={t("rh.paidModelHint")}>💲 {t("rh.paidModel")}</span>
+            ) : null}
           </div>
-        ) : null}
+        )}
         {stats.length ? (
           <div className="rhAppInfoStats">
             {stats.map(item => (

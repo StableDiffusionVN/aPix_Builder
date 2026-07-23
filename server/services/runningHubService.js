@@ -25,7 +25,7 @@ import { normalizeValues } from "../lib/comfyClient.js";
 import { mapValuesToRequest } from "../lib/workflowPatcher.js";
 import { decorateCanvasHistoryItem, mergeCanvasHistoryItem } from "../lib/canvasHistory.js";
 
-const runningHubTimeoutMs = Number(process.env.RUNNINGHUB_TIMEOUT_MS || 10 * 60 * 1000);
+const runningHubTimeoutMs = Number(process.env.RUNNINGHUB_TIMEOUT_MS || 20 * 60 * 1000);
 
 export function createRunningHubService({ storage, runCoordinator, readBody, send, resourceRoot, dataRoot }) {
   const resourceConfigDir = path.join(resourceRoot, "config");

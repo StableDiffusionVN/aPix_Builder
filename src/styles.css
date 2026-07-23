@@ -10712,29 +10712,41 @@ html:not([data-theme="dark"]):not([data-theme="light"]) .appShell.is-runninghub 
 
 /* ── Output video/audio ────────────────────────────────── */
 
-.resultVideo {
+/* Stage riêng cho output video/âm thanh — full khung preview, controls native đầy đủ */
+.mediaStage {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+}
+
+.mediaStage .resultVideo {
   max-width: 100%;
   max-height: 100%;
   width: auto;
   height: auto;
-  object-fit: contain;
+  border-radius: 8px;
   background: #000;
+  pointer-events: auto;
 }
 
-/* Video/audio output phải nhận được click vào controls (.resultImage mặc định pointer-events: none) */
-.previewArea .resultVideo,
-.previewArea .resultAudioWrap,
-.previewArea .resultAudioWrap audio {
+.resultAudioWrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: min(420px, 90%);
   pointer-events: auto;
-  user-select: auto;
+}
+
+.resultAudioWrap audio {
+  width: 100%;
+  pointer-events: auto;
 }
 
 .previewArea.isPlayableOutput {
   cursor: default;
-}
-
-.previewArea.isPlayableOutput .imageStage {
-  transform: none;
 }
 
 .resultAudioWrap {

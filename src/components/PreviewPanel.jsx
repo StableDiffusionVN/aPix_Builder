@@ -171,6 +171,17 @@ export function PreviewPanel({
                 <RunningState progress={progress} status={status} progressPct={progressPct} />
               )}
             </div>
+          ) : heroImage && isPlayableOutput ? (
+            // Video/âm thanh: stage riêng full khung, KHÔNG dùng imageStage (kích thước/transform tính cho ảnh)
+            <div className="mediaStage">
+              {previewKind === "video" ? (
+                <video key={previewImage} className="resultVideo" src={previewImage} controls playsInline preload="metadata" />
+              ) : (
+                <div className="resultAudioWrap">
+                  <audio key={previewImage} src={previewImage} controls preload="metadata" />
+                </div>
+              )}
+            </div>
           ) : heroImage ? (
             <div
               className={`imageStage ${compareMode && canCompare ? "isCompare" : ""}`}
@@ -184,13 +195,7 @@ export function PreviewPanel({
                 "--compare-divider-x": `${compareDividerX}px`
               }}
             >
-              {mediaKindFromUrl(previewImage) === "video" ? (
-                <video className="resultImage resultVideo" src={previewImage} controls playsInline preload="metadata" />
-              ) : mediaKindFromUrl(previewImage) === "audio" ? (
-                <div className="resultAudioWrap">
-                  <audio src={previewImage} controls preload="metadata" />
-                </div>
-              ) : compareMode && canCompare ? (
+              {compareMode && canCompare ? (
                 <>
                   <img className="resultImage compareInputImage" src={compareInputImage} alt={t("preview.inputImage")} draggable="false" />
                   <img ref={imageElementRef} className="resultImage compareOutputImage" src={previewImage} alt={outputLabel} draggable="false" onLoad={handleResultImageLoad} />

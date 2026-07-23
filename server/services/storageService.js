@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { createReadStream } from "node:fs";
 import { access, chmod, cp, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -1165,6 +1166,15 @@ export function createStorageService({ resourceRoot, dataRoot, readBody, send, h
     if (ext === ".webp") return "image/webp";
     if (ext === ".gif") return "image/gif";
     if (ext === ".avif") return "image/avif";
+    if (ext === ".mp4" || ext === ".m4v") return "video/mp4";
+    if (ext === ".webm") return "video/webm";
+    if (ext === ".mov") return "video/quicktime";
+    if (ext === ".mp3") return "audio/mpeg";
+    if (ext === ".wav") return "audio/wav";
+    if (ext === ".m4a") return "audio/mp4";
+    if (ext === ".aac") return "audio/aac";
+    if (ext === ".ogg" || ext === ".opus") return "audio/ogg";
+    if (ext === ".flac") return "audio/flac";
     return "image/png";
   }
 
@@ -1177,9 +1187,40 @@ export function createStorageService({ resourceRoot, dataRoot, readBody, send, h
       send(res, 404, { error: "Image not found" });
       return;
     }
+    const contentType = imageContentType(filename);
+    // Hỗ trợ HTTP Range để <video>/<audio> tua được (không có Range thì trình duyệt không seek nổi mp4)
+    const range = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range || "");
+    if (range && req.method === "GET") {
+      const size = fileStat.size;
+      let start;
+      let end;
+      if (range[1] === "") { // suffix range: bytes=-N → N byte cuối
+        start = Math.max(0, size - Number(range[2]));
+        end = size - 1;
+      } else {
+        start = Number(range[1]);
+        end = range[2] === "" ? size - 1 : Number(range[2]);
+      }
+      if (!Number.isFinite(start) || !Number.isFinite(end) || start > end || start >= size) {
+        res.writeHead(416, { "content-range": `bytes */${size}` });
+        res.end();
+        return;
+      }
+      end = Math.min(end, size - 1);
+      res.writeHead(206, {
+        "content-type": contentType,
+        "cache-control": "no-store",
+        "accept-ranges": "bytes",
+        "content-range": `bytes ${start}-${end}/${size}`,
+        "content-length": end - start + 1
+      });
+      createReadStream(filePath, { start, end }).pipe(res);
+      return;
+    }
     res.writeHead(200, {
-      "content-type": imageContentType(filename),
+      "content-type": contentType,
       "cache-control": "no-store",
+      "accept-ranges": "bytes",
       "content-length": fileStat.size
     });
     if (req.method === "HEAD") {

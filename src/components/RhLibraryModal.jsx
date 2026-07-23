@@ -130,7 +130,6 @@ function RhLibraryDetail({ record, kind, locale, t, importState, onImport, onClo
           {record.name}
           {isPlus ? <span className="rhLibPlusBadge" title={t("rhLib.plusWarning")}>⚡ Plus GPU</span> : null}
         </h3>
-        {isPlus ? <p className="rhLibPlusWarning">{t("rhLib.plusWarning")}</p> : null}
         {record.owner ? (
           <div className="rhLibDetailOwner">
             {record.owner.avatar ? <img src={record.owner.avatar} alt="" loading="lazy" /> : null}

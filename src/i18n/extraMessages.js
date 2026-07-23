@@ -491,11 +491,13 @@ export const extraMessages = {
     "rhLib.openOnRh": "Mở trên RunningHub",
     "rhLib.workflowImportSoon": "Import workflow sẽ được hỗ trợ trong bản cập nhật sau — hiện có thể xem trên RunningHub.",
     "rhLib.close": "Đóng",
-    "rhLib.plusWarning": "App chạy Plus GPU (48GB) — API key thường có thể không hỗ trợ, task có thể bị lỗi hoặc tốn nhiều coin hơn.",
-    "rh.plusWarning": "App chạy Plus GPU (48GB) — API key thường có thể không hỗ trợ, task có thể bị lỗi hoặc tốn nhiều coin hơn.",
+    "rhLib.plusWarning": "App chạy trên Plus GPU (48GB) — có thể tốn nhiều coin hơn.",
+    "rh.plusWarning": "App chạy trên Plus GPU (48GB) — có thể tốn nhiều coin hơn.",
     "field.uploadVideo": "Tải video lên (kéo thả hoặc bấm chọn)",
     "field.uploadAudio": "Tải âm thanh lên (kéo thả hoặc bấm chọn)",
-    "field.clearMedia": "Xóa file"
+    "field.clearMedia": "Xóa file",
+    "rh.deleteApp": "Xóa app khỏi danh sách",
+    "rh.appDeleted": "Đã xóa app — quay về app mặc định"
   },
   en: {
     "notify.rhComplete": "RunningHub has completed!",
@@ -987,10 +989,12 @@ export const extraMessages = {
     "rhLib.openOnRh": "Open on RunningHub",
     "rhLib.workflowImportSoon": "Workflow import is coming in a future update — for now you can view it on RunningHub.",
     "rhLib.close": "Close",
-    "rhLib.plusWarning": "This app runs on Plus GPU (48GB) — standard API keys may not support it; tasks may fail or cost more coins.",
-    "rh.plusWarning": "This app runs on Plus GPU (48GB) — standard API keys may not support it; tasks may fail or cost more coins.",
+    "rhLib.plusWarning": "This app runs on Plus GPU (48GB) — it may cost more coins.",
+    "rh.plusWarning": "This app runs on Plus GPU (48GB) — it may cost more coins.",
     "field.uploadVideo": "Upload video (drag & drop or click)",
     "field.uploadAudio": "Upload audio (drag & drop or click)",
-    "field.clearMedia": "Remove file"
+    "field.clearMedia": "Remove file",
+    "rh.deleteApp": "Delete app from list",
+    "rh.appDeleted": "App deleted — switched back to the default app"
   }
 };

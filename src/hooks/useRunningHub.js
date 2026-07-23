@@ -270,6 +270,22 @@ export function useRunningHub() {
     return trimmedId;
   }, [fetchNodes, persistApps, t, updateSettings]);
 
+  const deleteWebapp = useCallback(async (id) => {
+    const trimmedId = String(id ?? settings.webappId ?? "").trim();
+    if (!trimmedId || isDefaultRhWebapp(trimmedId)) return { ok: false };
+    try {
+      await persistApps(removeSavedRhAppFromList(savedWebappsRef.current, trimmedId));
+    } catch (error) {
+      console.error("Failed to delete RH saved app:", error);
+      return { ok: false, error: t("rh.appSaveFailed") };
+    }
+    // Đang chọn app vừa xóa → quay về app mặc định
+    if ((settings.webappId ?? "").trim() === trimmedId) {
+      updateSettings({ webappId: DEFAULT_RH_WEBAPP_ID });
+    }
+    return { ok: true };
+  }, [persistApps, settings.webappId, t, updateSettings]);
+
   const saveCurrentWebapp = useCallback(async () => {
     if (!savedAppsReady) {
       return { ok: false, error: t("rh.appStorageLoading") };
@@ -317,6 +333,7 @@ export function useRunningHub() {
     savedAppsError,
     webappOptions,
     saveCurrentWebapp,
+    deleteWebapp,
     importWebapp,
     nodes,
     webappInfo,

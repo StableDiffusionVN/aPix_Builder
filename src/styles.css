@@ -10715,7 +10715,26 @@ html:not([data-theme="dark"]):not([data-theme="light"]) .appShell.is-runninghub 
 .resultVideo {
   max-width: 100%;
   max-height: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
   background: #000;
+}
+
+/* Video/audio output phải nhận được click vào controls (.resultImage mặc định pointer-events: none) */
+.previewArea .resultVideo,
+.previewArea .resultAudioWrap,
+.previewArea .resultAudioWrap audio {
+  pointer-events: auto;
+  user-select: auto;
+}
+
+.previewArea.isPlayableOutput {
+  cursor: default;
+}
+
+.previewArea.isPlayableOutput .imageStage {
+  transform: none;
 }
 
 .resultAudioWrap {

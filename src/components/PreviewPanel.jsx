@@ -85,6 +85,9 @@ export function PreviewPanel({
   const { t } = useI18n();
 
   const previewImage = displayImage || heroImage;
+  // Output video/âm thanh: tắt pan/zoom/compare để <video>/<audio> nhận được click vào controls.
+  const previewKind = mediaKindFromUrl(previewImage);
+  const isPlayableOutput = previewKind !== "image";
   const panelOnLeft = colorPanelAlign === "left";
   const colorPanelToggleTitle = `${colorPanelOpen ? t("colorPanel.close") : t("colorPanel.open")} (Tab)`;
 
@@ -101,7 +104,7 @@ export function PreviewPanel({
           ) : null}
           {selectedOutput ? (
             <>
-              {canCompare ? (
+              {canCompare && !isPlayableOutput ? (
                 <button
                   className={`downloadButton compareButton ${compareMode ? "active" : ""}`}
                   onClick={() => setCompareMode(current => !current)}
@@ -137,14 +140,14 @@ export function PreviewPanel({
 
       <div className="outputViewer">
         <div
-          className={`previewArea ${heroImage && !showRunningScreen ? "isInteractive" : ""} ${resultOutputs.length > 1 ? "hasOutputRail" : ""} ${compareMode ? "isCompareMode" : ""} ${healingActive ? "isHealingTool" : ""} ${colorPickTarget ? "isColorPickTool" : ""} ${draggingImage || isWheeling ? "isDragging" : ""}`}
+          className={`previewArea ${heroImage && !showRunningScreen && !isPlayableOutput ? "isInteractive" : ""} ${resultOutputs.length > 1 ? "hasOutputRail" : ""} ${compareMode ? "isCompareMode" : ""} ${healingActive ? "isHealingTool" : ""} ${colorPickTarget ? "isColorPickTool" : ""} ${draggingImage || isWheeling ? "isDragging" : ""} ${isPlayableOutput ? "isPlayableOutput" : ""}`}
           ref={previewAreaRef}
-          onWheel={handlePreviewWheel}
-          onPointerDown={handlePreviewPointerDown}
-          onPointerMove={handlePreviewPointerMove}
-          onPointerUp={handlePreviewPointerUp}
-          onPointerCancel={handlePreviewPointerUp}
-          onPointerLeave={handlePreviewPointerLeave}
+          onWheel={isPlayableOutput ? undefined : handlePreviewWheel}
+          onPointerDown={isPlayableOutput ? undefined : handlePreviewPointerDown}
+          onPointerMove={isPlayableOutput ? undefined : handlePreviewPointerMove}
+          onPointerUp={isPlayableOutput ? undefined : handlePreviewPointerUp}
+          onPointerCancel={isPlayableOutput ? undefined : handlePreviewPointerUp}
+          onPointerLeave={isPlayableOutput ? undefined : handlePreviewPointerLeave}
         >
           {colorPickTarget && colorPickCursor ? (
             <ColorPickCursorOverlay x={colorPickCursor.x} y={colorPickCursor.y} />

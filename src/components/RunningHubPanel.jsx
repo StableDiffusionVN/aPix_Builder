@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Bookmark, LayoutTemplate, LibraryBig, Loader2, Lock, RefreshCcw, Settings2, Workflow, Zap } from "lucide-react";
+import { Bookmark, LayoutTemplate, LibraryBig, Loader2, Lock, RefreshCcw, Settings2, Trash2, Workflow, Zap } from "lucide-react";
 import { RunningHubField } from "./RunningHubField";
 import { ComfyUiLogomark } from "./icons/ComfyUiIcon";
 import { RunningHubLogomark } from "./icons/RunningHubIcon";
@@ -58,9 +58,6 @@ function RunningHubAppInfo({ info, t }) {
           ) : null}
         </div>
         {info.webappId ? <small className="rhAppInfoId">ID {info.webappId}</small> : null}
-        {info.instanceType === "plus" ? (
-          <div className="rhAppPlusWarning">{t("rh.plusWarning")}</div>
-        ) : null}
         {stats.length ? (
           <div className="rhAppInfoStats">
             {stats.map(item => (
@@ -257,6 +254,7 @@ export function RunningHubPanel({
   savedWebapps = [],
   savedAppsError = "",
   onSaveWebapp,
+  onDeleteWebapp,
   nodes,
   webappInfo = null,
   values,
@@ -360,6 +358,23 @@ export function RunningHubPanel({
                 aria-pressed={isSavedWebapp}
               >
                 <Bookmark size={14} />
+              </button>
+            ) : null}
+            {isSavedWebapp && onDeleteWebapp ? (
+              <button
+                type="button"
+                className="rhWebappActionBtn rhWebappDeleteBtn"
+                onClick={() => {
+                  void (async () => {
+                    const result = await onDeleteWebapp(settings.webappId);
+                    if (result?.ok) setSaveHint(t("rh.appDeleted"));
+                    else if (result?.error) setSaveHint(result.error);
+                  })();
+                }}
+                title={t("rh.deleteApp")}
+                aria-label={t("rh.deleteApp")}
+              >
+                <Trash2 size={14} />
               </button>
             ) : null}
             <button

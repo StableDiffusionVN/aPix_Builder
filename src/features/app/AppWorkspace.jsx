@@ -252,6 +252,7 @@ export function AppWorkspace() {
     savedAppsError: rhSavedAppsError,
     webappOptions: rhWebappOptions,
     saveCurrentWebapp,
+    deleteWebapp: deleteRhWebapp,
     importWebapp: importRhWebapp,
     restoreNodes: restoreRhNodes,
     restoreWebappInfo: restoreRhWebappInfo,
@@ -1760,6 +1761,7 @@ export function AppWorkspace() {
             savedWebapps={rhSavedWebapps}
             savedAppsError={rhSavedAppsError}
             onSaveWebapp={saveCurrentWebapp}
+            onDeleteWebapp={deleteRhWebapp}
             onSettingsChange={patch => {
               updateRhSettings(patch);
               setRhTestResult(null);

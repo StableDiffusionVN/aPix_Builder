@@ -14,6 +14,7 @@ import {
   X
 } from "lucide-react";
 import { useI18n } from "../i18n/I18nContext.jsx";
+import { estimateRhCoins } from "../lib/rhCost.js";
 import "../styles/rhLibrary.css";
 
 const SORT_OPTIONS = [
@@ -142,6 +143,17 @@ function RhLibraryDetail({ record, kind, locale, t, importState, onImport, onClo
           <span><Heart size={11} /> {formatCount(record.stats.likeCount, locale)}</span>
           <span><Star size={11} /> {formatCount(record.stats.collectCount, locale)}</span>
         </div>
+        {Number(detail?.avgRunningSeconds) > 0 ? (
+          <div className="rhLibDetailStats rhLibDetailCost" title={t("rh.estTooltip")}>
+            <span>⏱ ~{Math.round(Number(detail.avgRunningSeconds))}s</span>
+            {detail.runningSuccessRate != null && detail.runningSuccessRate !== "" ? (
+              <span>✅ {detail.runningSuccessRate}%</span>
+            ) : null}
+            {estimateRhCoins(detail.avgRunningSeconds) ? (
+              <span>🪙 ~{estimateRhCoins(detail.avgRunningSeconds)} {t("rh.estCoinsUnit")}</span>
+            ) : null}
+          </div>
+        ) : null}
         {record.tags.length ? (
           <div className="rhLibDetailTags">
             {record.tags.map(tag => <span key={tag.id}>{tag.name}</span>)}

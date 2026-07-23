@@ -573,3 +573,8 @@ html[data-theme="light"] .rhLibOverlay {
   font-size: 11px;
   line-height: 1.45;
 }
+
+.rhLibDetailCost {
+  color: var(--muted-2);
+  font-size: 11px;
+}

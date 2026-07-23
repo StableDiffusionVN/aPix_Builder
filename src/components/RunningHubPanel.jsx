@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Bookmark, LayoutTemplate, LibraryBig, Loader2, Lock, RefreshCcw, Settings2, Trash2, Workflow, Zap } from "lucide-react";
+import { estimateRhCoins } from "../lib/rhCost.js";
 import { RunningHubField } from "./RunningHubField";
 import { ComfyUiLogomark } from "./icons/ComfyUiIcon";
 import { RunningHubLogomark } from "./icons/RunningHubIcon";
@@ -58,6 +59,17 @@ function RunningHubAppInfo({ info, t }) {
           ) : null}
         </div>
         {info.webappId ? <small className="rhAppInfoId">ID {info.webappId}</small> : null}
+        {Number(info.avgRunningSeconds) > 0 ? (
+          <div className="rhAppCostRow" title={t("rh.estTooltip")}>
+            <span>⏱ ~{Math.round(Number(info.avgRunningSeconds))}s</span>
+            {info.runningSuccessRate != null && info.runningSuccessRate !== "" ? (
+              <span>✅ {info.runningSuccessRate}%</span>
+            ) : null}
+            {estimateRhCoins(info.avgRunningSeconds) ? (
+              <span>🪙 ~{estimateRhCoins(info.avgRunningSeconds)} {t("rh.estCoinsUnit")}</span>
+            ) : null}
+          </div>
+        ) : null}
         {stats.length ? (
           <div className="rhAppInfoStats">
             {stats.map(item => (

@@ -264,7 +264,9 @@ export function createRunningHubService({ storage, runCoordinator, readBody, sen
       statisticsInfo: webapp.statisticsInfo,
       covers: webapp.covers,
       tags: webapp.tags,
-      instanceType: detail?.instanceType || null
+      instanceType: detail?.instanceType || null,
+      avgRunningSeconds: detail?.avgRunningSeconds ?? null,
+      runningSuccessRate: detail?.runningSuccessRate ?? null
     });
   }
   

@@ -253,6 +253,22 @@ export function useRunningHub() {
     }
   }, [locale, primaryApiKey, settings.webappId, t]);
 
+  const importWebapp = useCallback(async ({ id, name } = {}) => {
+    const trimmedId = String(id || "").trim();
+    if (!trimmedId) throw new Error(t("rh.noWebappId"));
+    updateSettings({ webappId: trimmedId });
+    if (!isDefaultRhWebapp(trimmedId)) {
+      const entryName = String(name || "").trim() || trimmedId;
+      try {
+        await persistApps(upsertSavedRhAppList(savedWebappsRef.current, { id: trimmedId, name: entryName }));
+      } catch (error) {
+        console.error("Failed to save imported RH app:", error);
+      }
+    }
+    await fetchNodes({ webappId: trimmedId, throwOnError: true });
+    return trimmedId;
+  }, [fetchNodes, persistApps, t, updateSettings]);
+
   const saveCurrentWebapp = useCallback(async () => {
     if (!savedAppsReady) {
       return { ok: false, error: t("rh.appStorageLoading") };
@@ -300,6 +316,7 @@ export function useRunningHub() {
     savedAppsError,
     webappOptions,
     saveCurrentWebapp,
+    importWebapp,
     nodes,
     webappInfo,
     restoreNodes,

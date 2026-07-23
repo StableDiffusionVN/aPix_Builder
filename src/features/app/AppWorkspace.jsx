@@ -22,7 +22,7 @@ import {
 import { cloneDefaultAdjustments } from "../../lib/imageAdjustments";
 import { DEFAULT_HEALING_BRUSH_SIZE } from "../../lib/healingBrush";
 import { PreviewPanel } from "../../components/PreviewPanel";
-import { preloadSettingsModal } from "../../components/lazyModals";
+import { preloadRhLibraryModal, preloadSettingsModal, RhLibraryModal } from "../../components/lazyModals";
 import { formatOutputTimingLabel, formatRhCoins } from "../../lib/runLog";
 import { PresetBar } from "../../components/PresetBar";
 import { RunControls } from "../../components/RunControls";
@@ -252,6 +252,7 @@ export function AppWorkspace() {
     savedAppsError: rhSavedAppsError,
     webappOptions: rhWebappOptions,
     saveCurrentWebapp,
+    importWebapp: importRhWebapp,
     restoreNodes: restoreRhNodes,
     restoreWebappInfo: restoreRhWebappInfo,
     nodesLoading: rhNodesLoading,
@@ -259,6 +260,7 @@ export function AppWorkspace() {
     fetchNodes: fetchRhNodes
   } = useRunningHub();
   const [shortcutExporting, setShortcutExporting] = useState(false);
+  const [rhLibraryOpen, setRhLibraryOpen] = useState(false);
   const [templateFolderExporting, setTemplateFolderExporting] = useState(false);
   const { history, setHistory, loadOutputHistory, deleteHistoryItem } = useHistory();
   const { inputImages, setInputImages, refreshInputImages } = useInputImages();
@@ -1582,6 +1584,13 @@ export function AppWorkspace() {
     handleRunClickRef
   });
 
+  const handleRhLibraryImport = useCallback(async ({ id, name }) => {
+    await importRhWebapp({ id, name });
+    setExecutionMode("runninghub-app");
+    setWorkspaceView("form");
+    setRhLibraryOpen(false);
+  }, [importRhWebapp, setExecutionMode, setWorkspaceView]);
+
   return (
     <main
       className={`appShell${isCanvasView ? " is-canvas-view" : ""} ${isRunningHub ? "is-runninghub" : ""}${sidebarSide === "right" ? " sidebar-right" : ""}${availableUpdate ? " hasUpdateBanner" : ""}`}
@@ -1603,6 +1612,8 @@ export function AppWorkspace() {
               }}
               canvasActive={isCanvasView}
               onCanvasToggle={() => setWorkspaceView(isCanvasView ? "form" : "canvas")}
+              onLibraryOpen={() => setRhLibraryOpen(true)}
+              onLibraryHover={preloadRhLibraryModal}
             >
               <div
                 ref={handleWorkflowToolbarHost}
@@ -2084,6 +2095,16 @@ export function AppWorkspace() {
         heroImage={heroImage}
         handleSaveEditedOutput={handleSaveEditedOutput}
       />
+
+      {rhLibraryOpen ? (
+        <Suspense fallback={null}>
+          <RhLibraryModal
+            open
+            onClose={() => setRhLibraryOpen(false)}
+            onImportApp={handleRhLibraryImport}
+          />
+        </Suspense>
+      ) : null}
 
     </main>
   );

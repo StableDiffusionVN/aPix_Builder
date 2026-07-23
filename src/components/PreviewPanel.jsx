@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { ColorPickCursorOverlay } from "./colorPickUi";
 import { useI18n } from "../i18n/I18nContext";
+import { mediaKindFromUrl } from "../lib/mediaKind";
 import { RunningHubRunningState } from "./RunningHubRunningState";
 import { RunLogPanel } from "./lazyModals";
 
@@ -180,7 +181,13 @@ export function PreviewPanel({
                 "--compare-divider-x": `${compareDividerX}px`
               }}
             >
-              {compareMode && canCompare ? (
+              {mediaKindFromUrl(previewImage) === "video" ? (
+                <video className="resultImage resultVideo" src={previewImage} controls playsInline preload="metadata" />
+              ) : mediaKindFromUrl(previewImage) === "audio" ? (
+                <div className="resultAudioWrap">
+                  <audio src={previewImage} controls preload="metadata" />
+                </div>
+              ) : compareMode && canCompare ? (
                 <>
                   <img className="resultImage compareInputImage" src={compareInputImage} alt={t("preview.inputImage")} draggable="false" />
                   <img ref={imageElementRef} className="resultImage compareOutputImage" src={previewImage} alt={outputLabel} draggable="false" onLoad={handleResultImageLoad} />
@@ -220,7 +227,13 @@ export function PreviewPanel({
                   aria-label={t("preview.viewOutput", { index: index + 1 })}
                   aria-pressed={index === selectedOutputIndex}
                 >
-                  <img src={output.url} alt={output.filename || `Output ${index + 1}`} draggable="false" />
+                  {mediaKindFromUrl(output.url) === "video" ? (
+                    <video src={output.url} muted preload="metadata" />
+                  ) : mediaKindFromUrl(output.url) === "audio" ? (
+                    <span className="outputThumbAudio" aria-hidden="true">♪</span>
+                  ) : (
+                    <img src={output.url} alt={output.filename || `Output ${index + 1}`} draggable="false" />
+                  )}
                 </button>
               ))}
             </div>

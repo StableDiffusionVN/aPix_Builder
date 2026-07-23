@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Download, Filter, History, Loader2, Star, Workflow, X } from "lucide-react";
 import { useI18n } from "../i18n/I18nContext";
 import { getSetting, setSetting } from "../lib/appSettings.js";
+import { mediaKindFromUrl } from "../lib/mediaKind.js";
 
 function formatTime(value, locale) {
   if (!value) return "";
@@ -190,13 +191,19 @@ export function OutputGallery({
             >
               <span className="historyThumb">
                 {primaryOutput ? (
-                  <img
-                    src={primaryOutput.url}
-                    alt={primaryOutput.filename || item.templateName}
-                    draggable="false"
-                    loading="lazy"
-                    decoding="async"
-                  />
+                  mediaKindFromUrl(primaryOutput.url) === "video" ? (
+                    <video src={primaryOutput.url} muted preload="metadata" />
+                  ) : mediaKindFromUrl(primaryOutput.url) === "audio" ? (
+                    <span className="historyThumbAudio" aria-hidden="true">♪</span>
+                  ) : (
+                    <img
+                      src={primaryOutput.url}
+                      alt={primaryOutput.filename || item.templateName}
+                      draggable="false"
+                      loading="lazy"
+                      decoding="async"
+                    />
+                  )
                 ) : null}
                 {isSelected ? <span className="historySelectBadge" aria-hidden="true">✓</span> : null}
               </span>

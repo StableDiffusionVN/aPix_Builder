@@ -21,6 +21,7 @@ import {
   waitForRhApiKeyIdle
 } from "../lib/runningHubClient.js";
 import { withRhTokenFailover, resolveRhApiKeys, RH_TOKEN_POLICY } from "../lib/rhTokenFailover.js";
+import { fetchRhWebappDetail } from "../lib/rhLibrary.js";
 import { normalizeValues } from "../lib/comfyClient.js";
 import { mapValuesToRequest } from "../lib/workflowPatcher.js";
 import { decorateCanvasHistoryItem, mergeCanvasHistoryItem } from "../lib/canvasHistory.js";
@@ -251,7 +252,10 @@ export function createRunningHubService({ storage, runCoordinator, readBody, sen
       send(res, 400, { error: "Missing RunningHub webappId" });
       return;
     }
-    const webapp = await getWebappCallDemo(apiKey, webappId);
+    const [webapp, detail] = await Promise.all([
+      getWebappCallDemo(apiKey, webappId),
+      fetchRhWebappDetail(webappId)
+    ]);
     send(res, 200, {
       nodes: webapp.nodeInfoList,
       webappId,
@@ -259,7 +263,8 @@ export function createRunningHubService({ storage, runCoordinator, readBody, sen
       accessEncrypted: webapp.accessEncrypted,
       statisticsInfo: webapp.statisticsInfo,
       covers: webapp.covers,
-      tags: webapp.tags
+      tags: webapp.tags,
+      instanceType: detail?.instanceType || null
     });
   }
   

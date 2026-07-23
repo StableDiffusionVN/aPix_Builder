@@ -549,3 +549,27 @@ html[data-theme="light"] .rhLibOverlay {
     z-index: 3;
   }
 }
+
+/* ── Plus GPU badge (thư viện) ──────────────────────────── */
+
+.rhLibPlusBadge {
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(251, 191, 36, 0.16);
+  color: var(--warning);
+  font-size: 10.5px;
+  font-weight: 700;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.rhLibPlusWarning {
+  margin: 0;
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: rgba(251, 191, 36, 0.1);
+  color: var(--warning);
+  font-size: 11px;
+  line-height: 1.45;
+}

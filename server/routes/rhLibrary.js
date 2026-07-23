@@ -1,4 +1,4 @@
-import { fetchRhLibraryList, fetchRhLibraryTags } from "../lib/rhLibrary.js";
+import { fetchRhLibraryList, fetchRhLibraryTags, fetchRhWebappDetail } from "../lib/rhLibrary.js";
 
 export function createRhLibraryRoutes(context) {
   const { send } = context;
@@ -11,6 +11,11 @@ export function createRhLibraryRoutes(context) {
       } catch (error) {
         send(res, 502, { error: error.message || String(error) });
       }
+      return true;
+    }
+    if (req.method === "GET" && url.pathname === "/api/rh-library/detail") {
+      const detail = await fetchRhWebappDetail(url.searchParams.get("id") || "");
+      send(res, 200, { detail });
       return true;
     }
     if (req.method === "GET" && url.pathname === "/api/rh-library/list") {

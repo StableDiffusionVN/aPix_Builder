@@ -95,6 +95,22 @@ function RhLibraryCard({ record, locale, onSelect }) {
 
 function RhLibraryDetail({ record, kind, locale, t, importState, onImport, onClose }) {
   const detailUrl = `https://www.runninghub.ai/ai-detail/${record.id}`;
+  const [detail, setDetail] = useState(null);
+  useEffect(() => {
+    if (kind !== "app") return;
+    let cancelled = false;
+    setDetail(null);
+    fetch(`/api/rh-library/detail?id=${record.id}`)
+      .then(response => response.json())
+      .then(data => {
+        if (!cancelled) setDetail(data.detail || null);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [kind, record.id]);
+  const isPlus = detail?.instanceType === "plus";
   const publishDate = record.publishTime
     ? new Date(record.publishTime).toLocaleDateString(locale === "vi" ? "vi-VN" : "en-US")
     : "";
@@ -110,7 +126,11 @@ function RhLibraryDetail({ record, kind, locale, t, importState, onImport, onClo
         <CoverMedia cover={record.cover} className="rhLibDetailMedia" />
       </div>
       <div className="rhLibDetailInfo">
-        <h3>{record.name}</h3>
+        <h3>
+          {record.name}
+          {isPlus ? <span className="rhLibPlusBadge" title={t("rhLib.plusWarning")}>⚡ Plus GPU</span> : null}
+        </h3>
+        {isPlus ? <p className="rhLibPlusWarning">{t("rhLib.plusWarning")}</p> : null}
         {record.owner ? (
           <div className="rhLibDetailOwner">
             {record.owner.avatar ? <img src={record.owner.avatar} alt="" loading="lazy" /> : null}

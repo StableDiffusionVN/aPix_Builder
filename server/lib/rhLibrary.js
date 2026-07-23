@@ -102,6 +102,23 @@ function normalizeRecord(record) {
   };
 }
 
+/// Chi tiết app từ API nội bộ — dùng lấy `instanceType` ("plus" = app chạy Plus GPU,
+/// API key thường có thể không hỗ trợ). Fail mềm: lỗi → null.
+export async function fetchRhWebappDetail(webappId, signal) {
+  try {
+    const raw = await postPortalJson("/api/webapp/detail", { webappId: String(webappId) }, signal);
+    if (!raw || typeof raw !== "object") return null;
+    return {
+      instanceType: raw.instanceType || null,
+      description: raw.description || "",
+      avgRunningSeconds: Number(raw.avgRunningSeconds) || null,
+      runningSuccessRate: raw.runningSuccessRate ?? null
+    };
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchRhLibraryList(options = {}, signal) {
   const normalizedKind = normalizeKind(options.kind);
   const sort = LIST_SORTS.has(options.sort) ? options.sort : "RECOMMEND";

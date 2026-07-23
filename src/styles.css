@@ -5609,10 +5609,15 @@ html[data-theme="light"] .logTaskInspectLine {
 }
 
 .historyThumb,
-.historyThumb img {
+.historyThumb img,
+.historyThumb video {
   display: block;
   width: 52px;
   height: 52px;
+}
+
+.historyThumb video {
+  object-fit: cover;
 }
 
 .historyThumb {
@@ -10640,4 +10645,139 @@ html:not([data-theme="dark"]):not([data-theme="light"]) .appShell.is-runninghub 
   color: var(--muted-2);
   max-width: 300px;
   line-height: 1.6;
+}
+
+/* ── Media field (video/audio input) ───────────────────── */
+
+.mediaFieldDropzone {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 10px;
+  background: var(--panel-soft);
+}
+
+.mediaFieldDropzone.isDragging {
+  border-color: var(--accent);
+  background: var(--accent-muted);
+}
+
+.mediaFieldDropzone input[type="file"] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.mediaFieldPreview {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mediaFieldPreview video {
+  width: 100%;
+  max-height: 220px;
+  border-radius: 8px;
+  background: #000;
+}
+
+.mediaFieldPreview audio {
+  width: 100%;
+}
+
+.mediaFieldClear {
+  align-self: flex-start;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.mediaFieldEmpty {
+  padding: 18px 8px;
+  text-align: center;
+  color: var(--muted-2);
+  font-size: 12px;
+  pointer-events: none;
+}
+
+/* ── Output video/audio ────────────────────────────────── */
+
+.resultVideo {
+  max-width: 100%;
+  max-height: 100%;
+  background: #000;
+}
+
+.resultAudioWrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: min(420px, 90%);
+}
+
+.resultAudioWrap audio {
+  width: 100%;
+}
+
+.outputThumb video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.outputThumbAudio,
+.historyThumbAudio {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  font-size: 18px;
+  color: var(--muted);
+  background: var(--surface-2);
+}
+
+.imageLightboxStage video {
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.imageLightboxStage audio {
+  width: min(420px, 90vw);
+}
+
+/* ── RunningHub Plus GPU ───────────────────────────────── */
+
+.rhAppInfoPlus {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(251, 191, 36, 0.16);
+  color: var(--warning);
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.rhAppPlusWarning {
+  margin-top: 6px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: rgba(251, 191, 36, 0.1);
+  color: var(--warning);
+  font-size: 11px;
+  line-height: 1.45;
 }

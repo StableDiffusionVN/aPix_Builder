@@ -450,11 +450,8 @@ export async function prepareNodeInfoList(apiKey, nodes, { inputDir, outputDir, 
         || fieldValue === ""
         || (typeof fieldValue === "string" && !fieldValue.trim());
       if (isEmpty) {
-        prepared.push({
-          nodeId: String(node.nodeId),
-          fieldName: node.fieldName,
-          fieldValue: ""
-        });
+        // Bỏ node trống khỏi nodeInfoList → RunningHub dùng giá trị mặc định của app
+        // (gửi fieldValue rỗng sẽ làm API lỗi).
         continue;
       }
       onProgress?.({ type: "upload", label: `Đang upload ${node.description || node.fieldName}...` });
@@ -469,6 +466,7 @@ export async function prepareNodeInfoList(apiKey, nodes, { inputDir, outputDir, 
     } else if (fieldValue != null && typeof fieldValue !== "string") {
       fieldValue = String(fieldValue);
     }
+    if (fieldValue == null || !String(fieldValue).trim()) continue;
     prepared.push({
       nodeId: String(node.nodeId),
       fieldName: node.fieldName,

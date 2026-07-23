@@ -117,6 +117,8 @@ const inputTypes = new Set([
   "float",
   "radio",
   "file",
+  "video",
+  "audio",
   "colorpicker",
   "date",
   "json"
@@ -559,6 +561,66 @@ const DynamicFieldInner = memo(function DynamicFieldInner({
     t
   });
   if (basicField) return basicField;
+  if (ui.type === "video" || ui.type === "audio") {
+    const isVideo = ui.type === "video";
+    const accept = isVideo ? "video/*" : "audio/*";
+    const hasMedia = typeof value === "string" && value.startsWith("data:");
+    const readMediaFile = file => {
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => onChange(String(reader.result || ""));
+      reader.readAsDataURL(file);
+    };
+    return (
+      <label
+        className={`field ${description ? "fieldWithTooltip" : ""}`}
+        data-field-tooltip={description || undefined}
+      >
+        <span>{label}</span>
+        <div
+          className={`mediaFieldDropzone ${isDraggingFile ? "isDragging" : ""}`}
+          onDragEnter={event => { event.preventDefault(); setIsDraggingFile(true); }}
+          onDragOver={event => { event.preventDefault(); event.dataTransfer.dropEffect = "copy"; }}
+          onDragLeave={event => {
+            event.preventDefault();
+            if (!event.currentTarget.contains(event.relatedTarget)) setIsDraggingFile(false);
+          }}
+          onDrop={event => {
+            event.preventDefault();
+            setIsDraggingFile(false);
+            readMediaFile(event.dataTransfer.files?.[0]);
+          }}
+        >
+          {hasMedia ? (
+            <div className="mediaFieldPreview">
+              {isVideo
+                ? <video src={value} controls playsInline preload="metadata" />
+                : <audio src={value} controls preload="metadata" />}
+              <button
+                type="button"
+                className="mediaFieldClear"
+                onClick={event => { event.preventDefault(); onChange(""); }}
+              >
+                {t("field.clearMedia")}
+              </button>
+            </div>
+          ) : (
+            <div className="mediaFieldEmpty">
+              <span>{isVideo ? t("field.uploadVideo") : t("field.uploadAudio")}</span>
+            </div>
+          )}
+          <input
+            type="file"
+            accept={accept}
+            onChange={event => {
+              readMediaFile(event.target.files?.[0]);
+              event.target.value = "";
+            }}
+          />
+        </div>
+      </label>
+    );
+  }
   if (ui.type === "image" || ui.type === "image_mask" || ui.type === "file") {
     const acceptsImageUrl = ui.type === "image" || ui.type === "image_mask";
 

@@ -74,7 +74,8 @@ export function buildWebappInfo(data = {}, webappId = "") {
       ? data.statisticsInfo
       : null,
     covers: Array.isArray(data.covers) ? data.covers : [],
-    tags: Array.isArray(data.tags) ? data.tags : []
+    tags: Array.isArray(data.tags) ? data.tags : [],
+    instanceType: data.instanceType || null
   };
 }
 

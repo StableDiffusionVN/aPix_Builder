@@ -37,7 +37,8 @@ export function RunningHubField({
   const isLongText = String(value || "").length > 80 || /prompt|text|caption|value/i.test(node.fieldName);
   const uiType =
     fieldType === "IMAGE" ? "image_mask"
-    : fieldType === "AUDIO" || fieldType === "VIDEO" ? "file"
+    : fieldType === "AUDIO" ? "audio"
+    : fieldType === "VIDEO" ? "video"
     : fieldType === "LIST" ? "dropdown"
     : fieldType === "INT" || fieldType === "INTEGER" ? "int"
     : fieldType === "FLOAT" || fieldType === "NUMBER" ? "float"

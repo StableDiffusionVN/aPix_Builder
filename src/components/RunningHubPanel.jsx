@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Bookmark, LayoutTemplate, LibraryBig, Loader2, Lock, RefreshCcw, Settings2, Workflow } from "lucide-react";
+import { Bookmark, LayoutTemplate, LibraryBig, Loader2, Lock, RefreshCcw, Settings2, Workflow, Zap } from "lucide-react";
 import { RunningHubField } from "./RunningHubField";
 import { ComfyUiLogomark } from "./icons/ComfyUiIcon";
 import { RunningHubLogomark } from "./icons/RunningHubIcon";
@@ -44,6 +44,12 @@ function RunningHubAppInfo({ info, t }) {
       <div className="rhAppInfoBody">
         <div className="rhAppInfoTitleRow">
           <strong className="rhAppInfoTitle">{info.webappName || t("rh.unnamedApp")}</strong>
+          {info.instanceType === "plus" ? (
+            <span className="rhAppInfoPlus" title={t("rh.plusWarning")}>
+              <Zap size={11} />
+              <span>Plus GPU</span>
+            </span>
+          ) : null}
           {info.accessEncrypted ? (
             <span className="rhAppInfoEncrypted" title={t("rh.accessEncrypted")}>
               <Lock size={12} />
@@ -52,6 +58,9 @@ function RunningHubAppInfo({ info, t }) {
           ) : null}
         </div>
         {info.webappId ? <small className="rhAppInfoId">ID {info.webappId}</small> : null}
+        {info.instanceType === "plus" ? (
+          <div className="rhAppPlusWarning">{t("rh.plusWarning")}</div>
+        ) : null}
         {stats.length ? (
           <div className="rhAppInfoStats">
             {stats.map(item => (

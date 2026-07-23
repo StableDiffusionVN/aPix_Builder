@@ -9788,10 +9788,10 @@ html:not([data-theme="dark"]):not([data-theme="light"]) .appShell.is-runninghub 
 }
 
 .rhAppInfoCover {
+  /* Cover cố định tỉ lệ 4:5 — không co giãn theo nội dung bên cạnh */
   width: 72px;
-  /* Cao theo khối thông tin bên cạnh (grid stretch) — tối thiểu giữ khung 3:4 */
-  align-self: stretch;
-  min-height: 96px;
+  aspect-ratio: 4 / 5;
+  align-self: start;
   overflow: hidden;
   border-radius: 10px;
   border: 1px solid var(--border);
@@ -9807,6 +9807,8 @@ html:not([data-theme="dark"]):not([data-theme="light"]) .appShell.is-runninghub 
 
 .rhAppInfoBody {
   display: grid;
+  /* Dòng xếp sát nhau — không giãn khoảng cách khi khối thấp hơn cover */
+  align-content: start;
   gap: 6px;
   min-width: 0;
 }

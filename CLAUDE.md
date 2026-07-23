@@ -33,6 +33,7 @@ Mỗi lần phát hành/bump phiên bản main app, LUÔN làm đủ 3 cập nh�
 5. **Website `apix.sdvn.vn`** (repo git riêng tại `website/`, gitignored) — áp dụng cho MỌI đợt cập nhật app/extension/plugin, không riêng main app:
    - Thêm **1 dòng thông tin update ngắn gọn ngay dưới tiêu đề phụ hero** (`heroLead`/`hero.updateNote` trong `website/index.html`, chuỗi vi/en trong `website/i18n.js`) — CHỈ nói về MAIN APP (desktop), gọn đúng 1 dòng, 2-3 điểm chính; KHÔNG liệt kê chi tiết iOS/Android/extension/pts trong dòng này; thay dòng cũ, không chồng dòng. Pill hero cũng chỉ hiển thị version main app.
    - Cập nhật **pill hero** (`hero.pill` — số version) + **toàn bộ link tải hardcode version** trong `index.html`/`heroNote` (DMG/EXE/APK/ccx/extension) + thông tin khác nếu đổi.
+   - **BẮT BUỘC bump tham số cache-bust** `?v=` của `i18n.js`/`styles.css` trong `index.html` mỗi khi 2 file này đổi — chúng được serve `immutable, max-age=7d`, quên bump là trình duyệt người dùng giữ chuỗi cũ cả tuần (đã dính 23/07).
    - Deploy: `bash website/prepare.sh` rồi:
      ```bash
      set -a; source _local/apix-vps.env; set +a   # env file KHÔNG có export — phải set -a

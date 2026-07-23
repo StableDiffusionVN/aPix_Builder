@@ -9792,9 +9792,9 @@ html:not([data-theme="dark"]):not([data-theme="light"]) .appShell.is-runninghub 
   /* Giữ đúng 4:5; cao tối thiểu bằng khối thông tin (stretch) nhưng có trần
      tránh vòng lặp stretch↔width làm cover phình vô hạn */
   flex: 0 0 auto;
-  aspect-ratio: 4 / 5;
+  aspect-ratio: 2 / 3;
   min-height: 90px;
-  max-height: 148px;
+  max-height: 118px;
   width: auto;
   overflow: hidden;
   border-radius: 10px;

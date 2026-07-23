@@ -112,6 +112,7 @@ function RhLibraryDetail({ record, kind, locale, t, importState, onImport, onClo
     };
   }, [kind, record.id]);
   const isPlus = detail?.instanceType === "plus";
+  const isLite = detail?.instanceType === "lite";
   const publishDate = record.publishTime
     ? new Date(record.publishTime).toLocaleDateString(locale === "vi" ? "vi-VN" : "en-US")
     : "";
@@ -130,6 +131,7 @@ function RhLibraryDetail({ record, kind, locale, t, importState, onImport, onClo
         <h3>
           {record.name}
           {isPlus ? <span className="rhLibPlusBadge" title={t("rhLib.plusWarning")}>⚡ Plus GPU</span> : null}
+          {isLite ? <span className="rhLibLiteBadge" title={t("rh.liteHint")}>Lite</span> : null}
         </h3>
         {record.owner ? (
           <div className="rhLibDetailOwner">
@@ -152,6 +154,13 @@ function RhLibraryDetail({ record, kind, locale, t, importState, onImport, onClo
             {estimateRhCoins(detail.avgRunningSeconds) ? (
               <span>🪙 ~{estimateRhCoins(detail.avgRunningSeconds)} {t("rh.estCoinsUnit")}</span>
             ) : null}
+            {detail.hasPaidModel ? (
+              <span title={t("rh.paidModelHint")}>💲 {t("rh.paidModel")}</span>
+            ) : null}
+          </div>
+        ) : detail?.hasPaidModel ? (
+          <div className="rhLibDetailStats rhLibDetailCost">
+            <span title={t("rh.paidModelHint")}>💲 {t("rh.paidModel")}</span>
           </div>
         ) : null}
         {record.tags.length ? (

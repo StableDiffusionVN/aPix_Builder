@@ -50,6 +50,8 @@ function RunningHubAppInfo({ info, t }) {
               <Zap size={11} />
               <span>Plus GPU</span>
             </span>
+          ) : info.instanceType === "lite" ? (
+            <span className="rhAppInfoLite" title={t("rh.liteHint")}>Lite</span>
           ) : null}
           {info.accessEncrypted ? (
             <span className="rhAppInfoEncrypted" title={t("rh.accessEncrypted")}>
@@ -68,6 +70,13 @@ function RunningHubAppInfo({ info, t }) {
             {estimateRhCoins(info.avgRunningSeconds) ? (
               <span>🪙 ~{estimateRhCoins(info.avgRunningSeconds)} {t("rh.estCoinsUnit")}</span>
             ) : null}
+            {info.hasPaidModel ? (
+              <span className="rhAppPaidModel" title={t("rh.paidModelHint")}>💲 {t("rh.paidModel")}</span>
+            ) : null}
+          </div>
+        ) : info.hasPaidModel ? (
+          <div className="rhAppCostRow">
+            <span className="rhAppPaidModel" title={t("rh.paidModelHint")}>💲 {t("rh.paidModel")}</span>
           </div>
         ) : null}
         {stats.length ? (

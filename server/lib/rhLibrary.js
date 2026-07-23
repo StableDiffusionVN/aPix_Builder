@@ -112,7 +112,10 @@ export async function fetchRhWebappDetail(webappId, signal) {
       instanceType: raw.instanceType || null,
       description: raw.description || "",
       avgRunningSeconds: Number(raw.avgRunningSeconds) || null,
-      runningSuccessRate: raw.runningSuccessRate ?? null
+      runningSuccessRate: raw.runningSuccessRate ?? null,
+      // Node RH_* = model bên thứ ba trả phí $ (ngoài coin GPU) — bảng giá cần đăng nhập RunningHub.
+      hasPaidModel: Array.isArray(raw.inputNodes)
+        && raw.inputNodes.some(node => /^RH_/i.test(String(node?.nodeName || "")))
     };
   } catch {
     return null;

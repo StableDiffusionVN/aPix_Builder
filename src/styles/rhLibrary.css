@@ -578,3 +578,15 @@ html[data-theme="light"] .rhLibOverlay {
   color: var(--muted-2);
   font-size: 11px;
 }
+
+.rhLibLiteBadge {
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(114, 201, 87, 0.16);
+  color: #72c957;
+  font-size: 10.5px;
+  font-weight: 700;
+  white-space: nowrap;
+  vertical-align: middle;
+}

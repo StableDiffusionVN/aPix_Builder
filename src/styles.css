@@ -9789,7 +9789,9 @@ html:not([data-theme="dark"]):not([data-theme="light"]) .appShell.is-runninghub 
 
 .rhAppInfoCover {
   width: 72px;
-  aspect-ratio: 3 / 4;
+  /* Cao theo khối thông tin bên cạnh (grid stretch) — tối thiểu giữ khung 3:4 */
+  align-self: stretch;
+  min-height: 96px;
   overflow: hidden;
   border-radius: 10px;
   border: 1px solid var(--border);
@@ -10822,4 +10824,21 @@ html:not([data-theme="dark"]):not([data-theme="light"]) .appShell.is-runninghub 
   margin-top: 4px;
   font-size: 11px;
   color: var(--muted);
+}
+
+.rhAppInfoLite {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(114, 201, 87, 0.16);
+  color: #72c957;
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.rhAppPaidModel {
+  color: var(--warning);
 }

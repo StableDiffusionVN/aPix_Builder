@@ -77,7 +77,10 @@ export function buildWebappInfo(data = {}, webappId = "") {
     tags: Array.isArray(data.tags) ? data.tags : [],
     instanceType: data.instanceType || null,
     avgRunningSeconds: data.avgRunningSeconds ?? null,
-    runningSuccessRate: data.runningSuccessRate ?? null
+    runningSuccessRate: data.runningSuccessRate ?? null,
+    // Node RH_* trong nodeInfoList = model bên thứ ba trả phí $ (ngoài coin GPU).
+    hasPaidModel: Array.isArray(data.nodes)
+      && data.nodes.some(node => /^RH_/i.test(String(node?.nodeName || "")))
   };
 }
 

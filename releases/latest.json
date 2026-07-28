@@ -1,15 +1,13 @@
 {
-  "version": "1.4.0",
-  "label": "v1.4",
-  "publishedAt": "2026-07-23T13:31:22.097Z",
+  "version": "1.4.1",
+  "label": "v1.4.1",
+  "publishedAt": "2026-07-28T05:03:48.612Z",
   "notes": [
-    "Thư viện app RunningHub: nút Thư viện cạnh Canvas — duyệt, lọc danh mục, tìm kiếm, sắp xếp, import dùng ngay",
-    "Card thông tin app + dự toán chi phí: ⏱ thời gian TB, ✅ tỉ lệ thành công, 🪙 ~coin, 💲 phí model, badge Plus GPU/Lite",
-    "Input/output video-âm thanh: field video/audio, kết quả phát/tua ngay trong Preview/Thư viện/Lightbox",
-    "App RH dùng tham số mặc định khi bỏ trống; sửa menu lựa chọn COMBO; tăng thời gian chờ 20 phút; tên app quốc tế"
+    "Chạy batch nhiều ảnh: ảnh của các lệnh do hàng chờ nền chạy hiện ngay trong Lịch sử tạo và khung xem, không phải tải lại trang",
+    "Giữ ô \"Đang xử lý\" và số lệnh trên nút log khi hàng chờ đang chạy lệnh tiếp theo — không còn tưởng nhầm là đã hết việc"
   ],
-  "downloadUrl": "https://github.com/StableDiffusionVN/aPix_Builder/releases/download/v1.4.0/aPix.Builder-1.4.0-arm64.dmg",
-  "downloadUrlWin": "https://github.com/StableDiffusionVN/aPix_Builder/releases/download/v1.4.0/aPix.Builder-1.4.0-x64-portable.exe",
-  "releasePageUrl": "https://github.com/StableDiffusionVN/aPix_Builder/releases/tag/v1.4.0",
+  "downloadUrl": "https://github.com/StableDiffusionVN/aPix_Builder/releases/download/v1.4.1/aPix.Builder-1.4.1-arm64.dmg",
+  "downloadUrlWin": "https://github.com/StableDiffusionVN/aPix_Builder/releases/download/v1.4.1/aPix.Builder-1.4.1-x64-portable.exe",
+  "releasePageUrl": "https://github.com/StableDiffusionVN/aPix_Builder/releases/tag/v1.4.1",
   "mandatory": false
 }

@@ -82,6 +82,8 @@ import {
 } from "../../providers/WorkspaceLayoutProvider.jsx";
 import { useTemplateWorkspaceActions } from "../templates/useTemplateWorkspaceActions.js";
 import { useBatchImageState } from "./useBatchImageState.js";
+import { historyItemToResult } from "./backendQueueResults.js";
+import { useBackendQueueResults } from "./useBackendQueueResults.js";
 import { useWorkspaceModals } from "./useWorkspaceModals.js";
 import { useShortcutActionRefs, useWorkspaceShortcuts } from "./useWorkspaceShortcuts.js";
 import { RunningState } from "./AppWorkspaceRunningUi.jsx";
@@ -330,6 +332,49 @@ export function AppWorkspace() {
   useEffect(() => {
     refreshRunLogSessions();
   }, [executionMode, isCanvasView, refreshRunLogSessions]);
+
+  const historyRef = useRef(history);
+  historyRef.current = history;
+
+  const isClientOwnedRun = useCallback((runId) => (
+    runId === localExecution.activeRunId
+    || runId === rhExecution.activeRunId
+    || localExecution.runQueue.some(job => job.runId === runId)
+    || rhExecution.runQueue.some(job => job.runId === runId)
+  ), [localExecution.activeRunId, localExecution.runQueue, rhExecution.activeRunId, rhExecution.runQueue]);
+
+  const hasHistoryItem = useCallback((id) => historyRef.current.some(item => item.id === id), []);
+
+  const adoptBackendQueueResult = useCallback((item) => {
+    setHistory(current => (current.some(entry => entry.id === item.id) ? current : [item, ...current]));
+    setSelectedHistoryIds(new Set([item.id]));
+    setHistorySelectionAnchor(item.id);
+    setSelectedOutputIndex(0);
+    const isRh = isRunningHubHistoryItem(item);
+    (isRh ? rhExecution : localExecution).setResult(historyItemToResult(item));
+    if (notifyEnabled && typeof Notification !== "undefined" && Notification.permission === "granted") {
+      notifyWorkflowCompleted({ enabled: true, t, isRh });
+    }
+  }, [
+    localExecution,
+    notifyEnabled,
+    rhExecution,
+    setHistory,
+    setHistorySelectionAnchor,
+    setSelectedHistoryIds,
+    setSelectedOutputIndex,
+    t
+  ]);
+
+  // Batch nhiều ảnh: lệnh thứ 2 trở đi chạy ở hàng chờ backend nên client không
+  // có onComplete — nạp ảnh vào thư viện ngay khi backend chạy xong.
+  useBackendQueueResults({
+    sessions: runLogSessions,
+    isOwnRun: isClientOwnedRun,
+    hasHistoryItem,
+    onAdopt: adoptBackendQueueResult,
+    refreshSessions: refreshRunLogSessions
+  });
 
   const isRunningHub = isRunningHubMode(executionMode);
   const isRunningHubApp = executionMode === "runninghub-app";

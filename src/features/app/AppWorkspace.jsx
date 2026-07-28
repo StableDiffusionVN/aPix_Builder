@@ -82,7 +82,7 @@ import {
 } from "../../providers/WorkspaceLayoutProvider.jsx";
 import { useTemplateWorkspaceActions } from "../templates/useTemplateWorkspaceActions.js";
 import { useBatchImageState } from "./useBatchImageState.js";
-import { historyItemToResult } from "./backendQueueResults.js";
+import { BACKEND_RUN_ACTIVE_STATUSES, historyItemToResult } from "./backendQueueResults.js";
 import { useBackendQueueResults } from "./useBackendQueueResults.js";
 import { useWorkspaceModals } from "./useWorkspaceModals.js";
 import { useShortcutActionRefs, useWorkspaceShortcuts } from "./useWorkspaceShortcuts.js";
@@ -651,15 +651,29 @@ export function AppWorkspace() {
     provider: resultTiming.provider || (isRunningHub ? "runninghub" : undefined),
     rhCoins: resultTiming.rhCoins
   });
-  const backendFormQueueCount = useMemo(() => (
+  // Batch: lệnh 2..N chạy ở hàng chờ backend — đang chạy (running) lẫn đang chờ
+  // (queued) đều phải tính, nếu không UI trông như đã hết việc.
+  const backendFormRuns = useMemo(() => (
     (runLogSessions || []).filter(session => (
-      session.status === "queued"
-      && session.runKind === "form"
-      && !runQueue.some(job => job.runId === session.runId)
-    )).length
-  ), [runLogSessions, runQueue]);
+      session.runKind === "form"
+      && BACKEND_RUN_ACTIVE_STATUSES.has(session.status)
+      && !isClientOwnedRun(session.runId)
+    ))
+  ), [isClientOwnedRun, runLogSessions]);
+  const backendFormQueueCount = useMemo(
+    () => backendFormRuns.filter(session => session.status === "queued").length,
+    [backendFormRuns]
+  );
+  const backendFormRunningCount = useMemo(
+    () => backendFormRuns.filter(session => session.status === "running").length,
+    [backendFormRuns]
+  );
   const formQueueCount = runQueue.length + backendFormQueueCount;
-  const showStatus = Boolean(error || result || running || activeRunId || formQueueCount);
+  const formBusy = running || backendFormRunningCount > 0 || formQueueCount > 0;
+  const backendFormPendingLabel = backendFormRunningCount > 0
+    ? t("history.backendRunning")
+    : formQueueCount > 0 ? t("history.backendQueued") : "";
+  const showStatus = Boolean(error || result || running || activeRunId || formBusy);
 
   const compareInputImage = useMemo(() => {
     if (isRunningHubApp) {
@@ -999,8 +1013,8 @@ export function AppWorkspace() {
 
   // Khi không còn chạy và hết hàng chờ, tắt màn hình chờ để xem được ảnh
   useEffect(() => {
-    if (!running && !formQueueCount) setShowWaitScreen(false);
-  }, [running, formQueueCount, setShowWaitScreen]);
+    if (!formBusy) setShowWaitScreen(false);
+  }, [formBusy, setShowWaitScreen]);
 
   // Auto-fill dynamic choices from discovery
   useEffect(() => {
@@ -2101,9 +2115,9 @@ export function AppWorkspace() {
           selectedIds={selectedHistoryIds}
           activeId={activeHistoryId}
           onDelete={handleDeleteHistoryItem}
-          pending={running || formQueueCount > 0}
+          pending={formBusy}
           pendingActive={showRunningScreen}
-          pendingLabel={progress?.label || status}
+          pendingLabel={running ? (progress?.label || status) : backendFormPendingLabel}
           pendingProgressPct={progressPct}
           queueCount={formQueueCount}
           onShowWaiting={() => setShowWaitScreen(true)}

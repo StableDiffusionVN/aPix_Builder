@@ -2,6 +2,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { localFileToUpload } from "./localImageFolder.js";
+import { localImageRefToUpload, parseLocalImageRef } from "./localImageRef.js";
 import { lookupMenuSubFields, menuChoiceOptions, menuChoiceValue, resolveMenuStoredValue } from "../../shared/menuChoices.js";
 
 function menuSubSelectionStorageKey(yamlKey) {
@@ -207,6 +208,22 @@ export function resolveInputImageFilename(value) {
 }
 
 async function inputImageToUpload(inputDir, value, options = {}) {
+  // Ảnh kết quả của node trước trên canvas là ref `/api/output-image?name=` —
+  // nằm ở thư mục output, không phải input; đọc sai thư mục thì ComfyUI nhận
+  // tên file không tồn tại và báo lỗi thiếu ảnh.
+  const localRef = parseLocalImageRef(typeof value === "string" ? value : value?.url);
+  if (localRef) {
+    const image = await localImageRefToUpload(localRef, {
+      inputDir,
+      outputDir: options.outputDir
+    });
+    return {
+      kind: "upload",
+      index: Date.now(),
+      mimeType: image.mimeType,
+      buffer: image.buffer
+    };
+  }
   const filename = resolveInputImageFilename(value);
   if (!filename && typeof value?.url === "string" && value.url.startsWith("data:")) {
     const parsed = options.parseDataUrl?.(value.url);
@@ -253,6 +270,16 @@ async function applyMask(target, uploaded, maskDataUrl, signal, options) {
 export async function setWorkflowValue(workflow, id, value, target, signal, options = {}) {
   const { nodeInputs, section, field } = resolveWorkflowInput(workflow, id);
   const { inputDir, uploadDir, uploadImageToComfy, uploadedImageUrl, urlUploadMode } = options;
+
+  // Canvas nối output node trước → input node sau: giá trị là chuỗi ref local
+  // (`/api/output-image?name=`). Không bọc lại thì chuỗi được gán thẳng vào
+  // widget `image` và ComfyUI báo không có ảnh.
+  if (typeof value === "string" && parseLocalImageRef(value)) {
+    const fieldName = String(field || "").toLowerCase();
+    const isImageField = section === "inputs"
+      && ("image" in nodeInputs || fieldName === "url" || fieldName.includes("image"));
+    if (isImageField) value = { kind: "input-image", url: value };
+  }
 
   if (value?.kind === "local-file") {
     const upload = await localFileToUpload(value);

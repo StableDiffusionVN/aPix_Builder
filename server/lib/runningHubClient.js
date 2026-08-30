@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { parseDataUrl } from "./comfyClient.js";
+import { parseLocalImageRef, readLocalImageFromDir } from "./localImageRef.js";
 
 export const RUNNINGHUB_HOST = "www.runninghub.ai";
 export const RUNNINGHUB_BASE = `https://${RUNNINGHUB_HOST}`;
@@ -309,56 +310,6 @@ async function fetchRemoteImage(url, signal) {
   } catch {
     return null;
   }
-}
-
-function safeBasename(rawName = "") {
-  return path.basename(String(rawName)).replace(/[^\w.-]+/g, "_");
-}
-
-function mimeFromFilename(filename = "") {
-  const ext = path.extname(filename).slice(1).toLowerCase();
-  if (ext === "jpg" || ext === "jpeg") return "image/jpeg";
-  if (ext === "webp") return "image/webp";
-  if (ext === "gif") return "image/gif";
-  return "image/png";
-}
-
-/** Parse /api/output-image or /api/input-image refs (path or absolute URL). */
-function parseLocalImageRef(value) {
-  if (!value || typeof value !== "string") return null;
-  let pathname = value;
-  let search = "";
-  if (/^https?:\/\//i.test(value)) {
-    try {
-      const parsed = new URL(value);
-      pathname = parsed.pathname;
-      search = parsed.search;
-    } catch {
-      return null;
-    }
-  } else if (!value.startsWith("/")) {
-    return null;
-  }
-  const refUrl = new URL(`${pathname}${search}`, "http://localhost");
-  if (pathname.startsWith("/api/output-image")) {
-    const name = safeBasename(refUrl.searchParams.get("name") || "");
-    return name ? { kind: "output", name } : null;
-  }
-  if (pathname.startsWith("/api/input-image")) {
-    const name = safeBasename(refUrl.searchParams.get("name") || "");
-    return name ? { kind: "input", name } : null;
-  }
-  return null;
-}
-
-async function readLocalImageFromDir(dir, name) {
-  const filePath = path.join(dir, name);
-  const resolvedDir = path.resolve(dir);
-  if (!path.resolve(filePath).startsWith(resolvedDir)) {
-    throw new Error("Invalid local image path");
-  }
-  const buffer = await readFile(filePath);
-  return { buffer, mimeType: mimeFromFilename(name), filename: name };
 }
 
 async function resolveImageFieldValue(apiKey, value, { inputDir, outputDir, signal, onProgress }) {

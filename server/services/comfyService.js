@@ -80,10 +80,11 @@ export function createComfyService({ storage, runCoordinator, readBody, send }) 
       const normalized = await normalizeValues(body.values || {});
       const request = mapValuesToRequest(config, normalized);
       const responseRequest = {};
-      const { inputDir, uploadDir } = storage.getPaths();
+      const { inputDir, uploadDir, outputDir } = storage.getPaths();
     const patchOptions = {
       inputDir,
       uploadDir,
+      outputDir,
       uploadImageToComfy,
       uploadMaskToComfy,
       parseDataUrl,

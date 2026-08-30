@@ -1,6 +1,6 @@
-# aPix Builder · v1.2
+# aPix Builder · v1.3
 
-**Website:** [apix.sdvn.vn](https://apix.sdvn.vn) · **Release:** [v1.2.0](https://github.com/StableDiffusionVN/aPix_Builder/releases/tag/v1.2.0)
+**Website:** [apix.sdvn.vn](https://apix.sdvn.vn) · **Release:** [v1.3.0](https://github.com/StableDiffusionVN/aPix_Builder/releases/tag/v1.3.0)
 
 **English:** aPix Builder is a web/desktop app for running, managing, and editing ComfyUI and RunningHub workflows through YAML templates. It can export a selected RunningHub Workflow or App as a signed Apple Shortcut with the current API key embedded.
 
@@ -10,22 +10,22 @@
 
 ## Tải bản desktop / Desktop downloads
 
-Phiên bản hiện tại: **1.2.0** (v1.2)
+Phiên bản hiện tại: **1.3.0** (v1.3)
 
 | Nền tảng | File | Ghi chú |
 | --- | --- | --- |
-| macOS (Apple Silicon) | `aPix Builder-1.2.0-arm64.dmg` | Cài như app thông thường; không cần Node.js |
-| Windows (x64) | `aPix Builder-1.2.0-x64-portable.exe` | Portable — chạy trực tiếp, không cần cài đặt |
-| Adobe Photoshop (UXP) | [`aPixBuilder_v1.2.0.ccx`](https://github.com/StableDiffusionVN/aPix_builder_pts/releases/tag/v1.2.0) | Plugin PS 24+ — repo [aPix_builder_pts](https://github.com/StableDiffusionVN/aPix_builder_pts) |
-| Chrome Extension | [`aPix-Builder-Web-Extension-v1.2.0.zip`](https://github.com/StableDiffusionVN/aPix_builder_web_extension/releases/tag/v1.2.0) | Side panel — repo [aPix_builder_web_extension](https://github.com/StableDiffusionVN/aPix_builder_web_extension) |
+| macOS (Apple Silicon) | `aPix Builder-1.3.0-arm64.dmg` | Cài như app thông thường; không cần Node.js |
+| Windows (x64) | `aPix Builder-1.3.0-x64-portable.exe` | Portable — chạy trực tiếp, không cần cài đặt |
+| Adobe Photoshop (UXP) | [`aPixBuilder_v1.3.0.ccx`](https://github.com/StableDiffusionVN/aPix_builder_pts/releases/tag/v1.3.0) | Plugin PS 24+ — repo [aPix_builder_pts](https://github.com/StableDiffusionVN/aPix_builder_pts) |
+| Chrome Extension | [Chrome Web Store](https://chromewebstore.google.com/detail/apix-builder-web-extensio/nnhnedbdbgfjkbjcaacalomceeonbige) | Side panel — repo [aPix_builder_web_extension](https://github.com/StableDiffusionVN/aPix_builder_web_extension) |
 
-Tải tại [GitHub Releases — v1.2.0](https://github.com/StableDiffusionVN/aPix_Builder/releases/tag/v1.2.0) (DMG + EXE).
+Tải tại [GitHub Releases — v1.3.0](https://github.com/StableDiffusionVN/aPix_Builder/releases/tag/v1.3.0) (DMG + EXE).
 
 Bản desktop tự kiểm tra cập nhật qua `https://apix.sdvn.vn/releases/latest.json` (manifest trỏ link GitHub) và hiện banner tải bản mới (macOS DMG). Cài bản mới ghi đè lên bản cũ; settings lưu trong thư mục dữ liệu hệ điều hành (macOS: `~/Library/Application Support/aPix Builder/`).
 
 **Export Shortcut:** khả dụng trên web/backend chạy bằng macOS và bản macOS DMG. Bản Windows EXE hiển thị nút nhưng vô hiệu hóa vì Apple `shortcuts sign` không có trên Windows.
 
-**English:** Current release **1.2.0 (v1.2)**. Download DMG (macOS arm64) or portable EXE (Windows x64) from [GitHub Releases](https://github.com/StableDiffusionVN/aPix_Builder/releases/tag/v1.2.0). The desktop app checks `latest.json` on apix.sdvn.vn (links to GitHub) for updates and prompts you to download a newer DMG.
+**English:** Current release **1.3.0 (v1.3)**. Download DMG (macOS arm64) or portable EXE (Windows x64) from [GitHub Releases](https://github.com/StableDiffusionVN/aPix_Builder/releases/tag/v1.3.0). The desktop app checks `latest.json` on apix.sdvn.vn (links to GitHub) for updates and prompts you to download a newer DMG.
 
 ## Video hướng dẫn / Tutorial
 
@@ -149,7 +149,7 @@ Local builds use ad-hoc signing on macOS. For wide distribution, use Apple Devel
 ### Project info
 
 - **Official website:** [apix.sdvn.vn](https://apix.sdvn.vn)
-- **Downloads:** [GitHub v1.2.0](https://github.com/StableDiffusionVN/aPix_Builder/releases/tag/v1.2.0)
+- **Downloads:** [GitHub v1.3.0](https://github.com/StableDiffusionVN/aPix_Builder/releases/tag/v1.3.0)
 - Creator: [© Phạm Hưng](https://www.facebook.com/phamhungd/)
 - Community: [SDVN - AI Art Community](https://www.facebook.com/groups/stablediffusion.vn)
 - GitHub: [StableDiffusionVN](https://github.com/StableDiffusionVN/)
@@ -264,8 +264,8 @@ npm run dist:win   # Windows portable EXE x64 → thư mục release/
 
 | File output | Mô tả |
 | --- | --- |
-| `release/aPix Builder-1.2.0-arm64.dmg` | Bản cài macOS (Apple Silicon) |
-| `release/aPix Builder-1.2.0-x64-portable.exe` | Bản portable Windows, chạy không cần Node.js |
+| `release/aPix Builder-1.3.0-arm64.dmg` | Bản cài macOS (Apple Silicon) |
+| `release/aPix Builder-1.3.0-x64-portable.exe` | Bản portable Windows, chạy không cần Node.js |
 | `releases/latest.json` | Manifest kiểm tra cập nhật — upload lên `apix.sdvn.vn/releases/` (link tải trỏ GitHub) |
 
 Sau khi build macOS, script tự cập nhật `releases/latest.json`. Khi phát hành:
@@ -373,7 +373,7 @@ Xem đầy đủ phím tắt Image Editor và Mask Editor trong modal thông tin
 ### Thông tin dự án
 
 - **Website chính thức:** [apix.sdvn.vn](https://apix.sdvn.vn)
-- **Tải bản desktop:** [GitHub v1.2.0](https://github.com/StableDiffusionVN/aPix_Builder/releases/tag/v1.2.0)
+- **Tải bản desktop:** [GitHub v1.3.0](https://github.com/StableDiffusionVN/aPix_Builder/releases/tag/v1.3.0)
 - Người tạo: [© Phạm Hưng](https://www.facebook.com/phamhungd/)
 - Liên hệ: [0355873687](https://zalo.me/0355873687)
 - Cộng đồng: [SDVN - Cộng đồng AI Art](https://www.facebook.com/groups/stablediffusion.vn)

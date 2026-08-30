@@ -34,6 +34,30 @@ export function validateTemplateConfig(config, template, scope = TEMPLATE_SCOPES
   }
 }
 
+// Dò TỪNG FIELD checkpoints/loras mà node loader trong workflow có class_type chứa "SDVN".
+// Client bơm danh sách model SDVN CHỈ cho các field này (per-field — đồng bộ iOS/Android):
+// model SDVN do node SDVN tự tải theo tên, node loader thường chọn sẽ fail khi chạy.
+// Trả về { [normalizeId(item.id)]: "checkpoints" | "loras" }.
+export function sdvnModelFieldsFromWorkflow(config, workflow) {
+  const fields = {};
+  // CHỈ duyệt field top-level (không vào menu-sub/col) — thống nhất 5 codebase theo chuẩn
+  // iOS/Android; muốn hỗ trợ sub-field phải đổi đồng bộ cả 5 nơi một đợt.
+  for (const item of Object.values(config?.input || {})) {
+    const uiType = String(item?.ui?.type || "").toLowerCase();
+    const idKey = Array.isArray(item?.id) ? item.id.join("|") : String(item?.id || "");
+    let kind = null;
+    // CHỈ theo ui.type khai báo trong YAML — KHÔNG suy từ tên widget (lora_name/ckpt_name),
+    // để field type menu/menu-sub trỏ node SDVN không bị thêm danh sách model.
+    if (["checkpoints", "checkpoint", "ckpt"].includes(uiType)) kind = "checkpoints";
+    else if (["loras", "lora"].includes(uiType)) kind = "loras";
+    if (!kind || !idKey) continue;
+    const nodeId = idKey.split("-")[0];
+    const classType = nodeId ? workflow?.[nodeId]?.class_type : null;
+    if (typeof classType === "string" && /sdvn/i.test(classType)) fields[idKey] = kind;
+  }
+  return fields;
+}
+
 export function createTemplateService({
   configDir,
   defaultDir,
@@ -211,31 +235,13 @@ export function createTemplateService({
     return String(value).trim();
   }
 
-  // Dò type checkpoints/loras mà node loader trong api.json có class_type chứa "SDVN".
-  // Client sẽ bơm thêm danh sách model SDVN cho các type này vào danh sách quét được.
-  async function computeSdvnModelTypes(config, workflowPath) {
-    if (!workflowPath) return [];
-    let workflow;
+  async function computeSdvnModelFields(config, workflowPath) {
+    if (!workflowPath) return {};
     try {
-      workflow = JSON.parse(await readFile(workflowPath, "utf8"));
+      return sdvnModelFieldsFromWorkflow(config, JSON.parse(await readFile(workflowPath, "utf8")));
     } catch {
-      return [];
+      return {};
     }
-    const types = new Set();
-    for (const item of Object.values(config?.input || {})) {
-      const uiType = String(item?.ui?.type || "").toLowerCase();
-      const idStr = Array.isArray(item?.id) ? String(item.id[0] || "") : String(item?.id || "");
-      let kind = null;
-      // CHỈ theo ui.type khai báo trong YAML — KHÔNG suy từ tên widget (lora_name/ckpt_name),
-      // để field type menu/menu-sub trỏ node SDVN không bị thêm danh sách model.
-      if (["checkpoints", "checkpoint", "ckpt"].includes(uiType)) kind = "checkpoints";
-      else if (["loras", "lora"].includes(uiType)) kind = "loras";
-      if (!kind || !idStr) continue;
-      const nodeId = idStr.split("-")[0];
-      const classType = nodeId ? workflow?.[nodeId]?.class_type : null;
-      if (typeof classType === "string" && /sdvn/i.test(classType)) types.add(kind);
-    }
-    return [...types];
   }
 
   async function loadConfig(templateId, scope = TEMPLATE_SCOPES.local) {
@@ -246,7 +252,9 @@ export function createTemplateService({
       config.runninghub.workflowId = extractRunningHubWorkflowId(raw, config);
     }
     validateConfig(config, template, scope);
-    config.sdvnModelTypes = await computeSdvnModelTypes(config, template.workflowPath);
+    config.sdvnModelFields = await computeSdvnModelFields(config, template.workflowPath);
+    // Giữ sdvnModelTypes (derive từ map) cho canvas project cũ đã lưu config — fallback per-type.
+    config.sdvnModelTypes = [...new Set(Object.values(config.sdvnModelFields))];
     return {
       raw,
       config,

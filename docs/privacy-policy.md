@@ -1,0 +1,96 @@
+# Chính sách quyền riêng tư — aPix Builder / Privacy Policy
+
+> Cần host tại: **https://apix.sdvn.vn/privacy** (URL đã nhúng trong app iOS + Android).
+> Cập nhật lần cuối / Last updated: 2026-07-08
+
+## Tiếng Việt
+
+**aPix Builder** (SDVN) là ứng dụng khách (client) tạo ảnh AI. Chúng tôi tôn trọng quyền
+riêng tư của bạn:
+
+### Dữ liệu ứng dụng xử lý
+- **Ảnh và prompt bạn nhập** được gửi tới: (a) **máy chủ ComfyUI do chính bạn cấu hình**
+  (địa chỉ bạn tự nhập trong Cài đặt), và/hoặc (b) **RunningHub** (dịch vụ AI bên thứ ba,
+  runninghub.ai) khi bạn dùng chế độ RunningHub — theo [chính sách quyền riêng tư của
+  RunningHub](https://www.runninghub.ai/policy), với mức bảo vệ dữ liệu người dùng tương
+  đương chính sách này. Ứng dụng chỉ gửi dữ liệu khi bạn bấm Chạy, và **hỏi ý kiến bạn
+  (nêu rõ dữ liệu gì, gửi tới đâu) trước lần gửi đầu tiên tới RunningHub** — không có dữ
+  liệu nào được gửi trước khi bạn đồng ý.
+- **API key RunningHub** do bạn tự nhập, được lưu **mã hoá trên thiết bị** (iOS: Keychain;
+  Android: EncryptedSharedPreferences) và chỉ dùng để gọi API RunningHub. Bạn có thể xoá
+  key bất kỳ lúc nào trong Cài đặt.
+- **Ảnh kết quả** lưu cục bộ trên thiết bị của bạn (và vào thư viện ảnh nếu bạn bật
+  tự lưu / bấm lưu).
+
+### Dữ liệu ảnh có khuôn mặt (face data)
+Một số workflow cho phép chỉnh sửa ảnh chân dung (ví dụ: đổi phong cách, cosplay, nâng
+độ phân giải). Ứng dụng **KHÔNG trích xuất, phân tích hay lưu trữ dữ liệu sinh trắc học
+khuôn mặt** (không nhận diện khuôn mặt, không tạo face embedding/Face ID) — ảnh được xử
+lý như một tệp ảnh thông thường, không khác gì ảnh phong cảnh hay đồ vật.
+- Ảnh (có thể chứa khuôn mặt) chỉ được gửi đi khi bạn bấm Chạy, tới đúng nơi bạn chọn:
+  máy chủ ComfyUI do bạn tự cấu hình, hoặc RunningHub (bên thứ ba) nếu bạn chọn chế độ
+  RunningHub.
+- **SDVN không nhận, không lưu trữ và không xử lý ảnh của bạn trên bất kỳ máy chủ nào
+  của SDVN.**
+- Nếu gửi tới RunningHub: việc lưu trữ/xử lý tại đó tuân theo chính sách quyền riêng tư
+  của RunningHub, không do SDVN kiểm soát hay có quyền truy cập.
+- Ảnh đầu vào và ảnh kết quả chỉ lưu cục bộ trên thiết bị của bạn (và vào thư viện Ảnh
+  nếu bạn bật tự lưu/bấm lưu) — không đồng bộ lên máy chủ nào của SDVN, không có thời
+  hạn lưu trữ phía SDVN vì SDVN không giữ bản sao nào.
+
+### Ứng dụng KHÔNG:
+- Không thu thập số liệu phân tích (analytics), không quảng cáo, không trình theo dõi.
+- Không gửi bất kỳ dữ liệu nào về máy chủ của SDVN.
+- Không yêu cầu tạo tài khoản.
+
+### Nội dung AI
+Ảnh do AI tạo ra theo yêu cầu của bạn; bạn chịu trách nhiệm về nội dung mình tạo.
+Ứng dụng có nút **Báo cáo nội dung** để báo cáo nội dung vi phạm.
+
+### Liên hệ
+Email hỗ trợ: sdvn@stablediffusion.vn · https://github.com/StableDiffusionVN
+
+## English
+
+**aPix Builder** (SDVN) is an AI image generation client. We respect your privacy:
+
+### Data the app processes
+- **Images and prompts you enter** are sent to: (a) the **ComfyUI server you configure
+  yourself** (address entered in Settings), and/or (b) **RunningHub** (a third-party AI
+  service, runninghub.ai) when you use RunningHub mode — under [RunningHub's privacy
+  policy](https://www.runninghub.ai/policy), which provides equal protection for user
+  data. The app only transmits data when you tap Run, and **asks for your explicit
+  consent (stating what data is sent and to whom) before the first transfer to
+  RunningHub** — no data is sent until you agree.
+- **Your RunningHub API key** is entered by you and stored **encrypted on device** (iOS:
+  Keychain; Android: EncryptedSharedPreferences), used solely to call the RunningHub API.
+  You can delete it anytime in Settings.
+- **Generated images** are stored locally on your device (and in your photo library if
+  you enable auto-save or tap save).
+
+### Face / photo data
+Some workflows let you edit portrait photos (e.g. style transfer, cosplay-style edits,
+upscaling). The app does **NOT extract, analyze, or store any facial biometric data**
+(no face recognition, no face embeddings/Face ID data) — photos are processed as
+ordinary image files, no differently from a landscape or object photo.
+- Photos (which may contain faces) are only transmitted when you tap Run, and only to
+  the destination you choose: the ComfyUI server you configure yourself, or RunningHub
+  (a third party) if you select RunningHub mode.
+- **SDVN does not receive, store, or process your photos on any SDVN server.**
+- If sent to RunningHub: storage/processing there is governed by RunningHub's own
+  privacy policy, not controlled by or accessible to SDVN.
+- Input and output photos are stored only locally on your device (and in your Photos
+  library if you enable auto-save or tap save) — never synced to any SDVN server, and
+  SDVN has no retention period because SDVN keeps no copy at all.
+
+### The app does NOT:
+- Collect analytics, show ads, or include any trackers.
+- Send any data to SDVN servers.
+- Require an account.
+
+### AI content
+Images are generated by AI at your request; you are responsible for the content you
+create. The app includes a **Report content** button for violating content.
+
+### Contact
+Support email: sdvn@stablediffusion.vn · https://github.com/StableDiffusionVN

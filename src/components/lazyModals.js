@@ -20,6 +20,15 @@ export const RunLogPanel = lazy(() =>
 );
 
 const loadSettingsModal = () => withModalStyles(() => import("./SettingsModal.jsx"));
+const loadRhLibraryModal = () => import("./RhLibraryModal.jsx");
+
+export const RhLibraryModal = lazy(() =>
+  loadRhLibraryModal().then(m => ({ default: m.RhLibraryModal }))
+);
+
+export function preloadRhLibraryModal() {
+  void loadRhLibraryModal();
+}
 
 export const WorkspaceInfoModal = lazy(() =>
   withModalStyles(() => import("../features/app/WorkspaceInfoModal.jsx"))

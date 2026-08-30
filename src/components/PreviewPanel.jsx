@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { ColorPickCursorOverlay } from "./colorPickUi";
 import { useI18n } from "../i18n/I18nContext";
+import { mediaKindFromUrl } from "../lib/mediaKind";
 import { RunningHubRunningState } from "./RunningHubRunningState";
 import { RunLogPanel } from "./lazyModals";
 
@@ -84,6 +85,9 @@ export function PreviewPanel({
   const { t } = useI18n();
 
   const previewImage = displayImage || heroImage;
+  // Output video/âm thanh: tắt pan/zoom/compare để <video>/<audio> nhận được click vào controls.
+  const previewKind = mediaKindFromUrl(previewImage);
+  const isPlayableOutput = previewKind !== "image";
   const panelOnLeft = colorPanelAlign === "left";
   const colorPanelToggleTitle = `${colorPanelOpen ? t("colorPanel.close") : t("colorPanel.open")} (Tab)`;
 
@@ -100,7 +104,7 @@ export function PreviewPanel({
           ) : null}
           {selectedOutput ? (
             <>
-              {canCompare ? (
+              {canCompare && !isPlayableOutput ? (
                 <button
                   className={`downloadButton compareButton ${compareMode ? "active" : ""}`}
                   onClick={() => setCompareMode(current => !current)}
@@ -136,14 +140,14 @@ export function PreviewPanel({
 
       <div className="outputViewer">
         <div
-          className={`previewArea ${heroImage && !showRunningScreen ? "isInteractive" : ""} ${resultOutputs.length > 1 ? "hasOutputRail" : ""} ${compareMode ? "isCompareMode" : ""} ${healingActive ? "isHealingTool" : ""} ${colorPickTarget ? "isColorPickTool" : ""} ${draggingImage || isWheeling ? "isDragging" : ""}`}
+          className={`previewArea ${heroImage && !showRunningScreen && !isPlayableOutput ? "isInteractive" : ""} ${resultOutputs.length > 1 ? "hasOutputRail" : ""} ${compareMode ? "isCompareMode" : ""} ${healingActive ? "isHealingTool" : ""} ${colorPickTarget ? "isColorPickTool" : ""} ${draggingImage || isWheeling ? "isDragging" : ""} ${isPlayableOutput ? "isPlayableOutput" : ""}`}
           ref={previewAreaRef}
-          onWheel={handlePreviewWheel}
-          onPointerDown={handlePreviewPointerDown}
-          onPointerMove={handlePreviewPointerMove}
-          onPointerUp={handlePreviewPointerUp}
-          onPointerCancel={handlePreviewPointerUp}
-          onPointerLeave={handlePreviewPointerLeave}
+          onWheel={isPlayableOutput ? undefined : handlePreviewWheel}
+          onPointerDown={isPlayableOutput ? undefined : handlePreviewPointerDown}
+          onPointerMove={isPlayableOutput ? undefined : handlePreviewPointerMove}
+          onPointerUp={isPlayableOutput ? undefined : handlePreviewPointerUp}
+          onPointerCancel={isPlayableOutput ? undefined : handlePreviewPointerUp}
+          onPointerLeave={isPlayableOutput ? undefined : handlePreviewPointerLeave}
         >
           {colorPickTarget && colorPickCursor ? (
             <ColorPickCursorOverlay x={colorPickCursor.x} y={colorPickCursor.y} />
@@ -165,6 +169,17 @@ export function PreviewPanel({
                 <RunningHubRunningState progress={progress} status={status} />
               ) : (
                 <RunningState progress={progress} status={status} progressPct={progressPct} />
+              )}
+            </div>
+          ) : heroImage && isPlayableOutput ? (
+            // Video/âm thanh: stage riêng full khung, KHÔNG dùng imageStage (kích thước/transform tính cho ảnh)
+            <div className="mediaStage">
+              {previewKind === "video" ? (
+                <video key={previewImage} className="resultVideo" src={previewImage} controls playsInline preload="metadata" />
+              ) : (
+                <div className="resultAudioWrap">
+                  <audio key={previewImage} src={previewImage} controls preload="metadata" />
+                </div>
               )}
             </div>
           ) : heroImage ? (
@@ -220,7 +235,13 @@ export function PreviewPanel({
                   aria-label={t("preview.viewOutput", { index: index + 1 })}
                   aria-pressed={index === selectedOutputIndex}
                 >
-                  <img src={output.url} alt={output.filename || `Output ${index + 1}`} draggable="false" />
+                  {mediaKindFromUrl(output.url) === "video" ? (
+                    <video src={output.url} muted preload="metadata" />
+                  ) : mediaKindFromUrl(output.url) === "audio" ? (
+                    <span className="outputThumbAudio" aria-hidden="true">♪</span>
+                  ) : (
+                    <img src={output.url} alt={output.filename || `Output ${index + 1}`} draggable="false" />
+                  )}
                 </button>
               ))}
             </div>

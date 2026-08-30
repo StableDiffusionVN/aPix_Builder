@@ -20,6 +20,28 @@ Bộ aPix Builder của SDVN: client tạo ảnh AI qua **ComfyUI / RunningHub W
 4. Trước khi checkout/restore/đổi nhánh: **cảnh báo** nếu còn thay đổi chưa commit.
 5. Commit trong **đúng repo của subproject** — mỗi subproject là **git độc lập** nằm trong thư mục repo chính (KHÔNG phải submodule; repo chính gitignore các thư mục này, tương tự `website/`).
 
+## ⛔ Quy tắc UPDATE main platform (web/desktop) — BẮT BUỘC mỗi lần lên phiên bản
+
+> Auto-update từng chết im lặng (preload ESM, fix `a380ce8`) mà không ai biết vì phát hành không kiểm tra lại. KHÔNG để lặp lại.
+
+Mỗi lần phát hành/bump phiên bản main app, LUÔN làm đủ 3 cập nhật + 1 kiểm tra:
+
+1. **Version**: bump `package.json` `version` — nguồn duy nhất, tự chảy vào cả Electron (`app.getVersion()` để so sánh update) lẫn bảng Info (`VITE_APP_VERSION` qua `vite.config.js` define).
+2. **Bảng Info**: cập nhật `info.updateText` (CẢ vi lẫn en) trong `src/i18n/I18nContext.jsx` — danh sách tính năng mới hiển thị trong modal Info.
+3. **Manifest update**: cập nhật `releases/latest.json` (version, label, notes, `downloadUrl` DMG macOS + `downloadUrlWin` exe Windows, releasePageUrl, publishedAt) — deploy lên `apix.sdvn.vn/releases/latest.json`.
+4. **Kiểm tra auto-update THẬT trước khi phát hành**: chạy app desktop với manifest giả version cao hơn (`APIX_UPDATE_MANIFEST_URL=<url-test> npx electron .`) → banner "Có phiên bản mới" phải hiện sau ~5s và nút tải mở đúng link theo platform. Không tin code — phải thấy banner.
+5. **Website `apix.sdvn.vn`** (repo git riêng tại `website/`, gitignored) — áp dụng cho MỌI đợt cập nhật app/extension/plugin, không riêng main app:
+   - Thêm **1 dòng thông tin update ngắn gọn ngay dưới tiêu đề phụ hero** (`heroLead`/`hero.updateNote` trong `website/index.html`, chuỗi vi/en trong `website/i18n.js`) — CHỈ nói về MAIN APP (desktop), gọn đúng 1 dòng, 2-3 điểm chính; KHÔNG liệt kê chi tiết iOS/Android/extension/pts trong dòng này; thay dòng cũ, không chồng dòng. Pill hero cũng chỉ hiển thị version main app.
+   - Cập nhật **pill hero** (`hero.pill` — số version) + **toàn bộ link tải hardcode version** trong `index.html`/`heroNote` (DMG/EXE/APK/ccx/extension) + thông tin khác nếu đổi.
+   - **BẮT BUỘC bump tham số cache-bust** `?v=` của `i18n.js`/`styles.css` trong `index.html` mỗi khi 2 file này đổi — chúng được serve `immutable, max-age=7d`, quên bump là trình duyệt người dùng giữ chuỗi cũ cả tuần (đã dính 23/07).
+   - Deploy: `bash website/prepare.sh` rồi:
+     ```bash
+     set -a; source _local/apix-vps.env; set +a   # env file KHÔNG có export — phải set -a
+     expect website/deploy/upload-tar.exp "$PWD/website/dist" "$APIX_VPS_SITE_ROOT"   # BẮT BUỘC 2 tham số
+     expect website/deploy/upload-releases.exp    # manifest latest.json (không cần tham số)
+     ```
+     Commit trong repo `website/` (nhánh `main`, có remote riêng `apix-website`).
+
 ## 4 codebase + cách verify
 
 | Subproject | Thư mục | Stack | Verify nhanh |
@@ -37,6 +59,6 @@ Bộ aPix Builder của SDVN: client tạo ảnh AI qua **ComfyUI / RunningHub W
 - **menu-sub (conditional field):** main `src/lib/template.js` + `shared/menuChoices.js` · extension `src/lib/catalog.js` (`expandActiveFields`) + `src/components/DynamicFields.jsx` · iOS `Core/TemplateModels.swift` + `AppStore.builderRows` + `Features/Builder/BuilderView.swift`.
 - **Render field tham số:** main/ext `DynamicFields.jsx` · iOS `Features/Builder/ParameterField.swift`.
 - **Đọc template/manifest:** main/ext `src/lib/catalog.js`/`templateImport.js` · iOS `Services/YAMLLoader.swift` + `Core/TemplateModels.swift`.
-- **Chạy ComfyUI / RunningHub + failover:** main/ext `src/services/comfy.js`,`runningHub.js` · iOS `Services/ComfyUIClient.swift`,`RunningHubClient.swift` + `Core/AppStore.swift`.
+- **Chạy ComfyUI / RunningHub + failover:** main `server/lib/runningHubClient.js` + `rhTokenFailover.js` + `src/hooks/useExecution.js`/`useRunningHubExecution.js` · ext `src/services/comfy.js`,`runningHub.js` · pts `src/services/runninghub.js` (failover key pool từ 2026-07) · iOS `Services/ComfyUIClient.swift`,`RunningHubClient.swift` + `Core/AppStore.swift`.
 
 > App chính (`src/`) là tham chiếu hành vi chuẩn; extension/iOS/pts mirror theo. Khi sửa logic dùng chung, kiểm tra cả các bản port.

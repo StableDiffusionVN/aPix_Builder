@@ -673,6 +673,11 @@ export function RunLogPanel({
   const queueCount = queueEntries.length;
   const showQueuePanel = queueCount > 0 && statusFilter !== "queued";
   const hasLiveRunning = running || runningSessions.length > 0;
+  // Job chạy ở hàng chờ backend không nằm trong `running` của client — vẫn phải
+  // đếm, nếu không badge biến mất khi client đã xong lệnh đầu của batch.
+  const activeCount = queueCount
+    + (running ? 1 : 0)
+    + runningSessions.filter(session => session.runId && session.runId !== activeRunId).length;
   const liveRunId = activeRunId || runningSessions[0]?.runId || "";
   const liveStatus = running
     ? (status || "processing...")
@@ -847,8 +852,8 @@ export function RunLogPanel({
           aria-keyshortcuts="Backquote"
         >
           <ScrollText size={15} />
-          {(running || queueCount > 0) ? (
-            <span className="outputLogBadge">{queueCount + (running ? 1 : 0)}</span>
+          {activeCount > 0 ? (
+            <span className="outputLogBadge">{activeCount}</span>
           ) : null}
         </button>
       )}

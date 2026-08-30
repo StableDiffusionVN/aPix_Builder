@@ -18,6 +18,7 @@ import {
   waitForPrompt
 } from "../lib/comfyClient.js";
 import { fetchWithRetry } from "../lib/fetchRetry.js";
+import { safeFileName } from "../lib/fileNames.js";
 import {
   collectOutputs,
   mapValuesToRequest,
@@ -38,10 +39,6 @@ export function createComfyService({ storage, runCoordinator, readBody, send }) 
     getRunLogSessions,
     ensureRunLogSession
   } = runCoordinator;
-
-  function safeOutputName(rawName = "") {
-    return path.basename(String(rawName)).replace(/[^\w.-]+/g, "_");
-  }
 
   async function assertTemplateWorkflow(config, template, options = {}) {
     const workflow = JSON.parse(await readFile(template.workflowPath, "utf8"));
@@ -83,10 +80,11 @@ export function createComfyService({ storage, runCoordinator, readBody, send }) 
       const normalized = await normalizeValues(body.values || {});
       const request = mapValuesToRequest(config, normalized);
       const responseRequest = {};
-      const { inputDir, uploadDir } = storage.getPaths();
+      const { inputDir, uploadDir, outputDir } = storage.getPaths();
     const patchOptions = {
       inputDir,
       uploadDir,
+      outputDir,
       uploadImageToComfy,
       uploadMaskToComfy,
       parseDataUrl,
@@ -265,7 +263,7 @@ export function createComfyService({ storage, runCoordinator, readBody, send }) 
               });
             }
           });
-          const originalName = safeOutputName(image.filename || `output_${index}.png`);
+          const originalName = safeFileName(image.filename || `output_${index}.png`);
           const ext = path.extname(originalName) || ".png";
           const base = originalName.replace(/\.[^.]+$/, "") || "output";
           const filename = `${Date.now()}_${runId}_${index}_${base}${ext}`;

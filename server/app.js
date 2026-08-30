@@ -22,6 +22,7 @@ import { createRunningHubService } from "./services/runningHubService.js";
 import { createShortcutService } from "./services/shortcutService.js";
 import { backendQueueHasRunId, createBackendRunQueueStore } from "./lib/backendRunQueueStore.js";
 import { archiveTemplateDirectory } from "./lib/templateArchive.js";
+import { getSdvnLibraryNames } from "./lib/sdvnModelLibrary.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
@@ -596,6 +597,16 @@ async function handleTemplateExport(req, res, url) {
   }
 }
 
+async function handleSdvnModels(req, res, url) {
+  const type = String(url.searchParams.get("type") || "");
+  if (type !== "checkpoints" && type !== "loras") {
+    send(res, 400, { error: "Invalid type" });
+    return;
+  }
+  const names = await getSdvnLibraryNames(type);
+  send(res, 200, { type, names });
+}
+
 async function handleTemplateDelete(req, res, url) {
   const body = JSON.parse(await readBody(req) || "{}");
   const scope = storage.getTemplates().normalizeScope(body.scope || url?.searchParams?.get("scope"));
@@ -791,6 +802,7 @@ export const routeContext = {
   handleRunningHubShortcutExport: shortcut.handleRunningHubShortcutExport,
   handleRunningHubWfRun: runningHub.handleRunningHubWfRun,
   handleRunningHubWfWorkflowJson: runningHub.handleRunningHubWfWorkflowJson,
+  handleSdvnModels,
   handleSaveColorAdjust: storage.handleSaveColorAdjust,
   handleSaveEditedOutput: storage.handleSaveEditedOutput,
   handleStorageSettings: storage.handleStorageSettings,

@@ -11,6 +11,7 @@ import { createImagesRoutes } from "./routes/images.js";
 import { createPresetsRoutes } from "./routes/presets.js";
 import { createRunLogRoutes } from "./routes/run-log.js";
 import { createRunRoutes } from "./routes/run.js";
+import { createRhLibraryRoutes } from "./routes/rhLibrary.js";
 import { createRunningHubRoutes } from "./routes/runninghub.js";
 import { createStorageRoutes } from "./routes/storage.js";
 import { createTemplateRoutes } from "./routes/templates.js";
@@ -19,6 +20,7 @@ const routes = [
   createTemplateRoutes(routeContext),
   createRunRoutes(routeContext),
   createRunningHubRoutes(routeContext),
+  createRhLibraryRoutes(routeContext),
   createStorageRoutes(routeContext),
   createImagesRoutes(routeContext),
   createPresetsRoutes(routeContext),

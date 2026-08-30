@@ -6,6 +6,7 @@ import { MaskEditorModal } from "./MaskEditorModal";
 import { defaultValue, getActiveSubInputs, isMenuSub, normalizeId } from "../lib/template";
 import { menuChoiceOptions, parseMenuChoices, resolveMenuStoredValue } from "../../shared/menuChoices.js";
 import { DYNAMIC_FIELD_TYPES, canonicalDynamicType, dynamicFieldChoices, isDynamicFieldType } from "../lib/dynamicTypes";
+import { fieldChoicesWithSdvn, sdvnFieldPending } from "../lib/sdvnModels";
 import { localizeRuntimeMessage, useI18n } from "../i18n/I18nContext";
 import { clearPickedFolderFiles, registerPickedFolderFiles } from "../lib/folderFileCache.js";
 import { isHttpImageUrl, readLocalFolderValue } from "../lib/localImageFolder.js";
@@ -116,6 +117,8 @@ const inputTypes = new Set([
   "float",
   "radio",
   "file",
+  "video",
+  "audio",
   "colorpicker",
   "date",
   "json"
@@ -133,7 +136,8 @@ const DynamicFieldInner = memo(function DynamicFieldInner({
   onRefreshInputImages,
   onUpdateInputImages,
   discovery = null,
-  discoveryLoading = false
+  discoveryLoading = false,
+  sdvnModelFields = null
 }) {
   const { locale, t } = useI18n();
   const ui = item.ui || {};
@@ -236,11 +240,16 @@ const DynamicFieldInner = memo(function DynamicFieldInner({
 
   useEffect(() => {
     if (!isDynamicList) return;
-    const choices = dynamicFieldChoices(discovery, dynamicKind);
+    const fieldKey = normalizeId(item.id);
+    // Discovery của template khác / augment SDVN chưa xong → chờ, không reset value
+    // (tránh race ghi đè default SDVN bằng model server đầu danh sách khi đổi template).
+    if (sdvnFieldPending(discovery, sdvnModelFields, fieldKey)) return;
+    // Per-field: field có thư viện SDVN riêng thì "None"/tên SDVN là giá trị hợp lệ — không bị reset.
+    const choices = fieldChoicesWithSdvn(discovery, dynamicFieldChoices(discovery, dynamicKind), fieldKey);
     if (!choices.length) return;
     const defaultChoice = choices.includes(ui.value) ? ui.value : choices[0];
     if (!choices.includes(value)) onChange(defaultChoice);
-  }, [isDynamicList, dynamicKind, discovery, ui.value, value, onChange]);
+  }, [isDynamicList, dynamicKind, discovery, ui.value, value, onChange, item.id, sdvnModelFields]);
 
   useEffect(() => {
     if (activeImageIndex >= selectedImages.length) {
@@ -525,6 +534,7 @@ const DynamicFieldInner = memo(function DynamicFieldInner({
                 onUpdateInputImages={onUpdateInputImages}
                 discovery={discovery}
                 discoveryLoading={discoveryLoading}
+                sdvnModelFields={sdvnModelFields}
               />
             ))}
           </div>
@@ -551,6 +561,66 @@ const DynamicFieldInner = memo(function DynamicFieldInner({
     t
   });
   if (basicField) return basicField;
+  if (ui.type === "video" || ui.type === "audio") {
+    const isVideo = ui.type === "video";
+    const accept = isVideo ? "video/*" : "audio/*";
+    const hasMedia = typeof value === "string" && value.startsWith("data:");
+    const readMediaFile = file => {
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => onChange(String(reader.result || ""));
+      reader.readAsDataURL(file);
+    };
+    return (
+      <label
+        className={`field ${description ? "fieldWithTooltip" : ""}`}
+        data-field-tooltip={description || undefined}
+      >
+        <span>{label}</span>
+        <div
+          className={`mediaFieldDropzone ${isDraggingFile ? "isDragging" : ""}`}
+          onDragEnter={event => { event.preventDefault(); setIsDraggingFile(true); }}
+          onDragOver={event => { event.preventDefault(); event.dataTransfer.dropEffect = "copy"; }}
+          onDragLeave={event => {
+            event.preventDefault();
+            if (!event.currentTarget.contains(event.relatedTarget)) setIsDraggingFile(false);
+          }}
+          onDrop={event => {
+            event.preventDefault();
+            setIsDraggingFile(false);
+            readMediaFile(event.dataTransfer.files?.[0]);
+          }}
+        >
+          {hasMedia ? (
+            <div className="mediaFieldPreview">
+              {isVideo
+                ? <video src={value} controls playsInline preload="metadata" />
+                : <audio src={value} controls preload="metadata" />}
+              <button
+                type="button"
+                className="mediaFieldClear"
+                onClick={event => { event.preventDefault(); onChange(""); }}
+              >
+                {t("field.clearMedia")}
+              </button>
+            </div>
+          ) : (
+            <div className="mediaFieldEmpty">
+              <span>{isVideo ? t("field.uploadVideo") : t("field.uploadAudio")}</span>
+            </div>
+          )}
+          <input
+            type="file"
+            accept={accept}
+            onChange={event => {
+              readMediaFile(event.target.files?.[0]);
+              event.target.value = "";
+            }}
+          />
+        </div>
+      </label>
+    );
+  }
   if (ui.type === "image" || ui.type === "image_mask" || ui.type === "file") {
     const acceptsImageUrl = ui.type === "image" || ui.type === "image_mask";
 

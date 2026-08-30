@@ -1,12 +1,13 @@
 {
-  "version": "1.2.0",
-  "label": "v1.2",
-  "publishedAt": "2026-07-02T11:41:15.465Z",
+  "version": "1.4.2",
+  "label": "v1.4.2",
+  "publishedAt": "2026-08-30T12:55:42.991Z",
   "notes": [
-    "Canvas: dropdown checkpoint/lora load danh sách model từ ComfyUI, gõ để tìm kiếm lọc, áp quy tắc thư viện SDVN như chế độ Form"
+    "Canvas ComfyUI: ảnh kết quả của node trước được nạp đúng vào node sau — trước đây node sau báo lỗi thiếu ảnh vì đường dẫn ảnh không được tải lên ComfyUI",
+    "Ảnh output có mask khi nối sang node sau cũng đọc đúng thư mục kết quả"
   ],
-  "downloadUrl": "https://github.com/StableDiffusionVN/aPix_Builder/releases/download/v1.2.0/aPix.Builder-1.2.0-arm64.dmg",
-  "downloadUrlWin": "https://github.com/StableDiffusionVN/aPix_Builder/releases/download/v1.2.0/aPix.Builder-1.2.0-x64-portable.exe",
-  "releasePageUrl": "https://github.com/StableDiffusionVN/aPix_Builder/releases/tag/v1.2.0",
+  "downloadUrl": "https://github.com/StableDiffusionVN/aPix_Builder/releases/download/v1.4.2/aPix.Builder-1.4.2-arm64.dmg",
+  "downloadUrlWin": "https://github.com/StableDiffusionVN/aPix_Builder/releases/download/v1.4.2/aPix.Builder-1.4.2-x64-portable.exe",
+  "releasePageUrl": "https://github.com/StableDiffusionVN/aPix_Builder/releases/tag/v1.4.2",
   "mandatory": false
 }

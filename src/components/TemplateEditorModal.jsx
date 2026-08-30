@@ -1074,8 +1074,6 @@ export function TemplateEditorModal({
     try {
       const yamlFile = preferredFile(files, ["app_build.yaml", "app_build.yml"], isYamlFile);
       const jsonFile = preferredFile(files, ["api.json", "workflow.json"], isJsonFile);
-      if (!jsonFile) throw new Error(l("Không tìm thấy workflow JSON hợp lệ", "No valid workflow JSON file was found"));
-      const nextWorkflow = JSON.parse(await readTextFile(jsonFile));
       const nextConfig = yamlFile ? YAML.parse(await readTextFile(yamlFile)) : null;
       if (nextConfig && !nextConfig.input) {
         throw new Error(l("YAML thiếu input", "YAML is missing input"));
@@ -1086,6 +1084,11 @@ export function TemplateEditorModal({
       if (isRhWf && nextConfig && !nextConfig.runninghub?.workflowId) {
         throw new Error(l("YAML thiếu runninghub.workflowId", "YAML is missing runninghub.workflowId"));
       }
+      // RunningHub Workflow với saveWorkflowJson=false chạy bằng workflowId (server tự lấy JSON khi patch),
+      // không cần kèm api.json/workflow.json trong folder/zip import.
+      const requiresJson = !(isRhWf && nextConfig?.runninghub?.saveWorkflowJson === false);
+      if (requiresJson && !jsonFile) throw new Error(l("Không tìm thấy workflow JSON hợp lệ", "No valid workflow JSON file was found"));
+      const nextWorkflow = jsonFile ? JSON.parse(await readTextFile(jsonFile)) : null;
       setTemplateId(slugify(nextConfig?.template?.id || nextConfig?.app?.id || templateIdFromFile(yamlFile || jsonFile)));
       if (isRhWf && nextConfig?.runninghub) {
         const rh = nextConfig.runninghub;
@@ -1097,7 +1100,7 @@ export function TemplateEditorModal({
       } else if (isRhWf) {
         setSaveWorkflowJson(true);
       }
-      await applyWorkflow(nextWorkflow, jsonFile.name, nextConfig);
+      await applyWorkflow(nextWorkflow, (jsonFile || yamlFile).name, nextConfig);
     } catch (err) {
       setError(l(`Không đọc được tệp upload: ${err.message}`, `Could not read the uploaded file: ${localizeRuntimeMessage(err.message, locale)}`));
     }

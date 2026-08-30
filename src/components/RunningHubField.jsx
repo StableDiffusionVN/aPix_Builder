@@ -8,14 +8,25 @@ function listChoices(node) {
     if (typeof choice === "object") return String(choice.value ?? choice.label ?? choice.name ?? "");
     return String(choice);
   };
-  if (Array.isArray(data)) return data.map(normalize).filter(Boolean);
+  // ComfyUI COMBO trả tuple [[...options], {config}] — lấy mảng con đầu làm danh sách chọn.
+  const fromArray = arr => {
+    const list = Array.isArray(arr[0]) ? arr[0] : arr;
+    return list.map(normalize).filter(Boolean);
+  };
+  if (Array.isArray(data)) {
+    const choices = fromArray(data);
+    if (choices.length) return choices;
+  }
   if (Array.isArray(data?.options)) return data.options.map(normalize).filter(Boolean);
   if (Array.isArray(data?.values)) return data.values.map(normalize).filter(Boolean);
   if (Array.isArray(data?.choices)) return data.choices.map(normalize).filter(Boolean);
   if (typeof data === "string") {
     try {
       const parsed = JSON.parse(data);
-      if (Array.isArray(parsed)) return parsed.map(normalize).filter(Boolean);
+      if (Array.isArray(parsed)) {
+        const choices = fromArray(parsed);
+        if (choices.length) return choices;
+      }
     } catch {}
   }
   return node.fieldValue ? [String(node.fieldValue)] : [];
@@ -37,7 +48,8 @@ export function RunningHubField({
   const isLongText = String(value || "").length > 80 || /prompt|text|caption|value/i.test(node.fieldName);
   const uiType =
     fieldType === "IMAGE" ? "image_mask"
-    : fieldType === "AUDIO" || fieldType === "VIDEO" ? "file"
+    : fieldType === "AUDIO" ? "audio"
+    : fieldType === "VIDEO" ? "video"
     : fieldType === "LIST" ? "dropdown"
     : fieldType === "INT" || fieldType === "INTEGER" ? "int"
     : fieldType === "FLOAT" || fieldType === "NUMBER" ? "float"

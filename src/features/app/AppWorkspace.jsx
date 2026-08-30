@@ -22,13 +22,14 @@ import {
 import { cloneDefaultAdjustments } from "../../lib/imageAdjustments";
 import { DEFAULT_HEALING_BRUSH_SIZE } from "../../lib/healingBrush";
 import { PreviewPanel } from "../../components/PreviewPanel";
-import { preloadSettingsModal } from "../../components/lazyModals";
+import { preloadRhLibraryModal, preloadSettingsModal, RhLibraryModal } from "../../components/lazyModals";
 import { formatOutputTimingLabel, formatRhCoins } from "../../lib/runLog";
 import { PresetBar } from "../../components/PresetBar";
 import { RunControls } from "../../components/RunControls";
 import { TemplateSelector } from "../../components/TemplateSelector";
 import { downloadImage } from "../../lib/download";
 import { canonicalDynamicType, dynamicFieldChoices } from "../../lib/dynamicTypes";
+import { fieldChoicesWithSdvn, sdvnFieldPending } from "../../lib/sdvnModels";
 import {
   extractImageValueUrl,
   findCompareInputImage,
@@ -81,6 +82,8 @@ import {
 } from "../../providers/WorkspaceLayoutProvider.jsx";
 import { useTemplateWorkspaceActions } from "../templates/useTemplateWorkspaceActions.js";
 import { useBatchImageState } from "./useBatchImageState.js";
+import { BACKEND_RUN_ACTIVE_STATUSES, historyItemToResult } from "./backendQueueResults.js";
+import { useBackendQueueResults } from "./useBackendQueueResults.js";
 import { useWorkspaceModals } from "./useWorkspaceModals.js";
 import { useShortcutActionRefs, useWorkspaceShortcuts } from "./useWorkspaceShortcuts.js";
 import { RunningState } from "./AppWorkspaceRunningUi.jsx";
@@ -240,7 +243,7 @@ export function AppWorkspace() {
     : executionMode === "local";
   const { discovery, discoveryRaw, discoveryLoading } = useDiscovery(
     shouldDiscoverComfy ? comfyAddress : "",
-    config?.sdvnModelTypes
+    config?.sdvnModelFields
   );
   const {
     settings: rhSettings,
@@ -251,6 +254,8 @@ export function AppWorkspace() {
     savedAppsError: rhSavedAppsError,
     webappOptions: rhWebappOptions,
     saveCurrentWebapp,
+    deleteWebapp: deleteRhWebapp,
+    importWebapp: importRhWebapp,
     restoreNodes: restoreRhNodes,
     restoreWebappInfo: restoreRhWebappInfo,
     nodesLoading: rhNodesLoading,
@@ -258,6 +263,7 @@ export function AppWorkspace() {
     fetchNodes: fetchRhNodes
   } = useRunningHub();
   const [shortcutExporting, setShortcutExporting] = useState(false);
+  const [rhLibraryOpen, setRhLibraryOpen] = useState(false);
   const [templateFolderExporting, setTemplateFolderExporting] = useState(false);
   const { history, setHistory, loadOutputHistory, deleteHistoryItem } = useHistory();
   const { inputImages, setInputImages, refreshInputImages } = useInputImages();
@@ -326,6 +332,49 @@ export function AppWorkspace() {
   useEffect(() => {
     refreshRunLogSessions();
   }, [executionMode, isCanvasView, refreshRunLogSessions]);
+
+  const historyRef = useRef(history);
+  historyRef.current = history;
+
+  const isClientOwnedRun = useCallback((runId) => (
+    runId === localExecution.activeRunId
+    || runId === rhExecution.activeRunId
+    || localExecution.runQueue.some(job => job.runId === runId)
+    || rhExecution.runQueue.some(job => job.runId === runId)
+  ), [localExecution.activeRunId, localExecution.runQueue, rhExecution.activeRunId, rhExecution.runQueue]);
+
+  const hasHistoryItem = useCallback((id) => historyRef.current.some(item => item.id === id), []);
+
+  const adoptBackendQueueResult = useCallback((item) => {
+    setHistory(current => (current.some(entry => entry.id === item.id) ? current : [item, ...current]));
+    setSelectedHistoryIds(new Set([item.id]));
+    setHistorySelectionAnchor(item.id);
+    setSelectedOutputIndex(0);
+    const isRh = isRunningHubHistoryItem(item);
+    (isRh ? rhExecution : localExecution).setResult(historyItemToResult(item));
+    if (notifyEnabled && typeof Notification !== "undefined" && Notification.permission === "granted") {
+      notifyWorkflowCompleted({ enabled: true, t, isRh });
+    }
+  }, [
+    localExecution,
+    notifyEnabled,
+    rhExecution,
+    setHistory,
+    setHistorySelectionAnchor,
+    setSelectedHistoryIds,
+    setSelectedOutputIndex,
+    t
+  ]);
+
+  // Batch nhiều ảnh: lệnh thứ 2 trở đi chạy ở hàng chờ backend nên client không
+  // có onComplete — nạp ảnh vào thư viện ngay khi backend chạy xong.
+  useBackendQueueResults({
+    sessions: runLogSessions,
+    isOwnRun: isClientOwnedRun,
+    hasHistoryItem,
+    onAdopt: adoptBackendQueueResult,
+    refreshSessions: refreshRunLogSessions
+  });
 
   const isRunningHub = isRunningHubMode(executionMode);
   const isRunningHubApp = executionMode === "runninghub-app";
@@ -602,15 +651,29 @@ export function AppWorkspace() {
     provider: resultTiming.provider || (isRunningHub ? "runninghub" : undefined),
     rhCoins: resultTiming.rhCoins
   });
-  const backendFormQueueCount = useMemo(() => (
+  // Batch: lệnh 2..N chạy ở hàng chờ backend — đang chạy (running) lẫn đang chờ
+  // (queued) đều phải tính, nếu không UI trông như đã hết việc.
+  const backendFormRuns = useMemo(() => (
     (runLogSessions || []).filter(session => (
-      session.status === "queued"
-      && session.runKind === "form"
-      && !runQueue.some(job => job.runId === session.runId)
-    )).length
-  ), [runLogSessions, runQueue]);
+      session.runKind === "form"
+      && BACKEND_RUN_ACTIVE_STATUSES.has(session.status)
+      && !isClientOwnedRun(session.runId)
+    ))
+  ), [isClientOwnedRun, runLogSessions]);
+  const backendFormQueueCount = useMemo(
+    () => backendFormRuns.filter(session => session.status === "queued").length,
+    [backendFormRuns]
+  );
+  const backendFormRunningCount = useMemo(
+    () => backendFormRuns.filter(session => session.status === "running").length,
+    [backendFormRuns]
+  );
   const formQueueCount = runQueue.length + backendFormQueueCount;
-  const showStatus = Boolean(error || result || running || activeRunId || formQueueCount);
+  const formBusy = running || backendFormRunningCount > 0 || formQueueCount > 0;
+  const backendFormPendingLabel = backendFormRunningCount > 0
+    ? t("history.backendRunning")
+    : formQueueCount > 0 ? t("history.backendQueued") : "";
+  const showStatus = Boolean(error || result || running || activeRunId || formBusy);
 
   const compareInputImage = useMemo(() => {
     if (isRunningHubApp) {
@@ -950,8 +1013,8 @@ export function AppWorkspace() {
 
   // Khi không còn chạy và hết hàng chờ, tắt màn hình chờ để xem được ảnh
   useEffect(() => {
-    if (!running && !formQueueCount) setShowWaitScreen(false);
-  }, [running, formQueueCount, setShowWaitScreen]);
+    if (!formBusy) setShowWaitScreen(false);
+  }, [formBusy, setShowWaitScreen]);
 
   // Auto-fill dynamic choices from discovery
   useEffect(() => {
@@ -963,9 +1026,13 @@ export function AppWorkspace() {
       for (const item of inputs) {
         const kind = canonicalDynamicType(item.ui?.type);
         if (!kind || !item.id) continue;
-        const choices = dynamicFieldChoices(discovery, kind);
-        if (!choices.length) continue;
         const key = normalizeId(item.id);
+        // Discovery đang là bản của template khác / augment SDVN chưa xong → không reset
+        // (tránh race ghi đè default SDVN bằng model server đầu danh sách khi đổi template).
+        if (sdvnFieldPending(discovery, config?.sdvnModelFields, key)) continue;
+        // Field có thư viện SDVN riêng: "None" đứng đầu và là giá trị hợp lệ (per-field).
+        const choices = fieldChoicesWithSdvn(discovery, dynamicFieldChoices(discovery, kind), key);
+        if (!choices.length) continue;
         if (choices.includes(next[key])) continue;
         const preferred = choices.includes(item.ui?.value) ? item.ui.value : choices[0];
         next[key] = preferred;
@@ -973,7 +1040,7 @@ export function AppWorkspace() {
       }
       return changed ? next : current;
     });
-  }, [inputs, discovery, isCanvasView, setValues]);
+  }, [inputs, discovery, isCanvasView, setValues, config?.sdvnModelFields]);
 
   function selectOutput(index) {
     if (!resultOutputs.length) return;
@@ -1577,6 +1644,13 @@ export function AppWorkspace() {
     handleRunClickRef
   });
 
+  const handleRhLibraryImport = useCallback(async ({ id, name }) => {
+    await importRhWebapp({ id, name });
+    setExecutionMode("runninghub-app");
+    setWorkspaceView("form");
+    setRhLibraryOpen(false);
+  }, [importRhWebapp, setExecutionMode, setWorkspaceView]);
+
   return (
     <main
       className={`appShell${isCanvasView ? " is-canvas-view" : ""} ${isRunningHub ? "is-runninghub" : ""}${sidebarSide === "right" ? " sidebar-right" : ""}${availableUpdate ? " hasUpdateBanner" : ""}`}
@@ -1598,6 +1672,8 @@ export function AppWorkspace() {
               }}
               canvasActive={isCanvasView}
               onCanvasToggle={() => setWorkspaceView(isCanvasView ? "form" : "canvas")}
+              onLibraryOpen={() => setRhLibraryOpen(true)}
+              onLibraryHover={preloadRhLibraryModal}
             >
               <div
                 ref={handleWorkflowToolbarHost}
@@ -1744,6 +1820,7 @@ export function AppWorkspace() {
             savedWebapps={rhSavedWebapps}
             savedAppsError={rhSavedAppsError}
             onSaveWebapp={saveCurrentWebapp}
+            onDeleteWebapp={deleteRhWebapp}
             onSettingsChange={patch => {
               updateRhSettings(patch);
               setRhTestResult(null);
@@ -1910,6 +1987,7 @@ export function AppWorkspace() {
                       inputImages={inputImages}
                       onRefreshInputImages={refreshInputImages}
                       onUpdateInputImages={setInputImages}
+                      sdvnModelFields={config?.sdvnModelFields}
                       discovery={discovery}
                       discoveryLoading={discoveryLoading}
                     />
@@ -2037,9 +2115,9 @@ export function AppWorkspace() {
           selectedIds={selectedHistoryIds}
           activeId={activeHistoryId}
           onDelete={handleDeleteHistoryItem}
-          pending={running || formQueueCount > 0}
+          pending={formBusy}
           pendingActive={showRunningScreen}
-          pendingLabel={progress?.label || status}
+          pendingLabel={running ? (progress?.label || status) : backendFormPendingLabel}
           pendingProgressPct={progressPct}
           queueCount={formQueueCount}
           onShowWaiting={() => setShowWaitScreen(true)}
@@ -2078,6 +2156,16 @@ export function AppWorkspace() {
         heroImage={heroImage}
         handleSaveEditedOutput={handleSaveEditedOutput}
       />
+
+      {rhLibraryOpen ? (
+        <Suspense fallback={null}>
+          <RhLibraryModal
+            open
+            onClose={() => setRhLibraryOpen(false)}
+            onImportApp={handleRhLibraryImport}
+          />
+        </Suspense>
+      ) : null}
 
     </main>
   );

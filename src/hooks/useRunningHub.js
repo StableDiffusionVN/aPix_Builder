@@ -74,7 +74,13 @@ export function buildWebappInfo(data = {}, webappId = "") {
       ? data.statisticsInfo
       : null,
     covers: Array.isArray(data.covers) ? data.covers : [],
-    tags: Array.isArray(data.tags) ? data.tags : []
+    tags: Array.isArray(data.tags) ? data.tags : [],
+    instanceType: data.instanceType || null,
+    avgRunningSeconds: data.avgRunningSeconds ?? null,
+    runningSuccessRate: data.runningSuccessRate ?? null,
+    // Node RH_* trong nodeInfoList = model bên thứ ba trả phí $ (ngoài coin GPU).
+    hasPaidModel: Array.isArray(data.nodes)
+      && data.nodes.some(node => /^RH_/i.test(String(node?.nodeName || "")))
   };
 }
 
@@ -253,6 +259,38 @@ export function useRunningHub() {
     }
   }, [locale, primaryApiKey, settings.webappId, t]);
 
+  const importWebapp = useCallback(async ({ id, name } = {}) => {
+    const trimmedId = String(id || "").trim();
+    if (!trimmedId) throw new Error(t("rh.noWebappId"));
+    updateSettings({ webappId: trimmedId });
+    if (!isDefaultRhWebapp(trimmedId)) {
+      const entryName = String(name || "").trim() || trimmedId;
+      try {
+        await persistApps(upsertSavedRhAppList(savedWebappsRef.current, { id: trimmedId, name: entryName }));
+      } catch (error) {
+        console.error("Failed to save imported RH app:", error);
+      }
+    }
+    await fetchNodes({ webappId: trimmedId, throwOnError: true });
+    return trimmedId;
+  }, [fetchNodes, persistApps, t, updateSettings]);
+
+  const deleteWebapp = useCallback(async (id) => {
+    const trimmedId = String(id ?? settings.webappId ?? "").trim();
+    if (!trimmedId || isDefaultRhWebapp(trimmedId)) return { ok: false };
+    try {
+      await persistApps(removeSavedRhAppFromList(savedWebappsRef.current, trimmedId));
+    } catch (error) {
+      console.error("Failed to delete RH saved app:", error);
+      return { ok: false, error: t("rh.appSaveFailed") };
+    }
+    // Đang chọn app vừa xóa → quay về app mặc định
+    if ((settings.webappId ?? "").trim() === trimmedId) {
+      updateSettings({ webappId: DEFAULT_RH_WEBAPP_ID });
+    }
+    return { ok: true };
+  }, [persistApps, settings.webappId, t, updateSettings]);
+
   const saveCurrentWebapp = useCallback(async () => {
     if (!savedAppsReady) {
       return { ok: false, error: t("rh.appStorageLoading") };
@@ -300,6 +338,8 @@ export function useRunningHub() {
     savedAppsError,
     webappOptions,
     saveCurrentWebapp,
+    deleteWebapp,
+    importWebapp,
     nodes,
     webappInfo,
     restoreNodes,

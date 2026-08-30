@@ -41,7 +41,7 @@ export function isRhInsufficientCoinsError(error) {
   const message = String(
     error instanceof RhApiError ? error.msg : error.message || error.msg || ""
   ).toLowerCase();
-  return /coin|balance|insufficient|hết|不足|余额|credit/.test(message);
+  return /coin|balance|insufficient|hết|không đủ|不足|余额|积分|credit/.test(message);
 }
 
 export function isRhFailoverError(error) {

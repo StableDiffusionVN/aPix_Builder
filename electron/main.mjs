@@ -6,7 +6,7 @@ import { isVersionNewer } from "../shared/version.js";
 import { createSignedRunningHubShortcut, resolveShortcutAssetsDir } from "./runninghub-shortcut.mjs";
 
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const preloadPath = path.join(appRoot, "electron", "preload.mjs");
+const preloadPath = path.join(appRoot, "electron", "preload.cjs");
 const shortcutAssetsDir = resolveShortcutAssetsDir(appRoot);
 const UPDATE_MANIFEST_URL = process.env.APIX_UPDATE_MANIFEST_URL ?? "https://apix.sdvn.vn/releases/latest.json";
 const UPDATE_CHECK_DELAY_MS = 5000;
@@ -56,12 +56,17 @@ function normalizeManifest(manifest) {
   const downloadUrl = String(manifest.downloadUrl ?? "").trim();
   if (!version || !downloadUrl) return null;
 
+  // Windows dùng downloadUrlWin (exe) — trước đây luôn trả downloadUrl là bản DMG macOS.
+  const platformDownloadUrl = process.platform === "win32"
+    ? String(manifest.downloadUrlWin ?? "").trim() || downloadUrl
+    : downloadUrl;
+
   return {
     version,
     label: String(manifest.label ?? version).trim(),
     publishedAt: manifest.publishedAt ?? null,
     notes: Array.isArray(manifest.notes) ? manifest.notes.map(String) : [],
-    downloadUrl,
+    downloadUrl: platformDownloadUrl,
     mandatory: Boolean(manifest.mandatory)
   };
 }

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Bookmark, LayoutTemplate, Loader2, Lock, RefreshCcw, Settings2, Workflow } from "lucide-react";
+import { Bookmark, LayoutTemplate, LibraryBig, Loader2, Lock, RefreshCcw, Settings2, Trash2, Workflow, Zap } from "lucide-react";
+import { estimateRhCoins } from "../lib/rhCost.js";
 import { RunningHubField } from "./RunningHubField";
 import { ComfyUiLogomark } from "./icons/ComfyUiIcon";
 import { RunningHubLogomark } from "./icons/RunningHubIcon";
@@ -44,6 +45,14 @@ function RunningHubAppInfo({ info, t }) {
       <div className="rhAppInfoBody">
         <div className="rhAppInfoTitleRow">
           <strong className="rhAppInfoTitle">{info.webappName || t("rh.unnamedApp")}</strong>
+          {info.instanceType === "plus" ? (
+            <span className="rhAppInfoPlus" title={t("rh.plusWarning")}>
+              <Zap size={11} />
+              <span>Plus GPU</span>
+            </span>
+          ) : info.instanceType === "lite" ? (
+            <span className="rhAppInfoLite" title={t("rh.liteHint")}>Lite</span>
+          ) : null}
           {info.accessEncrypted ? (
             <span className="rhAppInfoEncrypted" title={t("rh.accessEncrypted")}>
               <Lock size={12} />
@@ -52,6 +61,31 @@ function RunningHubAppInfo({ info, t }) {
           ) : null}
         </div>
         {info.webappId ? <small className="rhAppInfoId">ID {info.webappId}</small> : null}
+        {Number(info.avgRunningSeconds) > 0 ? (
+          <div className="rhAppCostRow" title={t("rh.estTooltip")}>
+            <span>⏱ ~{Math.round(Number(info.avgRunningSeconds))}s</span>
+            {info.runningSuccessRate != null && info.runningSuccessRate !== "" ? (
+              <span>✅ {info.runningSuccessRate}%</span>
+            ) : null}
+            {estimateRhCoins(info.avgRunningSeconds) ? (
+              <span className="rhAppCostPair">
+                🪙 ~{estimateRhCoins(info.avgRunningSeconds)} {t("rh.estCoinsUnit")}
+                {info.hasPaidModel ? (
+                  <span className="rhAppPaidModel" title={t("rh.paidModelHint")}> 💲 {t("rh.paidModel")}</span>
+                ) : null}
+              </span>
+            ) : info.hasPaidModel ? (
+              <span className="rhAppPaidModel" title={t("rh.paidModelHint")}>💲 {t("rh.paidModel")}</span>
+            ) : null}
+          </div>
+        ) : (
+          <div className="rhAppCostRow">
+            <span className="rhAppCostEmpty">{t("rh.noEstimate")}</span>
+            {info.hasPaidModel ? (
+              <span className="rhAppPaidModel" title={t("rh.paidModelHint")}>💲 {t("rh.paidModel")}</span>
+            ) : null}
+          </div>
+        )}
         {stats.length ? (
           <div className="rhAppInfoStats">
             {stats.map(item => (
@@ -80,7 +114,7 @@ const EXECUTION_MODE_OPTIONS = [
   { id: "runninghub-app", label: "RH App", title: "RunningHub App (Alt/Option+3)", icon: RunningHubLogomark, iconTitle: "RunningHub", shortcut: "Alt+3" }
 ];
 
-export function ExecutionModeToggle({ mode, onChange, canvasActive = false, onCanvasToggle, children }) {
+export function ExecutionModeToggle({ mode, onChange, canvasActive = false, onCanvasToggle, onLibraryOpen, onLibraryHover, children }) {
   const { locale } = useI18n();
   const trackRef = useRef(null);
   const formOptionsRef = useRef(null);
@@ -147,6 +181,20 @@ export function ExecutionModeToggle({ mode, onChange, canvasActive = false, onCa
       aria-label={workspaceLabel}
     >
       <div className="executionModeTrack" ref={trackRef}>
+        {onLibraryOpen ? (
+          <button
+            type="button"
+            className="executionModeLibraryToggle hasModeIcon"
+            aria-label={isVi ? "Thư viện RunningHub" : "RunningHub Library"}
+            title={isVi ? "Thư viện app RunningHub" : "RunningHub app library"}
+            onPointerEnter={onLibraryHover}
+            onFocus={onLibraryHover}
+            onClick={() => onLibraryOpen()}
+          >
+            <LibraryBig size={12} className="executionModeIcon" aria-hidden="true" />
+            {isVi ? "Thư viện" : "Library"}
+          </button>
+        ) : null}
         <button
           type="button"
           ref={node => {
@@ -234,6 +282,7 @@ export function RunningHubPanel({
   savedWebapps = [],
   savedAppsError = "",
   onSaveWebapp,
+  onDeleteWebapp,
   nodes,
   webappInfo = null,
   values,
@@ -282,7 +331,7 @@ export function RunningHubPanel({
     <section className="settingsGroup runningHubPanel">
       <div className="settingsHeader">
         <Settings2 size={16} />
-        <h2>{webappInfo?.webappName || "RunningHub App"}</h2>
+        <h2 title={webappInfo?.webappName || "RunningHub App"}>{webappInfo?.webappName || "RunningHub App"}</h2>
         <button
           type="button"
           className="rhWebappActionBtn rhExportShortcutBtn"
@@ -337,6 +386,23 @@ export function RunningHubPanel({
                 aria-pressed={isSavedWebapp}
               >
                 <Bookmark size={14} />
+              </button>
+            ) : null}
+            {isSavedWebapp && onDeleteWebapp ? (
+              <button
+                type="button"
+                className="rhWebappActionBtn rhWebappDeleteBtn"
+                onClick={() => {
+                  void (async () => {
+                    const result = await onDeleteWebapp(settings.webappId);
+                    if (result?.ok) setSaveHint(t("rh.appDeleted"));
+                    else if (result?.error) setSaveHint(result.error);
+                  })();
+                }}
+                title={t("rh.deleteApp")}
+                aria-label={t("rh.deleteApp")}
+              >
+                <Trash2 size={14} />
               </button>
             ) : null}
             <button

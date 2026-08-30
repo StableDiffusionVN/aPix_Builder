@@ -9,15 +9,20 @@ import { portTypeForUi } from "./canvasModel.js";
 import { CanvasImageField } from "./CanvasImageField.jsx";
 import { useCanvasActions } from "./canvasContext.js";
 
-export function NodeField({ port, value, onChange, linked, onContextMenu, sdvnModelTypes }) {
+export function NodeField({ port, value, onChange, linked, onContextMenu, sdvnModelTypes, sdvnModelFields }) {
   const { t } = useI18n();
   const { discovery } = useCanvasActions();
   const type = port.type || portTypeForUi(port.uiType);
   const staticChoices = Array.isArray(port.choices) && port.choices.length ? port.choices : null;
   // Field dynamic (checkpoints/loras/vae/samplers…) không có choices tĩnh → lấy danh sách từ discovery ComfyUI.
   const dynamicKind = staticChoices ? "" : canonicalDynamicType(port.uiType);
-  // Quy tắc SDVN (đồng bộ với form): template có node loader SDVN cho type này → bơm thư viện SDVN.
-  const sdvnEnabled = Boolean(dynamicKind) && Array.isArray(sdvnModelTypes) && sdvnModelTypes.includes(dynamicKind);
+  // Quy tắc SDVN per-field (đồng bộ form/iOS/Android): CHỈ port trỏ node loader SDVN mới bơm thư viện.
+  // Fallback per-type cho canvas project cũ đã lưu config chưa có sdvnModelFields.
+  const sdvnEnabled = Boolean(dynamicKind) && (
+    sdvnModelFields
+      ? Boolean(sdvnModelFields[port.valueKey])
+      : Array.isArray(sdvnModelTypes) && sdvnModelTypes.includes(dynamicKind)
+  );
   const [sdvnNames, setSdvnNames] = useState(null);
 
   useEffect(() => {

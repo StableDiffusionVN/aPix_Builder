@@ -1,13 +1,14 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { parseDataUrl } from "./comfyClient.js";
+import { parseLocalImageRef, readLocalImageFromDir } from "./localImageRef.js";
 
 export const RUNNINGHUB_HOST = "www.runninghub.ai";
 export const RUNNINGHUB_BASE = `https://${RUNNINGHUB_HOST}`;
 export const RUNNINGHUB_DEFAULT_FULL_WF_ID = "2064644362323189762";
 
 const DEFAULT_POLL_MS = 5000;
-const DEFAULT_TIMEOUT_MS = 10 * 60 * 1000;
+const DEFAULT_TIMEOUT_MS = 20 * 60 * 1000;
 const TOKEN_IDLE_POLL_MS = 5000;
 const TOKEN_IDLE_TIMEOUT_MS = 30 * 60 * 1000;
 const TOKEN_SUBMIT_MAX_ATTEMPTS = 120;
@@ -311,56 +312,6 @@ async function fetchRemoteImage(url, signal) {
   }
 }
 
-function safeBasename(rawName = "") {
-  return path.basename(String(rawName)).replace(/[^\w.-]+/g, "_");
-}
-
-function mimeFromFilename(filename = "") {
-  const ext = path.extname(filename).slice(1).toLowerCase();
-  if (ext === "jpg" || ext === "jpeg") return "image/jpeg";
-  if (ext === "webp") return "image/webp";
-  if (ext === "gif") return "image/gif";
-  return "image/png";
-}
-
-/** Parse /api/output-image or /api/input-image refs (path or absolute URL). */
-function parseLocalImageRef(value) {
-  if (!value || typeof value !== "string") return null;
-  let pathname = value;
-  let search = "";
-  if (/^https?:\/\//i.test(value)) {
-    try {
-      const parsed = new URL(value);
-      pathname = parsed.pathname;
-      search = parsed.search;
-    } catch {
-      return null;
-    }
-  } else if (!value.startsWith("/")) {
-    return null;
-  }
-  const refUrl = new URL(`${pathname}${search}`, "http://localhost");
-  if (pathname.startsWith("/api/output-image")) {
-    const name = safeBasename(refUrl.searchParams.get("name") || "");
-    return name ? { kind: "output", name } : null;
-  }
-  if (pathname.startsWith("/api/input-image")) {
-    const name = safeBasename(refUrl.searchParams.get("name") || "");
-    return name ? { kind: "input", name } : null;
-  }
-  return null;
-}
-
-async function readLocalImageFromDir(dir, name) {
-  const filePath = path.join(dir, name);
-  const resolvedDir = path.resolve(dir);
-  if (!path.resolve(filePath).startsWith(resolvedDir)) {
-    throw new Error("Invalid local image path");
-  }
-  const buffer = await readFile(filePath);
-  return { buffer, mimeType: mimeFromFilename(name), filename: name };
-}
-
 async function resolveImageFieldValue(apiKey, value, { inputDir, outputDir, signal, onProgress }) {
   if (value == null || value === "") return "";
   if (typeof value === "object") {
@@ -450,11 +401,8 @@ export async function prepareNodeInfoList(apiKey, nodes, { inputDir, outputDir, 
         || fieldValue === ""
         || (typeof fieldValue === "string" && !fieldValue.trim());
       if (isEmpty) {
-        prepared.push({
-          nodeId: String(node.nodeId),
-          fieldName: node.fieldName,
-          fieldValue: ""
-        });
+        // Bỏ node trống khỏi nodeInfoList → RunningHub dùng giá trị mặc định của app
+        // (gửi fieldValue rỗng sẽ làm API lỗi).
         continue;
       }
       onProgress?.({ type: "upload", label: `Đang upload ${node.description || node.fieldName}...` });
@@ -469,6 +417,7 @@ export async function prepareNodeInfoList(apiKey, nodes, { inputDir, outputDir, 
     } else if (fieldValue != null && typeof fieldValue !== "string") {
       fieldValue = String(fieldValue);
     }
+    if (fieldValue == null || !String(fieldValue).trim()) continue;
     prepared.push({
       nodeId: String(node.nodeId),
       fieldName: node.fieldName,

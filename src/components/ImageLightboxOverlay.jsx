@@ -4,6 +4,7 @@ import { ChevronLeft, ChevronRight, Download, X } from "lucide-react";
 import { useI18n } from "../i18n/I18nContext.jsx";
 import { useZoomableImage } from "../hooks/useZoomableImage.js";
 import { downloadImage } from "../lib/download.js";
+import { mediaKindFromUrl } from "../lib/mediaKind.js";
 
 export function ImageLightboxOverlay({ open, image, images, title, onClose, zoomable = true }) {
   const { t } = useI18n();
@@ -98,7 +99,13 @@ export function ImageLightboxOverlay({ open, image, images, title, onClose, zoom
           style={zoom.stageStyle}
           {...zoom.stageProps}
         >
-          <img src={currentImage.url} alt={currentImage.name || title || ""} />
+          {mediaKindFromUrl(currentImage.url) === "video" ? (
+            <video src={currentImage.url} controls autoPlay playsInline preload="metadata" />
+          ) : mediaKindFromUrl(currentImage.url) === "audio" ? (
+            <audio src={currentImage.url} controls autoPlay preload="metadata" />
+          ) : (
+            <img src={currentImage.url} alt={currentImage.name || title || ""} />
+          )}
         </div>
         {canNavigate ? (
           <>

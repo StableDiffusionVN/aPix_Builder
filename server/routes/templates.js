@@ -2,6 +2,7 @@ export function createTemplateRoutes(context) {
   const {
     TEMPLATE_SCOPES,
     assertTemplateWorkflow,
+    handleSdvnModels,
     handleTemplateDelete,
     handleTemplateEditor,
     handleTemplateExport,
@@ -39,6 +40,10 @@ export function createTemplateRoutes(context) {
           scope
         }
       });
+      return true;
+    }
+    if (req.method === "GET" && url.pathname === "/api/sdvn-models") {
+      await handleSdvnModels(req, res, url);
       return true;
     }
     if (req.method === "GET" && url.pathname === "/api/template-editor") {

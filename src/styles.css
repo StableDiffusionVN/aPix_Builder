@@ -800,6 +800,7 @@ html[data-theme="light"] .appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasZo
 }
 
 .appTopBar .executionModeToggle .executionModeCanvasToggle,
+.appTopBar .executionModeToggle .executionModeLibraryToggle,
 .appTopBar .executionModeToggle .executionModeFormOption {
   min-height: 26px;
   padding: 3px 10px;
@@ -808,6 +809,22 @@ html[data-theme="light"] .appTopBar .canvasWorkflowToolbar.isAppTopBar .canvasZo
   color: var(--muted-2);
   font-size: 11px;
   font-weight: 600;
+}
+
+.appTopBar .executionModeToggle .executionModeLibraryToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: none;
+  border-right: 1px solid var(--border-subtle);
+  border-radius: 6px 0 0 6px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.appTopBar .executionModeToggle .executionModeLibraryToggle:hover {
+  background: rgba(var(--rh-brand-rgb), 0.12);
+  color: var(--text);
 }
 
 .appTopBar .executionModeToggle .executionModeCanvasToggle.active,
@@ -1017,6 +1034,7 @@ body.sidebar-layout-resizing {
   line-height: 1.3;
   letter-spacing: normal;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .panelTitle span {
@@ -5591,10 +5609,15 @@ html[data-theme="light"] .logTaskInspectLine {
 }
 
 .historyThumb,
-.historyThumb img {
+.historyThumb img,
+.historyThumb video {
   display: block;
   width: 52px;
   height: 52px;
+}
+
+.historyThumb video {
+  object-fit: cover;
 }
 
 .historyThumb {
@@ -9754,8 +9777,9 @@ html:not([data-theme="dark"]):not([data-theme="light"]) .appShell.is-runninghub 
   background: transparent;
 }
 .rhAppInfo {
-  display: grid;
-  grid-template-columns: 72px minmax(0, 1fr);
+  /* Flex để cover stretch theo chiều cao khối thông tin nhưng vẫn giữ đúng tỉ lệ 4:5 */
+  display: flex;
+  align-items: stretch;
   gap: 10px;
   margin-bottom: 10px;
   padding: 10px;
@@ -9765,8 +9789,13 @@ html:not([data-theme="dark"]):not([data-theme="light"]) .appShell.is-runninghub 
 }
 
 .rhAppInfoCover {
-  width: 72px;
-  aspect-ratio: 3 / 4;
+  /* Giữ đúng 4:5; cao tối thiểu bằng khối thông tin (stretch) nhưng có trần
+     tránh vòng lặp stretch↔width làm cover phình vô hạn */
+  flex: 0 0 auto;
+  aspect-ratio: 2 / 3;
+  min-height: 90px;
+  max-height: 109px;
+  width: auto;
   overflow: hidden;
   border-radius: 10px;
   border: 1px solid var(--border);
@@ -9782,7 +9811,10 @@ html:not([data-theme="dark"]):not([data-theme="light"]) .appShell.is-runninghub 
 
 .rhAppInfoBody {
   display: grid;
+  /* Dòng xếp sát nhau — không giãn khoảng cách khi khối thấp hơn cover */
+  align-content: start;
   gap: 6px;
+  flex: 1;
   min-width: 0;
 }
 
@@ -9824,8 +9856,10 @@ html:not([data-theme="dark"]):not([data-theme="light"]) .appShell.is-runninghub 
 }
 
 .rhAppInfoStats {
+  /* Hẹp ngang → ẩn phần thừa, không xuống dòng */
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  overflow: hidden;
   gap: 6px 10px;
 }
 
@@ -9845,8 +9879,10 @@ html:not([data-theme="dark"]):not([data-theme="light"]) .appShell.is-runninghub 
 }
 
 .rhAppInfoTags {
+  /* Hẹp ngang → ẩn phần thừa, không xuống dòng */
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  overflow: hidden;
   gap: 6px;
 }
 
@@ -10622,4 +10658,212 @@ html:not([data-theme="dark"]):not([data-theme="light"]) .appShell.is-runninghub 
   color: var(--muted-2);
   max-width: 300px;
   line-height: 1.6;
+}
+
+/* ── Media field (video/audio input) ───────────────────── */
+
+.mediaFieldDropzone {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 10px;
+  background: var(--panel-soft);
+}
+
+.mediaFieldDropzone.isDragging {
+  border-color: var(--accent);
+  background: var(--accent-muted);
+}
+
+.mediaFieldDropzone input[type="file"] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.mediaFieldPreview {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mediaFieldPreview video {
+  width: 100%;
+  max-height: 220px;
+  border-radius: 8px;
+  background: #000;
+}
+
+.mediaFieldPreview audio {
+  width: 100%;
+}
+
+.mediaFieldClear {
+  align-self: flex-start;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.mediaFieldEmpty {
+  padding: 18px 8px;
+  text-align: center;
+  color: var(--muted-2);
+  font-size: 12px;
+  pointer-events: none;
+}
+
+/* ── Output video/audio ────────────────────────────────── */
+
+/* Stage riêng cho output video/âm thanh — full khung preview, controls native đầy đủ */
+.mediaStage {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+}
+
+.mediaStage .resultVideo {
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  border-radius: 8px;
+  background: #000;
+  pointer-events: auto;
+}
+
+.resultAudioWrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: min(420px, 90%);
+  pointer-events: auto;
+}
+
+.resultAudioWrap audio {
+  width: 100%;
+  pointer-events: auto;
+}
+
+.previewArea.isPlayableOutput {
+  cursor: default;
+}
+
+.resultAudioWrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: min(420px, 90%);
+}
+
+.resultAudioWrap audio {
+  width: 100%;
+}
+
+.outputThumb video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.outputThumbAudio,
+.historyThumbAudio {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  font-size: 18px;
+  color: var(--muted);
+  background: var(--surface-2);
+}
+
+.imageLightboxStage video {
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.imageLightboxStage audio {
+  width: min(420px, 90vw);
+}
+
+/* ── RunningHub Plus GPU ───────────────────────────────── */
+
+.rhAppInfoPlus {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(251, 191, 36, 0.16);
+  color: var(--warning);
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.rhAppPlusWarning {
+  margin-top: 6px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: rgba(251, 191, 36, 0.1);
+  color: var(--warning);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+/* ── Dự toán chi phí app RH ────────────────────────────── */
+
+.rhAppCostRow {
+  /* Hẹp ngang → ẩn phần thừa, không xuống dòng */
+  display: flex;
+  flex-wrap: nowrap;
+  overflow: hidden;
+  gap: 4px 10px;
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.rhAppInfoLite {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(114, 201, 87, 0.16);
+  color: #72c957;
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.rhAppPaidModel {
+  color: var(--warning);
+}
+
+/* Dòng giữ chỗ khi chưa có số liệu dự toán — mờ, giữ cấu trúc 5 dòng của card */
+.rhAppCostEmpty {
+  color: var(--muted-2);
+  font-style: italic;
+  opacity: 0.8;
+}
+
+/* Coin + phí model dính nhau trên cùng một dòng */
+.rhAppCostPair {
+  white-space: nowrap;
 }

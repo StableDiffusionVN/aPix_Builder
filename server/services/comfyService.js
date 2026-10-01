@@ -37,7 +37,8 @@ export function createComfyService({ storage, runCoordinator, readBody, send }) 
     drainBackendRunQueue,
     cancelQueuedBackendRun,
     getRunLogSessions,
-    ensureRunLogSession
+    ensureRunLogSession,
+    endRunLogSession
   } = runCoordinator;
 
   async function assertTemplateWorkflow(config, template, options = {}) {
@@ -71,6 +72,7 @@ export function createComfyService({ storage, runCoordinator, readBody, send }) 
       meta: { runKind: body.runKind || existingRunSession?.runKind || "form" }
     });
   
+    let settled = false;
     try {
       const { config, server, template } = await storage.getTemplates().loadConfig(body.template);
       const target = normalizeComfyTarget(body.address || server.address);
@@ -129,6 +131,13 @@ export function createComfyService({ storage, runCoordinator, readBody, send }) 
         },
         canvasHistory: body
       });
+      // Chốt phiên trước khi ghi response: UI có thể đã mất kết nối, nhưng run
+      // vẫn phải được đánh dấu xong để lịch sử/UI nạp được ảnh.
+      endRunLogSession(runId, "success", {
+        promptId: queued.prompt_id,
+        durationMs: historyItem.durationMs
+      });
+      settled = true;
       send(res, 200, {
         runId,
         promptId: queued.prompt_id,
@@ -142,6 +151,12 @@ export function createComfyService({ storage, runCoordinator, readBody, send }) 
         rawOutputs: history?.outputs || {},
         historyItem
       });
+    } catch (error) {
+      if (!settled) {
+        settled = true;
+        endRunLogSession(runId, "error", { error: error?.message || String(error) });
+      }
+      throw error;
     } finally {
       broadcastRunEvent(run, { type: "run_end", data: { runId } });
       for (const client of run.sseClients) {

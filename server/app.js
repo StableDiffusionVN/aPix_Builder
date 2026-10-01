@@ -541,7 +541,8 @@ const runCoordinator = {
   drainBackendRunQueue,
   cancelQueuedBackendRun,
   getRunLogSessions,
-  ensureRunLogSession
+  ensureRunLogSession,
+  endRunLogSession
 };
 
 const comfy = createComfyService({ storage, runCoordinator, readBody, send });

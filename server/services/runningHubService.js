@@ -57,7 +57,8 @@ export function createRunningHubService({ storage, runCoordinator, readBody, sen
     drainBackendRunQueue,
     cancelQueuedBackendRun,
     getRunLogSessions,
-    ensureRunLogSession
+    ensureRunLogSession,
+    endRunLogSession
   } = runCoordinator;
 
   function normalizeRhSavedApps(raw) {
@@ -450,7 +451,7 @@ export function createRunningHubService({ storage, runCoordinator, readBody, sen
       onSwitch: onTokenSwitch,
       onExhausted: onResourceAccessExhausted
     });
-    return { runId, submittedAt, apiKeys, abortController, run, emitRhStatus, onTokenWait, failoverOptions };
+    return { runId, submittedAt, apiKeys, abortController, run, emitRhStatus, onTokenWait, failoverOptions, settled: false };
   }
 
   // Mở đầu mỗi lượt thử token: chờ key rảnh + chụp số dư trước khi chạy (tính coin tiêu thụ).
@@ -507,6 +508,15 @@ export function createRunningHubService({ storage, runCoordinator, readBody, sen
       },
       ...archiveExtra
     });
+    // Chốt phiên NGAY khi có kết quả, trước khi ghi response: nếu UI đã mất kết
+    // nối thì send() ném lỗi, nhưng run vẫn phải được đánh dấu thành công để
+    // lịch sử và lớp theo dõi của UI nạp được ảnh (tránh phiên treo "running").
+    endRunLogSession(runId, "success", {
+      taskId: String(taskId),
+      durationMs: historyItem.durationMs,
+      rhCoins: historyItem.rhCoins
+    });
+    ctx.settled = true;
     send(res, 200, {
       runId,
       taskId: String(taskId),
@@ -518,6 +528,17 @@ export function createRunningHubService({ storage, runCoordinator, readBody, sen
       rhCoins: historyItem.rhCoins,
       outputs: historyItem.outputs,
       historyItem
+    });
+  }
+
+  // Lỗi giữa chừng (kể cả khi UI đã rớt kết nối) vẫn phải đóng phiên để run log
+  // không treo ở trạng thái "running".
+  function settleRhRunFailure(ctx, error) {
+    if (ctx.settled) return;
+    ctx.settled = true;
+    endRunLogSession(ctx.runId, "error", {
+      error: error?.message || String(error),
+      taskId: ctx.run?.taskId ? String(ctx.run.taskId) : undefined
     });
   }
 
@@ -557,6 +578,9 @@ export function createRunningHubService({ storage, runCoordinator, readBody, sen
           responseExtra: { rhMode: "app", webappId }
         });
       });
+    } catch (error) {
+      settleRhRunFailure(ctx, error);
+      throw error;
     } finally {
       closeRhRun(ctx.run, ctx.runId);
     }
@@ -651,6 +675,9 @@ export function createRunningHubService({ storage, runCoordinator, readBody, sen
           responseExtra: { rhMode: "wf", workflowId: sourceWorkflowId, templateId }
         });
       });
+    } catch (error) {
+      settleRhRunFailure(ctx, error);
+      throw error;
     } finally {
       closeRhRun(ctx.run, ctx.runId);
     }

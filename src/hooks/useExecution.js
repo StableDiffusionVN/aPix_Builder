@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { describeJob } from "../lib/runLog";
 import { localizeRuntimeMessage, useI18n } from "../i18n/I18nContext";
+import { shouldKeepRunAfterFetchError } from "../lib/runConnection.js";
 
 function formatDuration(ms) {
   if (!Number.isFinite(ms)) return "";
@@ -203,6 +204,14 @@ export function useExecution({ onComplete, runLog } = {}) {
       runLog?.endSession?.(job.runId, "success", { durationMs: timedResult.durationMs });
       onComplete?.(timedHistoryItem, timedResult);
     } catch (err) {
+      // Mất kết nối UI ↔ server app nhưng server vẫn chạy run → chờ, không báo lỗi.
+      if (await shouldKeepRunAfterFetchError(err, job.runId)) {
+        setProgress({ type: "running", label: t("exec.detachedStillRunning") });
+        setStatus(t("exec.detachedStillRunning"));
+        appendLog("warn", t("exec.detachedStillRunning"), { runId: job.runId });
+        runLog?.updateSession?.(job.runId, { status: "running" });
+        return;
+      }
       setProgress(null);
       const message = localizeRuntimeMessage(err.message, locale);
       setError(message);

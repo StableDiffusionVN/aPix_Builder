@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { describeJob } from "../lib/runLog";
 import { nodeFieldKey } from "./useRunningHub";
 import { localizeRuntimeMessage, useI18n } from "../i18n/I18nContext";
+import { shouldKeepRunAfterFetchError } from "../lib/runConnection.js";
 
 function formatDuration(ms) {
   if (!Number.isFinite(ms)) return "";
@@ -227,6 +228,19 @@ export function useRunningHubExecution({ onComplete, runLog } = {}) {
       runLog?.endSession?.(job.runId, "success", { durationMs: timedResult.durationMs, taskId, rhCoins });
       onComplete?.(timedHistoryItem, timedResult);
     } catch (err) {
+      // Đứt kết nối UI ↔ server app trong lúc server vẫn chạy run: giữ phiên ở
+      // trạng thái đang chạy để lớp theo dõi hàng chờ nạp kết quả khi xong.
+      if (await shouldKeepRunAfterFetchError(err, job.runId)) {
+        setProgress({ type: "running", label: t("exec.detachedStillRunning") });
+        setTaskStatus({ status: "running", label: t("exec.detachedStillRunning") });
+        setStatus(t("exec.detachedStillRunning"));
+        appendLog("warn", t("exec.detachedStillRunning"), {
+          runId: job.runId,
+          taskId: activeTaskIdRef.current || undefined
+        });
+        runLog?.updateSession?.(job.runId, { status: "running" });
+        return;
+      }
       setProgress(null);
       const message = localizeRuntimeMessage(err.message, locale);
       const isAccessWarning = err.code === "rh_resource_access_exhausted";

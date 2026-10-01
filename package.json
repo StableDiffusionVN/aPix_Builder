@@ -3,7 +3,7 @@
   "productName": "aPix Builder",
   "description": "ComfyUI and RunningHub workflow builder with Apple Shortcut export",
   "author": "StableDiffusionVN",
-  "version": "1.4.2",
+  "version": "1.4.3",
   "private": true,
   "type": "module",
   "main": "electron/main.mjs",

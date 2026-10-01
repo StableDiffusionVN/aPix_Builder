@@ -12,6 +12,10 @@ const DEFAULT_TIMEOUT_MS = 20 * 60 * 1000;
 const TOKEN_IDLE_POLL_MS = 5000;
 const TOKEN_IDLE_TIMEOUT_MS = 30 * 60 * 1000;
 const TOKEN_SUBMIT_MAX_ATTEMPTS = 120;
+// Poll trạng thái task: mạng tới RunningHub (HK) hay chập chờn — một nhịp lỗi không
+// được phép giết cả run vì task vẫn chạy tiếp trên cloud. Chỉ bỏ cuộc khi lỗi kéo dài.
+const TRANSIENT_NETWORK_WINDOW_MS = 3 * 60 * 1000;
+const POLL_REQUEST_TIMEOUT_MS = 60 * 1000;
 
 export class RhApiError extends Error {
   constructor(code, msg, raw = null) {
@@ -470,10 +474,10 @@ export async function submitAiAppTask(apiKey, webappId, nodeInfoList, signal) {
   return data.data || {};
 }
 
-export async function queryTaskOutputs(apiKey, taskId, signal) {
+export async function queryTaskOutputs(apiKey, taskId, signal, { timeoutMs } = {}) {
   const response = await fetch(`${RUNNINGHUB_BASE}/task/openapi/outputs`, {
     method: "POST",
-    signal,
+    signal: timeoutMs ? anySignal(signal, AbortSignal.timeout(timeoutMs)) : signal,
     headers: rhHeaders(apiKey, { "content-type": "application/json" }),
     body: JSON.stringify({ apiKey, taskId })
   });
@@ -482,12 +486,44 @@ export async function queryTaskOutputs(apiKey, taskId, signal) {
   try {
     data = text ? JSON.parse(text) : {};
   } catch {
-    throw new Error(text || `RunningHub HTTP ${response.status}`);
+    throw Object.assign(new Error(text || `RunningHub HTTP ${response.status}`), { status: response.status });
   }
   if (!response.ok) {
-    throw new Error(data.msg || data.message || text || `RunningHub HTTP ${response.status}`);
+    throw Object.assign(
+      new Error(data.msg || data.message || text || `RunningHub HTTP ${response.status}`),
+      { status: response.status }
+    );
   }
   return data;
+}
+
+function anySignal(signal, timeoutSignal) {
+  if (!signal) return timeoutSignal;
+  return typeof AbortSignal.any === "function"
+    ? AbortSignal.any([signal, timeoutSignal])
+    : signal;
+}
+
+/** Lỗi mạng/hạ tầng tạm thời — nên thử lại thay vì bỏ task đang chạy trên cloud. */
+export function isTransientRhNetworkError(error) {
+  if (!error) return false;
+  const status = Number(error.status);
+  if (status === 429 || (status >= 500 && status <= 599)) return true;
+  const text = `${error.name || ""} ${error.message || ""} ${error.cause?.code || ""}`.toLowerCase();
+  return [
+    "fetch failed",
+    "econnreset",
+    "econnrefused",
+    "etimedout",
+    "ehostunreach",
+    "enetunreach",
+    "enotfound",
+    "eai_again",
+    "socket hang up",
+    "timeouterror",
+    "terminated",
+    "network"
+  ].some(token => text.includes(token));
 }
 
 export function parsePromptTips(promptTips) {
@@ -636,10 +672,33 @@ export async function waitForTaskOutputs(apiKey, taskId, options = {}) {
     onStatus
   } = options;
   const started = Date.now();
+  let transientSince = 0;
 
   while (true) {
     if (signal?.aborted) throw new Error("Đã hủy task RunningHub");
-    const result = await queryTaskOutputs(apiKey, taskId, signal);
+    let result;
+    try {
+      result = await queryTaskOutputs(apiKey, taskId, signal, { timeoutMs: POLL_REQUEST_TIMEOUT_MS });
+      transientSince = 0;
+    } catch (error) {
+      if (signal?.aborted) throw new Error("Đã hủy task RunningHub");
+      if (!isTransientRhNetworkError(error)) throw error;
+      // Task vẫn chạy trên RunningHub — giữ vòng chờ thay vì báo run thất bại.
+      transientSince = transientSince || Date.now();
+      const downMs = Date.now() - transientSince;
+      if (downMs > TRANSIENT_NETWORK_WINDOW_MS) {
+        throw new Error(`Mất kết nối RunningHub quá lâu (${Math.round(downMs / 1000)}s): ${error.message}`);
+      }
+      onStatus?.({
+        type: "waiting",
+        label: `Lỗi mạng tạm thời khi hỏi RunningHub (${error.message}) — thử lại...`
+      });
+      if (Date.now() - started > timeoutMs) {
+        throw new Error("Timeout khi chờ kết quả từ RunningHub");
+      }
+      await new Promise(resolve => setTimeout(resolve, pollMs));
+      continue;
+    }
     const code = result.code;
     const data = result.data;
 

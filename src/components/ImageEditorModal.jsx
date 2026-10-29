@@ -870,29 +870,46 @@ export function ImageEditorModal({ source, title = "Image Editor", initialState 
     }
   }, [adjustments.curves, activeCurveChannel, selectedCurvePointIndex]);
 
-  // When the committed stroke set changes (commit / undo / redo / reset), rebuild
-  // the brush layer and recomposite. Not triggered during dragging.
-  useEffect(() => {
-    if (!isReady) return;
+  // Coalesce render requests into the next frame (shared with the adjustments effect).
+  const scheduleRender = useCallback(() => {
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    rafRef.current = requestAnimationFrame(() => renderPreviewRef.current?.());
+  }, []);
 
+  // When the committed stroke set changes (commit / undo / redo / reset), rebuild
+  // the brush layer and recomposite. Not triggered during dragging, and not by
+  // adjustment changes (renderPreview identity) — those render through the effect above.
+  const renderedStrokesRef = useRef(null);
+  useEffect(() => {
+    if (!isReady) {
+      renderedStrokesRef.current = null;
+      return;
+    }
+    if (renderedStrokesRef.current === strokes) return;
+    const firstPass = renderedStrokesRef.current === null;
+    renderedStrokesRef.current = strokes;
     const healingCount = (strokes || []).filter(s => s.tool === "healing").length;
     const prevCount = prevHealingCountRef.current;
     prevHealingCountRef.current = healingCount;
+    // The first frame after loading is drawn by the adjustments effect.
+    if (firstPass) return;
 
     if (healingCount > 0 || prevCount > 0) {
-      renderPreview();
+      scheduleRender();
     } else {
       syncStrokeLayer();
       compositePreview();
     }
-  }, [isReady, strokes, syncStrokeLayer, compositePreview, renderPreview]);
+  }, [isReady, strokes, syncStrokeLayer, compositePreview, scheduleRender]);
 
   // Entering/leaving the crop tool switches between the full-image crop preview
   // and the normal cropped preview.
   useEffect(() => {
-    croppingRef.current = activeTool === "crop";
-    if (isReady) renderPreview();
-  }, [activeTool, isReady, renderPreview]);
+    const cropping = activeTool === "crop";
+    if (croppingRef.current === cropping) return;
+    croppingRef.current = cropping;
+    if (isReady) scheduleRender();
+  }, [activeTool, isReady, scheduleRender]);
 
   function updateAdjustment(key, value, shouldCommit = false) {
     setAdjustments(current => {

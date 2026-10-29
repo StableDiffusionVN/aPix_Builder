@@ -6,6 +6,7 @@ import {
   needsColorPipeline
 } from "./imageAdjustments.js";
 import { applyHealingStrokes } from "./healingBrush.js";
+import { applyColorPipelineGpuToCanvas } from "./gpuPipeline.js";
 import { ensureLut, getLoadedLut } from "./lutStore.js";
 import { normalizePersistedColorState } from "./colorAdjustPersistence.js";
 
@@ -98,7 +99,8 @@ export async function renderAdjustedCanvas(image, { adjustments, healingStrokes 
   });
   if (!meta) throw new Error("Render failed");
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
-  if (needsColorPipeline(adjustments)) {
+  if (needsColorPipeline(adjustments)
+    && !applyColorPipelineGpuToCanvas(canvas, adjustments, { scale: meta.scale, seed: 1 })) {
     const imageData = ctx.getImageData(0, 0, meta.width, meta.height);
     const result = await runColorPipelineOffThread(imageData, adjustments, { scale: meta.scale, seed: 1 });
     ctx.putImageData(result, 0, 0);

@@ -1,5 +1,6 @@
 import { sampleCubeLut } from "../../shared/cubeLut.js";
 import { getLoadedLut } from "./lutStore.js";
+import { applyColorPipelineGpuToCanvas } from "./gpuPipeline.js";
 
 export const HSL_CHANNEL_RADIUS = 32;
 
@@ -1809,12 +1810,12 @@ function forEachLatticePoint(size, callback) {
 
 // Bake the colour stage over encoded RGB; values stay linear so the later
 // gamut fit still sees out-of-range colours.
-function bakeColorStage(ctx) {
-  const data = new Float32Array(BAKE_SIZE * BAKE_SIZE * BAKE_SIZE * 3);
+function bakeColorStage(ctx, size = BAKE_SIZE) {
+  const data = new Float32Array(size * size * size * 3);
   const px = new Float64Array(3);
   const lab = new Float64Array(3);
   const tmp = new Float64Array(3);
-  forEachLatticePoint(BAKE_SIZE, (er, eg, eb, offset) => {
+  forEachLatticePoint(size, (er, eg, eb, offset) => {
     px[0] = decodeSrgb(er);
     px[1] = decodeSrgb(eg);
     px[2] = decodeSrgb(eb);
@@ -1823,7 +1824,75 @@ function bakeColorStage(ctx) {
     data[offset + 1] = px[1];
     data[offset + 2] = px[2];
   });
-  return { size: BAKE_SIZE, data, domainMin: UNIT_DOMAIN, domainMax: UNIT_DOMAIN_MAX };
+  return { size, data, domainMin: UNIT_DOMAIN, domainMax: UNIT_DOMAIN_MAX };
+}
+
+// Base stage (white balance, exposure, calibration, contrast) over encoded sRGB → linear.
+function bakeBaseStage(stage, size) {
+  const data = new Float32Array(size * size * size * 3);
+  const px = new Float64Array(3);
+  forEachLatticePoint(size, (er, eg, eb, offset) => {
+    px[0] = decodeSrgb(er);
+    px[1] = decodeSrgb(eg);
+    px[2] = decodeSrgb(eb);
+    applyBaseStage(px, stage);
+    data[offset] = px[0];
+    data[offset + 1] = px[1];
+    data[offset + 2] = px[2];
+  });
+  return { size, data };
+}
+
+const GPU_BASE_KEYS = ["temperature", "tint", "luminance", "contrast", "calibration"];
+const GPU_COLOR_KEYS = ["curves", "hsl", "saturation", "vibrance", "hue", "grading", "dehaze", "lut"];
+const gpuBakeCache = { base: { key: "", value: null }, color: { key: "", value: null } };
+
+function isIdentityBaseStage(stage) {
+  return stage.gain === 1 && !stage.calibrationMatrix && !stage.shadowTint && !stage.contrastTable
+    && Math.abs(stage.wbR - 1) < 1e-9 && Math.abs(stage.wbG - 1) < 1e-9 && Math.abs(stage.wbB - 1) < 1e-9;
+}
+
+/**
+ * Everything the WebGL renderer needs: the two per-pixel stages baked into 3D
+ * LUTs (cached per group of settings, so dragging Exposure does not re-bake the
+ * colour stage) plus the parameters of the spatial passes.
+ */
+export function prepareGpuPipeline(adjustments, { interactive = false } = {}) {
+  const ctx = createPipelineContext(adjustments);
+  const pick = keys => JSON.stringify(keys.map(key => adjustments[key] ?? null));
+
+  const baseKey = `${pick(GPU_BASE_KEYS)}|${interactive ? 33 : 49}`;
+  if (gpuBakeCache.base.key !== baseKey) {
+    gpuBakeCache.base = {
+      key: baseKey,
+      value: isIdentityBaseStage(ctx.stage) ? null : bakeBaseStage(ctx.stage, interactive ? 33 : 49)
+    };
+  }
+  // A LUT that is still loading changes the result once it arrives.
+  const lutReady = ctx.lut ? "1" : "0";
+  const colorKey = `${pick(GPU_COLOR_KEYS)}|${lutReady}|${interactive ? 33 : 49}`;
+  if (gpuBakeCache.color.key !== colorKey) {
+    gpuBakeCache.color = {
+      key: colorKey,
+      value: ctx.hasColorStage ? bakeColorStage(ctx, interactive ? 33 : BAKE_SIZE) : null
+    };
+  }
+
+  return {
+    baseLut: gpuBakeCache.base.value,
+    colorLut: gpuBakeCache.color.value,
+    toneTable: ctx.toneTable,
+    clarityAmount: ctx.clarityAmount,
+    textureAmount: ctx.textureAmount,
+    vignette: ctx.vignette,
+    invert: ctx.invert,
+    grain: {
+      amount: Number(adjustments.grain) || 0,
+      size: adjustments.grainSize ?? 50,
+      roughness: adjustments.grainRoughness ?? 50
+    },
+    workEdge: interactive ? 384 : 768
+  };
 }
 
 /**
@@ -1977,7 +2046,8 @@ export function applyColorAdjustmentsToCanvas(sourceCanvas, targetCanvas, adjust
   if (!ctx) return null;
   ctx.drawImage(sourceCanvas, 0, 0);
 
-  if (needsColorPipeline(adjustments)) {
+  if (needsColorPipeline(adjustments)
+    && !applyColorPipelineGpuToCanvas(targetCanvas, adjustments, { scale, seed, interactive })) {
     const imageData = ctx.getImageData(0, 0, width, height);
     applyColorPipeline(imageData, adjustments, { scale, seed, interactive });
     ctx.putImageData(imageData, 0, 0);
@@ -2077,7 +2147,8 @@ export function applyImageAdjustments(image, adjustments, targetCanvas, {
     onAfterDraw(ctx, scale);
   }
 
-  if (!skipColorPipeline && needsColorPipeline(adjustments)) {
+  if (!skipColorPipeline && needsColorPipeline(adjustments)
+    && !applyColorPipelineGpuToCanvas(targetCanvas, adjustments, { scale, seed, interactive })) {
     const imageData = ctx.getImageData(0, 0, width, height);
     applyColorPipeline(imageData, adjustments, { scale, seed, interactive });
     ctx.putImageData(imageData, 0, 0);

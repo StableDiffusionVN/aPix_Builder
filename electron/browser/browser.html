@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; script-src 'self'" />
+  <title>aPix Browser</title>
+  <link rel="stylesheet" href="browser.css" />
+</head>
+<body>
+  <header class="chrome">
+    <div class="tabs" id="tabs"></div>
+    <button class="iconBtn" id="newTab" title="Tab mới (⌘T)">+</button>
+  </header>
+  <nav class="toolbar">
+    <button class="iconBtn" id="back" title="Quay lại">‹</button>
+    <button class="iconBtn" id="forward" title="Tiến tới">›</button>
+    <button class="iconBtn" id="reload" title="Tải lại (⌘R)">⟳</button>
+    <form id="addressForm" class="address">
+      <input id="address" type="text" spellcheck="false" autocomplete="off" placeholder="Nhập địa chỉ hoặc tìm kiếm" />
+    </form>
+    <button class="actionBtn" id="useComfy" title="Đặt địa chỉ trang đang mở làm server ComfyUI của aPix">Dùng làm server ComfyUI</button>
+    <button class="iconBtn" id="external" title="Mở bằng trình duyệt ngoài">↗</button>
+  </nav>
+  <div class="bookmarks" id="bookmarks"></div>
+  <main id="views"></main>
+  <div class="toast" id="toast" hidden></div>
+  <script src="browser.js"></script>
+</body>
+</html>

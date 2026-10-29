@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { isVersionNewer } from "../shared/version.js";
 import { createSignedRunningHubShortcut, resolveShortcutAssetsDir } from "./runninghub-shortcut.mjs";
+import { registerBrowserIpc } from "./browser-window.mjs";
 
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const preloadPath = path.join(appRoot, "electron", "preload.cjs");
@@ -142,6 +143,7 @@ async function createWindow() {
 }
 
 function registerIpcHandlers() {
+  registerBrowserIpc({ appRoot, getMainWindow: () => mainWindow });
   ipcMain.handle("app:get-version", () => app.getVersion());
 
   ipcMain.handle("app:check-for-updates", async () => {
@@ -222,7 +224,8 @@ if (gotSingleInstanceLock) {
   });
 
   app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
+    // The aPix Browser window may still be open after the main window was closed.
+    if (!mainWindow || mainWindow.isDestroyed()) {
       createWindow().catch(error => {
         console.error("Failed to recreate aPix Builder window:", error);
         app.quit();

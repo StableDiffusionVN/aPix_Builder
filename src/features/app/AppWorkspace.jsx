@@ -2,6 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import {
   Coins,
   FolderOutput,
+  Globe,
   Info,
   Loader2,
   Maximize2,
@@ -384,6 +385,17 @@ export function AppWorkspace() {
   const isRunningHubApp = executionMode === "runninghub-app";
   const isRunningHubWf = executionMode === "runninghub-wf";
   const shortcutExportAvailable = !(isDesktop && window.apixDesktop?.platform === "win32");
+
+  // In-app browser (desktop) for Colab / remote servers; the web build opens a normal tab.
+  const openAppBrowser = useCallback(() => {
+    if (window.apixDesktop?.openBrowser) window.apixDesktop.openBrowser();
+    else window.open("https://colab.research.google.com/", "_blank", "noopener");
+  }, []);
+
+  useEffect(() => window.apixDesktop?.onUseComfyUrl?.(address => {
+    setComfyAddress(address);
+    setStatus(t("browser.comfyLinked", { address }));
+  }), [setComfyAddress, setStatus, t]);
   const healthStatus = discoveryLoading ? "loading" : discovery ? "online" : "offline";
 
   const inputs = useMemo(() => flattenInputs(config?.input), [config]);
@@ -1782,6 +1794,15 @@ export function AppWorkspace() {
             ) : null}
           </button>
 
+          <button
+            type="button"
+            className="appTopBarButton"
+            onClick={openAppBrowser}
+            title={t("browser.open")}
+            aria-label={t("browser.open")}
+          >
+            <Globe size={15} />
+          </button>
           <button
             className="appTopBarButton"
             onPointerEnter={preloadSettingsModal}

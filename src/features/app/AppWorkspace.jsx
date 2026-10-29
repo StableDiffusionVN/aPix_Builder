@@ -88,6 +88,7 @@ import { useWorkspaceModals } from "./useWorkspaceModals.js";
 import { useShortcutActionRefs, useWorkspaceShortcuts } from "./useWorkspaceShortcuts.js";
 import { RunningState } from "./AppWorkspaceRunningUi.jsx";
 import { WorkspaceModals } from "./WorkspaceModals.jsx";
+import { usePressHold } from "../../hooks/usePressHold.js";
 
 const InfiniteCanvas = lazy(() => import("../canvas/InfiniteCanvas.jsx").then(module => ({ default: module.InfiniteCanvas })));
 
@@ -606,6 +607,7 @@ export function AppWorkspace() {
   if (heroImage) lastColorPanelSourceRef.current = heroImage;
   const colorPanelSource = heroImage || lastColorPanelSourceRef.current;
   const displayImage = colorPreviewUrl || heroImage;
+  const originalHold = usePressHold({ enabled: Boolean(colorPreviewUrl && heroImage) });
   const colorAdjustTarget = useMemo(() => {
     const historyId = activeHistoryId;
     const outputIndex = selectedOutputIndex;
@@ -771,8 +773,9 @@ export function AppWorkspace() {
     if (!healingBridge?.spaceToolSuspended && healingBridge?.active && imageElementRef.current) {
       if (healingBridge.handlePointerDown(event, imageElementRef.current, previewAreaRef.current)) return;
     }
+    originalHold.begin(event);
     handlePreviewPointerDown(event);
-  }, [healingBridge, handlePreviewPointerDown, imageElementRef, previewAreaRef]);
+  }, [healingBridge, handlePreviewPointerDown, imageElementRef, originalHold, previewAreaRef]);
 
   const handlePreviewPointerMoveWithHealing = useCallback((event) => {
     if (!healingBridge?.spaceToolSuspended && healingBridge?.colorPickTarget && previewAreaRef.current) {
@@ -781,13 +784,15 @@ export function AppWorkspace() {
     if (!healingBridge?.spaceToolSuspended && healingBridge?.active && imageElementRef.current) {
       if (healingBridge.handlePointerMove(event, imageElementRef.current, previewAreaRef.current)) return;
     }
+    originalHold.move(event);
     handlePreviewPointerMove(event);
-  }, [healingBridge, handlePreviewPointerMove, imageElementRef, previewAreaRef]);
+  }, [healingBridge, handlePreviewPointerMove, imageElementRef, originalHold, previewAreaRef]);
 
   const handlePreviewPointerUpWithHealing = useCallback((event) => {
+    originalHold.end();
     if (healingBridge?.handlePointerUp?.(event)) return;
     handlePreviewPointerUp(event);
-  }, [healingBridge, handlePreviewPointerUp]);
+  }, [healingBridge, handlePreviewPointerUp, originalHold]);
 
   const handlePreviewPointerLeaveWithHealing = useCallback(() => {
     healingBridge?.clearHealingCursor?.();
@@ -2055,6 +2060,7 @@ export function AppWorkspace() {
           handlePreviewPointerMove={handlePreviewPointerMoveWithHealing}
           handlePreviewPointerUp={handlePreviewPointerUpWithHealing}
           handlePreviewPointerLeave={handlePreviewPointerLeaveWithHealing}
+          showOriginal={originalHold.holding}
           healingActive={Boolean(healingBridge?.active) && !healingBridge?.spaceToolSuspended}
           healingCursor={healingBridge?.spaceToolSuspended ? null : (healingBridge?.cursor ?? null)}
           healingBrushDiameter={healingBridge?.brushDiameter ?? 0}

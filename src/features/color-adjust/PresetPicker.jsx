@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Check, ChevronDown, Search } from "lucide-react";
+import { Check, ChevronDown, Search, Star } from "lucide-react";
 import { useI18n } from "../../i18n/I18nContext";
 import { PRESET_GROUPS, PRESETS } from "../../lib/imageAdjustments.js";
+import { toggleFavoritePreset, useFavoritePresets } from "../../lib/favoritePresets.js";
 import "../../styles/presetPicker.css";
 
 const IDLE_FINAL_RENDER_MS = 220;
@@ -37,11 +38,14 @@ export function usePresetHoverPreview({ buildPreview, setPreview, render }) {
   }, [buildPreview, render, setPreview]);
 }
 
-function buildSections(film, customPresets, customLabel) {
+function buildSections(film, customPresets, labels, favorites) {
+  const all = [...PRESETS, ...film.presets, ...customPresets];
+  const favoriteItems = favorites.map(id => all.find(item => item.id === id)).filter(Boolean);
   return [
+    { id: "favorites", label: labels.favorites, items: favoriteItems },
     ...PRESET_GROUPS.map(group => ({ id: group.id, label: group.label, items: PRESETS.filter(item => item.group === group.id) })),
     ...film.groups.map(group => ({ id: group.id, label: group.label, items: film.presets.filter(item => item.group === group.id) })),
-    { id: "custom", label: customLabel, items: customPresets }
+    { id: "custom", label: labels.custom, items: customPresets }
   ].filter(section => section.items.length);
 }
 
@@ -56,15 +60,20 @@ export function PresetPicker({ value, film, customPresets, onApply, onPreview })
   const popoverRef = useRef(null);
   const searchRef = useRef(null);
 
+  const favorites = useFavoritePresets();
   const sections = useMemo(() => {
-    const all = buildSections(film, customPresets, t("editor.custom"));
+    const all = buildSections(film, customPresets, { custom: t("editor.custom"), favorites: t("editor.presetFavorites") }, favorites);
     const needle = query.trim().toLowerCase();
     if (!needle) return all;
     return all
       .map(section => ({ ...section, items: section.items.filter(item => item.name.toLowerCase().includes(needle)) }))
       .filter(section => section.items.length);
-  }, [customPresets, film, query, t]);
-  const flat = useMemo(() => sections.flatMap(section => section.items), [sections]);
+  }, [customPresets, favorites, film, query, t]);
+  // A favourite appears twice (pinned + its group); keyboard navigation visits it once.
+  const flat = useMemo(() => {
+    const seen = new Set();
+    return sections.flatMap(section => section.items).filter(item => !seen.has(item.id) && seen.add(item.id));
+  }, [sections]);
   const current = useMemo(
     () => [...PRESETS, ...film.presets, ...customPresets].find(item => item.id === value) || null,
     [customPresets, film.presets, value]
@@ -190,22 +199,36 @@ export function PresetPicker({ value, film, customPresets, onApply, onPreview })
             {sections.map(section => (
               <div key={section.id} className="presetPickerGroup">
                 <div className="presetPickerGroupLabel">{section.label}</div>
-                {section.items.map(item => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    role="option"
-                    aria-selected={item.id === value}
-                    data-preset-id={item.id}
-                    className={`presetPickerItem${item.id === highlight ? " highlighted" : ""}${item.id === value ? " selected" : ""}`}
-                    onMouseEnter={() => preview(item)}
-                    onFocus={() => preview(item)}
-                    onClick={() => choose(item)}
-                  >
-                    <span>{item.name}</span>
-                    {item.id === value ? <Check size={12} /> : null}
-                  </button>
-                ))}
+                {section.items.map(item => {
+                  const favorite = favorites.includes(item.id);
+                  return (
+                    <div
+                      key={item.id}
+                      role="option"
+                      tabIndex={-1}
+                      aria-selected={item.id === value}
+                      data-preset-id={section.id === "favorites" ? undefined : item.id}
+                      className={`presetPickerItem${item.id === highlight ? " highlighted" : ""}${item.id === value ? " selected" : ""}`}
+                      onMouseEnter={() => preview(item)}
+                      onClick={() => choose(item)}
+                    >
+                      <span className="presetPickerItemName">{item.name}</span>
+                      {item.id === value ? <Check size={12} /> : null}
+                      <button
+                        type="button"
+                        className={`presetPickerFav${favorite ? " active" : ""}`}
+                        title={favorite ? t("editor.presetUnfavorite") : t("editor.presetFavorite")}
+                        aria-pressed={favorite}
+                        onClick={event => {
+                          event.stopPropagation();
+                          toggleFavoritePreset(item.id);
+                        }}
+                      >
+                        <Star size={12} fill={favorite ? "currentColor" : "none"} />
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
             ))}
             {!flat.length ? <p className="presetPickerEmpty">{t("editor.presetSearchEmpty")}</p> : null}

@@ -59,6 +59,8 @@ import { CalibrationSection, ColorGradingSection, LutSection, PresetAmountRange 
 import { CameraRawPresetActions, useCameraRawPresetIO } from "../features/color-adjust/CameraRawPresets.jsx";
 import { PresetPicker, usePresetHoverPreview } from "../features/color-adjust/PresetPicker.jsx";
 import { useFilmPresets } from "../lib/filmPresetStore.js";
+import { usePressHold } from "../hooks/usePressHold.js";
+import "../styles/holdOriginal.css";
 import { useColorExtras } from "../features/color-adjust/useColorExtras.js";
 
 const CurveIcon = ({ size = 14, ...props }) => (
@@ -332,6 +334,8 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
   const adjustmentsRef = useRef(DEFAULT_ADJUSTMENTS);
   // Preset hovered in the picker: previewed only, never saved or exported.
   const hoverPreviewRef = useRef(null);
+  // Press-and-hold on the preview (hand tool) shows the original image.
+  const holdOriginalRef = useRef(false);
   const brushRef = useRef(DEFAULT_BRUSH);
   const strokesRef = useRef([]);
   const panStartRef = useRef(null);
@@ -728,6 +732,13 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
       return;
     }
 
+    if (holdOriginalRef.current) {
+      if (!origCanvasRef.current) origCanvasRef.current = document.createElement("canvas");
+      drawOriginalGeometry(origCanvasRef.current, meta);
+      ctx.drawImage(origCanvasRef.current, 0, 0, canvas.width, canvas.height);
+      return;
+    }
+
     if (!overlayLayerRef.current) overlayLayerRef.current = document.createElement("canvas");
     const tmp = overlayLayerRef.current;
     if (tmp.width !== base.width || tmp.height !== base.height) {
@@ -794,6 +805,12 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
     }
   }, [applyAdjustments, syncStrokeLayer, compositePreview, activeCurveChannel, selectedCurvePointIndex, adjustments.curves]);
   renderPreviewRef.current = renderPreview;
+
+  const originalHold = usePressHold({ enabled: isReady });
+  useEffect(() => {
+    holdOriginalRef.current = originalHold.holding;
+    compositePreview();
+  }, [compositePreview, originalHold.holding]);
 
   const previewPreset = usePresetHoverPreview({
     buildPreview: useCallback(preset => mergePresetAdjustments(adjustmentsRef.current, preset.adjustments), []),
@@ -1786,6 +1803,7 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
       };
       return;
     }
+    originalHold.begin(event);
     event.currentTarget.setPointerCapture(event.pointerId);
     if (editorCompareMode && activeTool === "hand") updateEditorComparePosition(event);
     panStartRef.current = { pointer: { x: event.clientX, y: event.clientY }, pan };
@@ -1793,6 +1811,7 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
   }
 
   function handlePointerMove(event) {
+    originalHold.move(event);
     if (colorPickTarget && stageRef.current) {
       const stageRect = stageRef.current.getBoundingClientRect();
       setColorPickCursor({
@@ -1855,6 +1874,7 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
   }
 
   function endPointerInteraction(event) {
+    originalHold.end();
     try {
       event.currentTarget.releasePointerCapture(event.pointerId);
     } catch {
@@ -2059,6 +2079,7 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
             }}
           >
             {!isReady ? <span className="editorLoading">{t("editor.loading")}</span> : null}
+            {originalHold.holding ? <div className="holdOriginalBadge">{t("preview.holdOriginal")}</div> : null}
             {colorPickTarget && colorPickCursor ? (
               <ColorPickCursorOverlay x={colorPickCursor.x} y={colorPickCursor.y} />
             ) : null}

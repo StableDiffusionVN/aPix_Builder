@@ -16,6 +16,7 @@ import { useI18n } from "../i18n/I18nContext";
 import { mediaKindFromUrl } from "../lib/mediaKind";
 import { RunningHubRunningState } from "./RunningHubRunningState";
 import { RunLogPanel } from "./lazyModals";
+import "../styles/holdOriginal.css";
 
 export function PreviewPanel({
   outputLabel,
@@ -80,11 +81,13 @@ export function PreviewPanel({
   healingBrushDiameter = 0,
   colorPickTarget = null,
   colorPickCursor = null,
+  showOriginal = false,
   handlePreviewPointerLeave
 }) {
   const { t } = useI18n();
 
-  const previewImage = displayImage || heroImage;
+  // Press-and-hold on the preview shows the unadjusted output.
+  const previewImage = showOriginal ? heroImage : displayImage || heroImage;
   // Output video/âm thanh: tắt pan/zoom/compare để <video>/<audio> nhận được click vào controls.
   const previewKind = mediaKindFromUrl(previewImage);
   const isPlayableOutput = previewKind !== "image";
@@ -149,6 +152,7 @@ export function PreviewPanel({
           onPointerCancel={isPlayableOutput ? undefined : handlePreviewPointerUp}
           onPointerLeave={isPlayableOutput ? undefined : handlePreviewPointerLeave}
         >
+          {showOriginal ? <div className="holdOriginalBadge">{t("preview.holdOriginal")}</div> : null}
           {colorPickTarget && colorPickCursor ? (
             <ColorPickCursorOverlay x={colorPickCursor.x} y={colorPickCursor.y} />
           ) : null}

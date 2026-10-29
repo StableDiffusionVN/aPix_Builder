@@ -33,6 +33,7 @@ export function WorkspaceModals({
   rhPrimaryApiKey,
   reloadRhWfTemplates,
   outputEditorOpen,
+  outputEditorInitialState = null,
   setOutputEditorOpen,
   heroImage,
   handleSaveEditedOutput
@@ -94,6 +95,7 @@ export function WorkspaceModals({
           <ImageEditorModal
             source={heroImage}
             title="Output - Image Editor"
+            initialState={outputEditorInitialState}
             onClose={() => setOutputEditorOpen(false)}
             onSave={handleSaveEditedOutput}
           />

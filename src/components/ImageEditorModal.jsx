@@ -326,8 +326,10 @@ function snapshot(adjustments, brush, strokes, extra = {}) {
   };
 }
 
-export function ImageEditorModal({ source, title = "Image Editor", onClose, onSave }) {
+export function ImageEditorModal({ source, title = "Image Editor", initialState = null, onClose, onSave }) {
   const { t } = useI18n();
+  // Colour state the output panel had when the editor opened (read once per source).
+  const initialStateRef = useRef(initialState);
   const canvasRef = useRef(null);
   const stageRef = useRef(null);
   const imageRef = useRef(null);
@@ -336,6 +338,8 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
   const hoverPreviewRef = useRef(null);
   // Press-and-hold on the preview (hand tool) shows the original image.
   const holdOriginalRef = useRef(false);
+  // Long edge of the last full-quality preview (keeps the canvas size steady while dragging).
+  const displayLongEdgeRef = useRef(0);
   const brushRef = useRef(DEFAULT_BRUSH);
   const strokesRef = useRef([]);
   const panStartRef = useRef(null);
@@ -599,9 +603,15 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
     let cancelled = false;
     setIsReady(false);
     setError("");
-    setAdjustments(DEFAULT_ADJUSTMENTS);
+    const startState = initialStateRef.current;
+    const startAdjustments = startState?.adjustments
+      ? mergePresetAdjustments(startState.adjustments, startState.adjustments)
+      : DEFAULT_ADJUSTMENTS;
+    const startStrokes = (startState?.healingStrokes || []).map(stroke => ({ ...stroke, tool: "healing" }));
+    displayLongEdgeRef.current = 0;
+    setAdjustments(startAdjustments);
     setBrush(DEFAULT_BRUSH);
-    setStrokes([]);
+    setStrokes(startStrokes);
     setZoom(1);
     setPan({ x: 0, y: 0 });
     penAnchorsRef.current = [];
@@ -615,7 +625,7 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
       .then(image => {
         if (cancelled) return;
         imageRef.current = image;
-        const initial = snapshot(DEFAULT_ADJUSTMENTS, DEFAULT_BRUSH, [], { penAnchors: [], penClosed: false, activeSelection: null });
+        const initial = snapshot(startAdjustments, DEFAULT_BRUSH, startStrokes, { penAnchors: [], penClosed: false, activeSelection: null });
         setHistory([initial]);
         setHistoryIndex(0);
         setIsReady(true);
@@ -717,9 +727,15 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
     const base = baseCanvasRef.current;
     const meta = previewMetaRef.current;
     if (!canvas || !base || !meta) return;
-    if (canvas.width !== base.width || canvas.height !== base.height) {
-      canvas.width = base.width;
-      canvas.height = base.height;
+    // Reduced-size renders (while dragging a slider) are scaled up to the last
+    // full preview size so the on-screen image never jumps smaller.
+    const baseLong = Math.max(base.width, base.height);
+    const displayLong = Math.max(baseLong, displayLongEdgeRef.current || 0);
+    const targetWidth = Math.round(base.width * (displayLong / baseLong));
+    const targetHeight = Math.round(base.height * (displayLong / baseLong));
+    if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
+      canvas.width = targetWidth;
+      canvas.height = targetHeight;
     }
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
@@ -728,7 +744,7 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
     // Strokes are hidden while cropping (the preview is the full source image,
     // so their normalised coordinates wouldn't line up).
     if (croppingRef.current) {
-      ctx.drawImage(base, 0, 0);
+      ctx.drawImage(base, 0, 0, canvas.width, canvas.height);
       return;
     }
 
@@ -770,11 +786,12 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
       drawOriginalGeometry(origCanvas, meta);
 
       const splitX = (editorComparePosition / 100) * canvas.width;
+      const sourceSplit = (editorComparePosition / 100) * tmp.width;
       // Match output compare: original (input) on the left, adjusted on the right.
-      ctx.drawImage(origCanvas, 0, 0, splitX, canvas.height, 0, 0, splitX, canvas.height);
-      ctx.drawImage(tmp, splitX, 0, canvas.width - splitX, canvas.height, splitX, 0, canvas.width - splitX, canvas.height);
+      ctx.drawImage(origCanvas, 0, 0, sourceSplit, tmp.height, 0, 0, splitX, canvas.height);
+      ctx.drawImage(tmp, sourceSplit, 0, tmp.width - sourceSplit, tmp.height, splitX, 0, canvas.width - splitX, canvas.height);
     } else {
-      ctx.drawImage(tmp, 0, 0);
+      ctx.drawImage(tmp, 0, 0, canvas.width, canvas.height);
     }
   }, [editorCompareMode, editorComparePosition, drawOriginalGeometry]);
 
@@ -784,6 +801,7 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
     const meta = applyAdjustments(baseCanvasRef.current, { ignoreCrop: croppingRef.current, interactive });
     if (!meta) return;
     previewMetaRef.current = meta;
+    if (!interactive) displayLongEdgeRef.current = Math.max(meta.width, meta.height);
     syncStrokeLayer();
     compositePreview();
 

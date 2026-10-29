@@ -49,6 +49,7 @@ export function OutputGallery({
   onRestore,
   onItemClick,
   onDelete,
+  onDeleteMany,
   selectedIds = null,
   activeId = null,
   pending = false,
@@ -94,6 +95,37 @@ export function OutputGallery({
       setSetting("favorites.history", [...next]);
       return next;
     });
+  }
+
+  // Clicking an action on one of several selected items applies it to the whole selection.
+  function selectionFor(item) {
+    if (!selectedIds?.has?.(item.id) || selectedIds.size < 2) return null;
+    return history.filter(entry => selectedIds.has(entry.id));
+  }
+
+  function setFavoriteMany(ids, favorite) {
+    setFavorites(current => {
+      const next = new Set(current);
+      for (const id of ids) {
+        if (favorite) next.add(id);
+        else next.delete(id);
+      }
+      setSetting("favorites.history", [...next]);
+      return next;
+    });
+  }
+
+  async function downloadMany(items) {
+    for (const entry of items) {
+      if (entry.outputs?.[0]) await onDownload(entry.outputs[0]);
+    }
+  }
+
+  function deleteMany(items) {
+    if (!window.confirm(t("history.deleteSelectedConfirm", { count: items.length }))) return;
+    const ids = items.map(entry => entry.id);
+    if (onDeleteMany) onDeleteMany(ids);
+    else ids.forEach(id => onDelete(id));
   }
 
   return (
@@ -161,6 +193,7 @@ export function OutputGallery({
           const primaryOutput = item.outputs?.[0];
           const isSelected = selectedIds?.has?.(item.id);
           const isActive = activeId && item.id === activeId;
+          const batch = selectionFor(item);
           return (
             <article
               className={`historyItem${isSelected ? " isSelected" : ""}${isActive ? " active" : ""}`}
@@ -217,22 +250,27 @@ export function OutputGallery({
               <div className="historyActions">
                 <button className={`thumbAction ${favorites.has(item.id) ? "isFavorite" : ""}`} onClick={event => {
                   event.stopPropagation();
-                  toggleFavorite(item.id);
-                }} title={favorites.has(item.id) ? t("history.unfavorite") : t("history.favorite")}>
+                  if (batch) setFavoriteMany(batch.map(entry => entry.id), !favorites.has(item.id));
+                  else toggleFavorite(item.id);
+                }} title={batch
+                  ? t(favorites.has(item.id) ? "history.unfavoriteSelected" : "history.favoriteSelected", { count: batch.length })
+                  : favorites.has(item.id) ? t("history.unfavorite") : t("history.favorite")}>
                   <Star size={14} />
                 </button>
                 {primaryOutput ? (
                   <button className="thumbAction" onClick={event => {
                     event.stopPropagation();
-                    onDownload(primaryOutput);
-                  }} title={t("preview.download")}>
+                    if (batch) downloadMany(batch);
+                    else onDownload(primaryOutput);
+                  }} title={batch ? t("history.downloadSelected", { count: batch.length }) : t("preview.download")}>
                     <Download size={14} />
                   </button>
                 ) : null}
                 <button className="thumbAction danger" onClick={event => {
                   event.stopPropagation();
-                  onDelete(item.id);
-                }} title={t("history.delete")}>
+                  if (batch) deleteMany(batch);
+                  else onDelete(item.id);
+                }} title={batch ? t("history.deleteSelected", { count: batch.length }) : t("history.delete")}>
                   <X size={14} />
                 </button>
               </div>

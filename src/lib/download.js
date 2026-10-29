@@ -6,13 +6,16 @@ export async function downloadImage(output) {
       ? `Không tải được ảnh: ${response.status}`
       : `Could not download the image: ${response.status}`);
   }
-  const blob = await response.blob();
+  downloadBlob(await response.blob(), output.filename || "comfyui-output.png");
+}
+
+export function downloadBlob(blob, filename) {
   const link = document.createElement("a");
   const objectUrl = URL.createObjectURL(blob);
   link.href = objectUrl;
-  link.download = output.filename || "comfyui-output.png";
+  link.download = filename;
   document.body.appendChild(link);
   link.click();
   link.remove();
-  URL.revokeObjectURL(objectUrl);
+  setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
 }

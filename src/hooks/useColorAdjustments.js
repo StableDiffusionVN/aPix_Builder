@@ -36,6 +36,11 @@ import {
 import { useColorPresetLibrary } from "../features/color-adjust/useColorPresetLibrary.js";
 import { useFilmPresets } from "../lib/filmPresetStore.js";
 import { usePresetHoverPreview } from "../features/color-adjust/PresetPicker.jsx";
+import { canvasToBlob, renderAdjustedCanvas } from "../lib/adjustedRender.js";
+
+// Once adjustments rest this long (and the CPU is idle) the full-resolution
+// result replaces the reduced preview.
+const IDLE_FULL_RENDER_DELAY_MS = 600;
 import { useColorExtras } from "../features/color-adjust/useColorExtras.js";
 
 export function useColorAdjustments({
@@ -148,6 +153,87 @@ export function useColorAdjustments({
 
   // Preset hovered in the picker: rendered instead of the real adjustments, never saved.
   const hoverPreviewRef = useRef(null);
+
+  // Full-resolution result of the current state, rendered in the background.
+  const renderVersionRef = useRef(0);
+  const fullRenderRef = useRef(null);
+  const fullRenderJobRef = useRef(null);
+  const idleRenderRef = useRef({ timer: null, idle: null });
+
+  useEffect(() => {
+    renderVersionRef.current += 1;
+  }, [adjustments, healingStrokes, source]);
+
+  const cancelIdleRender = useCallback(() => {
+    const pending = idleRenderRef.current;
+    clearTimeout(pending.timer);
+    if (pending.idle !== null && typeof cancelIdleCallback === "function") cancelIdleCallback(pending.idle);
+    idleRenderRef.current = { timer: null, idle: null };
+  }, []);
+
+  const dropFullRender = useCallback(() => {
+    if (fullRenderRef.current?.url) URL.revokeObjectURL(fullRenderRef.current.url);
+    fullRenderRef.current = null;
+  }, []);
+
+  // Full-resolution canvas of the current state (cached while the state is unchanged).
+  const renderCurrentResult = useCallback(async () => {
+    const image = imageRef.current;
+    if (!image) throw new Error(t("editor.renderError"));
+    const version = renderVersionRef.current;
+    if (fullRenderRef.current?.version === version) return fullRenderRef.current.canvas;
+    if (fullRenderJobRef.current?.version === version) return fullRenderJobRef.current.promise;
+    const promise = (async () => {
+      const canvas = await renderAdjustedCanvas(image, {
+        adjustments: adjustmentsRef.current,
+        healingStrokes: healingStrokesRef.current
+      });
+      if (renderVersionRef.current === version && imageRef.current === image) {
+        const blob = await canvasToBlob(canvas, "image/jpeg");
+        if (renderVersionRef.current === version && imageRef.current === image) {
+          dropFullRender();
+          fullRenderRef.current = { version, canvas, url: URL.createObjectURL(blob) };
+        }
+      }
+      return canvas;
+    })();
+    fullRenderJobRef.current = { version, promise };
+    try {
+      return await promise;
+    } finally {
+      if (fullRenderJobRef.current?.promise === promise) fullRenderJobRef.current = null;
+    }
+  }, [dropFullRender, t]);
+
+  const scheduleIdleRender = useCallback(() => {
+    cancelIdleRender();
+    const version = renderVersionRef.current;
+    if (fullRenderRef.current?.version === version) return;
+    const start = () => {
+      idleRenderRef.current = { timer: null, idle: null };
+      if (renderVersionRef.current !== version || hoverPreviewRef.current) return;
+      renderCurrentResult()
+        .then(() => {
+          const full = fullRenderRef.current;
+          if (full?.version === renderVersionRef.current && !hoverPreviewRef.current) {
+            onPreviewChangeRef.current?.(full.url);
+          }
+        })
+        .catch(() => {});
+    };
+    const timer = setTimeout(() => {
+      const idle = typeof requestIdleCallback === "function"
+        ? requestIdleCallback(start, { timeout: 2000 })
+        : (setTimeout(start, 0), null);
+      idleRenderRef.current = { timer: null, idle };
+    }, IDLE_FULL_RENDER_DELAY_MS);
+    idleRenderRef.current = { timer, idle: null };
+  }, [cancelIdleRender, renderCurrentResult]);
+
+  useEffect(() => () => {
+    cancelIdleRender();
+    dropFullRender();
+  }, [cancelIdleRender, dropFullRender, source]);
 
   const setAdjustments = useCallback((updater) => {
     setAdjustmentsState(current => {
@@ -365,15 +451,26 @@ export function useColorAdjustments({
       || healingStrokesRef.current.length > 0
       || Boolean(activeHealingStrokeRef.current);
     if (!hasPreviewChanges) {
+      cancelIdleRender();
       onPreviewChangeRef.current?.(null);
       return;
     }
+
+    const settled = !interactive && !hoverPreviewRef.current && !activeHealingStrokeRef.current;
+    const full = fullRenderRef.current;
+    if (settled && full?.version === renderVersionRef.current) {
+      onPreviewChangeRef.current?.(full.url);
+      return;
+    }
+    // The reduced preview is already full size for small images.
+    if (settled && meta.scale < 1) scheduleIdleRender();
+    else if (!settled) cancelIdleRender();
 
     previewUrlFrameRef.current += 1;
     if (!interactive || options.forceEmit || previewUrlFrameRef.current % 2 === 0) {
       onPreviewChangeRef.current?.(canvasToPreviewDataUrl(outputCanvas, { interactive }));
     }
-  }, [activeCurveChannel, ensureSourceCanvas, selectedCurvePointIndex]);
+  }, [activeCurveChannel, cancelIdleRender, ensureSourceCanvas, scheduleIdleRender, selectedCurvePointIndex]);
 
   useEffect(() => {
     if (!isReady) return undefined;
@@ -978,6 +1075,7 @@ export function useColorAdjustments({
     handleCurvesPointerUp,
     handleCurvesDoubleClick,
     renderFullResolutionDataUrl,
+    renderCurrentResult,
     colorPickTarget,
     colorPickCursor,
     spaceToolSuspended,

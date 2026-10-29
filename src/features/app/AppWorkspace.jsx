@@ -27,7 +27,9 @@ import { formatOutputTimingLabel, formatRhCoins } from "../../lib/runLog";
 import { PresetBar } from "../../components/PresetBar";
 import { RunControls } from "../../components/RunControls";
 import { TemplateSelector } from "../../components/TemplateSelector";
-import { downloadImage } from "../../lib/download";
+import { downloadBlob, downloadImage } from "../../lib/download";
+import { mediaKindFromUrl } from "../../lib/mediaKind.js";
+import { hasPendingColorAdjust, mimeTypeForFilename, renderAdjustedOutputBlob } from "../../lib/adjustedRender.js";
 import { canonicalDynamicType, dynamicFieldChoices } from "../../lib/dynamicTypes";
 import { fieldChoicesWithSdvn, sdvnFieldPending } from "../../lib/sdvnModels";
 import {
@@ -89,6 +91,7 @@ import { useShortcutActionRefs, useWorkspaceShortcuts } from "./useWorkspaceShor
 import { RunningState } from "./AppWorkspaceRunningUi.jsx";
 import { WorkspaceModals } from "./WorkspaceModals.jsx";
 import { usePressHold } from "../../hooks/usePressHold.js";
+import { useAdjustedOutputPreview } from "../../hooks/useAdjustedOutputPreview.js";
 
 const InfiniteCanvas = lazy(() => import("../canvas/InfiniteCanvas.jsx").then(module => ({ default: module.InfiniteCanvas })));
 
@@ -606,8 +609,6 @@ export function AppWorkspace() {
   const lastColorPanelSourceRef = useRef(null);
   if (heroImage) lastColorPanelSourceRef.current = heroImage;
   const colorPanelSource = heroImage || lastColorPanelSourceRef.current;
-  const displayImage = colorPreviewUrl || heroImage;
-  const originalHold = usePressHold({ enabled: Boolean(colorPreviewUrl && heroImage) });
   const colorAdjustTarget = useMemo(() => {
     const historyId = activeHistoryId;
     const outputIndex = selectedOutputIndex;
@@ -635,6 +636,17 @@ export function AppWorkspace() {
     }
     return getOutputColorAdjust(selectedOutput);
   }, [colorAdjustCacheRef, colorAdjustTarget, history, selectedOutput]);
+  // Saved adjustments stay visible after the colour panel is closed.
+  const adjustedOutputUrl = useAdjustedOutputPreview(heroImage, persistedColorState, !colorPanelOpen);
+  const displayImage = colorPreviewUrl || (!colorPanelOpen && adjustedOutputUrl) || heroImage;
+  const originalHold = usePressHold({ enabled: Boolean(heroImage && displayImage !== heroImage) });
+  const colorResultRef = useRef(null);
+  const [outputEditorInitialState, setOutputEditorInitialState] = useState(null);
+  const openOutputEditor = useCallback(() => {
+    const live = colorResultRef.current;
+    setOutputEditorInitialState(live && live.persistKey === colorAdjustTarget.key ? live.getState() : persistedColorState);
+    setOutputEditorOpen(true);
+  }, [colorAdjustTarget.key, persistedColorState, setOutputEditorOpen]);
   const colorSyncTargetCount = useMemo(() => {
     if (!activeHistoryId) return selectedHistoryIds.size;
     return [...selectedHistoryIds].filter(id => id !== activeHistoryId).length;
@@ -1307,6 +1319,12 @@ export function AppWorkspace() {
     localExecution.setStatus(t("status.historyRestored"));
   }
 
+  async function handleDeleteHistoryItems(ids) {
+    // Sequential: each delete rewrites the history file on the server.
+    for (const id of ids) await handleDeleteHistoryItem(id);
+    setSelectedHistoryIds(current => new Set([...current].filter(id => !ids.includes(id))));
+  }
+
   async function handleDeleteHistoryItem(id) {
     await deleteHistoryItem(id);
     if (result?.runId === id) {
@@ -1317,8 +1335,25 @@ export function AppWorkspace() {
     }
   }
 
+  // Downloads apply the colour adjustments that have not been baked in with "Update".
+  async function downloadAdjustedOutput(output) {
+    if (!output?.url || mediaKindFromUrl(output.url) !== "image") return false;
+    const filename = output.filename || "comfyui-output.png";
+    const live = colorResultRef.current;
+    if (live && live.source === output.url && live.persistKey === colorAdjustTarget.key) {
+      if (!live.hasChanges()) return false;
+      downloadBlob(await live.getBlob(mimeTypeForFilename(filename)), filename);
+      return true;
+    }
+    if (!hasPendingColorAdjust(output.colorAdjust)) return false;
+    downloadBlob(await renderAdjustedOutputBlob(output.url, output.colorAdjust, filename), filename);
+    return true;
+  }
+
   async function handleDownload(output) {
-    try { await downloadImage(output); }
+    try {
+      if (!(await downloadAdjustedOutput(output))) await downloadImage(output);
+    }
     catch (err) { setError(localizeRuntimeMessage(err.message, locale)); setStatus(t("error.downloadFailed")); }
   }
 
@@ -2034,7 +2069,7 @@ export function AppWorkspace() {
           compareMode={compareMode}
           setCompareMode={setCompareMode}
           resetImageView={resetImageView}
-          onOpenEditor={() => setOutputEditorOpen(true)}
+          onOpenEditor={openOutputEditor}
           onDownload={handleDownload}
           showRunningScreen={showRunningScreen}
           isRunningHub={isRunningHub}
@@ -2098,6 +2133,7 @@ export function AppWorkspace() {
           onWidthChange={setColorPanelWidth}
           onHealingBridgeChange={handleHealingBridgeChange}
           onSyncClick={handleOpenColorSync}
+          resultRef={colorResultRef}
           syncDisabled={colorSyncTargetCount === 0}
           syncing={colorSyncing}
           updating={colorUpdating}
@@ -2121,6 +2157,7 @@ export function AppWorkspace() {
           selectedIds={selectedHistoryIds}
           activeId={activeHistoryId}
           onDelete={handleDeleteHistoryItem}
+          onDeleteMany={handleDeleteHistoryItems}
           pending={formBusy}
           pendingActive={showRunningScreen}
           pendingLabel={running ? (progress?.label || status) : backendFormPendingLabel}
@@ -2158,6 +2195,7 @@ export function AppWorkspace() {
         rhPrimaryApiKey={rhPrimaryApiKey}
         reloadRhWfTemplates={reloadRhWfTemplates}
         outputEditorOpen={outputEditorOpen}
+        outputEditorInitialState={outputEditorInitialState}
         setOutputEditorOpen={setOutputEditorOpen}
         heroImage={heroImage}
         handleSaveEditedOutput={handleSaveEditedOutput}

@@ -3,6 +3,7 @@ import { useI18n } from "../i18n/I18nContext";
 import { useColorAdjustments } from "../hooks/useColorAdjustments";
 import { ImageAdjustmentControls } from "./ImageAdjustmentControls";
 import { getSetting, setSetting } from "../lib/appSettings";
+import { canvasToBlob, hasPendingColorAdjust } from "../lib/adjustedRender.js";
 
 export const DEFAULT_COLOR_PANEL_WIDTH = 320;
 const MIN_PANEL_WIDTH = 280;
@@ -29,6 +30,7 @@ export function OutputColorPanel({
   onWidthChange,
   onHealingBridgeChange,
   onSyncClick,
+  resultRef = null,
   syncDisabled = true,
   syncing = false,
   updating = false,
@@ -72,8 +74,9 @@ export function OutputColorPanel({
     if (disabled || updating || !engine.isReady) return;
     setPreviewError("");
     try {
-      const dataUrl = engine.renderFullResolutionDataUrl();
-      await onUpdate(dataUrl);
+      // Reuses the background full-resolution render when it is up to date.
+      const canvas = await engine.renderCurrentResult();
+      await onUpdate(canvas.toDataURL("image/png"));
     } catch (err) {
       setPreviewError(err.message || t("editor.saveError"));
     }
@@ -109,6 +112,28 @@ export function OutputColorPanel({
   }
 
   const displayError = previewError || engine.error;
+
+  // Lets "Download" save the adjusted result without pressing Update first.
+  const { isReady, renderCurrentResult } = engine;
+  const engineRef = useRef(engine);
+  engineRef.current = engine;
+  useEffect(() => {
+    if (!resultRef) return undefined;
+    if (!open || !isReady || !source) {
+      resultRef.current = null;
+      return undefined;
+    }
+    resultRef.current = {
+      source,
+      persistKey,
+      hasChanges: () => hasPendingColorAdjust(engineRef.current.getPersistedState()),
+      getState: () => engineRef.current.getPersistedState(),
+      getBlob: async type => canvasToBlob(await renderCurrentResult(), type)
+    };
+    return () => {
+      resultRef.current = null;
+    };
+  }, [isReady, open, persistKey, renderCurrentResult, resultRef, source]);
 
   useEffect(() => {
     if (!open || disabled) {

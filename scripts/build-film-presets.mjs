@@ -34,7 +34,8 @@ for (const file of files) {
   if (seen.has(key)) continue;
   seen.add(key);
   const group = GROUPS.find(item => item.match.test(name));
-  presets.push({ id: `film_${slug(name)}`, name, group: group.id, adjustments: preset.adjustments, cameraRaw: preset.cameraRaw });
+  // Ids keep the original file name; the display name drops the "N - " prefix.
+  presets.push({ id: `film_${slug(name)}`, name: name.replace(/^N - /, ""), group: group.id, adjustments: preset.adjustments, cameraRaw: preset.cameraRaw });
 }
 
 const groups = GROUPS.filter(group => presets.some(preset => preset.group === group.id)).map(({ id, label }) => ({ id, label }));

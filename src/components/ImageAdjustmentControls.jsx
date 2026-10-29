@@ -15,7 +15,8 @@ import { COLOR_CHANNELS, getCurvePoint } from "../lib/imageAdjustments";
 import { isTextEntryTarget, preventToolbarFocus } from "../lib/keyboard";
 import { ColorPickButton } from "./colorPickUi";
 import { CalibrationSection, ColorGradingSection, LutSection, PresetAmountRange } from "../features/color-adjust/ColorExtrasSections.jsx";
-import { CameraRawPresetActions, PresetSelect, useCameraRawPresetIO } from "../features/color-adjust/CameraRawPresets.jsx";
+import { CameraRawPresetActions, useCameraRawPresetIO } from "../features/color-adjust/CameraRawPresets.jsx";
+import { PresetPicker } from "../features/color-adjust/PresetPicker.jsx";
 
 export { ColorPickButton, ColorPickCursorOverlay } from "./colorPickUi";
 
@@ -152,6 +153,7 @@ export function ImageAdjustmentControls({
     activePresetId,
     allPresets,
     filmPresets,
+    previewPreset,
     addPresets,
     customPresets,
     colorPickTarget,
@@ -386,7 +388,7 @@ export function ImageAdjustmentControls({
         <div className="imageEditorAccordionList">
           <AccordionSection icon={Sparkles} title="Presets" open={!!openSections.presets} onToggle={() => toggleSection("presets")}>
             <div className="presetAccordionContent">
-              <PresetSelect value={activePresetId} film={filmPresets} customPresets={customPresets} onApply={applyPreset} />
+              <PresetPicker value={activePresetId} film={filmPresets} customPresets={customPresets} onApply={applyPreset} onPreview={previewPreset} />
               <PresetAmountRange extras={colorExtras} onDragStart={beginSliderDrag} onCommit={commitCurrent} />
 
               <div className="presetGroupTitle custom">{t("editor.custom")}</div>

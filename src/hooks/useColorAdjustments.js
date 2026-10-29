@@ -35,6 +35,7 @@ import {
 } from "../lib/healingBrush";
 import { useColorPresetLibrary } from "../features/color-adjust/useColorPresetLibrary.js";
 import { useFilmPresets } from "../lib/filmPresetStore.js";
+import { usePresetHoverPreview } from "../features/color-adjust/PresetPicker.jsx";
 import { useColorExtras } from "../features/color-adjust/useColorExtras.js";
 
 export function useColorAdjustments({
@@ -144,6 +145,9 @@ export function useColorAdjustments({
   useEffect(() => {
     adjustmentsRef.current = adjustments;
   }, [adjustments]);
+
+  // Preset hovered in the picker: rendered instead of the real adjustments, never saved.
+  const hoverPreviewRef = useRef(null);
 
   const setAdjustments = useCallback((updater) => {
     setAdjustmentsState(current => {
@@ -308,10 +312,11 @@ export function useColorAdjustments({
 
     if (!previewCanvasRef.current) previewCanvasRef.current = document.createElement("canvas");
     const canvas = previewCanvasRef.current;
+    const shown = hoverPreviewRef.current || adjustmentsRef.current;
     const meta = applyColorAdjustmentsToCanvas(
       sourceCanvasRef.current,
       canvas,
-      adjustmentsRef.current,
+      shown,
       { scale: sourceMeta.scale, interactive, skipBlur: interactive }
     );
     if (!meta) return;
@@ -356,7 +361,7 @@ export function useColorAdjustments({
       }
     }
 
-    const hasPreviewChanges = !isAdjustmentsDefault(adjustmentsRef.current)
+    const hasPreviewChanges = !isAdjustmentsDefault(shown)
       || healingStrokesRef.current.length > 0
       || Boolean(activeHealingStrokeRef.current);
     if (!hasPreviewChanges) {
@@ -365,7 +370,7 @@ export function useColorAdjustments({
     }
 
     previewUrlFrameRef.current += 1;
-    if (!interactive || previewUrlFrameRef.current % 2 === 0) {
+    if (!interactive || options.forceEmit || previewUrlFrameRef.current % 2 === 0) {
       onPreviewChangeRef.current?.(canvasToPreviewDataUrl(outputCanvas, { interactive }));
     }
   }, [activeCurveChannel, ensureSourceCanvas, selectedCurvePointIndex]);
@@ -446,6 +451,14 @@ export function useColorAdjustments({
     commitHistory(next, healingStrokesRef.current);
     trackPresetApplied(preset);
   }, [commitHistory, setAdjustments, trackPresetApplied]);
+
+  const previewPreset = usePresetHoverPreview({
+    buildPreview: useCallback(preset => mergePresetAdjustments(adjustmentsRef.current, preset.adjustments), []),
+    setPreview: useCallback(next => {
+      hoverPreviewRef.current = next;
+    }, []),
+    render: renderPreview
+  });
 
   const resetAdjustments = useCallback(() => {
     const nextAdjustments = cloneDefaultAdjustments();
@@ -932,6 +945,7 @@ export function useColorAdjustments({
     activePresetId,
     allPresets,
     filmPresets,
+    previewPreset,
     isReady,
     error,
     hoveredZone,

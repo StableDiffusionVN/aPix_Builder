@@ -56,7 +56,8 @@ import {
   EditorRange
 } from "../features/image-editor/ImageEditorControls.jsx";
 import { CalibrationSection, ColorGradingSection, LutSection, PresetAmountRange } from "../features/color-adjust/ColorExtrasSections.jsx";
-import { CameraRawPresetActions, PresetSelect, useCameraRawPresetIO } from "../features/color-adjust/CameraRawPresets.jsx";
+import { CameraRawPresetActions, useCameraRawPresetIO } from "../features/color-adjust/CameraRawPresets.jsx";
+import { PresetPicker, usePresetHoverPreview } from "../features/color-adjust/PresetPicker.jsx";
 import { useFilmPresets } from "../lib/filmPresetStore.js";
 import { useColorExtras } from "../features/color-adjust/useColorExtras.js";
 
@@ -329,6 +330,8 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
   const stageRef = useRef(null);
   const imageRef = useRef(null);
   const adjustmentsRef = useRef(DEFAULT_ADJUSTMENTS);
+  // Preset hovered in the picker: previewed only, never saved or exported.
+  const hoverPreviewRef = useRef(null);
   const brushRef = useRef(DEFAULT_BRUSH);
   const strokesRef = useRef([]);
   const panStartRef = useRef(null);
@@ -626,7 +629,7 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
     const image = imageRef.current;
     if (!image) return null;
     const maxEdge = interactive ? PREVIEW_INTERACTIVE_MAX_EDGE : PREVIEW_MAX_EDGE;
-    return applyImageAdjustments(image, adjustments, targetCanvas, {
+    return applyImageAdjustments(image, (!fullResolution && hoverPreviewRef.current) || adjustments, targetCanvas, {
       fullResolution,
       maxEdge: fullResolution ? Infinity : maxEdge,
       interactive,
@@ -791,6 +794,14 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
     }
   }, [applyAdjustments, syncStrokeLayer, compositePreview, activeCurveChannel, selectedCurvePointIndex, adjustments.curves]);
   renderPreviewRef.current = renderPreview;
+
+  const previewPreset = usePresetHoverPreview({
+    buildPreview: useCallback(preset => mergePresetAdjustments(adjustmentsRef.current, preset.adjustments), []),
+    setPreview: useCallback(next => {
+      hoverPreviewRef.current = next;
+    }, []),
+    render: renderPreview
+  });
 
   // Heavy path: rebuild the adjusted base (throttled to one per animation frame)
   // whenever an adjustment changes.
@@ -2225,7 +2236,7 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
             <div className="imageEditorAccordionList">
               <AccordionSection icon={Sparkles} title="Presets" open={!!openSections.presets} onToggle={() => toggleSection("presets")}>
                 <div className="presetAccordionContent">
-                  <PresetSelect value={activePresetId} film={filmPresets} customPresets={customPresets} onApply={applyPreset} />
+                  <PresetPicker value={activePresetId} film={filmPresets} customPresets={customPresets} onApply={applyPreset} onPreview={previewPreset} />
                   <PresetAmountRange extras={colorExtras} onDragStart={beginSliderDrag} onCommit={commitCurrent} />
 
                   <div className="presetGroupTitle custom">{t("editor.custom")}</div>

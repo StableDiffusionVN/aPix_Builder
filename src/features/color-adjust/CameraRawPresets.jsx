@@ -1,47 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 import { useI18n } from "../../i18n/I18nContext";
-import { PRESET_GROUPS, PRESETS } from "../../lib/imageAdjustments.js";
 import { exportCameraRawPreset, importCameraRawPreset } from "../../lib/cameraRawPresets.js";
 import { XMP_MAX_BYTES } from "../../../shared/cameraRawXmp.js";
-
-/** Preset dropdown: built-in looks, bundled Camera Raw film presets, custom presets. */
-export function PresetSelect({ value, film, customPresets, onApply }) {
-  const { t } = useI18n();
-  const options = [...PRESETS, ...film.presets, ...customPresets];
-  const groups = [...PRESET_GROUPS.map(group => ({ ...group, presets: PRESETS })), ...film.groups.map(group => ({ ...group, presets: film.presets }))];
-  return (
-    <label className="field compact presetSelectField">
-      <span>{t("editor.selectPreset")}</span>
-      <select
-        value={value}
-        onChange={event => {
-          const preset = options.find(item => item.id === event.target.value);
-          if (preset) onApply(preset);
-        }}
-      >
-        <option value="">{t("editor.selectPresetPlaceholder")}</option>
-        {groups.map(group => {
-          const groupPresets = group.presets.filter(preset => preset.group === group.id);
-          if (!groupPresets.length) return null;
-          return (
-            <optgroup key={group.id} label={group.label}>
-              {groupPresets.map(preset => (
-                <option key={preset.id} value={preset.id}>{preset.name}</option>
-              ))}
-            </optgroup>
-          );
-        })}
-        {customPresets.length > 0 ? (
-          <optgroup label={t("editor.custom")}>
-            {customPresets.map(preset => (
-              <option key={preset.id} value={preset.id}>{preset.name}</option>
-            ))}
-          </optgroup>
-        ) : null}
-      </select>
-    </label>
-  );
-}
 
 function downloadText(text, fileName) {
   const blob = new Blob([text], { type: "application/rdf+xml" });

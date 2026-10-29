@@ -34,6 +34,7 @@ import {
   snapshotColorAdjustState
 } from "../lib/healingBrush";
 import { useColorPresetLibrary } from "../features/color-adjust/useColorPresetLibrary.js";
+import { useFilmPresets } from "../lib/filmPresetStore.js";
 import { useColorExtras } from "../features/color-adjust/useColorExtras.js";
 
 export function useColorAdjustments({
@@ -416,9 +417,10 @@ export function useColorAdjustments({
     }));
   }, [setAdjustments]);
 
+  const filmPresets = useFilmPresets();
   const allPresets = useMemo(
-    () => [...PRESETS, ...presetLibrary.customPresets],
-    [presetLibrary.customPresets]
+    () => [...PRESETS, ...filmPresets.presets, ...presetLibrary.customPresets],
+    [filmPresets.presets, presetLibrary.customPresets]
   );
   const commitAdjustments = useCallback((next) => {
     setAdjustments(next);
@@ -928,6 +930,8 @@ export function useColorAdjustments({
     adjustments,
     hsl,
     activePresetId,
+    allPresets,
+    filmPresets,
     isReady,
     error,
     hoveredZone,

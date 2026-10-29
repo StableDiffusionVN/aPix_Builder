@@ -42,7 +42,6 @@ import {
   getDominantHslChannelId,
   mergePresetAdjustments,
   findActivePresetId,
-  PRESET_GROUPS,
   PRESETS,
   PREVIEW_MAX_EDGE,
   PREVIEW_INTERACTIVE_MAX_EDGE,
@@ -56,7 +55,9 @@ import {
   CropOverlay,
   EditorRange
 } from "../features/image-editor/ImageEditorControls.jsx";
-import { ColorGradingSection, LutSection, PresetAmountRange } from "../features/color-adjust/ColorExtrasSections.jsx";
+import { CalibrationSection, ColorGradingSection, LutSection, PresetAmountRange } from "../features/color-adjust/ColorExtrasSections.jsx";
+import { CameraRawPresetActions, PresetSelect, useCameraRawPresetIO } from "../features/color-adjust/CameraRawPresets.jsx";
+import { useFilmPresets } from "../lib/filmPresetStore.js";
 import { useColorExtras } from "../features/color-adjust/useColorExtras.js";
 
 const CurveIcon = ({ size = 14, ...props }) => (
@@ -538,7 +539,8 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
     setHistoryIndex(index => Math.min(index + 1, 79));
   }, [historyIndex]);
 
-  const allPresets = useMemo(() => [...PRESETS, ...customPresets], [customPresets]);
+  const filmPresets = useFilmPresets();
+  const allPresets = useMemo(() => [...PRESETS, ...filmPresets.presets, ...customPresets], [customPresets, filmPresets.presets]);
   const commitAdjustments = useCallback((next) => {
     setAdjustments(next);
     commitHistory(next, brush, strokesRef.current);
@@ -559,6 +561,14 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
     () => findActivePresetId(adjustments, allPresets) || colorExtras.amountPresetId,
     [adjustments, allPresets, colorExtras.amountPresetId]
   );
+  const presetIO = useCameraRawPresetIO({
+    adjustments,
+    allPresets,
+    activePresetId,
+    customPresets,
+    addPresets: list => savePresets([...customPresets, ...list]),
+    onApply: preset => applyPreset(preset)
+  });
 
   const restore = useCallback(entry => {
     setAdjustments(entry.adjustments);
@@ -2215,36 +2225,7 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
             <div className="imageEditorAccordionList">
               <AccordionSection icon={Sparkles} title="Presets" open={!!openSections.presets} onToggle={() => toggleSection("presets")}>
                 <div className="presetAccordionContent">
-                  <label className="field compact presetSelectField">
-                    <span>{t("editor.selectPreset")}</span>
-                    <select
-                      value={activePresetId}
-                      onChange={event => {
-                        const preset = [...PRESETS, ...customPresets].find(item => item.id === event.target.value);
-                        if (preset) applyPreset(preset);
-                      }}
-                    >
-                      <option value="">{t("editor.selectPresetPlaceholder")}</option>
-                      {PRESET_GROUPS.map(group => {
-                        const groupPresets = PRESETS.filter(preset => preset.group === group.id);
-                        if (!groupPresets.length) return null;
-                        return (
-                          <optgroup key={group.id} label={group.label}>
-                            {groupPresets.map(preset => (
-                              <option key={preset.id} value={preset.id}>{preset.name}</option>
-                            ))}
-                          </optgroup>
-                        );
-                      })}
-                      {customPresets.length > 0 ? (
-                        <optgroup label={t("editor.custom")}>
-                          {customPresets.map(preset => (
-                            <option key={preset.id} value={preset.id}>{preset.name}</option>
-                          ))}
-                        </optgroup>
-                      ) : null}
-                    </select>
-                  </label>
+                  <PresetSelect value={activePresetId} film={filmPresets} customPresets={customPresets} onApply={applyPreset} />
                   <PresetAmountRange extras={colorExtras} onDragStart={beginSliderDrag} onCommit={commitCurrent} />
 
                   <div className="presetGroupTitle custom">{t("editor.custom")}</div>
@@ -2339,6 +2320,7 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
                       {t("editor.saveNewPreset")}
                     </button>
                   )}
+                  <CameraRawPresetActions io={presetIO} />
                 </div>
               </AccordionSection>
 
@@ -2594,6 +2576,15 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
                 extras={colorExtras}
                 open={!!openSections.grading}
                 onToggle={() => toggleSection("grading")}
+                onDragStart={beginSliderDrag}
+                onCommit={commitCurrent}
+              />
+
+              <CalibrationSection
+                adjustments={adjustments}
+                setAdjustments={setAdjustments}
+                open={!!openSections.calibration}
+                onToggle={() => toggleSection("calibration")}
                 onDragStart={beginSliderDrag}
                 onCommit={commitCurrent}
               />

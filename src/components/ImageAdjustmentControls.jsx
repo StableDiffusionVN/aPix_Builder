@@ -11,10 +11,11 @@ import {
   X
 } from "lucide-react";
 import { useI18n } from "../i18n/I18nContext";
-import { COLOR_CHANNELS, getCurvePoint, PRESET_GROUPS, PRESETS } from "../lib/imageAdjustments";
+import { COLOR_CHANNELS, getCurvePoint } from "../lib/imageAdjustments";
 import { isTextEntryTarget, preventToolbarFocus } from "../lib/keyboard";
 import { ColorPickButton } from "./colorPickUi";
-import { ColorGradingSection, LutSection, PresetAmountRange } from "../features/color-adjust/ColorExtrasSections.jsx";
+import { CalibrationSection, ColorGradingSection, LutSection, PresetAmountRange } from "../features/color-adjust/ColorExtrasSections.jsx";
+import { CameraRawPresetActions, PresetSelect, useCameraRawPresetIO } from "../features/color-adjust/CameraRawPresets.jsx";
 
 export { ColorPickButton, ColorPickCursorOverlay } from "./colorPickUi";
 
@@ -149,6 +150,9 @@ export function ImageAdjustmentControls({
     activeCurveChannel,
     selectedCurvePointIndex,
     activePresetId,
+    allPresets,
+    filmPresets,
+    addPresets,
     customPresets,
     colorPickTarget,
     toggleColorPickTarget,
@@ -195,6 +199,14 @@ export function ImageAdjustmentControls({
     handleRedo,
     colorExtras
   } = engine;
+  const presetIO = useCameraRawPresetIO({
+    adjustments,
+    allPresets,
+    activePresetId,
+    customPresets,
+    addPresets,
+    onApply: applyPreset
+  });
 
   useEffect(() => {
     function handleKeyDown(event) {
@@ -374,36 +386,7 @@ export function ImageAdjustmentControls({
         <div className="imageEditorAccordionList">
           <AccordionSection icon={Sparkles} title="Presets" open={!!openSections.presets} onToggle={() => toggleSection("presets")}>
             <div className="presetAccordionContent">
-              <label className="field compact presetSelectField">
-                <span>{t("editor.selectPreset")}</span>
-                <select
-                  value={activePresetId}
-                  onChange={event => {
-                    const preset = [...PRESETS, ...customPresets].find(item => item.id === event.target.value);
-                    if (preset) applyPreset(preset);
-                  }}
-                >
-                  <option value="">{t("editor.selectPresetPlaceholder")}</option>
-                  {PRESET_GROUPS.map(group => {
-                    const groupPresets = PRESETS.filter(preset => preset.group === group.id);
-                    if (!groupPresets.length) return null;
-                    return (
-                      <optgroup key={group.id} label={group.label}>
-                        {groupPresets.map(preset => (
-                          <option key={preset.id} value={preset.id}>{preset.name}</option>
-                        ))}
-                      </optgroup>
-                    );
-                  })}
-                  {customPresets.length > 0 ? (
-                    <optgroup label={t("editor.custom")}>
-                      {customPresets.map(preset => (
-                        <option key={preset.id} value={preset.id}>{preset.name}</option>
-                      ))}
-                    </optgroup>
-                  ) : null}
-                </select>
-              </label>
+              <PresetSelect value={activePresetId} film={filmPresets} customPresets={customPresets} onApply={applyPreset} />
               <PresetAmountRange extras={colorExtras} onDragStart={beginSliderDrag} onCommit={commitCurrent} />
 
               <div className="presetGroupTitle custom">{t("editor.custom")}</div>
@@ -498,6 +481,7 @@ export function ImageAdjustmentControls({
                   {t("editor.saveNewPreset")}
                 </button>
               )}
+              <CameraRawPresetActions io={presetIO} />
             </div>
           </AccordionSection>
 
@@ -642,6 +626,15 @@ export function ImageAdjustmentControls({
             extras={colorExtras}
             open={!!openSections.grading}
             onToggle={() => toggleSection("grading")}
+            onDragStart={beginSliderDrag}
+            onCommit={commitCurrent}
+          />
+
+          <CalibrationSection
+            adjustments={adjustments}
+            setAdjustments={setAdjustments}
+            open={!!openSections.calibration}
+            onToggle={() => toggleSection("calibration")}
             onDragStart={beginSliderDrag}
             onCommit={commitCurrent}
           />

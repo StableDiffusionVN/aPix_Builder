@@ -51,6 +51,10 @@ export function useColorPresetLibrary(adjustments) {
     setNewPresetName("");
   }, [adjustments, customPresets, newPresetName, savePresets]);
 
+  const addPresets = useCallback((presets) => {
+    savePresets([...customPresets, ...presets]);
+  }, [customPresets, savePresets]);
+
   const handleDeletePreset = useCallback((id) => {
     savePresets(customPresets.filter(item => item.id !== id));
   }, [customPresets, savePresets]);
@@ -75,6 +79,7 @@ export function useColorPresetLibrary(adjustments) {
     newPresetName,
     editingPresetId,
     renameValue,
+    addPresets,
     handleCreatePreset,
     handleDeletePreset,
     handleUpdatePresetSettings,

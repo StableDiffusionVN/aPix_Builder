@@ -1,8 +1,8 @@
 import { useRef } from "react";
-import { Film, Palette } from "lucide-react";
+import { Aperture, Film, Palette } from "lucide-react";
 import { useI18n } from "../../i18n/I18nContext";
 import { AccordionSection, EditorRange } from "../image-editor/ImageEditorControls.jsx";
-import { GRADING_ZONES, PRESET_AMOUNT_MAX } from "../../lib/imageAdjustments.js";
+import { GRADING_ZONES, normalizeCalibration, PRESET_AMOUNT_MAX } from "../../lib/imageAdjustments.js";
 import "../../styles/colorExtras.css";
 
 const ZONE_LABELS = { shadows: "Shadows", midtones: "Midtones", highlights: "Highlights" };
@@ -45,6 +45,41 @@ export function ColorGradingSection({ extras, open, onToggle, onDragStart, onCom
         </div>
       ))}
       <EditorRange label="Balance" value={grading.balance} min={-100} max={100} onChange={value => updateGrading("balance", null, value)} onDragStart={onDragStart} onCommit={onCommit} />
+    </AccordionSection>
+  );
+}
+
+const CALIBRATION_ROWS = [
+  ["shadowTint", "Shadows Tint"],
+  ["redHue", "Red Primary · Hue"],
+  ["redSaturation", "Red Primary · Saturation"],
+  ["greenHue", "Green Primary · Hue"],
+  ["greenSaturation", "Green Primary · Saturation"],
+  ["blueHue", "Blue Primary · Hue"],
+  ["blueSaturation", "Blue Primary · Saturation"]
+];
+
+// Lightroom-style Calibration (RGB primaries), used by most film presets.
+export function CalibrationSection({ adjustments, setAdjustments, open, onToggle, onDragStart, onCommit }) {
+  const { t } = useI18n();
+  const calibration = normalizeCalibration(adjustments.calibration);
+  return (
+    <AccordionSection icon={Aperture} title={t("editor.calibration")} open={open} onToggle={onToggle}>
+      {CALIBRATION_ROWS.map(([key, label]) => (
+        <EditorRange
+          key={key}
+          label={label}
+          value={calibration[key]}
+          min={-100}
+          max={100}
+          onChange={value => setAdjustments(current => ({
+            ...current,
+            calibration: { ...normalizeCalibration(current.calibration), [key]: value }
+          }))}
+          onDragStart={onDragStart}
+          onCommit={onCommit}
+        />
+      ))}
     </AccordionSection>
   );
 }

@@ -1,6 +1,7 @@
 import {
   cloneDefaultAdjustments,
   DEFAULT_CURVES,
+  normalizeCalibration,
   normalizeGrading,
   normalizeHslAdjustments,
   normalizeLutRef
@@ -30,6 +31,7 @@ export function normalizePersistedColorState(state) {
       ? JSON.parse(JSON.stringify(source.curves))
       : DEFAULT_CURVES;
     adjustments.grading = normalizeGrading(source.grading);
+    adjustments.calibration = normalizeCalibration(source.calibration);
     adjustments.lut = normalizeLutRef(source.lut);
   }
 
@@ -75,6 +77,7 @@ export function mergeColorAdjustGroups(targetState, sourceState, groups = COLOR_
   if (groups.includes("hsl")) {
     next.adjustments.hsl = normalizeHslAdjustments(source.adjustments.hsl);
     next.adjustments.grading = normalizeGrading(source.adjustments.grading);
+    next.adjustments.calibration = normalizeCalibration(source.adjustments.calibration);
     next.adjustments.lut = normalizeLutRef(source.adjustments.lut);
   }
   if (groups.includes("effects")) {

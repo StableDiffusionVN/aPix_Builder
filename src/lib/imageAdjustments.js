@@ -46,6 +46,19 @@ export function normalizeGrading(grading) {
   return normalized;
 }
 
+// Lightroom/Camera Raw "Calibration": hue/saturation of the RGB primaries + shadow tint.
+export const CALIBRATION_KEYS = ["redHue", "redSaturation", "greenHue", "greenSaturation", "blueHue", "blueSaturation", "shadowTint"];
+
+export const DEFAULT_CALIBRATION = Object.fromEntries(CALIBRATION_KEYS.map(key => [key, 0]));
+
+export function normalizeCalibration(calibration) {
+  return Object.fromEntries(CALIBRATION_KEYS.map(key => [key, clamp(Number(calibration?.[key]) || 0, -100, 100)]));
+}
+
+export function isCalibrationActive(calibration) {
+  return Boolean(calibration) && CALIBRATION_KEYS.some(key => Number(calibration[key]) !== 0);
+}
+
 export function normalizeLutRef(lut) {
   if (!lut?.id) return null;
   return {
@@ -86,6 +99,7 @@ export const DEFAULT_ADJUSTMENTS = {
   hsl: DEFAULT_HSL,
   curves: DEFAULT_CURVES,
   grading: DEFAULT_GRADING,
+  calibration: DEFAULT_CALIBRATION,
   lut: null
 };
 
@@ -1388,14 +1402,47 @@ function buildBaseStage(adjustments) {
   // Slider -100..+100 maps to 0..220% gain (legacy scale); above 100% a
   // C1 shoulder rolls highlights off instead of clipping them hard.
   const gain = clamp(1 + (adjustments.luminance || 0) / 100, 0, 2.2);
+  const calibration = isCalibrationActive(adjustments.calibration) ? normalizeCalibration(adjustments.calibration) : null;
   return {
     wbR,
     wbG,
     wbB,
     gain,
+    calibrationMatrix: calibration ? buildCalibrationMatrix(calibration) : null,
+    shadowTint: calibration ? calibration.shadowTint / 100 : 0,
     knee: gain > 1 ? Math.max(0, 2 - gain) : 1,
     contrastTable: buildContrastTable(adjustments.contrast || 0)
   };
+}
+
+// Rotate a primary about the neutral axis (positive = towards the next hue:
+// red→yellow, green→cyan, blue→magenta).
+function rotateAboutGrey(v, degrees) {
+  const angle = degrees * DEG;
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+  const k = 1 / Math.sqrt(3);
+  const dot = (v[0] + v[1] + v[2]) * k;
+  const cross = [k * (v[2] - v[1]), k * (v[0] - v[2]), k * (v[1] - v[0])];
+  return v.map((value, i) => value * cos + cross[i] * sin + k * dot * (1 - cos));
+}
+
+// Calibration as a 3×3 matrix in linear RGB (columns = moved primaries),
+// rows normalised so neutral greys stay neutral.
+export function buildCalibrationMatrix(calibration) {
+  const columns = ["red", "green", "blue"].map((name, index) => {
+    const primary = [0, 0, 0];
+    primary[index] = 1;
+    const rotated = rotateAboutGrey(primary, (calibration[`${name}Hue`] || 0) * 0.3);
+    const mean = (rotated[0] + rotated[1] + rotated[2]) / 3;
+    const factor = 1 + (calibration[`${name}Saturation`] || 0) / 200;
+    return rotated.map(value => mean + (value - mean) * factor);
+  });
+  const matrix = [0, 1, 2].map(row => columns.map(column => column[row]));
+  return matrix.map(row => {
+    const sum = row[0] + row[1] + row[2] || 1;
+    return row.map(value => value / sum);
+  });
 }
 
 function shoulder(v, gain, knee) {
@@ -1412,6 +1459,23 @@ function applyBaseStage(px, stage) {
     r = shoulder(r, stage.gain, stage.knee);
     g = shoulder(g, stage.gain, stage.knee);
     b = shoulder(b, stage.gain, stage.knee);
+  }
+  const m = stage.calibrationMatrix;
+  if (m) {
+    const cr = m[0][0] * r + m[0][1] * g + m[0][2] * b;
+    const cg = m[1][0] * r + m[1][1] * g + m[1][2] * b;
+    const cb = m[2][0] * r + m[2][1] * g + m[2][2] * b;
+    r = cr;
+    g = cg;
+    b = cb;
+  }
+  if (stage.shadowTint !== 0) {
+    // Negative = green, positive = magenta; fades out by the midtones.
+    const shade = 1 - Math.min(1, encodeSrgb(Math.max(0, luminanceOf(r, g, b))) * 1.6);
+    const k = stage.shadowTint * 0.12 * shade * shade;
+    r *= 1 + k * 0.5;
+    g *= 1 - k;
+    b *= 1 + k * 0.5;
   }
   px[0] = r;
   px[1] = g;
@@ -1505,6 +1569,7 @@ export function needsColorPipeline(adjustments) {
   if (adjustments.grain !== 0 || adjustments.clarity !== 0 || adjustments.dehaze !== 0) return true;
   if (adjustments.texture !== 0 || adjustments.vignette !== 0) return true;
   if (isGradingActive(adjustments.grading)) return true;
+  if (isCalibrationActive(adjustments.calibration)) return true;
   if (isLutActive(adjustments.lut) && getLoadedLut(adjustments.lut.id)) return true;
   if (adjustments.curves && (
     isCurveActive(adjustments.curves.rgb)
@@ -2067,11 +2132,19 @@ export function mergePresetAdjustments(currentAdjustments, presetAdjustments = {
       ? JSON.parse(JSON.stringify(presetAdjustments.curves))
       : defaults.curves,
     grading: normalizeGrading(presetAdjustments.grading),
+    calibration: normalizeCalibration(presetAdjustments.calibration),
     lut: normalizeLutRef(presetAdjustments.lut)
   };
 }
 
 export function adjustmentsMatchPreset(currentAdjustments, presetAdjustments = {}) {
+  // Cheap scalar reject first: the active-preset lookup runs over hundreds of
+  // presets on every slider change.
+  for (const key of PRESET_COMPARE_KEYS) {
+    const target = presetAdjustments[key] ?? DEFAULT_ADJUSTMENTS[key];
+    if (typeof target === "boolean") continue;
+    if (Math.abs((Number(currentAdjustments?.[key]) || 0) - (Number(target) || 0)) > 0.5) return false;
+  }
   const expected = mergePresetAdjustments(currentAdjustments, presetAdjustments);
   for (const key of PRESET_COMPARE_KEYS) {
     const current = currentAdjustments?.[key];
@@ -2085,6 +2158,7 @@ export function adjustmentsMatchPreset(currentAdjustments, presetAdjustments = {
   if (JSON.stringify(currentAdjustments?.hsl) !== JSON.stringify(expected.hsl)) return false;
   if (JSON.stringify(currentAdjustments?.curves) !== JSON.stringify(expected.curves)) return false;
   if (JSON.stringify(normalizeGrading(currentAdjustments?.grading)) !== JSON.stringify(expected.grading)) return false;
+  if (JSON.stringify(normalizeCalibration(currentAdjustments?.calibration)) !== JSON.stringify(expected.calibration)) return false;
   const currentLut = normalizeLutRef(currentAdjustments?.lut);
   if (currentLut?.id !== expected.lut?.id) return false;
   if (currentLut && Math.abs(currentLut.amount - expected.lut.amount) > 0.5) return false;
@@ -2150,6 +2224,10 @@ export function scalePresetAdjustments(presetAdjustments = {}, amount = 100) {
     }
     grading.balance = clamp(Math.round(grading.balance * k), -100, 100);
     out.grading = grading;
+  }
+  if (out.calibration) {
+    const calibration = normalizeCalibration(out.calibration);
+    out.calibration = Object.fromEntries(Object.entries(calibration).map(([key, value]) => [key, clamp(Math.round(value * k), -100, 100)]));
   }
   if (out.lut) {
     const lut = normalizeLutRef(out.lut);

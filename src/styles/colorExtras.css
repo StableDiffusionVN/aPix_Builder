@@ -1,0 +1,102 @@
+/* Color Grading, LUT and preset Amount (Image Editor / colour panel) */
+
+.presetAmountRow {
+  margin: -4px 0 10px;
+}
+
+.gradingZone {
+  padding-bottom: 6px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+
+.gradingZoneHeader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.gradingSwatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  flex: none;
+}
+
+.gradingHueRange .editorRange input {
+  appearance: none;
+  -webkit-appearance: none;
+  background: linear-gradient(
+    to right,
+    hsl(0 80% 55%), hsl(60 80% 55%), hsl(120 80% 55%),
+    hsl(180 80% 55%), hsl(240 80% 55%), hsl(300 80% 55%), hsl(360 80% 55%)
+  );
+}
+
+.gradingHueRange .editorRange input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.45);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.3);
+}
+
+.gradingHueRange .editorRange input::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.45);
+}
+
+.lutActions {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.lutActionBtn {
+  flex: 1;
+  min-height: 28px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 4px);
+  background: var(--surface, rgba(255, 255, 255, 0.04));
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.lutActionBtn:hover:not(:disabled) {
+  border-color: rgba(var(--accent-rgb), 0.5);
+}
+
+.lutActionBtn:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.lutActionBtn.danger:hover {
+  border-color: rgba(239, 68, 68, 0.6);
+  color: #ef4444;
+}
+
+.lutError {
+  margin: 6px 0 0;
+  color: #ef4444;
+  font-size: 11px;
+}
+
+.lutHint {
+  margin: 4px 0 0;
+  color: var(--muted-2, var(--muted));
+  font-size: 10px;
+  line-height: 1.4;
+}

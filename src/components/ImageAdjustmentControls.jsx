@@ -14,6 +14,7 @@ import { useI18n } from "../i18n/I18nContext";
 import { COLOR_CHANNELS, getCurvePoint, PRESET_GROUPS, PRESETS } from "../lib/imageAdjustments";
 import { isTextEntryTarget, preventToolbarFocus } from "../lib/keyboard";
 import { ColorPickButton } from "./colorPickUi";
+import { ColorGradingSection, LutSection, PresetAmountRange } from "../features/color-adjust/ColorExtrasSections.jsx";
 
 export { ColorPickButton, ColorPickCursorOverlay } from "./colorPickUi";
 
@@ -191,7 +192,8 @@ export function ImageAdjustmentControls({
     canUndo,
     canRedo,
     handleUndo,
-    handleRedo
+    handleRedo,
+    colorExtras
   } = engine;
 
   useEffect(() => {
@@ -402,6 +404,7 @@ export function ImageAdjustmentControls({
                   ) : null}
                 </select>
               </label>
+              <PresetAmountRange extras={colorExtras} onDragStart={beginSliderDrag} onCommit={commitCurrent} />
 
               <div className="presetGroupTitle custom">{t("editor.custom")}</div>
               {customPresets.length === 0 ? (
@@ -635,6 +638,14 @@ export function ImageAdjustmentControls({
             <EditorRange label="Luminance" value={hsl.l} min={-100} max={100} onChange={value => updateHsl(activeColorTab, "l", value)} onDragStart={beginSliderDrag} onCommit={commitCurrent} />
           </AccordionSection>
 
+          <ColorGradingSection
+            extras={colorExtras}
+            open={!!openSections.grading}
+            onToggle={() => toggleSection("grading")}
+            onDragStart={beginSliderDrag}
+            onCommit={commitCurrent}
+          />
+
           <AccordionSection icon={Sparkles} title="Effects" open={!!openSections.effects} onToggle={() => toggleSection("effects")}>
             <EditorRange label="Clarity" value={adjustments.clarity} min={-100} max={100} onChange={value => updateAdjustment("clarity", value)} onDragStart={beginSliderDrag} onCommit={commitCurrent} />
             <EditorRange label="Texture" value={adjustments.texture} min={-100} max={100} onChange={value => updateAdjustment("texture", value)} onDragStart={beginSliderDrag} onCommit={commitCurrent} />
@@ -645,6 +656,15 @@ export function ImageAdjustmentControls({
             <EditorRange label="Vignette" value={adjustments.vignette} min={-100} max={100} onChange={value => updateAdjustment("vignette", value)} onDragStart={beginSliderDrag} onCommit={commitCurrent} />
             <EditorRange label="Blur" value={adjustments.blur} min={0} max={20} step={0.5} onChange={value => updateAdjustment("blur", value)} onDragStart={beginSliderDrag} onCommit={commitCurrent} />
           </AccordionSection>
+
+          <LutSection
+            extras={colorExtras}
+            adjustments={adjustments}
+            open={!!openSections.lut}
+            onToggle={() => toggleSection("lut")}
+            onDragStart={beginSliderDrag}
+            onCommit={commitCurrent}
+          />
         </div>
       </div>
 

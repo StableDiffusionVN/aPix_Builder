@@ -34,6 +34,7 @@ import {
   snapshotColorAdjustState
 } from "../lib/healingBrush";
 import { useColorPresetLibrary } from "../features/color-adjust/useColorPresetLibrary.js";
+import { useColorExtras } from "../features/color-adjust/useColorExtras.js";
 
 export function useColorAdjustments({
   source,
@@ -415,12 +416,34 @@ export function useColorAdjustments({
     }));
   }, [setAdjustments]);
 
+  const allPresets = useMemo(
+    () => [...PRESETS, ...presetLibrary.customPresets],
+    [presetLibrary.customPresets]
+  );
+  const commitAdjustments = useCallback((next) => {
+    setAdjustments(next);
+    commitHistory(next, healingStrokesRef.current);
+  }, [commitHistory, setAdjustments]);
+  const scheduleFinalRender = useCallback(() => {
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    rafRef.current = requestAnimationFrame(() => renderPreview({ interactive: false }));
+  }, [renderPreview]);
+  const colorExtras = useColorExtras({
+    adjustments,
+    setAdjustments,
+    commitAdjustments,
+    allPresets,
+    onLutLoaded: scheduleFinalRender
+  });
+  const { trackPresetApplied } = colorExtras;
+
   const applyPreset = useCallback((preset) => {
     const next = mergePresetAdjustments(adjustmentsRef.current, preset.adjustments);
     setAdjustments(next);
     setSelectedCurvePointIndex(null);
     commitHistory(next, healingStrokesRef.current);
-  }, [commitHistory, setAdjustments]);
+    trackPresetApplied(preset);
+  }, [commitHistory, setAdjustments, trackPresetApplied]);
 
   const resetAdjustments = useCallback(() => {
     const nextAdjustments = cloneDefaultAdjustments();
@@ -897,8 +920,8 @@ export function useColorAdjustments({
 
   const hsl = adjustments.hsl[activeColorTab];
   const activePresetId = useMemo(
-    () => findActivePresetId(adjustments, [...PRESETS, ...presetLibrary.customPresets]),
-    [adjustments, presetLibrary.customPresets]
+    () => findActivePresetId(adjustments, allPresets) || colorExtras.amountPresetId,
+    [adjustments, allPresets, colorExtras.amountPresetId]
   );
 
   return {
@@ -913,6 +936,7 @@ export function useColorAdjustments({
     activeCurveChannel,
     selectedCurvePointIndex,
     ...presetLibrary,
+    colorExtras,
     histogramCanvasRef,
     curvesCanvasRef,
     updateAdjustment,

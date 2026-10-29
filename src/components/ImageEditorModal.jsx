@@ -56,6 +56,8 @@ import {
   CropOverlay,
   EditorRange
 } from "../features/image-editor/ImageEditorControls.jsx";
+import { ColorGradingSection, LutSection, PresetAmountRange } from "../features/color-adjust/ColorExtrasSections.jsx";
+import { useColorExtras } from "../features/color-adjust/useColorExtras.js";
 
 const CurveIcon = ({ size = 14, ...props }) => (
   <svg
@@ -509,10 +511,6 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
     return adjustmentsMatchPreset(adjustments, preset.adjustments);
   }, [adjustments]);
 
-  const activePresetId = useMemo(
-    () => findActivePresetId(adjustments, [...PRESETS, ...customPresets]),
-    [adjustments, customPresets]
-  );
 
   useEffect(() => {
     adjustmentsRef.current = adjustments;
@@ -539,6 +537,28 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
     });
     setHistoryIndex(index => Math.min(index + 1, 79));
   }, [historyIndex]);
+
+  const allPresets = useMemo(() => [...PRESETS, ...customPresets], [customPresets]);
+  const commitAdjustments = useCallback((next) => {
+    setAdjustments(next);
+    commitHistory(next, brush, strokesRef.current);
+  }, [brush, commitHistory]);
+  // renderPreview is declared further down; reach it through a ref.
+  const renderPreviewRef = useRef(null);
+  const handleLutLoaded = useCallback(() => {
+    requestAnimationFrame(() => renderPreviewRef.current?.({ interactive: false }));
+  }, []);
+  const colorExtras = useColorExtras({
+    adjustments,
+    setAdjustments,
+    commitAdjustments,
+    allPresets,
+    onLutLoaded: handleLutLoaded
+  });
+  const activePresetId = useMemo(
+    () => findActivePresetId(adjustments, allPresets) || colorExtras.amountPresetId,
+    [adjustments, allPresets, colorExtras.amountPresetId]
+  );
 
   const restore = useCallback(entry => {
     setAdjustments(entry.adjustments);
@@ -760,6 +780,7 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
       }
     }
   }, [applyAdjustments, syncStrokeLayer, compositePreview, activeCurveChannel, selectedCurvePointIndex, adjustments.curves]);
+  renderPreviewRef.current = renderPreview;
 
   // Heavy path: rebuild the adjusted base (throttled to one per animation frame)
   // whenever an adjustment changes.
@@ -832,6 +853,7 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
       commitHistory(next, brush, strokes);
       return next;
     });
+    colorExtras.trackPresetApplied(preset);
   }
 
   function updateHsl(channel, key, value) {
@@ -2223,6 +2245,7 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
                       ) : null}
                     </select>
                   </label>
+                  <PresetAmountRange extras={colorExtras} onDragStart={beginSliderDrag} onCommit={commitCurrent} />
 
                   <div className="presetGroupTitle custom">{t("editor.custom")}</div>
                   {customPresets.length === 0 ? (
@@ -2567,6 +2590,14 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
                 <EditorRange label="Luminance" value={hsl.l} min={-100} max={100} onChange={value => updateHsl(activeColorTab, "l", value)} onDragStart={beginSliderDrag} onCommit={commitCurrent} />
               </AccordionSection>
 
+              <ColorGradingSection
+                extras={colorExtras}
+                open={!!openSections.grading}
+                onToggle={() => toggleSection("grading")}
+                onDragStart={beginSliderDrag}
+                onCommit={commitCurrent}
+              />
+
               <AccordionSection icon={Sparkles} title="Effects" open={!!openSections.effects} onToggle={() => toggleSection("effects")}>
                 <EditorRange label="Clarity" value={adjustments.clarity} min={-100} max={100} onChange={value => updateAdjustment("clarity", value)} onDragStart={beginSliderDrag} onCommit={commitCurrent} />
                 <EditorRange label="Texture" value={adjustments.texture ?? 0} min={-100} max={100} onChange={value => updateAdjustment("texture", value)} onDragStart={beginSliderDrag} onCommit={commitCurrent} />
@@ -2577,6 +2608,15 @@ export function ImageEditorModal({ source, title = "Image Editor", onClose, onSa
                 <EditorRange label="Vignette" value={adjustments.vignette ?? 0} min={-100} max={100} onChange={value => updateAdjustment("vignette", value)} onDragStart={beginSliderDrag} onCommit={commitCurrent} />
                 <EditorRange label="Blur" value={adjustments.blur} min={0} max={20} step={0.5} onChange={value => updateAdjustment("blur", value)} onDragStart={beginSliderDrag} onCommit={commitCurrent} />
               </AccordionSection>
+
+              <LutSection
+                extras={colorExtras}
+                adjustments={adjustments}
+                open={!!openSections.lut}
+                onToggle={() => toggleSection("lut")}
+                onDragStart={beginSliderDrag}
+                onCommit={commitCurrent}
+              />
 
               <AccordionSection icon={Save} title="Export" open={!!openSections.export} onToggle={() => toggleSection("export")}>
                 <label className="field">

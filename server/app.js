@@ -813,6 +813,7 @@ export const routeContext = {
   handleTemplateSave,
   listInputImages: storage.listInputImages,
   normalizeComfyTarget: comfy.normalizeComfyTarget,
+  getStoragePaths: () => storage.getPaths(),
   readBody,
   readCustomPresets: storage.readCustomPresets,
   readOutputHistory: storage.readOutputHistory,

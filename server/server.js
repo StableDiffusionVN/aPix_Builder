@@ -8,6 +8,7 @@ import {
   setListeningPort
 } from "./app.js";
 import { createImagesRoutes } from "./routes/images.js";
+import { createLutRoutes } from "./routes/luts.js";
 import { createPresetsRoutes } from "./routes/presets.js";
 import { createRunLogRoutes } from "./routes/run-log.js";
 import { createRunRoutes } from "./routes/run.js";
@@ -24,6 +25,7 @@ const routes = [
   createStorageRoutes(routeContext),
   createImagesRoutes(routeContext),
   createPresetsRoutes(routeContext),
+  createLutRoutes(routeContext),
   createRunLogRoutes(routeContext)
 ];
 

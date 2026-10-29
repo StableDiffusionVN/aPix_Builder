@@ -1,3 +1,6 @@
+import { sampleCubeLut } from "../../shared/cubeLut.js";
+import { getLoadedLut } from "./lutStore.js";
+
 export const HSL_CHANNEL_RADIUS = 32;
 
 // Lightroom-style hue bands: orange covers skin (~12–48°), yellow starts ~40°.
@@ -22,6 +25,35 @@ export const DEFAULT_CURVES = {
   green: [{ x: 0, y: 0 }, { x: 255, y: 255 }],
   blue: [{ x: 0, y: 0 }, { x: 255, y: 255 }]
 };
+
+export const GRADING_ZONES = ["shadows", "midtones", "highlights"];
+
+export const DEFAULT_GRADING = {
+  shadows: { h: 0, s: 0 },
+  midtones: { h: 0, s: 0 },
+  highlights: { h: 0, s: 0 },
+  balance: 0
+};
+
+export function normalizeGrading(grading) {
+  const normalized = { balance: Number(grading?.balance) || 0 };
+  for (const zone of GRADING_ZONES) {
+    normalized[zone] = {
+      h: Number(grading?.[zone]?.h) || 0,
+      s: Number(grading?.[zone]?.s) || 0
+    };
+  }
+  return normalized;
+}
+
+export function normalizeLutRef(lut) {
+  if (!lut?.id) return null;
+  return {
+    id: String(lut.id),
+    name: String(lut.name || lut.id),
+    amount: Number.isFinite(Number(lut.amount)) ? Number(lut.amount) : 100
+  };
+}
 
 export const DEFAULT_ADJUSTMENTS = {
   luminance: 0,
@@ -52,7 +84,9 @@ export const DEFAULT_ADJUSTMENTS = {
   flipV: false,
   invert: false,
   hsl: DEFAULT_HSL,
-  curves: DEFAULT_CURVES
+  curves: DEFAULT_CURVES,
+  grading: DEFAULT_GRADING,
+  lut: null
 };
 
 export const PRESET_GROUPS = [
@@ -71,10 +105,20 @@ function preset(id, name, group, adjustments) {
 
 // Matte look: lift the black point / soften white with the RGB curve
 // (Blacks no longer greys out pure black).
-function matteCurves(black, white = 255) {
+function matteCurves(black, white = 255, channels = {}) {
   return {
     ...DEFAULT_CURVES,
-    rgb: [{ x: 0, y: black }, { x: 64, y: Math.round(black + (64 - black) * 0.82) }, { x: 255, y: white }]
+    rgb: [{ x: 0, y: black }, { x: 64, y: Math.round(black + (64 - black) * 0.82) }, { x: 255, y: white }],
+    ...channels
+  };
+}
+
+function grade(shadows, highlights, { midtones = [0, 0], balance = 0 } = {}) {
+  return {
+    shadows: { h: shadows[0], s: shadows[1] },
+    midtones: { h: midtones[0], s: midtones[1] },
+    highlights: { h: highlights[0], s: highlights[1] },
+    balance
   };
 }
 
@@ -83,358 +127,391 @@ export const PRESETS = [
 
   preset("portrait", "Portrait", "portrait", {
     luminance: 3,
-    contrast: -5,
+    contrast: -4,
     temperature: 4,
-    tint: 1,
-    vibrance: 5,
-    saturation: -5,
-    highlights: -8,
-    shadows: 10,
-    whites: -5,
-    blacks: 5,
-    clarity: -8,
-    texture: -10
+    vibrance: 8,
+    saturation: -4,
+    highlights: -15,
+    shadows: 12,
+    clarity: -10,
+    texture: -12,
+    hsl: { oranges: { h: -2, s: -6, l: 6 }, reds: { h: 0, s: -4, l: 0 } },
+    grading: grade([0, 0], [40, 8])
   }),
   preset("portrait-soft", "Soft Portrait", "portrait", {
-    luminance: 5,
-    contrast: -10,
-    temperature: 2,
-    tint: 2,
-    vibrance: 3,
+    luminance: 6,
+    contrast: -12,
+    vibrance: 4,
     saturation: -8,
-    highlights: -12,
-    shadows: 12,
-    whites: -8,
-    blacks: 8,
-    clarity: -12,
-    texture: -14
+    highlights: -20,
+    shadows: 18,
+    whites: -6,
+    blacks: 4,
+    clarity: -18,
+    texture: -20,
+    curves: matteCurves(10, 250),
+    grading: grade([220, 6], [30, 10])
   }),
   preset("golden-skin", "Golden Skin", "portrait", {
-    luminance: 2,
-    contrast: -2,
-    temperature: 6,
-    tint: 2,
-    vibrance: 4,
-    saturation: -2,
-    highlights: -5,
-    shadows: 6,
+    temperature: 8,
+    tint: 3,
+    vibrance: 6,
+    highlights: -10,
+    shadows: 8,
     clarity: -6,
-    hsl: {
-      oranges: { h: 0, s: -2, l: 4 }
-    }
+    hsl: { oranges: { h: -3, s: 4, l: 8 }, yellows: { h: -6, s: -8, l: 0 } },
+    grading: grade([0, 0], [38, 18], { midtones: [30, 8] })
   }),
 
   preset("landscape", "Landscape", "landscape", {
-    luminance: 2,
-    contrast: 8,
-    vibrance: 14,
-    saturation: 5,
-    highlights: -12,
-    shadows: 10,
-    whites: 3,
-    blacks: -4,
-    clarity: 12,
-    dehaze: 10,
+    contrast: 12,
+    vibrance: 22,
+    saturation: 4,
+    highlights: -35,
+    shadows: 25,
+    whites: 8,
+    blacks: -8,
+    clarity: 18,
+    dehaze: 12,
     hsl: {
-      greens: { h: 0, s: 6, l: 2 },
-      blues: { h: 0, s: 7, l: -2 },
-      aquas: { h: 0, s: 4, l: 0 }
+      greens: { h: -8, s: 10, l: -4 },
+      blues: { h: 0, s: 12, l: -10 },
+      aquas: { h: 0, s: 8, l: 0 }
     }
   }),
   preset("landscape-autumn", "Autumn", "landscape", {
-    luminance: 1,
-    contrast: 5,
-    temperature: 12,
-    tint: 2,
-    vibrance: 12,
-    saturation: 3,
-    highlights: -8,
-    shadows: 6,
-    clarity: 6,
+    contrast: 10,
+    temperature: 14,
+    vibrance: 15,
+    highlights: -20,
+    shadows: 15,
+    clarity: 10,
     hsl: {
-      oranges: { h: -3, s: 8, l: 2 },
-      yellows: { h: -4, s: 6, l: 1 },
-      reds: { h: 0, s: 5, l: 0 }
-    }
+      reds: { h: 0, s: 8, l: 0 },
+      oranges: { h: -4, s: 15, l: 4 },
+      yellows: { h: -12, s: 12, l: 0 },
+      greens: { h: -25, s: -15, l: -6 }
+    },
+    grading: grade([15, 8], [35, 15])
   }),
   preset("landscape-tropical", "Tropical", "landscape", {
     luminance: 3,
-    contrast: 4,
-    temperature: 2,
-    tint: -2,
-    vibrance: 16,
+    contrast: 8,
+    temperature: 3,
+    tint: -3,
+    vibrance: 25,
     saturation: 6,
-    highlights: -5,
-    clarity: 8,
-    dehaze: 6,
+    highlights: -18,
+    shadows: 12,
+    clarity: 10,
+    dehaze: 8,
     hsl: {
-      aquas: { h: 0, s: 8, l: 3 },
-      greens: { h: 2, s: 5, l: 0 },
-      blues: { h: 0, s: 6, l: -1 }
+      aquas: { h: -6, s: 18, l: 6 },
+      greens: { h: 6, s: 10, l: 0 },
+      blues: { h: -6, s: 12, l: -6 }
     }
   }),
 
-  preset("cinematic", "Cinematic", "creative", {
-    luminance: -5,
-    contrast: 12,
-    temperature: 6,
-    tint: -5,
-    vibrance: 6,
-    saturation: -6,
-    highlights: 4,
-    shadows: 10,
-    whites: -4,
-    blacks: 5,
-    clarity: 8,
-    dehaze: 4,
-    vignette: -10,
+  preset("cinematic", "Cinematic Teal & Orange", "creative", {
+    luminance: -3,
+    contrast: 14,
+    vibrance: 10,
+    saturation: -8,
+    highlights: -18,
+    shadows: 8,
+    blacks: -6,
+    clarity: 6,
+    vignette: -14,
+    curves: matteCurves(8, 248),
     hsl: {
-      blues: { h: 4, s: 4, l: -3 },
-      oranges: { h: 0, s: 6, l: 2 }
-    }
+      oranges: { h: 0, s: 8, l: 4 },
+      blues: { h: -10, s: 10, l: -8 },
+      aquas: { h: -10, s: 6, l: 0 }
+    },
+    grading: grade([195, 35], [32, 28], { balance: -10 })
   }),
   preset("moody", "Moody", "creative", {
     luminance: -8,
-    contrast: 14,
-    temperature: -4,
-    tint: 2,
-    vibrance: 3,
-    saturation: -8,
-    highlights: -14,
-    shadows: 7,
-    whites: -6,
-    blacks: -9,
-    clarity: 8,
-    vignette: -14
+    contrast: 18,
+    temperature: -6,
+    vibrance: 4,
+    saturation: -18,
+    highlights: -30,
+    shadows: 4,
+    whites: -10,
+    blacks: -14,
+    clarity: 12,
+    vignette: -22,
+    hsl: {
+      greens: { h: -15, s: -30, l: -10 },
+      blues: { h: 0, s: -10, l: -10 }
+    },
+    grading: grade([215, 22], [40, 8], { midtones: [200, 6] })
+  }),
+  preset("warm-film", "Warm Film", "creative", {
+    contrast: 6,
+    temperature: 8,
+    saturation: -6,
+    highlights: -15,
+    shadows: 10,
+    grain: 12,
+    grainSize: 55,
+    curves: matteCurves(14, 246),
+    grading: grade([180, 10], [40, 18])
   }),
   preset("vintage", "Vintage", "creative", {
-    luminance: 4,
-    contrast: -7,
-    temperature: 10,
-    tint: 5,
-    vibrance: -4,
-    saturation: -10,
-    highlights: -10,
-    shadows: 8,
-    whites: -7,
-    blacks: 12,
+    contrast: -8,
+    temperature: 12,
+    tint: 6,
+    saturation: -15,
+    highlights: -15,
+    shadows: 10,
     clarity: -8,
-    grain: 14,
+    grain: 20,
     grainSize: 58,
     grainRoughness: 48,
-    vignette: -12,
-    curves: matteCurves(18, 246)
+    vignette: -18,
+    curves: matteCurves(22, 240, { blue: [{ x: 0, y: 26 }, { x: 255, y: 232 }] }),
+    grading: grade([160, 12], [45, 20])
   }),
   preset("fade", "Matte Fade", "creative", {
-    luminance: 3,
     contrast: -10,
-    temperature: 4,
-    saturation: -7,
-    highlights: -9,
+    saturation: -12,
+    highlights: -10,
     shadows: 10,
-    blacks: 14,
-    clarity: -8,
+    clarity: -6,
     grain: 8,
-    vignette: -6,
-    curves: matteCurves(26, 248)
+    vignette: -8,
+    curves: matteCurves(30, 245),
+    grading: grade([210, 8], [0, 0])
   }),
   preset("cross-process", "Cross Process", "creative", {
-    luminance: 2,
-    contrast: 8,
-    temperature: -5,
-    tint: 6,
-    vibrance: 8,
-    saturation: 3,
-    highlights: -4,
-    clarity: 5,
-    hsl: {
-      greens: { h: 4, s: 4, l: 0 }
-    }
+    contrast: 15,
+    vibrance: 10,
+    highlights: -10,
+    curves: {
+      ...DEFAULT_CURVES,
+      red: [{ x: 0, y: 0 }, { x: 64, y: 50 }, { x: 192, y: 210 }, { x: 255, y: 255 }],
+      green: [{ x: 0, y: 0 }, { x: 64, y: 70 }, { x: 192, y: 200 }, { x: 255, y: 245 }],
+      blue: [{ x: 0, y: 40 }, { x: 128, y: 128 }, { x: 255, y: 210 }]
+    },
+    grading: grade([170, 15], [55, 15])
   }),
 
   preset("bright-airy", "Bright & Airy", "modern", {
-    luminance: 10,
-    contrast: -9,
+    luminance: 14,
+    contrast: -12,
     temperature: 2,
-    tint: 1,
-    vibrance: 5,
-    saturation: -4,
-    highlights: -16,
-    shadows: 16,
-    whites: -8,
+    vibrance: 8,
+    saturation: -6,
+    highlights: -25,
+    shadows: 25,
+    whites: 10,
     blacks: 6,
-    clarity: -10,
-    texture: -6
+    clarity: -12,
+    texture: -6,
+    curves: matteCurves(10, 255),
+    hsl: {
+      blues: { h: 0, s: -10, l: 8 },
+      greens: { h: 0, s: -10, l: 6 }
+    }
+  }),
+  preset("pastel", "Pastel", "modern", {
+    luminance: 8,
+    contrast: -16,
+    vibrance: 10,
+    saturation: -20,
+    highlights: -20,
+    shadows: 20,
+    curves: matteCurves(18, 250),
+    grading: grade([200, 10], [330, 10])
   }),
   preset("deep-rich", "Deep & Rich", "modern", {
-    luminance: -3,
-    contrast: 12,
-    vibrance: 5,
-    saturation: 5,
-    highlights: -6,
-    shadows: 5,
-    blacks: -8,
-    clarity: 10,
-    dehaze: 3
-  }),
-  preset("punchy", "Punchy", "modern", {
-    luminance: 1,
-    contrast: 10,
-    vibrance: 12,
-    saturation: 6,
-    highlights: -4,
-    shadows: 4,
-    whites: 4,
-    blacks: -5,
-    clarity: 10,
-    texture: 6
-  }),
-  preset("vibrant", "Vibrant", "modern", {
-    luminance: 1,
-    contrast: 5,
+    luminance: -4,
+    contrast: 16,
     vibrance: 12,
     saturation: 4,
-    highlights: 2,
-    shadows: 3,
-    whites: 3,
-    blacks: -3,
-    clarity: 5,
-    dehaze: 4
+    highlights: -18,
+    shadows: 6,
+    blacks: -14,
+    clarity: 12,
+    dehaze: 6,
+    hsl: {
+      reds: { h: 0, s: 6, l: -6 },
+      blues: { h: 0, s: 6, l: -8 }
+    },
+    grading: grade([230, 10], [0, 0])
+  }),
+  preset("punchy", "Punchy", "modern", {
+    contrast: 18,
+    vibrance: 22,
+    saturation: 6,
+    highlights: -10,
+    shadows: 8,
+    whites: 8,
+    blacks: -10,
+    clarity: 14,
+    texture: 10
+  }),
+  preset("vibrant", "Vibrant", "modern", {
+    contrast: 8,
+    vibrance: 30,
+    saturation: 8,
+    highlights: -8,
+    shadows: 6,
+    clarity: 6,
+    dehaze: 6
   }),
 
   preset("blackwhite", "B&W", "bw", {
-    vibrance: -100,
     saturation: -100,
-    contrast: 12,
-    clarity: 8,
-    blacks: -4
+    contrast: 14,
+    highlights: -10,
+    shadows: 10,
+    blacks: -6,
+    clarity: 10
   }),
   preset("bw-contrast", "B&W Contrast", "bw", {
-    vibrance: -100,
     saturation: -100,
-    contrast: 18,
-    clarity: 10,
-    blacks: -9,
-    whites: 4
+    contrast: 30,
+    highlights: -18,
+    shadows: 4,
+    whites: 14,
+    blacks: -20,
+    clarity: 18
+  }),
+  preset("bw-noir", "Noir", "bw", {
+    luminance: -6,
+    saturation: -100,
+    contrast: 35,
+    highlights: -10,
+    whites: 10,
+    blacks: -30,
+    clarity: 15,
+    vignette: -30,
+    grain: 10
   }),
   preset("bw-matte", "B&W Matte", "bw", {
-    vibrance: -100,
     saturation: -100,
-    contrast: -4,
-    blacks: 14,
-    shadows: 6,
-    clarity: -3,
-    grain: 10,
+    contrast: -6,
+    shadows: 12,
+    clarity: -4,
+    grain: 12,
     grainSize: 52,
     curves: matteCurves(24, 250)
   }),
   preset("bw-silver", "Silver Gelatin", "bw", {
-    vibrance: -100,
     saturation: -100,
-    contrast: 14,
-    clarity: 12,
-    texture: 5,
-    blacks: -6,
-    grain: 12,
-    grainRoughness: 36
+    contrast: 18,
+    blacks: -8,
+    clarity: 16,
+    texture: 10,
+    grain: 14,
+    grainRoughness: 36,
+    grading: grade([220, 5], [40, 6])
   }),
 
   preset("golden-hour", "Golden Hour", "specialty", {
-    luminance: 2,
-    contrast: 4,
-    temperature: 10,
-    tint: 3,
-    vibrance: 6,
-    saturation: 0,
-    highlights: -6,
-    shadows: 5,
-    clarity: 2,
-    vignette: -5,
+    contrast: 6,
+    temperature: 15,
+    tint: 4,
+    vibrance: 10,
+    highlights: -15,
+    shadows: 10,
+    vignette: -10,
     hsl: {
-      oranges: { h: 0, s: 2, l: 2 },
-      yellows: { h: -2, s: 2, l: 1 }
-    }
+      oranges: { h: 0, s: 6, l: 4 },
+      yellows: { h: -6, s: 6, l: 0 }
+    },
+    grading: grade([270, 6], [38, 25], { midtones: [30, 8] })
   }),
   preset("cool-nordic", "Cool Nordic", "specialty", {
-    luminance: 2,
-    contrast: 6,
-    temperature: -12,
+    contrast: 8,
+    temperature: -14,
     tint: -3,
-    vibrance: 4,
-    saturation: -4,
-    highlights: -5,
-    clarity: 6,
-    dehaze: 7,
+    vibrance: 6,
+    saturation: -12,
+    highlights: -15,
+    shadows: 10,
+    clarity: 8,
+    dehaze: 8,
     hsl: {
-      blues: { h: 0, s: 5, l: -2 },
-      aquas: { h: 0, s: 4, l: 0 }
-    }
+      blues: { h: 0, s: 8, l: -6 },
+      greens: { h: 10, s: -25, l: 0 }
+    },
+    grading: grade([210, 15], [190, 6])
   }),
   preset("street", "Street", "specialty", {
-    luminance: -2,
-    contrast: 10,
-    vibrance: 7,
-    saturation: 2,
-    highlights: -3,
-    shadows: 5,
-    blacks: -6,
-    clarity: 14,
-    texture: 8,
-    dehaze: 3
+    contrast: 16,
+    vibrance: 6,
+    saturation: -15,
+    highlights: -15,
+    shadows: 10,
+    blacks: -12,
+    clarity: 20,
+    texture: 10,
+    dehaze: 4,
+    vignette: -12,
+    grading: grade([200, 10], [0, 0])
   }),
   preset("food", "Food", "specialty", {
-    luminance: 3,
-    contrast: 3,
-    temperature: 4,
-    vibrance: 10,
-    saturation: 3,
-    highlights: -5,
-    clarity: 6,
-    texture: 4,
+    luminance: 4,
+    contrast: 8,
+    temperature: 6,
+    vibrance: 15,
+    saturation: 4,
+    highlights: -12,
+    shadows: 8,
+    clarity: 8,
+    texture: 8,
     hsl: {
-      oranges: { h: 0, s: 3, l: 2 },
-      yellows: { h: 0, s: 2, l: 2 }
+      reds: { h: 0, s: 6, l: 0 },
+      oranges: { h: 0, s: 8, l: 4 },
+      yellows: { h: 0, s: 6, l: 4 },
+      greens: { h: 0, s: 8, l: 0 }
     }
   }),
   preset("night", "Night", "specialty", {
-    luminance: 6,
-    contrast: 8,
-    temperature: -7,
+    luminance: 8,
+    contrast: 10,
+    temperature: -10,
     tint: -2,
-    vibrance: 5,
-    saturation: -2,
-    shadows: 14,
-    blacks: -4,
-    clarity: 4,
-    dehaze: -4,
-    vignette: -10
+    vibrance: 10,
+    saturation: -4,
+    highlights: -20,
+    shadows: 20,
+    blacks: -6,
+    clarity: 6,
+    dehaze: 6,
+    vignette: -12,
+    grading: grade([225, 18], [35, 8])
   }),
   preset("editorial", "Editorial", "specialty", {
-    luminance: -4,
-    contrast: 12,
-    saturation: -5,
-    highlights: -10,
-    shadows: 4,
-    whites: -3,
-    blacks: -7,
-    clarity: 10,
-    texture: 4,
-    vignette: -8
+    luminance: -2,
+    contrast: 16,
+    saturation: -14,
+    highlights: -20,
+    shadows: 6,
+    whites: 6,
+    blacks: -10,
+    clarity: 12,
+    texture: 6,
+    vignette: -10,
+    grading: grade([200, 8], [40, 6])
   }),
   preset("dramatic", "Dramatic", "specialty", {
     luminance: -6,
-    contrast: 16,
-    temperature: -3,
-    tint: 2,
-    vibrance: 4,
-    saturation: -8,
-    highlights: 6,
-    shadows: -5,
-    whites: 7,
-    blacks: -11,
-    clarity: 14,
-    dehaze: 8,
-    vignette: -10
+    contrast: 24,
+    vibrance: 6,
+    saturation: -14,
+    highlights: -30,
+    shadows: -6,
+    whites: 12,
+    blacks: -18,
+    clarity: 24,
+    dehaze: 12,
+    vignette: -18,
+    grading: grade([215, 12], [0, 0])
   })
 ];
 
@@ -1410,6 +1487,14 @@ function applyGrainPass(data, width, height, grain, grainSize, grainRoughness, s
   }
 }
 
+export function isGradingActive(grading) {
+  return GRADING_ZONES.some(zone => (Number(grading?.[zone]?.s) || 0) !== 0);
+}
+
+export function isLutActive(lut) {
+  return Boolean(lut?.id) && (Number(lut.amount ?? 100) || 0) > 0;
+}
+
 export function needsColorPipeline(adjustments) {
   if (!adjustments) return false;
   if (adjustments.invert) return true;
@@ -1419,6 +1504,8 @@ export function needsColorPipeline(adjustments) {
   if (adjustments.highlights !== 0 || adjustments.shadows !== 0 || adjustments.whites !== 0 || adjustments.blacks !== 0) return true;
   if (adjustments.grain !== 0 || adjustments.clarity !== 0 || adjustments.dehaze !== 0) return true;
   if (adjustments.texture !== 0 || adjustments.vignette !== 0) return true;
+  if (isGradingActive(adjustments.grading)) return true;
+  if (isLutActive(adjustments.lut) && getLoadedLut(adjustments.lut.id)) return true;
   if (adjustments.curves && (
     isCurveActive(adjustments.curves.rgb)
     || isCurveActive(adjustments.curves.red)
@@ -1433,12 +1520,26 @@ export function needsColorPipeline(adjustments) {
 
 const DEG = Math.PI / 180;
 const SKIN_OKLCH_HUE = 60;
+const GRADING_STRENGTH = 0.08;
+// Per-pixel colour work is baked into a 49³ lattice once the image is large
+// enough that evaluating it per pixel costs more than the bake (~118k samples).
+const BAKE_SIZE = 49;
+const BAKE_MIN_PIXELS = 250000;
 
-export function applyColorPipeline(imageData, adjustments, { scale = 1, seed = 1, interactive = false } = {}) {
-  const { data, width, height } = imageData;
-  const pixelCount = width * height;
+// Direction in OKLab of a grading hue picked on the familiar HSL wheel.
+function gradingTint(zone) {
+  const s = clamp(Number(zone?.s) || 0, 0, 100);
+  if (s === 0) return null;
+  const rgb = hslToRgb(Number(zone?.h) || 0, 100, 50);
+  const lab = new Float64Array(3);
+  linearToOklab(SRGB_TO_LINEAR[Math.round(rgb.r)], SRGB_TO_LINEAR[Math.round(rgb.g)], SRGB_TO_LINEAR[Math.round(rgb.b)], lab);
+  const length = Math.sqrt(lab[1] * lab[1] + lab[2] * lab[2]) || 1;
+  const strength = (s / 100) * GRADING_STRENGTH;
+  return { a: (lab[1] / length) * strength, b: (lab[2] / length) * strength };
+}
+
+function createPipelineContext(adjustments) {
   const num = key => Number(adjustments[key]) || 0;
-
   const activeChannelAdjusts = COLOR_CHANNELS
     .filter(channel => {
       const entry = adjustments.hsl?.[channel.id];
@@ -1457,24 +1558,252 @@ export function applyColorPipeline(imageData, adjustments, { scale = 1, seed = 1
     || isCurveActive(adjustments.curves.green)
     || isCurveActive(adjustments.curves.blue)
   );
-  const curveTables = hasCurves ? buildCurveTables(adjustments.curves) : null;
-  const stage = buildBaseStage(adjustments);
-  const toneTable = buildToneTable(adjustments);
-
+  const grading = normalizeGrading(adjustments.grading);
+  const gradingTints = isGradingActive(grading)
+    ? {
+      shadows: gradingTint(grading.shadows),
+      midtones: gradingTint(grading.midtones),
+      highlights: gradingTint(grading.highlights),
+      balance: clamp(grading.balance, -100, 100) / 100
+    }
+    : null;
+  const lut = isLutActive(adjustments.lut) ? getLoadedLut(adjustments.lut.id) : null;
   const saturation = num("saturation");
   const vibrance = num("vibrance") / 100;
   const hueShift = num("hue");
-  const needsLab = saturation !== 0 || vibrance !== 0 || hueShift !== 0 || activeChannelAdjusts.length > 0;
-  const chromaBase = saturation < 0 ? 1 + saturation / 100 : 1 + (saturation / 100) * 0.9;
-
-  const clarityAmount = (num("clarity") / 100) * 0.7;
-  const textureAmount = (num("texture") / 100) * 0.6;
+  const needsLab = saturation !== 0 || vibrance !== 0 || hueShift !== 0
+    || activeChannelAdjusts.length > 0 || Boolean(gradingTints);
+  const curveTables = hasCurves ? buildCurveTables(adjustments.curves) : null;
   const dehaze = num("dehaze");
-  const vignette = num("vignette") / 100;
-  const needsLocal = Boolean(toneTable) || clarityAmount !== 0 || textureAmount !== 0;
+
+  return {
+    stage: buildBaseStage(adjustments),
+    toneTable: buildToneTable(adjustments),
+    curveTables,
+    activeChannelAdjusts,
+    saturation,
+    vibrance,
+    hueShift,
+    chromaBase: saturation < 0 ? 1 + saturation / 100 : 1 + (saturation / 100) * 0.9,
+    gradingTints,
+    needsLab,
+    dehaze,
+    lut,
+    lutAmount: lut ? clamp(Number(adjustments.lut.amount ?? 100), 0, 100) / 100 : 0,
+    clarityAmount: (num("clarity") / 100) * 0.7,
+    textureAmount: (num("texture") / 100) * 0.6,
+    vignette: num("vignette") / 100,
+    invert: Boolean(adjustments.invert),
+    hasColorStage: Boolean(curveTables) || needsLab || dehaze !== 0 || Boolean(lut)
+  };
+}
+
+// Tone mapping on perceptual lightness. `baseValue` is the edge-aware base
+// layer (local) or the pixel's own lightness (global, e.g. LUT export).
+function applyToneStage(px, ctx, light, baseValue, textureValue) {
+  let target = light;
+  if (baseValue !== null) {
+    const detail = light - baseValue;
+    if (ctx.toneTable) target = sampleTable(ctx.toneTable, baseValue) + detail;
+    if (ctx.clarityAmount !== 0) target += ctx.clarityAmount * 4 * light * (1 - light) * detail;
+  }
+  if (textureValue !== null) {
+    target += ctx.textureAmount * (0.4 + 2.4 * light * (1 - light)) * (light - textureValue);
+  }
+  if (target === light) return;
+  const y = luminanceOf(px[0], px[1], px[2]);
+  const nextY = decodeSrgb(target);
+  if (y > 1e-6) {
+    const ratio = nextY / y;
+    px[0] *= ratio;
+    px[1] *= ratio;
+    px[2] *= ratio;
+  } else {
+    px[0] = nextY;
+    px[1] = nextY;
+    px[2] = nextY;
+  }
+  fitGamut(px);
+}
+
+// Everything that depends only on the pixel's own colour (bakeable).
+function applyColorStage(px, ctx, lab, tmp) {
+  if (ctx.curveTables) {
+    px[0] = decodeSrgb(sampleTable(ctx.curveTables.r, encodeSrgb(px[0])));
+    px[1] = decodeSrgb(sampleTable(ctx.curveTables.g, encodeSrgb(px[1])));
+    px[2] = decodeSrgb(sampleTable(ctx.curveTables.b, encodeSrgb(px[2])));
+  }
+
+  if (ctx.needsLab) {
+    // HSL bands are selected on sRGB-encoded hue so they match the swatches
+    // and the colour picker; the edit itself happens in OKLCh.
+    let bandH = 0;
+    let bandS = 0;
+    let bandL = 0;
+    let hsl = null;
+    if (ctx.activeChannelAdjusts.length) {
+      hsl = rgbToHsl(encodeSrgb(px[0]) * 255, encodeSrgb(px[1]) * 255, encodeSrgb(px[2]) * 255);
+      let weightSum = 0;
+      for (const channel of ctx.activeChannelAdjusts) {
+        const weight = getHslChannelWeight(hsl.h, channel.center, channel.radius);
+        weightSum += weight;
+        bandH += weight * channel.h;
+        bandS += weight * channel.s;
+        bandL += weight * channel.l;
+      }
+      // Overlapping bands share the pixel; a lone band fades out at its edge.
+      const norm = weightSum > 1 ? 1 / weightSum : 1;
+      bandH *= norm;
+      bandS *= norm;
+      bandL *= norm;
+    }
+
+    linearToOklab(px[0], px[1], px[2], lab);
+    let L = lab[0];
+    let a = lab[1];
+    let b = lab[2];
+
+    let chromaScale = ctx.chromaBase;
+    if (ctx.vibrance !== 0) {
+      const satNorm = Math.min(1, Math.sqrt(a * a + b * b) / 0.25);
+      const skinProtect = ctx.vibrance > 0
+        ? 1 - 0.6 * (1 - pipelineSmoothstep(0, 35, hueDistance(Math.atan2(b, a) / DEG, SKIN_OKLCH_HUE)))
+        : 1;
+      chromaScale += ctx.vibrance * (1 - satNorm) ** 2 * skinProtect;
+    }
+    let rotation = ctx.hueShift;
+
+    if (hsl && (bandH !== 0 || bandS !== 0 || bandL !== 0)) {
+      const chromaGate = hslChromaGate(hsl.s);
+      rotation += bandH * chromaGate;
+      if (bandS < 0) chromaScale *= Math.max(0, 1 + bandS / 100);
+      else if (bandS > 0) chromaScale *= 1 + (bandS / 100) * chromaGate * (0.35 + 0.65 * (hsl.s / 100));
+      if (bandL !== 0) L = clamp(L + (bandL / 100) * 0.16 * hslLuminanceGate(hsl.s, hsl.l), 0, 1);
+    }
+
+    chromaScale = clamp(chromaScale, 0, 2.5);
+    a *= chromaScale;
+    b *= chromaScale;
+    if (rotation !== 0) {
+      const cos = Math.cos(rotation * DEG);
+      const sin = Math.sin(rotation * DEG);
+      const ra = a * cos - b * sin;
+      b = a * sin + b * cos;
+      a = ra;
+    }
+
+    const tints = ctx.gradingTints;
+    if (tints) {
+      // Split-tone weights over lightness; Balance shifts the shadow/highlight split.
+      const t = clamp(L + tints.balance * 0.25, 0, 1);
+      const weights = [(1 - t) * (1 - t), 2 * t * (1 - t), t * t];
+      const zones = [tints.shadows, tints.midtones, tints.highlights];
+      for (let z = 0; z < 3; z++) {
+        if (!zones[z]) continue;
+        a += zones[z].a * weights[z];
+        b += zones[z].b * weights[z];
+      }
+    }
+    oklabToLinear(L, a, b, px);
+  }
+
+  if (ctx.dehaze !== 0) {
+    const hazed = applyDehazeLinear(px[0], px[1], px[2], ctx.dehaze);
+    px[0] = hazed.r;
+    px[1] = hazed.g;
+    px[2] = hazed.b;
+  }
+
+  if (ctx.lut) {
+    const er = encodeSrgb(px[0]);
+    const eg = encodeSrgb(px[1]);
+    const eb = encodeSrgb(px[2]);
+    sampleCubeLut(ctx.lut, er, eg, eb, tmp);
+    const k = ctx.lutAmount;
+    px[0] = decodeSrgb(er + (tmp[0] - er) * k);
+    px[1] = decodeSrgb(eg + (tmp[1] - eg) * k);
+    px[2] = decodeSrgb(eb + (tmp[2] - eb) * k);
+  }
+}
+
+const UNIT_DOMAIN = [0, 0, 0];
+const UNIT_DOMAIN_MAX = [1, 1, 1];
+
+function forEachLatticePoint(size, callback) {
+  const max = size - 1;
+  let offset = 0;
+  for (let bi = 0; bi < size; bi++) {
+    for (let gi = 0; gi < size; gi++) {
+      for (let ri = 0; ri < size; ri++) {
+        callback(ri / max, gi / max, bi / max, offset);
+        offset += 3;
+      }
+    }
+  }
+}
+
+// Bake the colour stage over encoded RGB; values stay linear so the later
+// gamut fit still sees out-of-range colours.
+function bakeColorStage(ctx) {
+  const data = new Float32Array(BAKE_SIZE * BAKE_SIZE * BAKE_SIZE * 3);
+  const px = new Float64Array(3);
+  const lab = new Float64Array(3);
+  const tmp = new Float64Array(3);
+  forEachLatticePoint(BAKE_SIZE, (er, eg, eb, offset) => {
+    px[0] = decodeSrgb(er);
+    px[1] = decodeSrgb(eg);
+    px[2] = decodeSrgb(eb);
+    applyColorStage(px, ctx, lab, tmp);
+    data[offset] = px[0];
+    data[offset + 1] = px[1];
+    data[offset + 2] = px[2];
+  });
+  return { size: BAKE_SIZE, data, domainMin: UNIT_DOMAIN, domainMax: UNIT_DOMAIN_MAX };
+}
+
+/**
+ * Bake every per-pixel adjustment into a .cube-style 3D LUT (encoded sRGB in/out).
+ * Spatial effects (clarity, texture, vignette, grain, blur) cannot live in a LUT;
+ * tone ranges are applied globally.
+ */
+export function bakeAdjustmentsLut(adjustments, size = 33) {
+  const ctx = createPipelineContext(adjustments);
+  const data = new Float32Array(size * size * size * 3);
+  const px = new Float64Array(3);
+  const lab = new Float64Array(3);
+  const tmp = new Float64Array(3);
+  forEachLatticePoint(size, (er, eg, eb, offset) => {
+    px[0] = decodeSrgb(er);
+    px[1] = decodeSrgb(eg);
+    px[2] = decodeSrgb(eb);
+    applyBaseStage(px, ctx.stage);
+    if (ctx.toneTable) {
+      const light = encodeSrgb(luminanceOf(px[0], px[1], px[2]));
+      applyToneStage(px, ctx, light, light, null);
+    }
+    if (ctx.hasColorStage) applyColorStage(px, ctx, lab, tmp);
+    fitGamut(px);
+    if (ctx.invert) {
+      px[0] = 1 - px[0];
+      px[1] = 1 - px[1];
+      px[2] = 1 - px[2];
+    }
+    data[offset] = encodeSrgb(px[0]);
+    data[offset + 1] = encodeSrgb(px[1]);
+    data[offset + 2] = encodeSrgb(px[2]);
+  });
+  return { size, data, domainMin: UNIT_DOMAIN, domainMax: UNIT_DOMAIN_MAX };
+}
+
+export function applyColorPipeline(imageData, adjustments, { scale = 1, seed = 1, interactive = false, bake } = {}) {
+  const { data, width, height } = imageData;
+  const pixelCount = width * height;
+  const ctx = createPipelineContext(adjustments);
+  const needsLocal = Boolean(ctx.toneTable) || ctx.clarityAmount !== 0 || ctx.textureAmount !== 0;
 
   const px = new Float64Array(3);
   const lab = new Float64Array(3);
+  const tmp = new Float64Array(3);
 
   // Pass 1: perceptual lightness after the base stage, used to build the
   // edge-aware base layer for local tone mapping / clarity, and a fine base for texture.
@@ -1487,11 +1816,11 @@ export function applyColorPipeline(imageData, adjustments, { scale = 1, seed = 1
       px[0] = SRGB_TO_LINEAR[data[index]];
       px[1] = SRGB_TO_LINEAR[data[index + 1]];
       px[2] = SRGB_TO_LINEAR[data[index + 2]];
-      applyBaseStage(px, stage);
+      applyBaseStage(px, ctx.stage);
       lightness[p] = encodeSrgb(luminanceOf(px[0], px[1], px[2]));
     }
     const longEdge = Math.max(width, height);
-    if (toneTable || clarityAmount !== 0) {
+    if (ctx.toneTable || ctx.clarityAmount !== 0) {
       base = guidedFilterSelf(
         lightness,
         width,
@@ -1501,11 +1830,13 @@ export function applyColorPipeline(imageData, adjustments, { scale = 1, seed = 1
         interactive ? 384 : 768
       );
     }
-    if (textureAmount !== 0) {
+    if (ctx.textureAmount !== 0) {
       textureBase = boxMean(lightness, width, height, Math.max(1, Math.round(longEdge * 0.002)));
     }
   }
 
+  const shouldBake = bake ?? pixelCount >= BAKE_MIN_PIXELS;
+  const baked = ctx.hasColorStage && shouldBake ? bakeColorStage(ctx) : null;
   const cx = width / 2;
   const cy = height / 2;
 
@@ -1515,122 +1846,31 @@ export function applyColorPipeline(imageData, adjustments, { scale = 1, seed = 1
     px[0] = SRGB_TO_LINEAR[data[index]];
     px[1] = SRGB_TO_LINEAR[data[index + 1]];
     px[2] = SRGB_TO_LINEAR[data[index + 2]];
-    applyBaseStage(px, stage);
+    applyBaseStage(px, ctx.stage);
 
     if (needsLocal) {
-      const light = lightness[p];
-      let target = light;
-      if (base) {
-        const detail = light - base[p];
-        if (toneTable) target = sampleTable(toneTable, base[p]) + detail;
-        if (clarityAmount !== 0) target += clarityAmount * 4 * light * (1 - light) * detail;
-      }
-      if (textureBase) {
-        target += textureAmount * (0.4 + 2.4 * light * (1 - light)) * (light - textureBase[p]);
-      }
-      if (target !== light) {
-        const y = luminanceOf(px[0], px[1], px[2]);
-        const nextY = decodeSrgb(target);
-        if (y > 1e-6) {
-          const ratio = nextY / y;
-          px[0] *= ratio;
-          px[1] *= ratio;
-          px[2] *= ratio;
-        } else {
-          px[0] = nextY;
-          px[1] = nextY;
-          px[2] = nextY;
-        }
-        fitGamut(px);
-      }
+      applyToneStage(px, ctx, lightness[p], base ? base[p] : null, textureBase ? textureBase[p] : null);
     }
 
-    if (curveTables) {
-      px[0] = decodeSrgb(sampleTable(curveTables.r, encodeSrgb(px[0])));
-      px[1] = decodeSrgb(sampleTable(curveTables.g, encodeSrgb(px[1])));
-      px[2] = decodeSrgb(sampleTable(curveTables.b, encodeSrgb(px[2])));
+    if (baked) {
+      sampleCubeLut(baked, encodeSrgb(px[0]), encodeSrgb(px[1]), encodeSrgb(px[2]), px);
+    } else if (ctx.hasColorStage) {
+      applyColorStage(px, ctx, lab, tmp);
     }
 
-    if (needsLab) {
-      // HSL bands are selected on sRGB-encoded hue so they match the swatches
-      // and the colour picker; the edit itself happens in OKLCh.
-      let bandH = 0;
-      let bandS = 0;
-      let bandL = 0;
-      let hsl = null;
-      if (activeChannelAdjusts.length) {
-        hsl = rgbToHsl(encodeSrgb(px[0]) * 255, encodeSrgb(px[1]) * 255, encodeSrgb(px[2]) * 255);
-        let weightSum = 0;
-        for (const channel of activeChannelAdjusts) {
-          const weight = getHslChannelWeight(hsl.h, channel.center, channel.radius);
-          weightSum += weight;
-          bandH += weight * channel.h;
-          bandS += weight * channel.s;
-          bandL += weight * channel.l;
-        }
-        // Overlapping bands share the pixel; a lone band fades out at its edge.
-        const norm = weightSum > 1 ? 1 / weightSum : 1;
-        bandH *= norm;
-        bandS *= norm;
-        bandL *= norm;
-      }
-
-      linearToOklab(px[0], px[1], px[2], lab);
-      let L = lab[0];
-      let a = lab[1];
-      let b = lab[2];
-
-      let chromaScale = chromaBase;
-      if (vibrance !== 0) {
-        const satNorm = Math.min(1, Math.sqrt(a * a + b * b) / 0.25);
-        const skinProtect = vibrance > 0
-          ? 1 - 0.6 * (1 - pipelineSmoothstep(0, 35, hueDistance(Math.atan2(b, a) / DEG, SKIN_OKLCH_HUE)))
-          : 1;
-        chromaScale += vibrance * (1 - satNorm) ** 2 * skinProtect;
-      }
-      let rotation = hueShift;
-
-      if (hsl && (bandH !== 0 || bandS !== 0 || bandL !== 0)) {
-        const chromaGate = hslChromaGate(hsl.s);
-        rotation += bandH * chromaGate;
-        if (bandS < 0) chromaScale *= Math.max(0, 1 + bandS / 100);
-        else if (bandS > 0) chromaScale *= 1 + (bandS / 100) * chromaGate * (0.35 + 0.65 * (hsl.s / 100));
-        if (bandL !== 0) L = clamp(L + (bandL / 100) * 0.16 * hslLuminanceGate(hsl.s, hsl.l), 0, 1);
-      }
-
-      chromaScale = clamp(chromaScale, 0, 2.5);
-      a *= chromaScale;
-      b *= chromaScale;
-      if (rotation !== 0) {
-        const cos = Math.cos(rotation * DEG);
-        const sin = Math.sin(rotation * DEG);
-        const ra = a * cos - b * sin;
-        b = a * sin + b * cos;
-        a = ra;
-      }
-      oklabToLinear(L, a, b, px);
-    }
-
-    if (dehaze !== 0) {
-      const hazed = applyDehazeLinear(px[0], px[1], px[2], dehaze);
-      px[0] = hazed.r;
-      px[1] = hazed.g;
-      px[2] = hazed.b;
-    }
-
-    if (vignette !== 0) {
+    if (ctx.vignette !== 0) {
       // Lightroom convention: negative darkens the corners, positive lightens.
       const dx = (p % width + 0.5 - cx) / cx;
       const dy = (((p / width) | 0) + 0.5 - cy) / cy;
       const dist = Math.sqrt(dx * dx + dy * dy) / Math.SQRT2;
-      const shade = 1 + vignette * 0.7 * pipelineSmoothstep(0.35, 1, dist);
+      const shade = 1 + ctx.vignette * 0.7 * pipelineSmoothstep(0.35, 1, dist);
       px[0] *= shade;
       px[1] *= shade;
       px[2] *= shade;
     }
 
     fitGamut(px);
-    if (adjustments.invert) {
+    if (ctx.invert) {
       px[0] = 1 - px[0];
       px[1] = 1 - px[1];
       px[2] = 1 - px[2];
@@ -1644,7 +1884,7 @@ export function applyColorPipeline(imageData, adjustments, { scale = 1, seed = 1
     data,
     width,
     height,
-    num("grain"),
+    Number(adjustments.grain) || 0,
     adjustments.grainSize ?? 50,
     adjustments.grainRoughness ?? 50,
     seed,
@@ -1825,7 +2065,9 @@ export function mergePresetAdjustments(currentAdjustments, presetAdjustments = {
     }),
     curves: presetAdjustments.curves
       ? JSON.parse(JSON.stringify(presetAdjustments.curves))
-      : defaults.curves
+      : defaults.curves,
+    grading: normalizeGrading(presetAdjustments.grading),
+    lut: normalizeLutRef(presetAdjustments.lut)
   };
 }
 
@@ -1842,7 +2084,79 @@ export function adjustmentsMatchPreset(currentAdjustments, presetAdjustments = {
   }
   if (JSON.stringify(currentAdjustments?.hsl) !== JSON.stringify(expected.hsl)) return false;
   if (JSON.stringify(currentAdjustments?.curves) !== JSON.stringify(expected.curves)) return false;
+  if (JSON.stringify(normalizeGrading(currentAdjustments?.grading)) !== JSON.stringify(expected.grading)) return false;
+  const currentLut = normalizeLutRef(currentAdjustments?.lut);
+  if (currentLut?.id !== expected.lut?.id) return false;
+  if (currentLut && Math.abs(currentLut.amount - expected.lut.amount) > 0.5) return false;
   return true;
+}
+
+// Slider ranges used when scaling a preset by its Amount (0–150%).
+const PRESET_SCALE_RANGES = {
+  luminance: [-100, 100],
+  contrast: [-100, 100],
+  temperature: [-100, 100],
+  tint: [-100, 100],
+  vibrance: [-100, 100],
+  saturation: [-100, 100],
+  hue: [-180, 180],
+  highlights: [-100, 100],
+  shadows: [-100, 100],
+  whites: [-100, 100],
+  blacks: [-100, 100],
+  grain: [0, 100],
+  clarity: [-100, 100],
+  dehaze: [-100, 100],
+  texture: [-100, 100],
+  vignette: [-100, 100],
+  blur: [0, 20]
+};
+
+export const PRESET_AMOUNT_MAX = 150;
+
+/**
+ * Scale a preset's deviation from neutral by `amount` percent. Shape settings
+ * (grain size/roughness, grading hues) keep their value; curves blend toward identity.
+ */
+export function scalePresetAdjustments(presetAdjustments = {}, amount = 100) {
+  const k = clamp(Number(amount), 0, PRESET_AMOUNT_MAX) / 100;
+  if (k === 1) return presetAdjustments;
+  const out = { ...presetAdjustments };
+  for (const [key, [min, max]] of Object.entries(PRESET_SCALE_RANGES)) {
+    if (typeof out[key] !== "number") continue;
+    const scaled = out[key] * k;
+    out[key] = clamp(key === "blur" ? Math.round(scaled * 2) / 2 : Math.round(scaled), min, max);
+  }
+  if (out.hsl) {
+    out.hsl = Object.fromEntries(Object.entries(out.hsl).map(([id, entry]) => [id, {
+      h: clamp(Math.round((Number(entry?.h) || 0) * k), -180, 180),
+      s: clamp(Math.round((Number(entry?.s) || 0) * k), -100, 100),
+      l: clamp(Math.round((Number(entry?.l) || 0) * k), -100, 100)
+    }]));
+  }
+  if (out.curves) {
+    out.curves = Object.fromEntries(Object.entries(out.curves).map(([channel, points]) => {
+      const scaled = (points || []).map(pt => ({ x: pt.x, y: clamp(Math.round(pt.x + (pt.y - pt.x) * k), 0, 255) }));
+      // A curve scaled flat collapses back to the default two-point identity.
+      const identity = scaled.every(pt => pt.y === pt.x);
+      return [channel, identity ? DEFAULT_CURVES.rgb.map(pt => ({ ...pt })) : scaled];
+    }));
+  }
+  if (out.grading) {
+    const grading = normalizeGrading(out.grading);
+    for (const zone of GRADING_ZONES) {
+      grading[zone].s = clamp(Math.round(grading[zone].s * k), 0, 100);
+      if (grading[zone].s === 0) grading[zone].h = 0;
+    }
+    grading.balance = clamp(Math.round(grading.balance * k), -100, 100);
+    out.grading = grading;
+  }
+  if (out.lut) {
+    const lut = normalizeLutRef(out.lut);
+    out.lut = lut ? { ...lut, amount: clamp(Math.round(lut.amount * k), 0, 100) } : null;
+  }
+  if (out.invert && k === 0) out.invert = false;
+  return out;
 }
 
 export function findActivePresetId(adjustments, presets = PRESETS) {

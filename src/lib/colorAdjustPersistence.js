@@ -1,7 +1,9 @@
 import {
   cloneDefaultAdjustments,
   DEFAULT_CURVES,
-  normalizeHslAdjustments
+  normalizeGrading,
+  normalizeHslAdjustments,
+  normalizeLutRef
 } from "./imageAdjustments";
 import { DEFAULT_HEALING_BRUSH_SIZE } from "./healingBrush";
 
@@ -27,6 +29,8 @@ export function normalizePersistedColorState(state) {
     adjustments.curves = source.curves
       ? JSON.parse(JSON.stringify(source.curves))
       : DEFAULT_CURVES;
+    adjustments.grading = normalizeGrading(source.grading);
+    adjustments.lut = normalizeLutRef(source.lut);
   }
 
   return {
@@ -70,6 +74,8 @@ export function mergeColorAdjustGroups(targetState, sourceState, groups = COLOR_
   }
   if (groups.includes("hsl")) {
     next.adjustments.hsl = normalizeHslAdjustments(source.adjustments.hsl);
+    next.adjustments.grading = normalizeGrading(source.adjustments.grading);
+    next.adjustments.lut = normalizeLutRef(source.adjustments.lut);
   }
   if (groups.includes("effects")) {
     next.adjustments.grain = source.adjustments.grain;

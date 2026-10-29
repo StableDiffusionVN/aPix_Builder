@@ -69,6 +69,15 @@ function preset(id, name, group, adjustments) {
   return { id, name, group, adjustments };
 }
 
+// Matte look: lift the black point / soften white with the RGB curve
+// (Blacks no longer greys out pure black).
+function matteCurves(black, white = 255) {
+  return {
+    ...DEFAULT_CURVES,
+    rgb: [{ x: 0, y: black }, { x: 64, y: Math.round(black + (64 - black) * 0.82) }, { x: 255, y: white }]
+  };
+}
+
 export const PRESETS = [
   preset("original", "Original", "neutral", {}),
 
@@ -213,7 +222,8 @@ export const PRESETS = [
     grain: 14,
     grainSize: 58,
     grainRoughness: 48,
-    vignette: -12
+    vignette: -12,
+    curves: matteCurves(18, 246)
   }),
   preset("fade", "Matte Fade", "creative", {
     luminance: 3,
@@ -225,7 +235,8 @@ export const PRESETS = [
     blacks: 14,
     clarity: -8,
     grain: 8,
-    vignette: -6
+    vignette: -6,
+    curves: matteCurves(26, 248)
   }),
   preset("cross-process", "Cross Process", "creative", {
     luminance: 2,
@@ -314,7 +325,8 @@ export const PRESETS = [
     shadows: 6,
     clarity: -3,
     grain: 10,
-    grainSize: 52
+    grainSize: 52,
+    curves: matteCurves(24, 250)
   }),
   preset("bw-silver", "Silver Gelatin", "bw", {
     vibrance: -100,
@@ -681,12 +693,16 @@ export function applyHslChannelMixRgb(r, g, b, channelAdjusts) {
   });
   if (weightSum <= 0) return { r, g, b };
 
-  let outR = 0;
-  let outG = 0;
-  let outB = 0;
+  // Only normalise when bands overlap (sum > 1); otherwise the remainder keeps
+  // the original colour so a lone band fades out smoothly at its edge.
+  const norm = weightSum > 1 ? 1 / weightSum : 1;
+  const keep = Math.max(0, 1 - weightSum * norm);
+  let outR = r * keep;
+  let outG = g * keep;
+  let outB = b * keep;
 
   for (let i = 0; i < channelAdjusts.length; i++) {
-    const weight = weights[i] / weightSum;
+    const weight = weights[i] * norm;
     if (weight <= 0) continue;
     const adjust = channelAdjusts[i];
     if (adjust.h === 0 && adjust.s === 0 && adjust.l === 0) {
@@ -729,86 +745,14 @@ function getPipelineContext(canvas) {
 }
 
 export function getSplineLut(points) {
+  const curve = buildMonotoneCurve(
+    (points || []).map(pt => ({ x: pt.x / 255, y: pt.y / 255 })),
+    255
+  );
   const lut = new Uint8Array(256);
-  const n = points.length;
-
-  if (n === 2) {
-    const p0 = points[0];
-    const p1 = points[1];
-    const dx = p1.x - p0.x || 1;
-    for (let i = 0; i < 256; i++) {
-      if (i < p0.x) {
-        lut[i] = p0.y;
-      } else if (i > p1.x) {
-        lut[i] = p1.y;
-      } else {
-        const t = (i - p0.x) / dx;
-        lut[i] = clamp(Math.round(p0.y + t * (p1.y - p0.y)), 0, 255);
-      }
-    }
-    return lut;
-  }
-
-  const h = new Array(n - 1);
-  for (let i = 0; i < n - 1; i++) {
-    h[i] = points[i + 1].x - points[i].x || 1;
-  }
-
-  const a = new Array(n);
-  for (let i = 0; i < n; i++) {
-    a[i] = points[i].y;
-  }
-
-  const alpha = new Array(n - 1);
-  for (let i = 1; i < n - 1; i++) {
-    alpha[i] = (3 / h[i]) * (a[i + 1] - a[i]) - (3 / h[i - 1]) * (a[i] - a[i - 1]);
-  }
-
-  const l = new Array(n);
-  const mu = new Array(n);
-  const z = new Array(n);
-
-  l[0] = 1;
-  mu[0] = 0;
-  z[0] = 0;
-
-  for (let i = 1; i < n - 1; i++) {
-    l[i] = 2 * (points[i + 1].x - points[i - 1].x) - h[i - 1] * mu[i - 1];
-    mu[i] = h[i] / l[i];
-    z[i] = (alpha[i] - h[i - 1] * z[i - 1]) / l[i];
-  }
-
-  l[n - 1] = 1;
-  z[n - 1] = 0;
-
-  const b = new Array(n);
-  const c = new Array(n);
-  const d = new Array(n);
-
-  c[n - 1] = 0;
-
-  for (let j = n - 2; j >= 0; j--) {
-    c[j] = z[j] - mu[j] * c[j + 1];
-    b[j] = (a[j + 1] - a[j]) / h[j] - (h[j] * (c[j + 1] + 2 * c[j])) / 3;
-    d[j] = (c[j + 1] - c[j]) / (3 * h[j]);
-  }
-
-  let j = 0;
   for (let i = 0; i < 256; i++) {
-    if (i < points[0].x) {
-      lut[i] = points[0].y;
-    } else if (i > points[n - 1].x) {
-      lut[i] = points[n - 1].y;
-    } else {
-      while (j < n - 1 && i > points[j + 1].x) {
-        j++;
-      }
-      const dx = i - points[j].x;
-      const val = a[j] + b[j] * dx + c[j] * dx * dx + d[j] * dx * dx * dx;
-      lut[i] = clamp(Math.round(val), 0, 255);
-    }
+    lut[i] = clamp(Math.round(curve[i] * 255), 0, 255);
   }
-
   return lut;
 }
 
@@ -1020,29 +964,54 @@ export function drawHistogram(canvas, histData) {
   context.globalCompositeOperation = "source-over";
 }
 
+// ---------------------------------------------------------------------------
+// Color pipeline. Values stay float end-to-end (no 8-bit round trips):
+//   linear-light sRGB  → white balance, exposure, mixing, dehaze, vignette
+//   sRGB-encoded       → contrast, tone ranges, curves (perceptual spacing)
+//   OKLab / OKLCh      → saturation, vibrance, hue (lightness-preserving)
+// ---------------------------------------------------------------------------
+
+const TABLE_SIZE = 4096;
 const SRGB_TO_LINEAR = new Float32Array(256);
-const LINEAR_TO_SRGB = new Uint8Array(4096);
+const ENCODE_TABLE = new Float32Array(TABLE_SIZE + 1);
+const DECODE_TABLE = new Float32Array(TABLE_SIZE + 1);
+
+function srgbEncodeExact(c) {
+  return c <= 0.0031308 ? c * 12.92 : 1.055 * (c ** (1 / 2.4)) - 0.055;
+}
+
+function srgbDecodeExact(c) {
+  return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+}
 
 for (let i = 0; i < 256; i++) {
-  const c = i / 255;
-  SRGB_TO_LINEAR[i] = c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  SRGB_TO_LINEAR[i] = srgbDecodeExact(i / 255);
 }
 
-for (let i = 0; i < 4096; i++) {
-  const linear = i / 4095;
-  const srgb = linear <= 0.0031308
-    ? linear * 12.92
-    : 1.055 * (linear ** (1 / 2.4)) - 0.055;
-  LINEAR_TO_SRGB[i] = clamp(Math.round(srgb * 255), 0, 255);
+for (let i = 0; i <= TABLE_SIZE; i++) {
+  ENCODE_TABLE[i] = srgbEncodeExact(i / TABLE_SIZE);
+  DECODE_TABLE[i] = srgbDecodeExact(i / TABLE_SIZE);
 }
 
-function srgbByteToLinear(value) {
-  return SRGB_TO_LINEAR[clamp(Math.round(value), 0, 255)];
+// Linear interpolation into a [0,1] → value table; clamps the input (NaN → 0).
+function sampleTable(table, value) {
+  if (!(value > 0)) return table[0];
+  if (value >= 1) return table[TABLE_SIZE];
+  const pos = value * TABLE_SIZE;
+  const i = pos | 0;
+  return table[i] + (table[i + 1] - table[i]) * (pos - i);
+}
+
+export function encodeSrgb(linear) {
+  return sampleTable(ENCODE_TABLE, linear);
+}
+
+export function decodeSrgb(encoded) {
+  return sampleTable(DECODE_TABLE, encoded);
 }
 
 function linearToSrgbByte(value) {
-  const normalized = clamp(value, 0, 1);
-  return LINEAR_TO_SRGB[clamp(Math.round(normalized * 4095), 0, 4095)];
+  return Math.round(encodeSrgb(value) * 255);
 }
 
 function pipelineSmoothstep(edge0, edge1, x) {
@@ -1050,122 +1019,333 @@ function pipelineSmoothstep(edge0, edge1, x) {
   return t * t * (3 - 2 * t);
 }
 
-function mulberry32(seed) {
-  let state = seed >>> 0;
-  return () => {
-    state = (state + 0x6D2B79F5) >>> 0;
-    let t = Math.imul(state ^ (state >>> 15), 1 | state);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
+function luminanceOf(r, g, b) {
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }
 
-function applyWhiteBalanceLinear(r, g, b, temperature, tint) {
-  const temp = temperature / 100;
-  const tintNorm = tint / 100;
+/**
+ * Monotone cubic Hermite (Fritsch–Carlson) through `points` ({x,y} in 0..1).
+ * Unlike a natural spline it never overshoots between points, so curves cannot
+ * ring, invert or clip on their own. Returns TABLE_SIZE+1 samples over x ∈ [0,1].
+ */
+export function buildMonotoneCurve(points, size = TABLE_SIZE) {
+  const sorted = (points || [])
+    .filter(pt => Number.isFinite(pt?.x) && Number.isFinite(pt?.y))
+    .map(pt => ({ x: pt.x, y: pt.y }))
+    .sort((a, b) => a.x - b.x);
+  const pts = [];
+  for (const pt of sorted) {
+    if (pts.length && Math.abs(pts[pts.length - 1].x - pt.x) < 1e-6) pts[pts.length - 1] = pt;
+    else pts.push(pt);
+  }
+  const out = new Float32Array(size + 1);
+  const n = pts.length;
+  if (n === 0) {
+    for (let i = 0; i <= size; i++) out[i] = i / size;
+    return out;
+  }
+  if (n === 1) {
+    out.fill(pts[0].y);
+    return out;
+  }
+
+  const dx = new Float64Array(n - 1);
+  const slope = new Float64Array(n - 1);
+  for (let i = 0; i < n - 1; i++) {
+    dx[i] = pts[i + 1].x - pts[i].x;
+    slope[i] = (pts[i + 1].y - pts[i].y) / dx[i];
+  }
+  const m = new Float64Array(n);
+  m[0] = slope[0];
+  m[n - 1] = slope[n - 2];
+  for (let i = 1; i < n - 1; i++) {
+    m[i] = slope[i - 1] * slope[i] <= 0 ? 0 : (slope[i - 1] + slope[i]) / 2;
+  }
+  for (let i = 0; i < n - 1; i++) {
+    if (slope[i] === 0) {
+      m[i] = 0;
+      m[i + 1] = 0;
+      continue;
+    }
+    const a = m[i] / slope[i];
+    const b = m[i + 1] / slope[i];
+    const s = a * a + b * b;
+    if (s > 9) {
+      const t = 3 / Math.sqrt(s);
+      m[i] = t * a * slope[i];
+      m[i + 1] = t * b * slope[i];
+    }
+  }
+
+  let j = 0;
+  for (let k = 0; k <= size; k++) {
+    const x = k / size;
+    if (x <= pts[0].x) {
+      out[k] = pts[0].y;
+      continue;
+    }
+    if (x >= pts[n - 1].x) {
+      out[k] = pts[n - 1].y;
+      continue;
+    }
+    while (j < n - 2 && x > pts[j + 1].x) j++;
+    const h = dx[j];
+    const t = (x - pts[j].x) / h;
+    const t2 = t * t;
+    const t3 = t2 * t;
+    out[k] = (2 * t3 - 3 * t2 + 1) * pts[j].y
+      + (t3 - 2 * t2 + t) * h * m[j]
+      + (-2 * t3 + 3 * t2) * pts[j + 1].y
+      + (t3 - t2) * h * m[j + 1];
+  }
+  return out;
+}
+
+const MID_GREY = srgbEncodeExact(0.18);
+
+// Per-channel S-curve in encoded space pivoting on 18% grey (like LR/ACR):
+// mid-tones keep their brightness, contrast also lifts saturation a little.
+function buildContrastTable(contrast) {
+  if (!contrast) return null;
+  const c = (contrast / 100) * 0.12;
+  const p = MID_GREY;
+  return buildMonotoneCurve([
+    { x: 0, y: 0 },
+    { x: p * 0.5, y: p * 0.5 - c },
+    { x: p, y: p },
+    { x: (1 + p) * 0.5, y: (1 + p) * 0.5 + c },
+    { x: 1, y: 1 }
+  ]);
+}
+
+// Highlights/Shadows/Whites/Blacks as one monotone tone curve. Pure black and
+// white only move through Blacks/Whites, so Shadows never greys out the blacks.
+function buildToneTable({ highlights = 0, shadows = 0, whites = 0, blacks = 0 }) {
+  if (!highlights && !shadows && !whites && !blacks) return null;
+  const hi = highlights / 100;
+  const sh = shadows / 100;
+  const wh = whites / 100;
+  const bl = blacks / 100;
+  const xs = [0, 0.12, 0.3, 0.5, 0.7, 0.88, 1];
+  const ys = [
+    Math.max(0, bl * 0.05),
+    0.12 + bl * 0.07 + sh * 0.05,
+    0.3 + sh * 0.13 + bl * 0.02,
+    0.5 + (sh + hi) * 0.03,
+    0.7 + hi * 0.13 + wh * 0.02,
+    0.88 + wh * 0.07 + hi * 0.05,
+    Math.min(1, 1 + wh * 0.05)
+  ];
+  for (let i = 0; i < ys.length; i++) {
+    ys[i] = clamp(ys[i], i ? ys[i - 1] : 0, 1);
+  }
+  return buildMonotoneCurve(xs.map((x, i) => ({ x, y: ys[i] })));
+}
+
+function buildCurveTables(curves) {
+  const toUnit = points => (points || DEFAULT_CURVES.rgb).map(pt => ({ x: pt.x / 255, y: pt.y / 255 }));
+  const master = buildMonotoneCurve(toUnit(curves.rgb));
+  const compose = points => {
+    const channel = buildMonotoneCurve(toUnit(points));
+    const out = new Float32Array(TABLE_SIZE + 1);
+    for (let i = 0; i <= TABLE_SIZE; i++) out[i] = sampleTable(master, channel[i]);
+    return out;
+  };
+  return { r: compose(curves.red), g: compose(curves.green), b: compose(curves.blue) };
+}
+
+// Box mean with exact edge normalisation (prefix sums, O(n) for any radius).
+function boxMean(src, width, height, radius) {
+  const out = new Float32Array(width * height);
+  if (radius < 1) {
+    out.set(src);
+    return out;
+  }
+  const tmp = new Float32Array(width * height);
+  const rowSum = new Float64Array(width + 1);
+  for (let y = 0; y < height; y++) {
+    const row = y * width;
+    for (let x = 0; x < width; x++) rowSum[x + 1] = rowSum[x] + src[row + x];
+    for (let x = 0; x < width; x++) {
+      const lo = Math.max(0, x - radius);
+      const hi = Math.min(width, x + radius + 1);
+      tmp[row + x] = (rowSum[hi] - rowSum[lo]) / (hi - lo);
+    }
+  }
+  const colSum = new Float64Array(height + 1);
+  for (let x = 0; x < width; x++) {
+    for (let y = 0; y < height; y++) colSum[y + 1] = colSum[y] + tmp[y * width + x];
+    for (let y = 0; y < height; y++) {
+      const lo = Math.max(0, y - radius);
+      const hi = Math.min(height, y + radius + 1);
+      out[y * width + x] = (colSum[hi] - colSum[lo]) / (hi - lo);
+    }
+  }
+  return out;
+}
+
+function downsamplePlane(src, width, height, factor) {
+  const w = Math.max(1, Math.ceil(width / factor));
+  const h = Math.max(1, Math.ceil(height / factor));
+  const out = new Float32Array(w * h);
+  const count = new Float32Array(w * h);
+  for (let y = 0; y < height; y++) {
+    const ly = Math.min(h - 1, (y / factor) | 0);
+    for (let x = 0; x < width; x++) {
+      const li = ly * w + Math.min(w - 1, (x / factor) | 0);
+      out[li] += src[y * width + x];
+      count[li]++;
+    }
+  }
+  for (let i = 0; i < out.length; i++) out[i] /= count[i] || 1;
+  return { data: out, width: w, height: h };
+}
+
+function upsampleBilinear(src, sw, sh, width, height, factor) {
+  const out = new Float32Array(width * height);
+  for (let y = 0; y < height; y++) {
+    const fy = clamp((y + 0.5) / factor - 0.5, 0, sh - 1);
+    const y0 = fy | 0;
+    const y1 = Math.min(sh - 1, y0 + 1);
+    const ty = fy - y0;
+    for (let x = 0; x < width; x++) {
+      const fx = clamp((x + 0.5) / factor - 0.5, 0, sw - 1);
+      const x0 = fx | 0;
+      const x1 = Math.min(sw - 1, x0 + 1);
+      const tx = fx - x0;
+      const top = src[y0 * sw + x0] + (src[y0 * sw + x1] - src[y0 * sw + x0]) * tx;
+      const bottom = src[y1 * sw + x0] + (src[y1 * sw + x1] - src[y1 * sw + x0]) * tx;
+      out[y * width + x] = top + (bottom - top) * ty;
+    }
+  }
+  return out;
+}
+
+/**
+ * Self-guided edge-preserving smoothing (He et al., fast guided filter): the
+ * a/b coefficients are solved on a downsampled plane and upsampled, so cost and
+ * memory stay bounded and preview/export see the same base layer.
+ */
+function guidedFilterSelf(plane, width, height, radius, eps, workEdge) {
+  const factor = Math.max(1, Math.ceil(Math.max(width, height) / workEdge));
+  const low = factor > 1 ? downsamplePlane(plane, width, height, factor) : { data: plane, width, height };
+  const r = Math.max(1, Math.round(radius / factor));
+  const n = low.width * low.height;
+  const meanI = boxMean(low.data, low.width, low.height, r);
+  const squares = new Float32Array(n);
+  for (let i = 0; i < n; i++) squares[i] = low.data[i] * low.data[i];
+  const meanII = boxMean(squares, low.width, low.height, r);
+  const a = squares;
+  const b = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const variance = Math.max(0, meanII[i] - meanI[i] * meanI[i]);
+    a[i] = variance / (variance + eps);
+    b[i] = meanI[i] - a[i] * meanI[i];
+  }
+  let meanA = boxMean(a, low.width, low.height, r);
+  let meanB = boxMean(b, low.width, low.height, r);
+  if (factor > 1) {
+    meanA = upsampleBilinear(meanA, low.width, low.height, width, height, factor);
+    meanB = upsampleBilinear(meanB, low.width, low.height, width, height, factor);
+  }
+  const out = new Float32Array(width * height);
+  for (let i = 0; i < out.length; i++) out[i] = meanA[i] * plane[i] + meanB[i];
+  return out;
+}
+
+// Pull out-of-range colours back toward their own luminance (keeps hue + Y)
+// instead of clipping each channel, which shifts hue in bright saturated areas.
+function fitGamut(px) {
+  const y = luminanceOf(px[0], px[1], px[2]);
+  if (y >= 1) {
+    px[0] = 1; px[1] = 1; px[2] = 1;
+    return;
+  }
+  if (y <= 0) {
+    px[0] = 0; px[1] = 0; px[2] = 0;
+    return;
+  }
+  let t = 1;
+  for (let c = 0; c < 3; c++) {
+    const v = px[c];
+    if (v > 1) t = Math.min(t, (1 - y) / (v - y));
+    else if (v < 0) t = Math.min(t, y / (y - v));
+  }
+  if (t < 1) {
+    for (let c = 0; c < 3; c++) px[c] = y + (px[c] - y) * t;
+  }
+}
+
+function linearToOklab(r, g, b, out) {
+  const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
+  const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
+  const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
+  out[0] = 0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s;
+  out[1] = 1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s;
+  out[2] = 0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s;
+}
+
+function oklabToLinear(L, a, b, out) {
+  const l_ = L + 0.3963377774 * a + 0.2158037573 * b;
+  const m_ = L - 0.1055613458 * a - 0.0638541728 * b;
+  const s_ = L - 0.0894841775 * a - 1.291485548 * b;
+  const l = l_ * l_ * l_;
+  const m = m_ * m_ * m_;
+  const s = s_ * s_ * s_;
+  out[0] = 4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s;
+  out[1] = -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s;
+  out[2] = -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s;
+}
+
+function buildBaseStage(adjustments) {
+  const temp = (adjustments.temperature || 0) / 100;
+  const tint = (adjustments.tint || 0) / 100;
+  let wbR = 1 + temp * 0.18;
+  let wbG = 1 + tint * 0.1 - temp * 0.025;
+  let wbB = 1 - temp * 0.18;
+  // Normalise so white balance shifts colour without changing brightness.
+  const wbY = luminanceOf(wbR, wbG, wbB) || 1;
+  wbR /= wbY;
+  wbG /= wbY;
+  wbB /= wbY;
+  // Slider -100..+100 maps to 0..220% gain (legacy scale); above 100% a
+  // C1 shoulder rolls highlights off instead of clipping them hard.
+  const gain = clamp(1 + (adjustments.luminance || 0) / 100, 0, 2.2);
   return {
-    r: r * (1 + temp * 0.18),
-    g: g * (1 + tintNorm * 0.1 - temp * 0.025),
-    b: b * (1 - temp * 0.18)
+    wbR,
+    wbG,
+    wbB,
+    gain,
+    knee: gain > 1 ? Math.max(0, 2 - gain) : 1,
+    contrastTable: buildContrastTable(adjustments.contrast || 0)
   };
 }
 
-function applyExposureLinear(r, g, b, luminance) {
-  if (luminance === 0) return { r, g, b };
-  // Slider -100..+100 maps to 0..220% brightness (legacy CSS filter scale).
-  // EV-style 2^(L/20) blew highlights ~4× faster at small values (+10 → +41% vs +10%).
-  const gain = clamp(1 + luminance / 100, 0, 2.2);
-  return { r: r * gain, g: g * gain, b: b * gain };
+function shoulder(v, gain, knee) {
+  if (v <= knee) return v;
+  const t = Math.min(1, (v - knee) / (gain - knee));
+  return knee + (1 - knee) * (1 - (1 - t) * (1 - t));
 }
 
-function applyContrastLinear(r, g, b, contrast) {
-  if (contrast === 0) return { r, g, b };
-  // Soft contrast around mid-gray; +100 ≈ 140% (legacy CSS hit 200% in display filter space).
-  const factor = 1 + (contrast / 100) * 0.4;
-  const pivot = 0.5;
-  const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-  const newLuma = pivot + (luma - pivot) * factor;
-  if (luma <= 1e-6) return { r: newLuma, g: newLuma, b: newLuma };
-  const scale = newLuma / luma;
-  return { r: r * scale, g: g * scale, b: b * scale };
-}
-
-function perceptualLumaFromLinear(r, g, b) {
-  const rs = linearToSrgbByte(r) / 255;
-  const gs = linearToSrgbByte(g) / 255;
-  const bs = linearToSrgbByte(b) / 255;
-  return clamp(0.299 * rs + 0.587 * gs + 0.114 * bs, 0, 1);
-}
-
-function applyToneRangesLinear(r, g, b, highlights, shadows, whites, blacks) {
-  const luma = clamp(0.2126 * r + 0.7152 * g + 0.0722 * b, 0, 1);
-  const y = perceptualLumaFromLinear(r, g, b);
-
-  // Legacy additive tone shifts (~45/255 max) with soft power-curve masks.
-  const highlightsVal = highlights * 0.0016;
-  const shadowsVal = shadows * 0.0016;
-  const whitesVal = whites * 0.0019;
-  const blacksVal = blacks * 0.0019;
-
-  let delta = 0;
-  if (highlights !== 0 && y > 0.2) {
-    delta += highlightsVal * ((y - 0.2) / 0.8) ** 1.5;
+function applyBaseStage(px, stage) {
+  let r = px[0] * stage.wbR * stage.gain;
+  let g = px[1] * stage.wbG * stage.gain;
+  let b = px[2] * stage.wbB * stage.gain;
+  if (stage.gain > 1) {
+    r = shoulder(r, stage.gain, stage.knee);
+    g = shoulder(g, stage.gain, stage.knee);
+    b = shoulder(b, stage.gain, stage.knee);
   }
-  if (shadows !== 0 && y < 0.8) {
-    delta += shadowsVal * ((0.8 - y) / 0.8) ** 1.5;
+  px[0] = r;
+  px[1] = g;
+  px[2] = b;
+  fitGamut(px);
+  const table = stage.contrastTable;
+  if (table) {
+    px[0] = decodeSrgb(sampleTable(table, encodeSrgb(px[0])));
+    px[1] = decodeSrgb(sampleTable(table, encodeSrgb(px[1])));
+    px[2] = decodeSrgb(sampleTable(table, encodeSrgb(px[2])));
   }
-  if (whites !== 0 && y > 0.5) {
-    delta += whitesVal * ((y - 0.5) / 0.5) ** 2;
-  }
-  if (blacks !== 0 && y < 0.4) {
-    delta += blacksVal * ((0.4 - y) / 0.4) ** 2;
-  }
-
-  if (Math.abs(delta) < 1e-8) return { r, g, b };
-  const newLuma = clamp(luma + delta, 0, 1);
-  if (luma <= 1e-6) return { r: newLuma, g: newLuma, b: newLuma };
-  const scale = newLuma / luma;
-  return { r: r * scale, g: g * scale, b: b * scale };
-}
-
-function applySaturationAndVibranceLinear(r, g, b, saturation, vibrance) {
-  if (saturation === 0 && vibrance === 0) return { r, g, b };
-  const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-
-  // -100 → 0 (full B&W), 0 → 1 (unchanged). Positive boost stays softer than desat.
-  const desatFloor = saturation <= 0 ? Math.max(0, 1 + saturation / 100) : 0;
-  let satFactor = saturation < 0
-    ? 1 + saturation / 100
-    : 1 + saturation / 120;
-
-  if (vibrance !== 0) {
-    const hsl = rgbToHsl(r * 255, g * 255, b * 255);
-    const satNorm = hsl.s / 100;
-    const skinProtect = 1 - pipelineSmoothstep(
-      0,
-      24,
-      hueDistance(hsl.h, 28)
-    ) * 0.65;
-    const vibranceDivisor = vibrance < 0 ? 100 : 120;
-    const vibranceExtra = (vibrance / vibranceDivisor) * (1 - satNorm) ** 2 * skinProtect;
-    satFactor += vibranceExtra;
-  }
-
-  satFactor = clamp(satFactor, desatFloor, 2.2);
-  if (satFactor <= 1e-6) return { r: luma, g: luma, b: luma };
-
-  return {
-    r: luma + (r - luma) * satFactor,
-    g: luma + (g - luma) * satFactor,
-    b: luma + (b - luma) * satFactor
-  };
-}
-
-function applyGlobalHueLinear(r, g, b, hue) {
-  if (hue === 0) return { r, g, b };
-  const hsl = rgbToHsl(r * 255, g * 255, b * 255);
-  const rgb = hslToRgb(hsl.h + hue, hsl.s, hsl.l);
-  return { r: rgb.r / 255, g: rgb.g / 255, b: rgb.b / 255 };
 }
 
 function applyDehazeLinear(r, g, b, dehaze) {
@@ -1176,7 +1356,7 @@ function applyDehazeLinear(r, g, b, dehaze) {
   const contrast = 1 + amount * 0.55 * hazeWeight;
   const blackShift = -amount * 0.025;
   const sat = 1 + amount * 0.22 * hazeWeight;
-  const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  const luma = luminanceOf(r, g, b);
   let nr = luma + (r - luma) * sat;
   let ng = luma + (g - luma) * sat;
   let nb = luma + (b - luma) * sat;
@@ -1186,116 +1366,39 @@ function applyDehazeLinear(r, g, b, dehaze) {
   return { r: nr, g: ng, b: nb };
 }
 
-function buildCurveLuts(curves) {
-  const lutRGB = getSplineLut(curves.rgb);
-  const lutRedOnly = getSplineLut(curves.red);
-  const lutGreenOnly = getSplineLut(curves.green);
-  const lutBlueOnly = getSplineLut(curves.blue);
-  const lutR = new Uint8Array(256);
-  const lutG = new Uint8Array(256);
-  const lutB = new Uint8Array(256);
-  for (let i = 0; i < 256; i++) {
-    lutR[i] = lutRGB[lutRedOnly[i]];
-    lutG[i] = lutRGB[lutGreenOnly[i]];
-    lutB[i] = lutRGB[lutBlueOnly[i]];
-  }
-  return { lutR, lutG, lutB };
+// Integer hash → [-1, 1); stable per (x, y, seed), no per-pixel PRNG allocation.
+function hashNoise(x, y, seed) {
+  let h = Math.imul(x | 0, 374761393) ^ Math.imul(y | 0, 668265263) ^ Math.imul(seed | 0, 2246822519);
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  h ^= h >>> 16;
+  return ((h >>> 0) / 4294967296) * 2 - 1;
 }
 
-function applyCurveLinear(r, g, b, lutR, lutG, lutB) {
-  return {
-    r: srgbByteToLinear(lutR[linearToSrgbByte(r)]),
-    g: srgbByteToLinear(lutG[linearToSrgbByte(g)]),
-    b: srgbByteToLinear(lutB[linearToSrgbByte(b)])
-  };
-}
-
-function boxBlurRgb(source, target, width, height, radius) {
-  const temp = new Float32Array(width * height * 3);
-  const window = radius * 2 + 1;
-  for (let c = 0; c < 3; c++) {
-    for (let y = 0; y < height; y++) {
-      for (let x = 0; x < width; x++) {
-        let sum = 0;
-        for (let k = -radius; k <= radius; k++) {
-          sum += source[(y * width + clamp(x + k, 0, width - 1)) * 4 + c];
-        }
-        temp[(y * width + x) * 3 + c] = sum / window;
-      }
-    }
-    for (let y = 0; y < height; y++) {
-      for (let x = 0; x < width; x++) {
-        let sum = 0;
-        for (let k = -radius; k <= radius; k++) {
-          sum += temp[(clamp(y + k, 0, height - 1) * width + x) * 3 + c];
-        }
-        target[(y * width + x) * 4 + c] = sum / window;
-      }
-    }
-  }
-}
-
-function applyClarityPass(data, width, height, clarity, scale) {
-  if (clarity === 0) return;
-  const radius = Math.max(1, Math.round((Math.abs(clarity) / 100) * 10 * Math.max(scale, 0.35)));
-  const strength = clarity / 100 * 0.75;
-  const original = new Uint8ClampedArray(data);
-  const blurred = new Float32Array(data.length);
-  boxBlurRgb(original, blurred, width, height, radius);
-  for (let i = 0; i < data.length; i += 4) {
-    const luma = (0.2126 * original[i] + 0.7152 * original[i + 1] + 0.0722 * original[i + 2]) / 255;
-    const midWeight = 4 * luma * (1 - luma);
-    data[i] = clamp(original[i] + strength * midWeight * (original[i] - blurred[i]), 0, 255);
-    data[i + 1] = clamp(original[i + 1] + strength * midWeight * (original[i + 1] - blurred[i + 1]), 0, 255);
-    data[i + 2] = clamp(original[i + 2] + strength * midWeight * (original[i + 2] - blurred[i + 2]), 0, 255);
-  }
-}
-
-function applyTexturePass(data, width, height, texture, scale) {
-  if (texture === 0) return;
-  const radius = Math.max(1, Math.round(2 * Math.max(scale, 0.35)));
-  const amount = texture / 100 * 0.45;
-  const original = new Uint8ClampedArray(data);
-  const blurred = new Float32Array(data.length);
-  boxBlurRgb(original, blurred, width, height, radius);
-  for (let i = 0; i < data.length; i += 4) {
-    data[i] = clamp(original[i] + amount * (original[i] - blurred[i]), 0, 255);
-    data[i + 1] = clamp(original[i + 1] + amount * (original[i + 1] - blurred[i + 1]), 0, 255);
-    data[i + 2] = clamp(original[i + 2] + amount * (original[i + 2] - blurred[i + 2]), 0, 255);
-  }
-}
-
-function applyVignettePass(data, width, height, vignette) {
-  if (vignette === 0) return;
-  const amount = vignette / 100;
-  const cx = width * 0.5;
-  const cy = height * 0.5;
-  const maxDist = Math.sqrt(cx * cx + cy * cy) || 1;
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      const idx = (y * width + x) * 4;
-      const dist = Math.sqrt((x - cx) ** 2 + (y - cy) ** 2) / maxDist;
-      const shade = 1 - amount * 0.65 * pipelineSmoothstep(0.35, 1, dist);
-      data[idx] = clamp(data[idx] * shade, 0, 255);
-      data[idx + 1] = clamp(data[idx + 1] * shade, 0, 255);
-      data[idx + 2] = clamp(data[idx + 2] * shade, 0, 255);
-    }
-  }
-}
-
-function applyGrainPass(data, width, height, grain, grainSize, grainRoughness, seed) {
+function applyGrainPass(data, width, height, grain, grainSize, grainRoughness, seed, scale) {
   if (grain === 0) return;
-  const rand = mulberry32(seed);
-  const sizeScale = 0.5 + (grainSize / 100) * 1.5;
+  // Grain size is defined in source pixels, so the preview (scale < 1) shows the
+  // same grain the full-resolution export will have.
+  const cell = Math.max(0.05, (0.5 + (grainSize / 100) * 1.5) * scale);
   const roughness = grainRoughness / 100;
   const strength = grain * 0.75;
   for (let y = 0; y < height; y++) {
+    const gy = y / cell;
+    const y0 = Math.floor(gy);
+    const ty = gy - y0;
+    const sy = ty * ty * (3 - 2 * ty);
     for (let x = 0; x < width; x++) {
       const idx = (y * width + x) * 4;
-      const cellX = Math.floor(x / sizeScale);
-      const cellY = Math.floor(y / sizeScale);
-      const coarse = (mulberry32((cellX + 1) * 374761 + (cellY + 1) * 668265 + seed)() - 0.5) * 2;
-      const fine = (rand() - 0.5) * 2;
+      if (data[idx + 3] === 0) continue;
+      const gx = x / cell;
+      const x0 = Math.floor(gx);
+      const tx = gx - x0;
+      const sx = tx * tx * (3 - 2 * tx);
+      const n00 = hashNoise(x0, y0, seed);
+      const n10 = hashNoise(x0 + 1, y0, seed);
+      const n01 = hashNoise(x0, y0 + 1, seed);
+      const n11 = hashNoise(x0 + 1, y0 + 1, seed);
+      const coarse = (n00 + (n10 - n00) * sx) + ((n01 + (n11 - n01) * sx) - (n00 + (n10 - n00) * sx)) * sy;
+      const fine = hashNoise(x, y, seed ^ 0x5bd1e995);
       const noise = coarse * roughness + fine * (1 - roughness * 0.5);
       const luma = (0.2126 * data[idx] + 0.7152 * data[idx + 1] + 0.0722 * data[idx + 2]) / 255;
       const lumaWeight = 0.35 + 0.65 * (4 * luma * (1 - luma));
@@ -1328,79 +1431,225 @@ export function needsColorPipeline(adjustments) {
   });
 }
 
+const DEG = Math.PI / 180;
+const SKIN_OKLCH_HUE = 60;
+
 export function applyColorPipeline(imageData, adjustments, { scale = 1, seed = 1, interactive = false } = {}) {
   const { data, width, height } = imageData;
-  const activeHslChannels = COLOR_CHANNELS.filter(channel => {
-    const entry = adjustments.hsl?.[channel.id];
-    return entry && (entry.h !== 0 || entry.s !== 0 || entry.l !== 0);
-  });
-  const activeChannelAdjusts = activeHslChannels.length
-    ? activeHslChannels.map(channel => ({
+  const pixelCount = width * height;
+  const num = key => Number(adjustments[key]) || 0;
+
+  const activeChannelAdjusts = COLOR_CHANNELS
+    .filter(channel => {
+      const entry = adjustments.hsl?.[channel.id];
+      return entry && (entry.h !== 0 || entry.s !== 0 || entry.l !== 0);
+    })
+    .map(channel => ({
       center: channel.center,
       radius: channel.radius ?? HSL_CHANNEL_RADIUS,
-      h: adjustments.hsl[channel.id].h,
-      s: adjustments.hsl[channel.id].s,
-      l: adjustments.hsl[channel.id].l
-    }))
-    : null;
+      h: Number(adjustments.hsl[channel.id].h) || 0,
+      s: Number(adjustments.hsl[channel.id].s) || 0,
+      l: Number(adjustments.hsl[channel.id].l) || 0
+    }));
   const hasCurves = adjustments.curves && (
     isCurveActive(adjustments.curves.rgb)
     || isCurveActive(adjustments.curves.red)
     || isCurveActive(adjustments.curves.green)
     || isCurveActive(adjustments.curves.blue)
   );
-  const curveLuts = hasCurves ? buildCurveLuts(adjustments.curves) : null;
+  const curveTables = hasCurves ? buildCurveTables(adjustments.curves) : null;
+  const stage = buildBaseStage(adjustments);
+  const toneTable = buildToneTable(adjustments);
 
-  for (let index = 0; index < data.length; index += 4) {
+  const saturation = num("saturation");
+  const vibrance = num("vibrance") / 100;
+  const hueShift = num("hue");
+  const needsLab = saturation !== 0 || vibrance !== 0 || hueShift !== 0 || activeChannelAdjusts.length > 0;
+  const chromaBase = saturation < 0 ? 1 + saturation / 100 : 1 + (saturation / 100) * 0.9;
+
+  const clarityAmount = (num("clarity") / 100) * 0.7;
+  const textureAmount = (num("texture") / 100) * 0.6;
+  const dehaze = num("dehaze");
+  const vignette = num("vignette") / 100;
+  const needsLocal = Boolean(toneTable) || clarityAmount !== 0 || textureAmount !== 0;
+
+  const px = new Float64Array(3);
+  const lab = new Float64Array(3);
+
+  // Pass 1: perceptual lightness after the base stage, used to build the
+  // edge-aware base layer for local tone mapping / clarity, and a fine base for texture.
+  let lightness = null;
+  let base = null;
+  let textureBase = null;
+  if (needsLocal) {
+    lightness = new Float32Array(pixelCount);
+    for (let p = 0, index = 0; p < pixelCount; p++, index += 4) {
+      px[0] = SRGB_TO_LINEAR[data[index]];
+      px[1] = SRGB_TO_LINEAR[data[index + 1]];
+      px[2] = SRGB_TO_LINEAR[data[index + 2]];
+      applyBaseStage(px, stage);
+      lightness[p] = encodeSrgb(luminanceOf(px[0], px[1], px[2]));
+    }
+    const longEdge = Math.max(width, height);
+    if (toneTable || clarityAmount !== 0) {
+      base = guidedFilterSelf(
+        lightness,
+        width,
+        height,
+        Math.max(2, Math.round(longEdge * 0.02)),
+        0.012,
+        interactive ? 384 : 768
+      );
+    }
+    if (textureAmount !== 0) {
+      textureBase = boxMean(lightness, width, height, Math.max(1, Math.round(longEdge * 0.002)));
+    }
+  }
+
+  const cx = width / 2;
+  const cy = height / 2;
+
+  // Pass 2: full per-pixel pipeline.
+  for (let p = 0, index = 0; p < pixelCount; p++, index += 4) {
     if (data[index + 3] === 0) continue;
-    let r = srgbByteToLinear(data[index]);
-    let g = srgbByteToLinear(data[index + 1]);
-    let b = srgbByteToLinear(data[index + 2]);
+    px[0] = SRGB_TO_LINEAR[data[index]];
+    px[1] = SRGB_TO_LINEAR[data[index + 1]];
+    px[2] = SRGB_TO_LINEAR[data[index + 2]];
+    applyBaseStage(px, stage);
 
-    ({ r, g, b } = applyWhiteBalanceLinear(r, g, b, adjustments.temperature, adjustments.tint));
-    ({ r, g, b } = applyExposureLinear(r, g, b, adjustments.luminance));
-    ({ r, g, b } = applyContrastLinear(r, g, b, adjustments.contrast));
-    if (curveLuts) ({ r, g, b } = applyCurveLinear(r, g, b, curveLuts.lutR, curveLuts.lutG, curveLuts.lutB));
-    ({ r, g, b } = applyToneRangesLinear(
-      r, g, b,
-      adjustments.highlights,
-      adjustments.shadows,
-      adjustments.whites,
-      adjustments.blacks
-    ));
-    ({ r, g, b } = applySaturationAndVibranceLinear(r, g, b, adjustments.saturation, adjustments.vibrance));
-    ({ r, g, b } = applyGlobalHueLinear(r, g, b, adjustments.hue));
-    if (activeChannelAdjusts) {
-      const rgb = applyHslChannelMixRgb(r * 255, g * 255, b * 255, activeChannelAdjusts);
-      r = rgb.r / 255;
-      g = rgb.g / 255;
-      b = rgb.b / 255;
+    if (needsLocal) {
+      const light = lightness[p];
+      let target = light;
+      if (base) {
+        const detail = light - base[p];
+        if (toneTable) target = sampleTable(toneTable, base[p]) + detail;
+        if (clarityAmount !== 0) target += clarityAmount * 4 * light * (1 - light) * detail;
+      }
+      if (textureBase) {
+        target += textureAmount * (0.4 + 2.4 * light * (1 - light)) * (light - textureBase[p]);
+      }
+      if (target !== light) {
+        const y = luminanceOf(px[0], px[1], px[2]);
+        const nextY = decodeSrgb(target);
+        if (y > 1e-6) {
+          const ratio = nextY / y;
+          px[0] *= ratio;
+          px[1] *= ratio;
+          px[2] *= ratio;
+        } else {
+          px[0] = nextY;
+          px[1] = nextY;
+          px[2] = nextY;
+        }
+        fitGamut(px);
+      }
     }
-    ({ r, g, b } = applyDehazeLinear(r, g, b, adjustments.dehaze));
+
+    if (curveTables) {
+      px[0] = decodeSrgb(sampleTable(curveTables.r, encodeSrgb(px[0])));
+      px[1] = decodeSrgb(sampleTable(curveTables.g, encodeSrgb(px[1])));
+      px[2] = decodeSrgb(sampleTable(curveTables.b, encodeSrgb(px[2])));
+    }
+
+    if (needsLab) {
+      // HSL bands are selected on sRGB-encoded hue so they match the swatches
+      // and the colour picker; the edit itself happens in OKLCh.
+      let bandH = 0;
+      let bandS = 0;
+      let bandL = 0;
+      let hsl = null;
+      if (activeChannelAdjusts.length) {
+        hsl = rgbToHsl(encodeSrgb(px[0]) * 255, encodeSrgb(px[1]) * 255, encodeSrgb(px[2]) * 255);
+        let weightSum = 0;
+        for (const channel of activeChannelAdjusts) {
+          const weight = getHslChannelWeight(hsl.h, channel.center, channel.radius);
+          weightSum += weight;
+          bandH += weight * channel.h;
+          bandS += weight * channel.s;
+          bandL += weight * channel.l;
+        }
+        // Overlapping bands share the pixel; a lone band fades out at its edge.
+        const norm = weightSum > 1 ? 1 / weightSum : 1;
+        bandH *= norm;
+        bandS *= norm;
+        bandL *= norm;
+      }
+
+      linearToOklab(px[0], px[1], px[2], lab);
+      let L = lab[0];
+      let a = lab[1];
+      let b = lab[2];
+
+      let chromaScale = chromaBase;
+      if (vibrance !== 0) {
+        const satNorm = Math.min(1, Math.sqrt(a * a + b * b) / 0.25);
+        const skinProtect = vibrance > 0
+          ? 1 - 0.6 * (1 - pipelineSmoothstep(0, 35, hueDistance(Math.atan2(b, a) / DEG, SKIN_OKLCH_HUE)))
+          : 1;
+        chromaScale += vibrance * (1 - satNorm) ** 2 * skinProtect;
+      }
+      let rotation = hueShift;
+
+      if (hsl && (bandH !== 0 || bandS !== 0 || bandL !== 0)) {
+        const chromaGate = hslChromaGate(hsl.s);
+        rotation += bandH * chromaGate;
+        if (bandS < 0) chromaScale *= Math.max(0, 1 + bandS / 100);
+        else if (bandS > 0) chromaScale *= 1 + (bandS / 100) * chromaGate * (0.35 + 0.65 * (hsl.s / 100));
+        if (bandL !== 0) L = clamp(L + (bandL / 100) * 0.16 * hslLuminanceGate(hsl.s, hsl.l), 0, 1);
+      }
+
+      chromaScale = clamp(chromaScale, 0, 2.5);
+      a *= chromaScale;
+      b *= chromaScale;
+      if (rotation !== 0) {
+        const cos = Math.cos(rotation * DEG);
+        const sin = Math.sin(rotation * DEG);
+        const ra = a * cos - b * sin;
+        b = a * sin + b * cos;
+        a = ra;
+      }
+      oklabToLinear(L, a, b, px);
+    }
+
+    if (dehaze !== 0) {
+      const hazed = applyDehazeLinear(px[0], px[1], px[2], dehaze);
+      px[0] = hazed.r;
+      px[1] = hazed.g;
+      px[2] = hazed.b;
+    }
+
+    if (vignette !== 0) {
+      // Lightroom convention: negative darkens the corners, positive lightens.
+      const dx = (p % width + 0.5 - cx) / cx;
+      const dy = (((p / width) | 0) + 0.5 - cy) / cy;
+      const dist = Math.sqrt(dx * dx + dy * dy) / Math.SQRT2;
+      const shade = 1 + vignette * 0.7 * pipelineSmoothstep(0.35, 1, dist);
+      px[0] *= shade;
+      px[1] *= shade;
+      px[2] *= shade;
+    }
+
+    fitGamut(px);
     if (adjustments.invert) {
-      r = 1 - r;
-      g = 1 - g;
-      b = 1 - b;
+      px[0] = 1 - px[0];
+      px[1] = 1 - px[1];
+      px[2] = 1 - px[2];
     }
-    data[index] = linearToSrgbByte(r);
-    data[index + 1] = linearToSrgbByte(g);
-    data[index + 2] = linearToSrgbByte(b);
+    data[index] = linearToSrgbByte(px[0]);
+    data[index + 1] = linearToSrgbByte(px[1]);
+    data[index + 2] = linearToSrgbByte(px[2]);
   }
 
-  if (!interactive) {
-    applyClarityPass(data, width, height, adjustments.clarity, scale);
-    applyTexturePass(data, width, height, adjustments.texture, scale);
-    applyVignettePass(data, width, height, adjustments.vignette);
-    applyGrainPass(
-      data,
-      width,
-      height,
-      adjustments.grain,
-      adjustments.grainSize ?? 50,
-      adjustments.grainRoughness ?? 50,
-      seed
-    );
-  }
+  applyGrainPass(
+    data,
+    width,
+    height,
+    num("grain"),
+    adjustments.grainSize ?? 50,
+    adjustments.grainRoughness ?? 50,
+    seed,
+    scale
+  );
 }
 
 export function applyColorAdjustmentsToCanvas(sourceCanvas, targetCanvas, adjustments, {

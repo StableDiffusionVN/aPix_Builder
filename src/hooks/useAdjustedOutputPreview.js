@@ -49,11 +49,10 @@ export function useAdjustedOutputPreview(url, colorAdjust, enabled = true) {
       .then(async image => {
         if (cancelled) return;
         const quick = document.createElement("canvas");
-        const meta = applyImageAdjustments(image, state.adjustments, quick);
-        if (meta && !cancelled) {
-          applyHealingStrokes(quick.getContext("2d"), state.healingStrokes, meta.scale);
-          setPreview({ key, url: canvasToPreviewDataUrl(quick) });
-        }
+        const meta = applyImageAdjustments(image, state.adjustments, quick, {
+          onAfterDraw: (ctx, scale) => applyHealingStrokes(ctx, state.healingStrokes, scale)
+        });
+        if (meta && !cancelled) setPreview({ key, url: canvasToPreviewDataUrl(quick) });
         if (meta?.scale >= 1) return;
         const full = await renderAdjustedCanvas(image, state);
         const blob = await canvasToBlob(full, "image/jpeg");

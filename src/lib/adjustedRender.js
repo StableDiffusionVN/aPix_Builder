@@ -87,10 +87,14 @@ export function runColorPipelineOffThread(imageData, adjustments, { scale = 1, s
 export async function renderAdjustedCanvas(image, { adjustments, healingStrokes = [] }) {
   if (isLutActive(adjustments.lut)) await ensureLut(adjustments.lut.id).catch(() => null);
   const canvas = document.createElement("canvas");
+  // Healing works on the source pixels, under the colour adjustments.
   const meta = applyImageAdjustments(image, adjustments, canvas, {
     fullResolution: true,
     skipColorPipeline: true,
-    skipBlur: true
+    skipBlur: true,
+    onAfterDraw: (drawCtx, scale) => {
+      if (healingStrokes.length) applyHealingStrokes(drawCtx, healingStrokes, scale);
+    }
   });
   if (!meta) throw new Error("Render failed");
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
@@ -109,7 +113,6 @@ export async function renderAdjustedCanvas(image, { adjustments, healingStrokes 
     ctx.clearRect(0, 0, meta.width, meta.height);
     ctx.drawImage(blurCanvas, 0, 0);
   }
-  if (healingStrokes.length) applyHealingStrokes(ctx, healingStrokes, meta.scale);
   return canvas;
 }
 

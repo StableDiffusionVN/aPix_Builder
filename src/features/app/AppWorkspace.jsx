@@ -2099,6 +2099,7 @@ export function AppWorkspace() {
           healingActive={Boolean(healingBridge?.active) && !healingBridge?.spaceToolSuspended}
           healingCursor={healingBridge?.spaceToolSuspended ? null : (healingBridge?.cursor ?? null)}
           healingBrushDiameter={healingBridge?.brushDiameter ?? 0}
+          healingOverlayRef={healingBridge?.setOverlayElement ?? null}
           colorPickTarget={healingBridge?.spaceToolSuspended ? null : (healingBridge?.colorPickTarget ?? null)}
           colorPickCursor={healingBridge?.spaceToolSuspended ? null : (healingBridge?.colorPickCursor ?? null)}
           stepOutput={stepOutput}

@@ -30,7 +30,6 @@ import {
 import {
   applyHealingStrokes,
   DEFAULT_HEALING_BRUSH_SIZE,
-  drawHealingOverlay,
   snapshotColorAdjustState
 } from "../lib/healingBrush";
 import { useColorPresetLibrary } from "../features/color-adjust/useColorPresetLibrary.js";
@@ -63,7 +62,6 @@ export function useColorAdjustments({
   const imageRef = useRef(null);
   const adjustmentsRef = useRef(cloneDefaultAdjustments());
   const previewCanvasRef = useRef(null);
-  const healingOverlayCanvasRef = useRef(null);
   const histogramCanvasRef = useRef(null);
   const curvesCanvasRef = useRef(null);
   const histogramDragRef = useRef(null);
@@ -330,6 +328,7 @@ export function useColorAdjustments({
     previewMetaRef.current = { width: 0, height: 0, scale: 1 };
     imageRef.current = null;
     sourceCacheKeyRef.current = "";
+    healedSourcesRef.current.clear();
     onPreviewChangeRef.current?.(null);
 
     if (!source) {
@@ -388,6 +387,68 @@ export function useColorAdjustments({
     return meta;
   }, []);
 
+  // Healing works on the source pixels, under the colour adjustments. The healed
+  // source is cached per preview size and extended stroke by stroke, so colour
+  // changes never re-run healing and a new stroke only heals itself.
+  const healedSourcesRef = useRef(new Map());
+  const getHealedSource = useCallback((sourceMeta) => {
+    const strokes = healingStrokesRef.current;
+    if (!strokes.length) return sourceCanvasRef.current;
+    const key = sourceCacheKeyRef.current;
+    const cache = healedSourcesRef.current;
+    let entry = cache.get(key);
+    const extendsCached = entry
+      && entry.source === sourceCanvasRef.current
+      && entry.strokes.length <= strokes.length
+      && entry.strokes.every((stroke, index) => stroke === strokes[index]);
+    if (!extendsCached) {
+      const canvas = entry?.canvas || document.createElement("canvas");
+      canvas.width = sourceCanvasRef.current.width;
+      canvas.height = sourceCanvasRef.current.height;
+      const ctx = canvas.getContext("2d", { willReadFrequently: true });
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(sourceCanvasRef.current, 0, 0);
+      entry = { canvas, source: sourceCanvasRef.current, strokes: [] };
+      cache.delete(key);
+      cache.set(key, entry);
+      while (cache.size > 2) cache.delete(cache.keys().next().value);
+    }
+    const added = strokes.slice(entry.strokes.length);
+    if (added.length) {
+      applyHealingStrokes(entry.canvas.getContext("2d", { willReadFrequently: true }), added, sourceMeta.scale);
+      entry.strokes = strokes.slice();
+    }
+    return entry.canvas;
+  }, []);
+
+  // Live healing stroke drawn as an SVG over the preview (no re-render while painting).
+  const healingOverlayElRef = useRef(null);
+  const drawHealingStrokeOverlay = useCallback(() => {
+    const el = healingOverlayElRef.current;
+    if (!el) return;
+    const stroke = activeHealingStrokeRef.current;
+    const meta = previewMetaRef.current;
+    const path = el.querySelector("path");
+    if (!stroke?.points?.length || !meta?.width || !path) {
+      el.style.display = "none";
+      path?.setAttribute("d", "");
+      return;
+    }
+    const fullWidth = meta.width / (meta.scale || 1);
+    const fullHeight = meta.height / (meta.scale || 1);
+    el.setAttribute("viewBox", `0 0 ${fullWidth} ${fullHeight}`);
+    const d = stroke.points
+      .map((point, index) => `${index ? "L" : "M"}${(point.x * fullWidth).toFixed(1)} ${(point.y * fullHeight).toFixed(1)}`)
+      .join(" ");
+    path.setAttribute("d", stroke.points.length === 1 ? `${d} l0.01 0.01` : d);
+    path.setAttribute("stroke-width", String(Math.max(2, stroke.size)));
+    el.style.display = "";
+  }, []);
+  const setHealingOverlayElement = useCallback((el) => {
+    healingOverlayElRef.current = el;
+    if (el) drawHealingStrokeOverlay();
+  }, [drawHealingStrokeOverlay]);
+
   const renderPreview = useCallback((options = {}) => {
     const image = imageRef.current;
     if (!image) return;
@@ -395,41 +456,21 @@ export function useColorAdjustments({
     const interactive = options.interactive ?? isSliderDraggingRef.current;
     const sourceMeta = ensureSourceCanvas(image, interactive);
     if (!sourceMeta || !sourceCanvasRef.current) return;
+    const baseCanvas = getHealedSource(sourceMeta);
 
     if (!previewCanvasRef.current) previewCanvasRef.current = document.createElement("canvas");
     const canvas = previewCanvasRef.current;
     const shown = hoverPreviewRef.current || adjustmentsRef.current;
     const meta = applyColorAdjustmentsToCanvas(
-      sourceCanvasRef.current,
+      baseCanvas,
       canvas,
       shown,
       { scale: sourceMeta.scale, interactive, skipBlur: interactive }
     );
     if (!meta) return;
     previewMetaRef.current = meta;
-
-    const ctx = canvas.getContext("2d");
-    if (ctx) {
-      applyHealingStrokes(ctx, healingStrokesRef.current, meta.scale);
-    }
-
-    let outputCanvas = canvas;
-    const activeStroke = activeHealingStrokeRef.current;
-    if (activeStroke && ctx) {
-      if (!healingOverlayCanvasRef.current) {
-        healingOverlayCanvasRef.current = document.createElement("canvas");
-      }
-      const overlayCanvas = healingOverlayCanvasRef.current;
-      if (overlayCanvas.width !== canvas.width || overlayCanvas.height !== canvas.height) {
-        overlayCanvas.width = canvas.width;
-        overlayCanvas.height = canvas.height;
-      }
-      const overlayCtx = overlayCanvas.getContext("2d");
-      overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
-      overlayCtx.drawImage(canvas, 0, 0);
-      drawHealingOverlay(overlayCtx, activeStroke, canvas.width, canvas.height, meta.scale);
-      outputCanvas = overlayCanvas;
-    }
+    const outputCanvas = canvas;
+    if (!activeHealingStrokeRef.current) drawHealingStrokeOverlay();
 
     if (!interactive) {
       const histData = computeHistogram(canvas);
@@ -470,7 +511,7 @@ export function useColorAdjustments({
     if (!interactive || options.forceEmit || previewUrlFrameRef.current % 2 === 0) {
       onPreviewChangeRef.current?.(canvasToPreviewDataUrl(outputCanvas, { interactive }));
     }
-  }, [activeCurveChannel, cancelIdleRender, ensureSourceCanvas, scheduleIdleRender, selectedCurvePointIndex]);
+  }, [activeCurveChannel, cancelIdleRender, drawHealingStrokeOverlay, ensureSourceCanvas, getHealedSource, scheduleIdleRender, selectedCurvePointIndex]);
 
   useEffect(() => {
     if (!isReady) return undefined;
@@ -726,10 +767,9 @@ export function useColorAdjustments({
       size: healingBrushSizeRef.current,
       points: [point]
     };
-    if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    rafRef.current = requestAnimationFrame(renderPreview);
+    drawHealingStrokeOverlay();
     return true;
-  }, [getHealingImagePoint, isReady, renderPreview]);
+  }, [drawHealingStrokeOverlay, getHealingImagePoint, isReady]);
 
   const handleHealingPointerHover = useCallback((event, imageElement, previewArea) => {
     if (spaceToolSuspendedRef.current || !healingActiveRef.current || healingPointerIdRef.current) return false;
@@ -744,15 +784,14 @@ export function useColorAdjustments({
       event.preventDefault();
       activeHealingStrokeRef.current.points.push(point);
       if (previewArea) updateHealingCursor(event, imageElement, previewArea);
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
-      rafRef.current = requestAnimationFrame(renderPreview);
+      drawHealingStrokeOverlay();
       return true;
     }
     if (!healingPointerIdRef.current && previewArea) {
       return updateHealingCursor(event, imageElement, previewArea);
     }
     return false;
-  }, [getHealingImagePoint, renderPreview, updateHealingCursor]);
+  }, [drawHealingStrokeOverlay, getHealingImagePoint, updateHealingCursor]);
 
   const handleHealingPointerUp = useCallback((event) => {
     if (healingPointerIdRef.current !== event.pointerId) return false;
@@ -767,11 +806,10 @@ export function useColorAdjustments({
       setHealingStrokesSync(nextStrokes);
       commitHistory(adjustmentsRef.current, nextStrokes);
     } else if (finished) {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
-      rafRef.current = requestAnimationFrame(renderPreview);
+      drawHealingStrokeOverlay();
     }
     return Boolean(finished);
-  }, [commitHistory, renderPreview, setHealingStrokesSync]);
+  }, [commitHistory, drawHealingStrokeOverlay, setHealingStrokesSync]);
 
   const finishActiveHealingStroke = useCallback(() => {
     if (!healingPointerIdRef.current) return;
@@ -783,10 +821,9 @@ export function useColorAdjustments({
       setHealingStrokesSync(nextStrokes);
       commitHistory(adjustmentsRef.current, nextStrokes);
     } else if (finished) {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
-      rafRef.current = requestAnimationFrame(renderPreview);
+      drawHealingStrokeOverlay();
     }
-  }, [commitHistory, renderPreview, setHealingStrokesSync]);
+  }, [commitHistory, drawHealingStrokeOverlay, setHealingStrokesSync]);
 
   const suspendToolsForSpace = useCallback(() => {
     if (!healingActiveRef.current && !colorPickTargetRef.current) return false;
@@ -1021,12 +1058,11 @@ export function useColorAdjustments({
     const image = imageRef.current;
     if (!image) throw new Error(t("editor.renderError"));
     const canvas = document.createElement("canvas");
-    const meta = applyImageAdjustments(image, adjustmentsRef.current, canvas, { fullResolution: true });
+    const meta = applyImageAdjustments(image, adjustmentsRef.current, canvas, {
+      fullResolution: true,
+      onAfterDraw: (ctx, scale) => applyHealingStrokes(ctx, healingStrokesRef.current, scale)
+    });
     if (!meta) throw new Error(t("editor.renderError"));
-    const ctx = canvas.getContext("2d");
-    if (ctx) {
-      applyHealingStrokes(ctx, healingStrokesRef.current, meta.scale);
-    }
     return canvas.toDataURL("image/png");
   }, [t]);
 
@@ -1076,6 +1112,7 @@ export function useColorAdjustments({
     handleCurvesDoubleClick,
     renderFullResolutionDataUrl,
     renderCurrentResult,
+    setHealingOverlayElement,
     colorPickTarget,
     colorPickCursor,
     spaceToolSuspended,

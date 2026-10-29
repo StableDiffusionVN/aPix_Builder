@@ -82,6 +82,7 @@ export function PreviewPanel({
   colorPickTarget = null,
   colorPickCursor = null,
   showOriginal = false,
+  healingOverlayRef = null,
   handlePreviewPointerLeave
 }) {
   const { t } = useI18n();
@@ -207,6 +208,12 @@ export function PreviewPanel({
               ) : (
                 <img ref={imageElementRef} className="resultImage" src={previewImage} alt={outputLabel} draggable="false" onLoad={handleResultImageLoad} />
               )}
+              {healingActive && healingOverlayRef ? (
+                // Live healing stroke, drawn imperatively by the colour engine.
+                <svg ref={healingOverlayRef} className="healingStrokeOverlay" preserveAspectRatio="none" aria-hidden="true" style={{ display: "none" }}>
+                  <path fill="none" stroke="rgba(239, 68, 68, 0.75)" strokeOpacity="0.55" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              ) : null}
             </div>
           ) : (
             <div className="emptyState">

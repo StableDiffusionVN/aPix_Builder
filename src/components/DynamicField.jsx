@@ -1,7 +1,9 @@
+import { inpaintAssetName } from "../../shared/inpaintAssets.js";
+import { imageValueForUi, isInpaintCropEnabled } from "../../shared/cropInpaint.js";
 import { Suspense, memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Eye, Folder, Images, Link, Loader2, Pencil, Scissors, Upload, X } from "lucide-react";
-import { ImageEditorModal } from "./lazyModals";
+import { Crop, Eye, Folder, Images, Link, Loader2, Pencil, Scissors, Upload, X } from "lucide-react";
+import { CropInpaintModal, ImageEditorModal } from "./lazyModals";
 import { MaskEditorModal } from "./MaskEditorModal";
 import { defaultValue, getActiveSubInputs, isMenuSub, normalizeId } from "../lib/template";
 import { menuChoiceOptions, parseMenuChoices, resolveMenuStoredValue } from "../../shared/menuChoices.js";
@@ -35,7 +37,10 @@ function readImageFieldValue(value) {
 }
 
 function buildInputImageValue(item, libraryImage) {
-  return makeInputImageValue(libraryImage, item.maskDataUrl ? { maskDataUrl: item.maskDataUrl } : {});
+  return makeInputImageValue(libraryImage, {
+    ...(item.maskDataUrl ? { maskDataUrl: item.maskDataUrl } : {}),
+    ...(item.cropInpaint ? { cropInpaint: item.cropInpaint } : {})
+  });
 }
 
 function resolveSelectedImages(rawValue, libraryReady, libraryImages) {
@@ -43,6 +48,7 @@ function resolveSelectedImages(rawValue, libraryReady, libraryImages) {
   return readImageFieldValue(rawValue).flatMap(item => {
     if (item?.startsWith?.("data:image")) return [item];
     if (item?.kind !== "input-image") return [];
+    if (inpaintAssetName(item)) return [item];
     if (!libraryReady) return [];
     const libraryImage = availableByName.get(item.name);
     if (!libraryImage) return [];
@@ -69,6 +75,7 @@ function pruneInvalidImageValue(rawValue, libraryImages) {
       return { next: item, changed: false };
     }
     if (item?.kind === "input-image") {
+      if (inpaintAssetName(item)) { next.push(item); continue; }
       const libraryImage = availableByName.get(item.name);
       if (!libraryImage) {
         changed = true;
@@ -140,7 +147,8 @@ const DynamicFieldInner = memo(function DynamicFieldInner({
   sdvnModelFields = null
 }) {
   const { locale, t } = useI18n();
-  const ui = item.ui || {};
+  const ui = useMemo(() => item.ui || {}, [item.ui]);
+  const inpaintCropEnabled = isInpaintCropEnabled(ui);
   const label = ui.label || item.key;
   const description = ui.description || ui.help || "";
   const display = ui.display || ui.variant || ui.widget || "";
@@ -152,6 +160,7 @@ const DynamicFieldInner = memo(function DynamicFieldInner({
   const [libraryLoading, setLibraryLoading] = useState(false);
   const [libraryMultiSelect, setLibraryMultiSelect] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
+  const [cropInpaintOpen, setCropInpaintOpen] = useState(false);
   const [maskEditorOpen, setMaskEditorOpen] = useState(false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxImage, setLightboxImage] = useState(null);
@@ -167,9 +176,13 @@ const DynamicFieldInner = memo(function DynamicFieldInner({
   const isImageField = ui.type === "image" || ui.type === "image_mask" || ui.type === "file";
   const folderValue = useMemo(() => readLocalFolderValue(value), [value]);
   const selectedImages = useMemo(
-    () => (folderValue ? [] : resolveSelectedImages(value, inputLibraryReady, inputImages)),
-    [folderValue, value, inputLibraryReady, inputImages]
+    () => (folderValue ? [] : resolveSelectedImages(imageValueForUi(value, ui), inputLibraryReady, inputImages)),
+    [folderValue, value, inputLibraryReady, inputImages, ui]
   );
+  // Latest selection for async loaders (URL, upload, drop): an image removed
+  // while a download is in flight must not come back when it finishes.
+  const selectedImagesRef = useRef(selectedImages);
+  selectedImagesRef.current = selectedImages;
   const activeImage = selectedImages[Math.min(activeImageIndex, Math.max(0, selectedImages.length - 1))] || null;
   const selectedInputName = activeImage?.kind === "input-image" ? activeImage.name : "";
   const selectedImageUrl = activeImage?.startsWith?.("data:image")
@@ -259,6 +272,7 @@ const DynamicFieldInner = memo(function DynamicFieldInner({
 
   function commitSelectedImages(images) {
     const next = images.filter(Boolean);
+    selectedImagesRef.current = next;
     if (!next.length) {
       onChange("");
     } else if (supportsMultipleImages && next.length > 1) {
@@ -273,22 +287,35 @@ const DynamicFieldInner = memo(function DynamicFieldInner({
     return uploadInputImageFile(file, { updateInputImages: setInputImages });
   }
 
-  async function handlePickedFiles(files) {
+  function commitIncomingImages(images, replaceIndex = null) {
+    if (!images.length) return;
+    const current = selectedImagesRef.current;
+    if (Number.isInteger(replaceIndex) && replaceIndex >= 0 && replaceIndex < current.length) {
+      const next = [...current];
+      next[replaceIndex] = images[0];
+      commitSelectedImages(next);
+      setActiveImageIndex(replaceIndex);
+      return;
+    }
+    const next = supportsMultipleImages ? [...current, ...images] : images.slice(0, 1);
+    commitSelectedImages(next);
+    setActiveImageIndex(Math.max(0, next.length - images.length));
+  }
+
+  async function handlePickedFiles(files, replaceIndex = null) {
     const pickedFiles = [...(files || [])];
     if (!pickedFiles.length) return;
-    const acceptedFiles = supportsMultipleImages ? pickedFiles : pickedFiles.slice(0, 1);
+    const acceptedFiles = supportsMultipleImages && replaceIndex == null ? pickedFiles : pickedFiles.slice(0, 1);
     const uploaded = [];
     for (const file of acceptedFiles) {
       const image = await uploadPickedFile(file);
       if (image) uploaded.push(image);
     }
     if (!uploaded.length) return;
-    const next = supportsMultipleImages ? [...selectedImages, ...uploaded] : uploaded;
-    commitSelectedImages(next);
-    setActiveImageIndex(Math.max(0, next.length - uploaded.length));
+    commitIncomingImages(uploaded, replaceIndex);
   }
 
-  async function handlePickedImageUrl(url, filename = "output.png") {
+  async function handlePickedImageUrl(url, filename = "output.png", replaceIndex = null) {
     if (!url) return;
     const response = await fetch(url);
     if (!response.ok) return;
@@ -300,14 +327,14 @@ const DynamicFieldInner = memo(function DynamicFieldInner({
         updateInputImages: setInputImages
       });
       if (nextImage) {
-        commitSelectedImages(supportsMultipleImages ? [...selectedImages, nextImage] : [nextImage]);
+        commitIncomingImages([nextImage], replaceIndex);
       }
     } catch {
-      commitSelectedImages(supportsMultipleImages ? [...selectedImages, dataUrl] : [dataUrl]);
+      commitIncomingImages([dataUrl], replaceIndex);
     }
   }
 
-  async function loadImageFromUrl(sourceUrl, { clearInput = false } = {}) {
+  async function loadImageFromUrl(sourceUrl, { clearInput = false, replaceIndex = null } = {}) {
     if (!sourceUrl) return;
     setImageUrlLoading(true);
     setImageUrlError("");
@@ -316,7 +343,7 @@ const DynamicFieldInner = memo(function DynamicFieldInner({
         updateInputImages: setInputImages,
         errorMessage: t("field.urlError")
       });
-      commitSelectedImages(supportsMultipleImages ? [...selectedImages, nextImage] : [nextImage]);
+      commitIncomingImages([nextImage], replaceIndex);
       if (clearInput) setImageUrlInput("");
     } catch (error) {
       setImageUrlError(localizeRuntimeMessage(error.message, locale) || t("field.urlError"));
@@ -375,7 +402,7 @@ const DynamicFieldInner = memo(function DynamicFieldInner({
       .find(line => line && !line.startsWith("#")) || "";
   }
 
-  async function handleImageDrop(event) {
+  async function handleImageDrop(event, replaceIndex = null) {
     event.preventDefault();
     event.stopPropagation();
     setIsDraggingFile(false);
@@ -383,21 +410,18 @@ const DynamicFieldInner = memo(function DynamicFieldInner({
     if (payload) {
       try {
         const image = JSON.parse(payload);
-        await handlePickedImageUrl(image.url, image.filename);
+        await handlePickedImageUrl(image.url, image.filename, replaceIndex);
         return;
       } catch {
         // Fall through to file handling.
       }
     }
     const uri = firstDroppedUri(event.dataTransfer);
-    if (uri) {
-      const source = uri.split("\n")[0].trim();
-      if (isHttpImageUrl(source)) {
-        await loadImageFromUrl(source);
-      }
+    if (uri && isHttpImageUrl(uri)) {
+      await loadImageFromUrl(uri, { replaceIndex });
       return;
     }
-    await handlePickedFiles(event.dataTransfer.files);
+    await handlePickedFiles(event.dataTransfer.files, replaceIndex);
   }
 
   async function openInputLibrary() {
@@ -458,11 +482,12 @@ const DynamicFieldInner = memo(function DynamicFieldInner({
     try {
       const nextImage = await saveEditedInputImage(dataUrl, {
         selectedName: selectedInputName,
+        privateInpaint: Boolean(inpaintAssetName(activeImage)),
         updateInputImages: setInputImages
       });
       if (nextImage) {
         const next = [...selectedImages];
-        next[activeImageIndex] = nextImage;
+        next[activeImageIndex] = activeImage?.cropInpaint ? { ...nextImage, cropInpaint: activeImage.cropInpaint } : nextImage;
         commitSelectedImages(next);
         return;
       }
@@ -474,7 +499,12 @@ const DynamicFieldInner = memo(function DynamicFieldInner({
     commitSelectedImages(next);
   }
 
-  function handleSaveMask(nextMaskDataUrl) {
+  async function handleSaveMask(nextMaskDataUrl) {
+    if (nextMaskDataUrl && inpaintAssetName(activeImage)) {
+      const saved = await uploadInputImageDataUrl(nextMaskDataUrl, { filename: "inpaint_mask.png", privateInpaint: true });
+      if (!saved) throw new Error("Không lưu được mask / Could not save mask");
+      nextMaskDataUrl = saved.url;
+    }
     if (activeImage?.kind !== "input-image") return;
     const next = [...selectedImages];
     if (nextMaskDataUrl) {
@@ -503,7 +533,6 @@ const DynamicFieldInner = memo(function DynamicFieldInner({
     const activeSubs = getActiveSubInputs(item, menuValue);
     const valuesMap = allValues || {};
     const patchValue = onValueChange || ((key, next) => onChange(next));
-    const selectedChoice = parsedChoices.find(choice => choice.value === menuValue);
 
     return (
       <section className="menuSubField">
@@ -538,9 +567,7 @@ const DynamicFieldInner = memo(function DynamicFieldInner({
               />
             ))}
           </div>
-        ) : (
-          <div className="menuSubEmpty">{t("field.noInputs", { name: selectedChoice?.label || menuValue })}</div>
-        )}
+        ) : null}
       </section>
     );
   }
@@ -635,11 +662,11 @@ const DynamicFieldInner = memo(function DynamicFieldInner({
             className={`multiImageDropzone ${isDraggingFile ? "isDragging" : ""}`}
             onDragEnter={event => {
               event.preventDefault();
-              if (!reorderDragRef.current) setIsDraggingFile(true);
+              if (reorderDragRef.current == null) setIsDraggingFile(true);
             }}
             onDragOver={event => {
               event.preventDefault();
-              event.dataTransfer.dropEffect = reorderDragRef.current ? "move" : "copy";
+              event.dataTransfer.dropEffect = reorderDragRef.current != null ? "move" : "copy";
             }}
             onDragLeave={event => {
               event.preventDefault();
@@ -712,11 +739,15 @@ const DynamicFieldInner = memo(function DynamicFieldInner({
                         setIsDraggingFile(false);
                       }}
                       onDragOver={event => {
-                        if (!event.dataTransfer.types.includes("application/x-apix-image-index")) return;
                         event.preventDefault();
-                        event.dataTransfer.dropEffect = "move";
+                        event.stopPropagation();
+                        event.dataTransfer.dropEffect = event.dataTransfer.types.includes("application/x-apix-image-index") ? "move" : "copy";
                       }}
                       onDrop={event => {
+                        if (!event.dataTransfer.types.includes("application/x-apix-image-index")) {
+                          void handleImageDrop(event, index);
+                          return;
+                        }
                         const transferredIndex = Number(event.dataTransfer.getData("application/x-apix-image-index"));
                         const fromIndex = Number.isInteger(transferredIndex)
                           ? transferredIndex
@@ -732,6 +763,7 @@ const DynamicFieldInner = memo(function DynamicFieldInner({
                       <img
                         src={imageUrl}
                         alt={imageName}
+                        draggable={false}
                         onLoad={event => {
                           const { naturalWidth, naturalHeight } = event.currentTarget;
                           if (!naturalWidth || !naturalHeight) return;
@@ -748,10 +780,18 @@ const DynamicFieldInner = memo(function DynamicFieldInner({
                       <span className="multiImageOrder">{index + 1}</span>
                       {imageSize?.width && imageSize?.height ? (
                         <div className="imageSizeBadge">
-                          {imageSize.width} x {imageSize.height}
+                          {image?.cropInpaint ? "Crop · " : ""}{imageSize.width} x {imageSize.height}
                         </div>
                       ) : null}
                       <div className="multiImageActions">
+                        {inpaintCropEnabled ? <button type="button"
+                          className={image?.cropInpaint ? "cropInpaintActive" : ""}
+                          aria-label="Crop Inpaint" aria-pressed={Boolean(image?.cropInpaint)}
+                          title={image?.cropInpaint ? "Crop Inpaint ✓" : "Crop Inpaint"}
+                          onClick={event => {
+                            event.preventDefault(); event.stopPropagation();
+                            setActiveImageIndex(index); setCropInpaintOpen(true);
+                          }}><Crop size={13} /></button> : null}
                         <button
                           type="button"
                           onClick={event => {
@@ -950,6 +990,18 @@ const DynamicFieldInner = memo(function DynamicFieldInner({
           title={label}
           onClose={() => setLightboxOpen(false)}
         />
+        {inpaintCropEnabled && cropInpaintOpen && selectedImageUrl ? createPortal(
+          <Suspense fallback={null}>
+            <CropInpaintModal value={activeImage}
+              updateInputImages={setInputImages}
+              onClose={() => setCropInpaintOpen(false)}
+              onSave={nextImage => {
+                const next = [...selectedImages];
+                next[activeImageIndex] = nextImage;
+                commitSelectedImages(next);
+              }} />
+          </Suspense>, document.body
+        ) : null}
         {editorOpen && selectedImageUrl ? createPortal(
           <Suspense fallback={null}>
             <ImageEditorModal

@@ -44,9 +44,9 @@
   right: 0;
   z-index: 60;
   display: grid;
-  gap: 8px;
-  width: 300px;
-  padding: 12px;
+  gap: 10px;
+  width: 320px;
+  padding: 14px;
   border: 1px solid var(--border-strong);
   border-radius: 10px;
   background: var(--panel-strong, var(--panel));
@@ -61,10 +61,22 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.colabPopoverHeader strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
 }
 
 .colabPhase {
-  padding: 1px 8px;
+  flex: none;
+  white-space: nowrap;
+  padding: 2px 8px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.08);
   color: var(--muted);
@@ -104,7 +116,13 @@
 
 .colabAction {
   flex: 1;
-  height: 28px;
+  min-width: 0;
+  height: 30px;
+  padding: 0 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px !important;
   border: 1px solid var(--border);
   border-radius: 6px;
   background: transparent;
@@ -124,10 +142,17 @@
   justify-content: space-between;
   gap: 8px;
   color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
 }
 
 .colabSetting select {
+  flex: none;
+  width: auto;
+  min-width: 0;
   height: 26px;
+  padding: 0 6px;
+  font-size: 12px !important;
   border: 1px solid var(--border);
   border-radius: 6px;
   background: rgba(0, 0, 0, 0.25);

@@ -4,7 +4,7 @@
   left: 12px;
   right: 12px;
   bottom: 0;
-  z-index: 80;
+  z-index: 15; /* above the workspace, below the top bar (16) and modals (20) */
   display: flex;
   flex-direction: column;
   height: min(78vh, calc(100vh - 64px));
@@ -145,7 +145,7 @@
   position: fixed;
   left: 50%;
   bottom: 0;
-  z-index: 79;
+  z-index: 14;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -187,3 +187,9 @@
 
 .colabSheetPeek:hover .colabSheetPeekLabel { opacity: 1; }
 .colabSheetPeek:hover .colabSheetPeekGrip { background: var(--accent); }
+
+/* The top bar (Colab popover, server menu) stays above the sheet. */
+.appTopBar {
+  position: relative;
+  z-index: 16;
+}

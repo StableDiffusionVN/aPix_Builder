@@ -1,6 +1,6 @@
 # aPix license server
 
-Cho phép người dùng tải model riêng `[SDVN]` (repo HuggingFace `phamhungd/SDVN-Model`) bằng **mã aPix**
+Cho phép người dùng tải model riêng `[SDVN]` (mọi repo HuggingFace của `phamhungd`, `PROTECTED_REPOS=phamhungd/*`) bằng **mã aPix**
 thay cho token HuggingFace. Token HuggingFace chỉ nằm trên server; người dùng nhận link tải ký tạm
 (CDN HuggingFace, hết hạn sau ít phút) cho đúng file được phép.
 

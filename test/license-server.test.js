@@ -2,7 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
-import { createLicenseServer, parseHuggingFaceUrl } from "../license-server/server.mjs";
+import { createLicenseServer, isProtectedRepo, parseHuggingFaceUrl } from "../license-server/server.mjs";
 import { allowsModel, LicenseStore, signToken, verifyToken } from "../license-server/licenseStore.mjs";
 
 const SECRET = "test-secret-0123456789";
@@ -45,6 +45,13 @@ describe("aPix license server", () => {
     expect(parseHuggingFaceUrl("https://huggingface.co/phamhungd/SDVN-Model/blob/main/a%20b.safetensors"))
       .toEqual({ repo: "phamhungd/SDVN-Model", revision: "main", file: "a b.safetensors" });
     expect(parseHuggingFaceUrl("https://civitai.com/api/download/models/1")).toBeNull();
+  });
+
+  test("protected repos: exact or whole account", () => {
+    expect(isProtectedRepo("phamhungd/sell-model", ["phamhungd/*"])).toBe(true);
+    expect(isProtectedRepo("phamhungd/SDVN-Model", ["phamhungd/SDVN-Model"])).toBe(true);
+    expect(isProtectedRepo("phamhungdx/other", ["phamhungd/*"])).toBe(false);
+    expect(isProtectedRepo("black-forest-labs/FLUX.1", ["phamhungd/*"])).toBe(false);
   });
 
   test("tokens are signed and expire", () => {

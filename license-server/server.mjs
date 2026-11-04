@@ -5,7 +5,7 @@
 //   HF_TOKEN=hf_… LICENSE_SECRET=… node license-server/server.mjs
 //
 // Env: PORT (8790), HOST (127.0.0.1), LICENSE_DATA_DIR (./license-data), HF_TOKEN,
-// LICENSE_SECRET (HMAC for session tokens), PROTECTED_REPOS ("phamhungd/SDVN-Model"),
+// LICENSE_SECRET (HMAC for session tokens), PROTECTED_REPOS ("owner/repo,owner/*"),
 // SESSION_HOURS (12), MAX_LINKS_PER_HOUR (120), BASE_PATH ("" or "/license" behind a proxy).
 import http from "node:http";
 import path from "node:path";
@@ -13,6 +13,11 @@ import { fileURLToPath } from "node:url";
 import { allowsModel, LicenseStore, signToken, verifyToken } from "./licenseStore.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
+
+// "owner/repo" or "owner/*" (every repo of that account).
+export function isProtectedRepo(repo, protectedRepos) {
+  return protectedRepos.some(item => item === repo || (item.endsWith("/*") && repo.startsWith(item.slice(0, -1))));
+}
 
 export function parseHuggingFaceUrl(url) {
   let parsed;
@@ -137,7 +142,7 @@ export function createLicenseServer(options = {}) {
         return;
       }
       const target = parseHuggingFaceUrl(body.url || "");
-      if (!target || !config.protectedRepos.includes(target.repo)) {
+      if (!target || !isProtectedRepo(target.repo, config.protectedRepos)) {
         // Not a protected model: the node downloads it the normal way.
         send(res, 200, { public: true });
         return;

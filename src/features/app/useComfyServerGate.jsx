@@ -14,6 +14,7 @@ export function useComfyServerGate({ enabled, healthStatus, onRun, onLocalChosen
   const [pending, setPending] = useState(false);
   const [colabState, setColabState] = useState(null);
   const runRef = useRef(onRun);
+  const colabBaselineRef = useRef(null);
   runRef.current = onRun;
 
   useEffect(() => {
@@ -25,7 +26,11 @@ export function useComfyServerGate({ enabled, healthStatus, onRun, onLocalChosen
   // Colab ready and the app sees the server (discovery online) → run what was asked.
   useEffect(() => {
     if (!pending) return;
-    if (colabState?.phase === "error" || colabState?.phase === "off") {
+    // Right after the choice the state is still the old one ("off", or a stale
+    // "error"/"ready"): wait for start() to report before judging it.
+    if (colabState === colabBaselineRef.current) return;
+    const phase = colabState?.phase;
+    if (phase === "error" || phase === "off") {
       setPending(false);
       return;
     }
@@ -49,9 +54,10 @@ export function useComfyServerGate({ enabled, healthStatus, onRun, onLocalChosen
 
   const chooseColab = useCallback(() => {
     setPromptOpen(false);
+    colabBaselineRef.current = colabState;
     setPending(true);
     void colab?.start();
-  }, [colab]);
+  }, [colab, colabState]);
 
   const chooseLocal = useCallback(() => {
     setPromptOpen(false);

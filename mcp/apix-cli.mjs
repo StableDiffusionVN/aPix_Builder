@@ -82,7 +82,9 @@ async function main() {
       }
       const submitted = await client.submitRun(templateId, values, { count: flags.count, address: flags.server });
       if (flags.wait === false) return print(flags.json ? submitted : submitted.runIds.join("\n"));
-      console.error(`Đã gửi ${submitted.runIds.length} lệnh tới ${submitted.address}, đang chờ…`);
+      console.error(submitted.waitingForColab
+        ? `Server ComfyUI không phản hồi — đang bật Google Colab, ${submitted.runIds.length} lệnh sẽ tự chạy khi có link…`
+        : `Đã gửi ${submitted.runIds.length} lệnh tới ${submitted.address}, đang chờ…`);
       const runs = await client.waitForRuns(submitted.runIds, {
         onUpdate: (run, done, total) => console.error(`[${done}/${total}] ${run.status} ${run.runId}`)
       });

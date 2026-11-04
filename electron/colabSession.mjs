@@ -15,6 +15,7 @@ export function createColabSession({ colab, getBackend, onState }) {
   let runToken = 0;
   let lastActivity = Date.now();
   let monitor = null;
+  let serverAddress = ""; // unmasked ComfyUI address of the ready session
 
   const set = patch => {
     state = { ...state, ...patch };
@@ -58,7 +59,8 @@ export function createColabSession({ colab, getBackend, onState }) {
           set({ phase: "error", message: "Mất kết nối ComfyUI trên Colab (runtime đã ngắt?) — bấm để khởi động lại" });
           stopMonitor();
         } else if (found.address !== state.address) {
-          await colab.findServer({ apply: true }).catch(() => null);
+          const switched = await colab.findServer({ apply: true, raw: true }).catch(() => null);
+          if (switched?.rawAddress) serverAddress = switched.rawAddress;
           set({ address: found.address, message: "Đã chuyển sang link ComfyUI khác còn hoạt động" });
         }
       }
@@ -83,8 +85,9 @@ export function createColabSession({ colab, getBackend, onState }) {
       if (status.signedIn === false) throw new Error("Chưa đăng nhập Google");
 
       // Already running (e.g. reopened app): reuse it.
-      const existing = await colab.findServer({ apply: true }).catch(() => null);
+      const existing = await colab.findServer({ apply: true, raw: true }).catch(() => null);
       if (existing?.found) {
+        serverAddress = existing.rawAddress || "";
         set({ phase: "ready", message: "Colab đang chạy — đã gắn server ComfyUI", address: existing.address, readyAt: Date.now() });
         startMonitor();
         return state;
@@ -95,8 +98,9 @@ export function createColabSession({ colab, getBackend, onState }) {
       const deadline = Date.now() + START_TIMEOUT_MS;
       while (alive() && Date.now() < deadline) {
         await sleep(5000);
-        const found = await colab.findServer({ apply: true }).catch(() => null);
+        const found = await colab.findServer({ apply: true, raw: true }).catch(() => null);
         if (found?.found) {
+          serverAddress = found.rawAddress || "";
           set({ phase: "ready", message: "ComfyUI trên Colab đã sẵn sàng", address: found.address, readyAt: Date.now() });
           startMonitor();
           return state;
@@ -136,6 +140,7 @@ export function createColabSession({ colab, getBackend, onState }) {
     start,
     stop,
     getState: () => state,
+    getServerAddress: () => (state.phase === "ready" ? serverAddress : ""),
     configure(next = {}) {
       config = {
         ...config,

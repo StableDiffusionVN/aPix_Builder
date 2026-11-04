@@ -193,7 +193,7 @@ export function createColabController({ appRoot, getMainWindow, getSavedServers 
     }
   }
 
-  async function findServer({ apply = false, url = "" } = {}) {
+  async function findServer({ apply = false, url = "", raw = false } = {}) {
     const contents = url ? guest(url) : await requireGuest();
     if (!contents) throw new Error("Không thấy tab Colab này trong trình duyệt aPix.");
     const text = await frameTexts(contents);
@@ -235,6 +235,8 @@ export function createColabController({ appRoot, getMainWindow, getSavedServers 
     return {
       found: Boolean(found),
       address: found ? mask(found.address) : "",
+      // Unmasked (may carry a saved login): only for in-process callers, never returned over HTTP.
+      ...(raw && found ? { rawAddress: found.address } : {}),
       applied: Boolean(found && apply),
       candidates: candidates.map(item => ({ ...item, address: mask(item.address) }))
     };

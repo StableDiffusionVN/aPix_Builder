@@ -13,7 +13,9 @@ const SERVER_INFO = { name: "apix-builder", version: "1.0.0" };
 const MAX_WAIT_SECONDS = Number(process.env.APIX_MCP_MAX_WAIT || 50);
 const waitMs = seconds => Math.max(1, Math.min(MAX_WAIT_SECONDS, Number(seconds) || MAX_WAIT_SECONDS)) * 1000;
 const pendingHint = runs => (runs.some(run => !["success", "error", "cancelled"].includes(run.status))
-  ? { hint: "Còn lệnh chưa xong — gọi wait_for_run với các runId này để chờ tiếp." }
+  ? { hint: runs.some(run => run.status === "waiting-colab")
+    ? "Đang bật Google Colab (2–5 phút) — lệnh sẽ tự chạy khi có link; gọi wait_for_run với các runId này để chờ tiếp."
+    : "Còn lệnh chưa xong — gọi wait_for_run với các runId này để chờ tiếp." }
   : {});
 const DEFAULT_PROTOCOL = "2025-06-18";
 const client = new ApixClient();
@@ -53,7 +55,7 @@ const TOOLS = [
   },
   {
     name: "run_template",
-    description: "Chạy một template. values: object {key_trường: giá_trị} theo get_template (ảnh = đường dẫn file, URL hoặc tên ảnh input; seed = số hoặc \"random\"; menu = tên lựa chọn). Trường không truyền dùng mặc định. Chờ tối đa ~50 giây rồi trả kết quả; lệnh chưa xong thì gọi wait_for_run.",
+    description: "Chạy một template. values: object {key_trường: giá_trị} theo get_template (ảnh = đường dẫn file, URL hoặc tên ảnh input; seed = số hoặc \"random\"; menu = tên lựa chọn). Trường không truyền dùng mặc định. Chờ tối đa ~50 giây rồi trả kết quả; lệnh chưa xong thì gọi wait_for_run. Nếu server ComfyUI của app không phản hồi, app desktop tự bật Google Colab và giữ lệnh (status waiting-colab, 2–5 phút) rồi tự chạy khi có link — chỉ cần gọi wait_for_run tiếp.",
     inputSchema: {
       type: "object",
       properties: {
@@ -70,7 +72,8 @@ const TOOLS = [
       const submitted = await client.submitRun(templateId, values, { count, address });
       if (!wait) return { ...submitted, status: "queued", hint: "Dùng wait_for_run hoặc get_run với runId để xem kết quả." };
       const runs = await client.waitForRuns(submitted.runIds, { timeoutMs: waitMs(seconds) });
-      return { comfyServer: submitted.address, values: submitted.values, runs, ...pendingHint(runs) };
+      const colab = submitted.waitingForColab ? { waitingForColab: true, colab: submitted.colab } : {};
+      return { comfyServer: submitted.address, ...colab, values: submitted.values, runs, ...pendingHint(runs) };
     }
   },
   {
@@ -232,7 +235,7 @@ async function handle(message) {
       protocolVersion: params.protocolVersion || DEFAULT_PROTOCOL,
       capabilities: { tools: {} },
       serverInfo: SERVER_INFO,
-      instructions: "aPix Builder: chạy workflow sinh ảnh ComfyUI qua app aPix đang mở trên máy. Quy trình: list_templates → get_template → run_template → (wait_for_run lặp lại tới khi xong) → view_output / list_history. Server ComfyUI chưa chạy: colab_auto start (gọi lại colab_auto status tới khi phase=ready) rồi chạy template; app tự tắt Colab khi không dùng (hoặc colab_auto stop). Điều khiển chi tiết: colab_open / colab_run / colab_wait_server / colab_stop."
+      instructions: "aPix Builder: chạy workflow sinh ảnh ComfyUI qua app aPix đang mở trên máy. Quy trình: list_templates → get_template → run_template → (wait_for_run lặp lại tới khi xong) → view_output / list_history. Server ComfyUI chưa chạy: cứ run_template — app desktop tự bật Colab và chạy lệnh khi có link (status waiting-colab → gọi wait_for_run tới khi xong); app tự tắt Colab khi không dùng (hoặc colab_auto stop). Điều khiển chi tiết: colab_open / colab_run / colab_wait_server / colab_stop."
     };
   }
   if (method === "ping") return {};

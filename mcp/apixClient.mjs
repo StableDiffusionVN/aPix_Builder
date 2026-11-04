@@ -44,7 +44,28 @@ export function maskAddress(address) {
   return String(address || "").replace(/\/\/[^/@]+@/, "//***@");
 }
 
-export class ApixError extends Error {}
+export class ApixError extends Error {
+  constructor(message, status = 0) {
+    super(message);
+    this.status = status;
+  }
+}
+
+/** Whether a ComfyUI server answers (URL logins become a Basic auth header). */
+export async function comfyReachable(address, timeoutMs = 6000) {
+  if (!address) return false;
+  try {
+    const parsed = new URL(address);
+    const headers = {};
+    if (parsed.username) {
+      headers.authorization = `Basic ${Buffer.from(`${decodeURIComponent(parsed.username)}:${decodeURIComponent(parsed.password)}`).toString("base64")}`;
+    }
+    const response = await fetch(`${parsed.origin}/system_stats`, { headers, signal: AbortSignal.timeout(timeoutMs) });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
 
 export class ApixClient {
   constructor() {
@@ -82,7 +103,7 @@ export class ApixClient {
     } catch {
       data = { raw: text };
     }
-    if (!response.ok) throw new ApixError(data.error || `aPix ${method} ${pathname} → HTTP ${response.status}`);
+    if (!response.ok) throw new ApixError(data.error || `aPix ${method} ${pathname} → HTTP ${response.status}`, response.status);
     return data;
   }
 
@@ -209,19 +230,51 @@ export class ApixClient {
         meta: { provider: "local", runKind: RUN_KIND }
       });
     }
+    const runIds = jobs.map(job => job.body.runId);
+    // The app's server is down: the desktop app starts Colab and runs these once its link is up.
+    if (!address && !(await comfyReachable(target))) {
+      let held;
+      try {
+        held = await this.request("/api/colab/run-when-ready", { method: "POST", body: { jobs } });
+      } catch (error) {
+        if (error.status === 501) {
+          throw new ApixError(`Server ComfyUI (${maskAddress(target) || "chưa đặt"}) không phản hồi. Mở ComfyUI trên máy, hoặc dùng app aPix desktop để tự bật Google Colab.`);
+        }
+        throw error;
+      }
+      return {
+        runIds,
+        address: "",
+        waitingForColab: true,
+        colab: { phase: held.colab?.phase, message: held.colab?.message },
+        values: summarizeValues(requestValues)
+      };
+    }
     const data = await this.request("/api/run-queue/submit", { method: "POST", body: { jobs } });
     if (!data.acknowledged) throw new ApixError("aPix không nhận lệnh chạy");
-    return { runIds: jobs.map(job => job.body.runId), address: maskAddress(target), values: summarizeValues(requestValues) };
+    return { runIds, address: maskAddress(target), values: summarizeValues(requestValues) };
   }
 
   async getRun(runId) {
-    const [state, history] = await Promise.all([
+    const [state, history, held] = await Promise.all([
       this.request("/api/run-state"),
-      this.request("/api/output-history")
+      this.request("/api/output-history"),
+      this.request("/api/colab/pending").catch(() => null)
     ]);
     const live = (state.runs || []).find(run => run.runId === runId);
     const session = (state.sessions || []).find(item => item.runId === runId);
     const item = (history.history || []).find(entry => entry.id === runId);
+    const waiting = !live && !session && !item ? (held?.runs || []).find(run => run.runId === runId) : null;
+    if (waiting) {
+      return {
+        runId,
+        status: waiting.status === "error" ? "error" : "waiting-colab",
+        error: waiting.error || "",
+        template: waiting.template || "",
+        colab: { phase: held.colab?.phase, message: held.colab?.message },
+        outputs: []
+      };
+    }
     const status = item?.status === "success" || item?.outputs?.length
       ? "success"
       : live ? (live.status || "running") : session?.status || "unknown";

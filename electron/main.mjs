@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { isVersionNewer } from "../shared/version.js";
 import { createSignedRunningHubShortcut, resolveShortcutAssetsDir } from "./runninghub-shortcut.mjs";
 import { registerBrowserIpc } from "./browser-window.mjs";
+import { createColabController } from "./colabControl.mjs";
 
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const preloadPath = path.join(appRoot, "electron", "preload.cjs");
@@ -114,6 +115,19 @@ async function createWindow() {
     process.env.APIX_SERVE_FRONTEND = "1";
     process.env.PORT = "0";
 
+    // Desktop-only capabilities the in-process server exposes to MCP (Colab control).
+    globalThis.apixDesktopBridge = {
+      colab: createColabController({
+        appRoot,
+        getMainWindow: () => mainWindow,
+        getSavedServers: async () => {
+          if (!backend) return [];
+          const response = await fetch(`http://${backend.host}:${backend.port}/api/app-settings`).catch(() => null);
+          const data = response?.ok ? await response.json() : {};
+          return (data.settings || data).connection?.servers || [];
+        }
+      })
+    };
     const { serverReady } = await import("../server/server.js");
     backend = await serverReady;
   }

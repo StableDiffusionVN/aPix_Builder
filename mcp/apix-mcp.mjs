@@ -121,6 +121,46 @@ const TOOLS = [
     run: async ({ run_id: runId, index = 0, max_size: maxSize = 1024 }) => viewOutput(runId, index, maxSize)
   },
   {
+    name: "colab_open",
+    description: "Mở notebook Google Colab (mặc định SDVN ComfyUI) trong trình duyệt của app aPix desktop (đã đăng nhập Google). Trả trạng thái: đăng nhập chưa, runtime, ô đang chạy.",
+    inputSchema: { type: "object", properties: { url: { type: "string", description: "Link notebook Colab; bỏ trống = SDVN ComfyUI" } } },
+    run: ({ url }) => client.colab("open", { url })
+  },
+  {
+    name: "colab_run",
+    description: "Chạy toàn bộ notebook Colab đang mở (Run all) để khởi động ComfyUI. Sau đó dùng colab_wait_server để chờ link ComfyUI. Nếu Colab hỏi quyền Google Drive / đăng nhập thì báo người dùng tự xác nhận trong cửa sổ trình duyệt aPix.",
+    inputSchema: { type: "object", properties: {} },
+    run: () => client.colab("run")
+  },
+  {
+    name: "colab_status",
+    description: "Trạng thái Colab: đã đăng nhập, runtime (kernel) kết nối chưa, số ô đang chạy, hộp thoại đang mở, đoạn cuối output.",
+    inputSchema: { type: "object", properties: {} },
+    run: () => client.colab("status")
+  },
+  {
+    name: "colab_wait_server",
+    description: "Chờ (≤ ~50 giây mỗi lần gọi) tới khi output Colab in link ComfyUI chạy được, rồi đặt làm server ComfyUI của aPix. Chưa thấy thì trả trạng thái để gọi lại.",
+    inputSchema: { type: "object", properties: { apply: { type: "boolean", default: true }, wait_seconds: { type: "number", default: 50 } } },
+    run: async ({ apply = true, wait_seconds: seconds }) => {
+      const deadline = Date.now() + waitMs(seconds);
+      let result;
+      do {
+        result = await client.colab("find-server", { apply });
+        if (result.found) return result;
+        await new Promise(resolve => setTimeout(resolve, 4000));
+      } while (Date.now() < deadline);
+      const status = await client.colab("status").catch(() => ({}));
+      return { ...result, status, hint: "ComfyUI chưa lên — gọi lại colab_wait_server (cài đặt lần đầu có thể mất vài phút)." };
+    }
+  },
+  {
+    name: "colab_stop",
+    description: "Tắt Colab: ngắt và xóa runtime (giải phóng GPU / compute unit). delete_runtime=false chỉ dừng ô đang chạy. Chỉ dùng khi người dùng yêu cầu hoặc đã xong việc.",
+    inputSchema: { type: "object", properties: { delete_runtime: { type: "boolean", default: true } } },
+    run: ({ delete_runtime: deleteRuntime = true }) => client.colab("stop", { deleteRuntime })
+  },
+  {
     name: "delete_history",
     description: "Xóa một mục khỏi lịch sử aPix (cả file ảnh kết quả). Chỉ dùng khi người dùng yêu cầu rõ.",
     inputSchema: { type: "object", properties: { run_id: { type: "string" } }, required: ["run_id"] },
@@ -176,7 +216,7 @@ async function handle(message) {
       protocolVersion: params.protocolVersion || DEFAULT_PROTOCOL,
       capabilities: { tools: {} },
       serverInfo: SERVER_INFO,
-      instructions: "aPix Builder: chạy workflow sinh ảnh ComfyUI qua app aPix đang mở trên máy. Quy trình: list_templates → get_template → run_template → (wait_for_run lặp lại tới khi xong) → view_output / list_history."
+      instructions: "aPix Builder: chạy workflow sinh ảnh ComfyUI qua app aPix đang mở trên máy. Quy trình: list_templates → get_template → run_template → (wait_for_run lặp lại tới khi xong) → view_output / list_history. Server ComfyUI chưa chạy: colab_open → colab_run → colab_wait_server (lặp tới khi found) rồi chạy template; xong việc có thể colab_stop."
     };
   }
   if (method === "ping") return {};

@@ -396,7 +396,7 @@ export function AppWorkspace() {
   // In-app browser (desktop) for Colab / remote servers; the web build opens a normal tab.
   const openAppBrowser = useCallback(() => {
     if (window.apixDesktop?.openBrowser) window.apixDesktop.openBrowser();
-    else window.open("https://colab.research.google.com/", "_blank", "noopener");
+    else window.open("https://colab.research.google.com/github/StableDiffusionVN/SDVN-WebUI/blob/main/SDVN_ComfyUI.ipynb", "_blank", "noopener");
   }, []);
 
   useEffect(() => window.apixDesktop?.onUseComfyUrl?.(address => {

@@ -74,6 +74,11 @@ Server chỉ nghe `127.0.0.1` — chỉ chương trình trên chính máy đó k
 | `run_template` | Chạy (`count` nhiều lần; `comfy_server` = URL hoặc tên server đã lưu); chờ ≤ 50 giây |
 | `wait_for_run` / `get_run` / `list_active_runs` / `cancel_run` | Chờ tiếp (≤ 50 giây mỗi lần), xem, hủy lệnh |
 | `list_history` / `view_output` / `delete_history` | Lịch sử, xem ảnh kết quả (thu nhỏ), xóa |
+| `colab_open` / `colab_run` / `colab_status` | (App desktop) mở notebook SDVN ComfyUI trong trình duyệt aPix đã đăng nhập Google, Run all, xem trạng thái runtime/ô/output |
+| `colab_wait_server` | Chờ link ComfyUI notebook in ra (ưu tiên pinggy → domain riêng → trycloudflare), kiểm tra chạy được rồi đặt làm server |
+| `colab_stop` | Ngắt và xoá runtime Colab (giải phóng GPU) |
+
+Colab: không bỏ qua bước cần người dùng (đăng nhập, quyền Google Drive) — tool báo để người dùng xác nhận trong cửa sổ trình duyệt aPix.
 
 Mỗi lần gọi chờ tối đa ~50 giây vì Codex / Claude Desktop ngắt tool sau ~60 giây; lệnh dài thì AI gọi
 `wait_for_run` lặp lại. Đổi bằng biến `APIX_MCP_MAX_WAIT` (giây) nếu client cho phép chờ lâu hơn.

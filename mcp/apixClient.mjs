@@ -291,6 +291,15 @@ export class ApixClient {
     }));
   }
 
+  // ---- Google Colab (desktop app: drives the signed-in aPix Browser) -----
+
+  async colab(action, body) {
+    const route = `/api/colab/${action}`;
+    return action === "status"
+      ? this.request(route, { timeoutMs: 30000 })
+      : this.request(route, { method: "POST", body: body || {}, timeoutMs: 90000 });
+  }
+
   async deleteHistory(runId) {
     return this.request("/api/output-history/delete", { method: "POST", body: { id: runId } });
   }

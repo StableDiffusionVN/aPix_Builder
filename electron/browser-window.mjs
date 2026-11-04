@@ -22,6 +22,10 @@ function configureSession() {
   session.fromPartition(PARTITION).setUserAgent(chromeLikeUserAgent());
 }
 
+function isColabUrl(url) {
+  return /^https:\/\/colab\.research\.google\.com\//.test(String(url || ""));
+}
+
 function isHttpUrl(url) {
   return typeof url === "string" && /^https?:\/\//i.test(url);
 }
@@ -47,6 +51,10 @@ function attachGuest(guest) {
     event.preventDefault();
     browserWindow?.webContents.send("browser:shortcut", action);
   });
+}
+
+export function getBrowserWindow() {
+  return browserWindow && !browserWindow.isDestroyed() ? browserWindow : null;
 }
 
 export function openBrowserWindow(appRoot, url) {
@@ -122,6 +130,19 @@ export function registerBrowserIpc({ appRoot, getMainWindow }) {
 
   ipcMain.handle("browser:use-comfy-url", async (event, url) => {
     if (!fromBrowser(event) || !isHttpUrl(url)) return { ok: false, error: "Địa chỉ không hợp lệ" };
+    // On a Colab tab the server is the ComfyUI link the notebook prints, not Colab itself.
+    if (isColabUrl(url)) {
+      const colab = globalThis.apixDesktopBridge?.colab;
+      if (!colab) return { ok: false, error: "Không đọc được Colab" };
+      try {
+        const result = await colab.findServer({ apply: true, url });
+        return result.found
+          ? { ok: true, address: result.address, fromColab: true }
+          : { ok: false, error: "Chưa thấy link ComfyUI chạy được trong output — chạy ô RUN và chờ ComfyUI in link." };
+      } catch (error) {
+        return { ok: false, error: error.message };
+      }
+    }
     const address = new URL(url).origin;
     const mainWindow = getMainWindow();
     if (!mainWindow || mainWindow.isDestroyed()) return { ok: false, error: "Cửa sổ aPix chưa mở" };

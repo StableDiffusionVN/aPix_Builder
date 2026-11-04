@@ -18,6 +18,7 @@ import { createStorageRoutes } from "./routes/storage.js";
 import { createTemplateRoutes } from "./routes/templates.js";
 import { publishRuntimeInfo } from "./lib/runtimeInfo.js";
 import { createMcpRoutes } from "./routes/mcp.js";
+import { createColabRoutes } from "./routes/colab.js";
 
 const routes = [
   createTemplateRoutes(routeContext),
@@ -29,7 +30,8 @@ const routes = [
   createPresetsRoutes(routeContext),
   createLutRoutes(routeContext),
   createRunLogRoutes(routeContext),
-  createMcpRoutes(routeContext)
+  createMcpRoutes(routeContext),
+  createColabRoutes(routeContext)
 ];
 
 export function createRequestHandler() {

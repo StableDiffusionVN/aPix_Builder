@@ -4,8 +4,10 @@
 const bridge = window.apixBrowser;
 const PARTITION = "persist:apix-browser";
 const STORAGE_KEY = "apix.browser.tabs";
-const HOME_URL = "https://colab.research.google.com/";
+// Default: the SDVN ComfyUI notebook (installs the SDVN nodes, prints the server link).
+const HOME_URL = "https://colab.research.google.com/github/StableDiffusionVN/SDVN-WebUI/blob/main/SDVN_ComfyUI.ipynb";
 const BOOKMARKS = [
+  { label: "SDVN ComfyUI (Colab)", url: HOME_URL },
   { label: "Google Colab", url: "https://colab.research.google.com/" },
   { label: "Colab SDVN", url: "https://sdvn.me" },
   { label: "Google Drive", url: "https://drive.google.com/" }
@@ -76,14 +78,16 @@ function renderTabs() {
     close.className = "close";
     close.textContent = "×";
     close.title = "Đóng tab (⌘W)";
-    close.addEventListener("click", event => {
+    // Selecting re-renders the tab strip on mousedown, which would replace this
+    // button before its click arrives — so the close button acts on mousedown itself.
+    close.addEventListener("mousedown", event => {
       event.stopPropagation();
-      closeTab(tab.id);
+      if (event.button === 0) closeTab(tab.id);
     });
     el.append(title, close);
     el.addEventListener("mousedown", event => {
       if (event.button === 1) closeTab(tab.id);
-      else selectTab(tab.id);
+      else if (event.button === 0) selectTab(tab.id);
     });
     return el;
   }));
@@ -103,8 +107,14 @@ async function refreshToolbar() {
   if (document.activeElement !== addressEl) addressEl.value = tab.url || "";
   backBtn.disabled = !canGo(tab.view, -1);
   forwardBtn.disabled = !canGo(tab.view, 1);
+  const onColab = /^https:\/\/colab\.research\.google\.com\//.test(tab.url || "");
   useComfyBtn.classList.toggle("ready", Boolean(tab.isComfy));
-  useComfyBtn.textContent = tab.isComfy ? "✓ Dùng làm server ComfyUI" : "Dùng làm server ComfyUI";
+  useComfyBtn.textContent = onColab
+    ? "Lấy link ComfyUI từ Colab"
+    : tab.isComfy ? "✓ Dùng làm server ComfyUI" : "Dùng làm server ComfyUI";
+  useComfyBtn.title = onColab
+    ? "Dò link ComfyUI mà notebook in ra (ô RUN), kiểm tra chạy được rồi đặt làm server của aPix"
+    : "Đặt địa chỉ trang đang mở làm server ComfyUI của aPix";
 }
 
 async function probeComfy(tab) {

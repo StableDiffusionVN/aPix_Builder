@@ -7,10 +7,16 @@
   "private": true,
   "type": "module",
   "main": "electron/main.mjs",
+  "bin": {
+    "apix": "mcp/apix-cli.mjs",
+    "apix-mcp": "mcp/apix-mcp.mjs"
+  },
   "scripts": {
     "start:app": "node scripts/start-app.mjs",
     "dev": "vite --host 0.0.0.0",
     "server": "node server/server.js",
+    "mcp": "node mcp/apix-mcp.mjs",
+    "apix": "node mcp/apix-cli.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc -p tsconfig.check.json",
@@ -62,6 +68,7 @@
       "electron/**/*",
       "server/**/*",
       "shared/**/*",
+      "mcp/**/*",
       "config/default/**/*",
       "config/default-rh/**/*",
       "package.json"

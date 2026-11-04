@@ -16,6 +16,7 @@ import { createRhLibraryRoutes } from "./routes/rhLibrary.js";
 import { createRunningHubRoutes } from "./routes/runninghub.js";
 import { createStorageRoutes } from "./routes/storage.js";
 import { createTemplateRoutes } from "./routes/templates.js";
+import { publishRuntimeInfo } from "./lib/runtimeInfo.js";
 
 const routes = [
   createTemplateRoutes(routeContext),
@@ -74,6 +75,7 @@ export const serverReady = initializeServerRuntime()
       const address = server.address();
       const activePort = typeof address === "object" && address ? address.port : port;
       setListeningPort(activePort);
+      publishRuntimeInfo({ host: "127.0.0.1", port: activePort, dataRoot: process.env.APIX_DATA_ROOT || "" });
       console.log(`ComfyUI YAML app server listening on http://127.0.0.1:${activePort}`);
       cleanupUploads().catch(console.error);
       setInterval(() => cleanupUploads().catch(console.error), 6 * 60 * 60 * 1000).unref();

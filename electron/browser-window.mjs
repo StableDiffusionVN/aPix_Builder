@@ -31,6 +31,14 @@ function isColabUrl(url) {
   return /^https:\/\/colab\.research\.google\.com\//.test(String(url || ""));
 }
 
+function isGoogleUrl(url) {
+  try {
+    return /(^|\.)(google\.com|googleusercontent\.com|gstatic\.com|google\.com\.vn)$/i.test(new URL(url).hostname);
+  } catch {
+    return false;
+  }
+}
+
 function isHttpUrl(url) {
   return typeof url === "string" && /^https?:\/\//i.test(url);
 }
@@ -46,7 +54,10 @@ function attachGuest(guest) {
         overrideBrowserWindowOptions: { width: 520, height: 680, parent: browserWindow, autoHideMenuBar: true }
       };
     }
-    void shell.openExternal(url);
+    // Google account / Drive / Colab pages (sign out, add account…) stay in this window
+    // so the session keeps the sign-in; anything else opens in the system browser.
+    if (isGoogleUrl(url)) browserWindow?.webContents.send("browser:navigate", url);
+    else void shell.openExternal(url);
     return { action: "deny" };
   });
   // Shortcuts still work while a page has keyboard focus.

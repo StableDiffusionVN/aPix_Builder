@@ -121,6 +121,22 @@ const TOOLS = [
     run: async ({ run_id: runId, index = 0, max_size: maxSize = 1024 }) => viewOutput(runId, index, maxSize)
   },
   {
+    name: "colab_auto",
+    description: "Một bước: bật Colab tự động như nút Colab trong app (mở notebook SDVN, Run all, chờ link ComfyUI và gắn làm server, tự tắt khi không dùng). action=start|stop|status; start chờ ≤ ~50 giây rồi trả trạng thái — gọi lại với status tới khi phase=ready.",
+    inputSchema: { type: "object", properties: { action: { type: "string", enum: ["start", "stop", "status"], default: "status" }, wait_seconds: { type: "number", default: 50 } } },
+    run: async ({ action = "status", wait_seconds: seconds }) => {
+      if (action === "stop") return client.colab("session/stop");
+      if (action === "start") await client.colab("session/start");
+      const deadline = Date.now() + waitMs(seconds);
+      let state = await client.colab("session");
+      while (action === "start" && !["ready", "error", "needs-user", "off"].includes(state.phase) && Date.now() < deadline) {
+        await new Promise(resolve => setTimeout(resolve, 4000));
+        state = await client.colab("session");
+      }
+      return state;
+    }
+  },
+  {
     name: "colab_open",
     description: "Mở notebook Google Colab (mặc định SDVN ComfyUI) trong trình duyệt của app aPix desktop (đã đăng nhập Google). Trả trạng thái: đăng nhập chưa, runtime, ô đang chạy.",
     inputSchema: { type: "object", properties: { url: { type: "string", description: "Link notebook Colab; bỏ trống = SDVN ComfyUI" } } },
@@ -216,7 +232,7 @@ async function handle(message) {
       protocolVersion: params.protocolVersion || DEFAULT_PROTOCOL,
       capabilities: { tools: {} },
       serverInfo: SERVER_INFO,
-      instructions: "aPix Builder: chạy workflow sinh ảnh ComfyUI qua app aPix đang mở trên máy. Quy trình: list_templates → get_template → run_template → (wait_for_run lặp lại tới khi xong) → view_output / list_history. Server ComfyUI chưa chạy: colab_open → colab_run → colab_wait_server (lặp tới khi found) rồi chạy template; xong việc có thể colab_stop."
+      instructions: "aPix Builder: chạy workflow sinh ảnh ComfyUI qua app aPix đang mở trên máy. Quy trình: list_templates → get_template → run_template → (wait_for_run lặp lại tới khi xong) → view_output / list_history. Server ComfyUI chưa chạy: colab_auto start (gọi lại colab_auto status tới khi phase=ready) rồi chạy template; app tự tắt Colab khi không dùng (hoặc colab_auto stop). Điều khiển chi tiết: colab_open / colab_run / colab_wait_server / colab_stop."
     };
   }
   if (method === "ping") return {};

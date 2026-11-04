@@ -295,7 +295,7 @@ export class ApixClient {
 
   async colab(action, body) {
     const route = `/api/colab/${action}`;
-    return action === "status"
+    return action === "status" || action === "session"
       ? this.request(route, { timeoutMs: 30000 })
       : this.request(route, { method: "POST", body: body || {}, timeoutMs: 90000 });
   }

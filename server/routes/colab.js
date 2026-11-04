@@ -9,7 +9,15 @@ export function createColabRoutes({ readBody, send }) {
       return true;
     }
     const body = req.method === "POST" ? JSON.parse(await readBody(req) || "{}") : {};
+    const session = globalThis.apixDesktopBridge?.colabSession;
     const actions = {
+      // One-button flow (same as the top-bar Colab button): start returns at once, poll GET.
+      "GET /api/colab/session": () => session.getState(),
+      "POST /api/colab/session/start": () => {
+        void session.start();
+        return session.getState();
+      },
+      "POST /api/colab/session/stop": () => session.stop(),
       "GET /api/colab/status": () => colab.status(),
       "POST /api/colab/open": () => colab.open(body.url),
       "POST /api/colab/run": () => colab.run(),

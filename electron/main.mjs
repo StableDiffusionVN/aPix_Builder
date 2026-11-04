@@ -6,6 +6,7 @@ import { isVersionNewer } from "../shared/version.js";
 import { createSignedRunningHubShortcut, resolveShortcutAssetsDir } from "./runninghub-shortcut.mjs";
 import { registerBrowserIpc } from "./browser-window.mjs";
 import { createColabController } from "./colabControl.mjs";
+import { createColabSession } from "./colabSession.mjs";
 
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const preloadPath = path.join(appRoot, "electron", "preload.cjs");
@@ -21,6 +22,8 @@ if (!gotSingleInstanceLock) {
 let mainWindow;
 let backend;
 let dismissedUpdateVersion = "";
+let colabSession = null;
+let quittingAfterColab = false;
 
 async function readDismissedUpdateVersion() {
   try {
@@ -116,18 +119,24 @@ async function createWindow() {
     process.env.PORT = "0";
 
     // Desktop-only capabilities the in-process server exposes to MCP (Colab control).
-    globalThis.apixDesktopBridge = {
-      colab: createColabController({
-        appRoot,
-        getMainWindow: () => mainWindow,
-        getSavedServers: async () => {
-          if (!backend) return [];
-          const response = await fetch(`http://${backend.host}:${backend.port}/api/app-settings`).catch(() => null);
-          const data = response?.ok ? await response.json() : {};
-          return (data.settings || data).connection?.servers || [];
-        }
-      })
-    };
+    const colab = createColabController({
+      appRoot,
+      getMainWindow: () => mainWindow,
+      getSavedServers: async () => {
+        if (!backend) return [];
+        const response = await fetch(`http://${backend.host}:${backend.port}/api/app-settings`).catch(() => null);
+        const data = response?.ok ? await response.json() : {};
+        return (data.settings || data).connection?.servers || [];
+      }
+    });
+    colabSession = createColabSession({
+      colab,
+      getBackend: () => backend,
+      onState: state => {
+        if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("colab:state", state);
+      }
+    });
+    globalThis.apixDesktopBridge = { colab, colabSession };
     const { serverReady } = await import("../server/server.js");
     backend = await serverReady;
   }
@@ -158,6 +167,10 @@ async function createWindow() {
 
 function registerIpcHandlers() {
   registerBrowserIpc({ appRoot, getMainWindow: () => mainWindow });
+  ipcMain.handle("colab:start", () => colabSession?.start());
+  ipcMain.handle("colab:stop", () => colabSession?.stop());
+  ipcMain.handle("colab:get-state", () => colabSession?.getState() || null);
+  ipcMain.handle("colab:configure", (_event, config) => colabSession?.configure(config || {}));
   ipcMain.handle("app:get-version", () => app.getVersion());
 
   ipcMain.handle("app:check-for-updates", async () => {
@@ -255,7 +268,15 @@ if (gotSingleInstanceLock) {
     if (process.platform !== "darwin") app.quit();
   });
 
-  app.on("before-quit", () => {
+  app.on("before-quit", event => {
+    // Free the Colab GPU before quitting (best effort, ≤ 15 s).
+    if (!quittingAfterColab && colabSession?.shouldStopOnQuit()) {
+      event.preventDefault();
+      quittingAfterColab = true;
+      Promise.race([colabSession.stop({ reason: "quit" }), new Promise(resolve => setTimeout(resolve, 15000))])
+        .finally(() => app.quit());
+      return;
+    }
     backend?.server?.close();
   });
 }

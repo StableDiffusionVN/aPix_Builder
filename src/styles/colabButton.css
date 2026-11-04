@@ -1,0 +1,131 @@
+/* Top bar → one-button Colab */
+.colabButtonRoot {
+  position: relative;
+}
+
+.appTopBarButton.colabButton {
+  width: auto;
+  gap: 5px;
+  padding: 0 9px;
+}
+
+.colabButtonLabel {
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.colabButtonDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--muted-2, var(--muted));
+}
+
+.colabButtonDot.is-ready { background: var(--success); box-shadow: 0 0 6px var(--success); }
+.colabButtonDot.is-opening,
+.colabButtonDot.is-starting,
+.colabButtonDot.is-waiting,
+.colabButtonDot.is-stopping,
+.colabButtonDot.is-needs-user { background: var(--accent); }
+.colabButtonDot.is-error { background: var(--danger); }
+
+.colabPopover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 60;
+  display: grid;
+  gap: 8px;
+  width: 300px;
+  padding: 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--panel-strong, var(--panel));
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
+  color: var(--text);
+  font-size: 12px;
+}
+
+.colabPopoverHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.colabPhase {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.colabPhase.is-ready { background: rgba(125, 211, 168, 0.16); color: var(--success); }
+.colabPhase.is-error { background: var(--danger-bg); color: var(--danger); }
+.colabPhase.is-needs-user { background: rgba(var(--accent-rgb), 0.16); color: var(--accent); }
+
+.colabMessage,
+.colabHint {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.colabHint {
+  color: var(--muted-2, var(--muted));
+  font-size: 10px;
+}
+
+.colabAddress {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--success);
+  font: 11px ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.colabActions {
+  display: flex;
+  gap: 6px;
+}
+
+.colabAction {
+  flex: 1;
+  height: 28px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.colabAction.primary { border-color: rgba(var(--accent-rgb), 0.55); color: var(--accent); }
+.colabAction.danger:hover { border-color: rgba(239, 68, 68, 0.6); color: #ef4444; }
+.colabAction:disabled { opacity: 0.6; cursor: progress; }
+
+.colabSetting {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--muted);
+}
+
+.colabSetting select {
+  height: 26px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.25);
+  color: var(--text);
+  font: inherit;
+}
+
+.colabSetting.checkbox {
+  justify-content: flex-start;
+}

@@ -93,6 +93,7 @@ import { RunningState } from "./AppWorkspaceRunningUi.jsx";
 import { WorkspaceModals } from "./WorkspaceModals.jsx";
 import { usePressHold } from "../../hooks/usePressHold.js";
 import { useAdjustedOutputPreview } from "../../hooks/useAdjustedOutputPreview.js";
+import { ColabButton } from "./ColabButton.jsx";
 
 const InfiniteCanvas = lazy(() => import("../canvas/InfiniteCanvas.jsx").then(module => ({ default: module.InfiniteCanvas })));
 
@@ -1801,6 +1802,7 @@ export function AppWorkspace() {
             ) : null}
           </button>
 
+          <ColabButton />
           <button
             type="button"
             className="appTopBarButton"

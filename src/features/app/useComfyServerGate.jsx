@@ -74,13 +74,6 @@ export function useComfyServerGate({ enabled, healthStatus, onRun, onLocalChosen
           </div>
         </div>
         <div className="serverGateOptions">
-          <button type="button" className="serverGateOption" onClick={chooseLocal}>
-            <Monitor size={18} />
-            <span>
-              <strong>{t("serverGate.local")}</strong>
-              <small>{t("serverGate.localHint")}</small>
-            </span>
-          </button>
           {colab ? (
             <button type="button" className="serverGateOption primary" onClick={chooseColab}>
               <Cloud size={18} />
@@ -90,6 +83,13 @@ export function useComfyServerGate({ enabled, healthStatus, onRun, onLocalChosen
               </span>
             </button>
           ) : null}
+          <button type="button" className="serverGateOption" onClick={chooseLocal}>
+            <Monitor size={18} />
+            <span>
+              <strong>{t("serverGate.local")}</strong>
+              <small>{t("serverGate.localHint")}</small>
+            </span>
+          </button>
         </div>
         <div className="templateDeleteActions">
           <button type="button" className="secondaryActionButton" onClick={() => setPromptOpen(false)}>

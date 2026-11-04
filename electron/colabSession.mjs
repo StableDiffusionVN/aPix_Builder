@@ -61,7 +61,7 @@ export function createColabSession({ colab, getBackend, onState }) {
         } else if (found.address !== state.address) {
           const switched = await colab.findServer({ apply: true, raw: true }).catch(() => null);
           if (switched?.rawAddress) serverAddress = switched.rawAddress;
-          set({ address: found.address, message: "Đã chuyển sang link ComfyUI khác còn hoạt động" });
+          set({ address: found.address, message: "Đã chuyển sang link ComfyUI khác" });
         }
       }
     }, 30000);

@@ -94,6 +94,7 @@ import { WorkspaceModals } from "./WorkspaceModals.jsx";
 import { usePressHold } from "../../hooks/usePressHold.js";
 import { useAdjustedOutputPreview } from "../../hooks/useAdjustedOutputPreview.js";
 import { ColabButton } from "./ColabButton.jsx";
+import { useComfyServerGate } from "./useComfyServerGate.jsx";
 
 const InfiniteCanvas = lazy(() => import("../canvas/InfiniteCanvas.jsx").then(module => ({ default: module.InfiniteCanvas })));
 
@@ -428,7 +429,16 @@ export function AppWorkspace() {
     setStatus,
     setShowWaitScreen
   });
-  const handleRunClick = runWithBatchExpansion;
+  const onLocalServerChosen = useCallback(() => {
+    setStatus(t("serverGate.localStatus", { address: comfyAddress || "http://127.0.0.1:8188" }));
+  }, [comfyAddress, setStatus, t]);
+  const serverGate = useComfyServerGate({
+    enabled: executionMode === "local" && !isCanvasView,
+    healthStatus,
+    onRun: runWithBatchExpansion,
+    onLocalChosen: onLocalServerChosen
+  });
+  const handleRunClick = serverGate.handleRun;
   const outputs = useMemo(() => Object.values(config?.output || {}), [config]);
   const currentPresets = useMemo(() => {
     void presetsVersion;
@@ -2068,8 +2078,11 @@ export function AppWorkspace() {
           </>
         )}
 
+        {serverGate.prompt}
         <RunControls
           running={running}
+          preparing={serverGate.preparing}
+          preparingLabel={serverGate.preparingLabel}
           canRun={canRun}
           canCancel={Boolean(running && activeRunId)}
           queueCount={formQueueCount}

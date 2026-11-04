@@ -138,3 +138,42 @@
 .colabSetting.checkbox {
   justify-content: flex-start;
 }
+
+/* Run → server not reachable: choose local ComfyUI or Colab */
+.serverGateModal {
+  width: min(440px, calc(100vw - 32px));
+}
+
+.serverGateOptions {
+  display: grid;
+  gap: 8px;
+  margin: 4px 0 12px;
+}
+
+.serverGateOption {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.serverGateOption svg { flex: none; margin-top: 1px; color: var(--muted); }
+.serverGateOption span { display: grid; gap: 3px; }
+.serverGateOption small { color: var(--muted); font-size: 11px; line-height: 1.4; }
+.serverGateOption:hover { border-color: var(--border-strong); background: var(--panel-soft); }
+.serverGateOption.primary { border-color: rgba(var(--accent-rgb), 0.5); }
+.serverGateOption.primary svg { color: var(--accent); }
+
+.runPreparingLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}

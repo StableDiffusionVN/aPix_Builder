@@ -4,6 +4,8 @@ import { useI18n } from "../i18n/I18nContext";
 
 export function RunControls({
   running,
+  preparing = false,
+  preparingLabel = "",
   canRun,
   canCancel,
   queueCount = 0,
@@ -52,10 +54,12 @@ export function RunControls({
         className={`runButton${stopInsideRun ? " runControlRun" : ""} ${runLabel ? "rhRunButton" : ""}`}
         onClick={onRun}
         disabled={!canRun}
-        title={running ? t("run.queueTitle") : `${idleLabel} (⌘/Ctrl+Enter)`}
+        title={preparing ? `${preparingLabel} — ${t("serverGate.cancelHint")}` : running ? t("run.queueTitle") : `${idleLabel} (⌘/Ctrl+Enter)`}
       >
-        {running ? <Loader2 className="spin" size={compact ? 13 : 15} /> : <Play size={compact ? 13 : 15} />}
-        <span>{running ? `${t("run.queue")}${queueCount ? ` (${queueCount})` : ""}` : idleLabel}</span>
+        {running || preparing ? <Loader2 className="spin" size={compact ? 13 : 15} /> : <Play size={compact ? 13 : 15} />}
+        <span className={preparing ? "runPreparingLabel" : undefined}>
+          {preparing ? preparingLabel : running ? `${t("run.queue")}${queueCount ? ` (${queueCount})` : ""}` : idleLabel}
+        </span>
       </button>
       <button
         type="button"

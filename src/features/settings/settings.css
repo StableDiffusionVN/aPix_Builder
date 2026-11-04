@@ -317,3 +317,88 @@
 .aiConnectError {
   color: var(--danger);
 }
+
+.aiConnectSection {
+  display: grid;
+  gap: 8px;
+}
+
+.aiConnectSection h4 {
+  margin: 4px 0 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.aiClientList {
+  display: grid;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.aiClientRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  background: var(--panel-soft);
+}
+
+.aiClientRow + .aiClientRow {
+  border-top: 1px solid var(--border);
+}
+
+.aiClientRow.notDetected {
+  opacity: 0.6;
+}
+
+.aiClientInfo {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  column-gap: 8px;
+  row-gap: 2px;
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+}
+
+.aiClientInfo small {
+  grid-column: 1 / -1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted-2, var(--muted));
+  font-size: 10px;
+}
+
+.aiClientStatus {
+  justify-self: start;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.aiClientStatus.is-connected {
+  background: rgba(125, 211, 168, 0.16);
+  color: var(--success);
+}
+
+.aiClientStatus.is-outdated {
+  background: rgba(var(--accent-rgb), 0.16);
+  color: var(--accent);
+}
+
+.aiConnectCopy.primary {
+  border-color: rgba(var(--accent-rgb), 0.55);
+  color: var(--accent);
+}
+
+.aiConnectCopy:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}

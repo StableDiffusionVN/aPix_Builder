@@ -1,6 +1,6 @@
-# aPix Builder — kết nối Claude / Codex (MCP) & CLI
+# aPix Builder — kết nối trợ lý AI (MCP) & CLI
 
-Cho trợ lý AI (Claude Code, Codex CLI, Claude Desktop hoặc client MCP khác) điều khiển aPix:
+Cho trợ lý AI (Claude, Cursor, Codex, Antigravity, Windsurf, VS Code, Gemini CLI hoặc client MCP khác) điều khiển aPix:
 xem template, chạy workflow sinh ảnh trên server ComfyUI (local / Colab), theo dõi hàng đợi, xem và
 quản lý ảnh kết quả. Lệnh chạy qua AI vào **cùng hàng đợi và lịch sử** với app — ảnh hiện trong thư
 viện aPix ngay khi xong.
@@ -12,11 +12,13 @@ Không cần Node, không cần mã nguồn — app desktop tự chạy MCP serv
 1. **Cài aPix Builder** (DMG macOS / EXE Windows) và mở app một lần.
 2. **Cài trợ lý AI** muốn dùng: [Claude Code](https://claude.com/claude-code), Codex CLI
    (`npm i -g @openai/codex`) hoặc Claude Desktop — đăng nhập như bình thường.
-3. Trong aPix mở **Settings → Kết nối AI**. Mục này hiện sẵn lệnh đúng đường dẫn của máy đó:
-   - **Claude Code / Codex CLI**: bấm *Copy* rồi dán vào Terminal, Enter. Làm một lần.
-   - **Claude Desktop**: copy khối JSON, gộp vào `claude_desktop_config.json`
-     (macOS `~/Library/Application Support/Claude/`, Windows `%APPDATA%\Claude\`), khởi động lại Claude Desktop.
-   - **Codex** cũng có thể dán khối TOML vào `~/.codex/config.toml`.
+3. Trong aPix mở **Settings → Kết nối AI**:
+   - **Ứng dụng AI trên máy** — app tự nhận biết và bấm **Kết nối** là ghi cấu hình vào đúng file
+     (giữ một bản `.apix-backup` của file gốc): Claude Desktop, Cursor, Windsurf, Google Antigravity,
+     Gemini CLI, VS Code (Copilot agent), Codex CLI, LM Studio. Khởi động lại ứng dụng AI sau khi kết nối.
+   - **Dòng lệnh** — Claude Code, Codex CLI, Gemini CLI: bấm *Copy*, dán vào Terminal.
+   - **Cấu hình thủ công** — Cline, Zed, Continue… hoặc client MCP khác: dán khối JSON `mcpServers`.
+   - Lệnh/cấu hình luôn đúng đường dẫn của máy đó; app đổi chỗ thì bấm **Cập nhật**.
 4. **Mỗi lần dùng**: mở app aPix → bật server ComfyUI (Colab/local; có thể mở bằng nút 🌐 trong app) →
    mở session mới của Claude/Codex và nói việc cần làm, ví dụ:
    > "dùng apix chạy SwapFace Qwen với ~/a.jpg làm Image Swap, ~/b.jpg làm Face Swap, chọn + Upscale 3800, chạy 3 lần rồi cho tôi xem kết quả"
@@ -31,7 +33,19 @@ claude mcp add apix --scope user --env ELECTRON_RUN_AS_NODE=1 -- "/Applications/
 codex mcp add apix --env ELECTRON_RUN_AS_NODE=1 -- "/Applications/aPix Builder.app/Contents/MacOS/aPix Builder" "/Applications/aPix Builder.app/Contents/Resources/app.asar/mcp/apix-mcp.mjs"
 ```
 
-Kiểm tra: `claude mcp list` / `codex mcp list` phải thấy `apix`. Gỡ: `claude mcp remove apix -s user`,
+| Ứng dụng | File cấu hình (macOS / Linux; Windows tương ứng trong `%USERPROFILE%` / `%APPDATA%`) |
+|---|---|
+| Claude Desktop | `~/Library/Application Support/Claude/claude_desktop_config.json` |
+| Cursor | `~/.cursor/mcp.json` |
+| Windsurf | `~/.codeium/windsurf/mcp_config.json` |
+| Google Antigravity | `~/.gemini/antigravity/mcp_config.json` |
+| Gemini CLI | `~/.gemini/settings.json` |
+| VS Code | `~/Library/Application Support/Code/User/mcp.json` (khóa `servers`) |
+| Codex CLI | `~/.codex/config.toml` (`[mcp_servers.apix]`) |
+| LM Studio | `~/.lmstudio/mcp.json` |
+| Claude Code | lệnh `claude mcp add` |
+
+Kiểm tra: `claude mcp list` / `codex mcp list` / `gemini mcp list` phải thấy `apix`. Gỡ: `claude mcp remove apix -s user`,
 `codex mcp remove apix`. Chuyển app sang vị trí khác (hoặc bản portable Windows ở thư mục khác) thì
 đăng ký lại bằng lệnh mới trong Settings.
 

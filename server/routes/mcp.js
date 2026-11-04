@@ -1,6 +1,7 @@
 // How to launch the aPix MCP server from this install (shown in Settings → AI connect).
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { installMcpClient, listMcpClients, uninstallMcpClient } from "../lib/mcpClients.js";
 
 const scriptPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "mcp", "apix-mcp.mjs");
 
@@ -18,10 +19,25 @@ export function mcpLaunchConfig() {
   };
 }
 
-export function createMcpRoutes({ send }) {
+export function createMcpRoutes({ readBody, send }) {
   return async function mcpRoutes(req, res, url) {
     if (req.method === "GET" && url.pathname === "/api/mcp-config") {
       send(res, 200, mcpLaunchConfig());
+      return true;
+    }
+    if (req.method === "GET" && url.pathname === "/api/mcp-clients") {
+      send(res, 200, { clients: await listMcpClients(mcpLaunchConfig()) });
+      return true;
+    }
+    if (req.method === "POST" && (url.pathname === "/api/mcp-clients/install" || url.pathname === "/api/mcp-clients/uninstall")) {
+      // Only a known client id is accepted; the entry written is always this install's own launch command.
+      const body = JSON.parse(await readBody(req) || "{}");
+      const action = url.pathname.endsWith("install") && !url.pathname.endsWith("uninstall") ? installMcpClient : uninstallMcpClient;
+      try {
+        send(res, 200, { client: await action(String(body.client || ""), mcpLaunchConfig()) });
+      } catch (error) {
+        send(res, 400, { error: error.message });
+      }
       return true;
     }
     return false;

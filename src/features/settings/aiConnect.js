@@ -20,6 +20,7 @@ export function buildMcpSnippets({ command, args = [], env = {}, platform = "dar
   return {
     claudeCode: `claude mcp add apix --scope user ${withEnv}-- ${launch}`,
     codex: `codex mcp add apix ${withEnv}-- ${launch}`,
+    gemini: `gemini mcp add --scope user ${Object.entries(env).map(([key, value]) => `-e ${key}=${value} `).join("")}apix ${launch}`,
     codexToml: `[mcp_servers.apix]\ncommand = ${tomlString(command)}\nargs = [${args.map(tomlString).join(", ")}]${tomlEnv}`,
     claudeDesktop: JSON.stringify(desktopConfig, null, 2),
     claudeDesktopPath: platform === "win32"

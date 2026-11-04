@@ -91,6 +91,13 @@ function attachGuest(guest, host) {
     if (code !== -3) logBrowser(`fail ${code} ${description} ${isMainFrame ? "main" : "frame"} ${shortUrl(url)}`);
   });
   guest.on("will-navigate", (_event, url) => logBrowser(`navigate ${shortUrl(url)}`));
+  // Colab's "Leave site?" (beforeunload) has no dialog in a webview and silently blocks
+  // every navigation — e.g. switching account (?authuser=1). The notebook comes from
+  // GitHub (nothing to save) and leaving the page does not stop the runtime: allow it.
+  guest.on("will-prevent-unload", event => {
+    logBrowser("beforeunload ignored");
+    event.preventDefault();
+  });
   // Shortcuts still work while the page has keyboard focus.
   guest.on("before-input-event", (event, input) => {
     if (input.type !== "keyDown" || !(input.meta || input.control) || input.shift || input.alt) return;

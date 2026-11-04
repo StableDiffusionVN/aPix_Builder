@@ -3,6 +3,7 @@ import { fetchOutputHistoryByRunId } from "../canvas/canvasRuntimeSync.js";
 import { collectBackendFormRunIds, pickSettledRunIds } from "./backendQueueResults.js";
 
 const POLL_MS = 2500;
+// Khi rảnh vẫn hỏi run log để thấy lệnh mới gửi từ MCP / CLI `apix`.
 const IDLE_POLL_MS = 5000;
 
 /**
@@ -27,10 +28,12 @@ export function useBackendQueueResults({ sessions, isOwnRun, hasHistoryItem, onA
   useEffect(() => {
     let cancelled = false;
     let timer = null;
+    const externalSince = Date.now();
 
     const watch = (currentSessions) => {
-      for (const runId of collectBackendFormRunIds(currentSessions, isOwnRunRef.current)) {
-        watchingRef.current.add(runId);
+      const runIds = collectBackendFormRunIds(currentSessions, isOwnRunRef.current, { externalSince });
+      for (const runId of runIds) {
+        if (!hasHistoryItemRef.current?.(runId)) watchingRef.current.add(runId);
       }
     };
 
@@ -39,18 +42,18 @@ export function useBackendQueueResults({ sessions, isOwnRun, hasHistoryItem, onA
       if (!settled.length) return;
       const historyByRunId = await fetchOutputHistoryByRunId();
       if (cancelled) return;
+      const sessionByRunId = new Map((currentSessions || []).map(session => [session.runId, session]));
       for (const runId of settled) {
         watchingRef.current.delete(runId);
         const item = historyByRunId.get(runId);
         if (!item) continue;
         if (hasHistoryItemRef.current?.(runId)) continue;
-        onAdoptRef.current?.(item);
+        onAdoptRef.current?.(item, sessionByRunId.get(runId) || null);
       }
     };
 
     const tick = async () => {
       watch(sessionsRef.current);
-      if (!watchingRef.current.size) return;
       const latest = await refreshSessionsRef.current?.() || sessionsRef.current;
       if (cancelled) return;
       watch(latest);

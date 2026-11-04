@@ -1,4 +1,5 @@
 import {
+  Bot,
   ChevronsUpDown,
   FolderCog,
   Loader2,
@@ -11,6 +12,7 @@ import {
 import { ConnectionPanel, SavedServerList, AddServerForm } from "./ConnectionPanel";
 import { RunningHubSettings } from "./RunningHubSettings";
 import { StorageSettings } from "./StorageSettings";
+import { AiConnectSettings } from "../features/settings/AiConnectSettings.jsx";
 import { ComfyUiLogomark } from "./icons/ComfyUiIcon";
 import { RunningHubLogomark } from "./icons/RunningHubIcon";
 import {
@@ -135,6 +137,13 @@ export function SettingsModal() {
               <span>
                 <b>{t("settings.canvas.tab")}</b>
                 <small>{t("settings.canvas.tabHint")}</small>
+              </span>
+            </button>
+            <button type="button" role="tab" aria-selected={settingsTab === "ai"} className={settingsTab === "ai" ? "active" : ""} onClick={() => setSettingsTab("ai")}>
+              <Bot size={17} />
+              <span>
+                <b>{t("aiConnect.tab")}</b>
+                <small>{t("aiConnect.tabHint")}</small>
               </span>
             </button>
           </nav>
@@ -319,6 +328,16 @@ export function SettingsModal() {
                   <p>{t("storage.description")}</p>
                 </header>
                 <StorageSettings />
+              </section>
+            ) : null}
+
+            {settingsTab === "ai" ? (
+              <section className="settingsPane" role="tabpanel">
+                <header className="settingsPaneHeader">
+                  <h3>{t("aiConnect.title")}</h3>
+                  <p>{t("aiConnect.description")}</p>
+                </header>
+                <AiConnectSettings />
               </section>
             ) : null}
 

@@ -85,7 +85,7 @@ import {
 } from "../../providers/WorkspaceLayoutProvider.jsx";
 import { useTemplateWorkspaceActions } from "../templates/useTemplateWorkspaceActions.js";
 import { useBatchImageState } from "./useBatchImageState.js";
-import { BACKEND_RUN_ACTIVE_STATUSES, historyItemToResult } from "./backendQueueResults.js";
+import { BACKEND_RUN_ACTIVE_STATUSES, EXTERNAL_RUN_KIND, historyItemToResult } from "./backendQueueResults.js";
 import { useBackendQueueResults } from "./useBackendQueueResults.js";
 import { useWorkspaceModals } from "./useWorkspaceModals.js";
 import { useShortcutActionRefs, useWorkspaceShortcuts } from "./useWorkspaceShortcuts.js";
@@ -350,12 +350,19 @@ export function AppWorkspace() {
 
   const hasHistoryItem = useCallback((id) => historyRef.current.some(item => item.id === id), []);
 
-  const adoptBackendQueueResult = useCallback((item) => {
+  const adoptBackendQueueResult = useCallback((item, session) => {
     setHistory(current => (current.some(entry => entry.id === item.id) ? current : [item, ...current]));
+    const isRh = isRunningHubHistoryItem(item);
+    // Lệnh từ MCP / CLI: chỉ thêm vào lịch sử, không giành khung xem người dùng đang mở.
+    if (session?.runKind === EXTERNAL_RUN_KIND) {
+      if (notifyEnabled && typeof Notification !== "undefined" && Notification.permission === "granted") {
+        notifyWorkflowCompleted({ enabled: true, t, isRh });
+      }
+      return;
+    }
     setSelectedHistoryIds(new Set([item.id]));
     setHistorySelectionAnchor(item.id);
     setSelectedOutputIndex(0);
-    const isRh = isRunningHubHistoryItem(item);
     (isRh ? rhExecution : localExecution).setResult(historyItemToResult(item));
     if (notifyEnabled && typeof Notification !== "undefined" && Notification.permission === "granted") {
       notifyWorkflowCompleted({ enabled: true, t, isRh });

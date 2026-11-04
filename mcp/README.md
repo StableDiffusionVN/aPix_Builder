@@ -1,39 +1,54 @@
-# aPix Builder — MCP server & CLI
+# aPix Builder — kết nối Claude / Codex (MCP) & CLI
 
-Cho Claude (Claude Code, Claude Desktop) hoặc chatbot hỗ trợ MCP điều khiển aPix Builder:
-xem template, chạy workflow sinh ảnh trên server ComfyUI (local / Colab), theo dõi hàng đợi,
-xem và quản lý ảnh kết quả.
+Cho trợ lý AI (Claude Code, Codex CLI, Claude Desktop hoặc client MCP khác) điều khiển aPix:
+xem template, chạy workflow sinh ảnh trên server ComfyUI (local / Colab), theo dõi hàng đợi, xem và
+quản lý ảnh kết quả. Lệnh chạy qua AI vào **cùng hàng đợi và lịch sử** với app — ảnh hiện trong thư
+viện aPix ngay khi xong.
 
-Cần app aPix đang chạy (bản desktop hoặc `npm run server`). Server aPix ghi địa chỉ của nó vào
-`~/.apix/server.json`; MCP/CLI tự tìm qua file này, nếu không có thì thử `http://127.0.0.1:8787`.
-Đặt `APIX_URL` để chỉ định địa chỉ khác.
+## Cài trên một máy mới (người dùng app desktop)
 
-## Đăng ký với Claude Code
+Không cần Node, không cần mã nguồn — app desktop tự chạy MCP server.
+
+1. **Cài aPix Builder** (DMG macOS / EXE Windows) và mở app một lần.
+2. **Cài trợ lý AI** muốn dùng: [Claude Code](https://claude.com/claude-code), Codex CLI
+   (`npm i -g @openai/codex`) hoặc Claude Desktop — đăng nhập như bình thường.
+3. Trong aPix mở **Settings → Kết nối AI**. Mục này hiện sẵn lệnh đúng đường dẫn của máy đó:
+   - **Claude Code / Codex CLI**: bấm *Copy* rồi dán vào Terminal, Enter. Làm một lần.
+   - **Claude Desktop**: copy khối JSON, gộp vào `claude_desktop_config.json`
+     (macOS `~/Library/Application Support/Claude/`, Windows `%APPDATA%\Claude\`), khởi động lại Claude Desktop.
+   - **Codex** cũng có thể dán khối TOML vào `~/.codex/config.toml`.
+4. **Mỗi lần dùng**: mở app aPix → bật server ComfyUI (Colab/local; có thể mở bằng nút 🌐 trong app) →
+   mở session mới của Claude/Codex và nói việc cần làm, ví dụ:
+   > "dùng apix chạy SwapFace Qwen với ~/a.jpg làm Image Swap, ~/b.jpg làm Face Swap, chọn + Upscale 3800, chạy 3 lần rồi cho tôi xem kết quả"
+
+Lệnh mẫu trên macOS (Settings → Kết nối AI tạo sẵn, chỉ để tham khảo):
 
 ```bash
-claude mcp add apix -- node /Volumes/SDdrive/ProductAI/aPix_Builder/mcp/apix-mcp.mjs
+claude mcp add apix --scope user --env ELECTRON_RUN_AS_NODE=1 -- "/Applications/aPix Builder.app/Contents/MacOS/aPix Builder" "/Applications/aPix Builder.app/Contents/Resources/app.asar/mcp/apix-mcp.mjs"
 ```
-
-Không có Node trên máy? Dùng chính app desktop đã cài:
 
 ```bash
-claude mcp add apix --env ELECTRON_RUN_AS_NODE=1 -- "/Applications/aPix Builder.app/Contents/MacOS/aPix Builder" "/Applications/aPix Builder.app/Contents/Resources/app.asar/mcp/apix-mcp.mjs"
+codex mcp add apix --env ELECTRON_RUN_AS_NODE=1 -- "/Applications/aPix Builder.app/Contents/MacOS/aPix Builder" "/Applications/aPix Builder.app/Contents/Resources/app.asar/mcp/apix-mcp.mjs"
 ```
 
-## Claude Desktop
+Kiểm tra: `claude mcp list` / `codex mcp list` phải thấy `apix`. Gỡ: `claude mcp remove apix -s user`,
+`codex mcp remove apix`. Chuyển app sang vị trí khác (hoặc bản portable Windows ở thư mục khác) thì
+đăng ký lại bằng lệnh mới trong Settings.
 
-`~/Library/Application Support/Claude/claude_desktop_config.json`:
+## Từ mã nguồn (máy dev)
 
-```json
-{
-  "mcpServers": {
-    "apix": {
-      "command": "node",
-      "args": ["/Volumes/SDdrive/ProductAI/aPix_Builder/mcp/apix-mcp.mjs"]
-    }
-  }
-}
+```bash
+npm install
+npm run server            # hoặc npm run desktop
+claude mcp add apix --scope user -- node "$PWD/mcp/apix-mcp.mjs"
+codex mcp add apix -- node "$PWD/mcp/apix-mcp.mjs"
 ```
+
+## Cách MCP tìm app
+
+Server aPix ghi địa chỉ đang chạy vào `~/.apix/server.json` (app desktop dùng cổng ngẫu nhiên); MCP/CLI
+đọc file này, nếu không có thì thử `http://127.0.0.1:8787`. Đặt `APIX_URL` để chỉ định địa chỉ khác.
+Server chỉ nghe `127.0.0.1` — chỉ chương trình trên chính máy đó kết nối được.
 
 ## Công cụ
 
@@ -42,9 +57,12 @@ claude mcp add apix --env ELECTRON_RUN_AS_NODE=1 -- "/Applications/aPix Builder.
 | `apix_status` | Kết nối, server ComfyUI đang dùng (mật khẩu được che), server đã lưu, thư mục output |
 | `list_templates` / `get_template` | Template và các trường (kiểu, lựa chọn, mặc định, sub-field của menu-sub) |
 | `list_input_images` / `upload_image` | Thư viện ảnh input; đưa ảnh từ file hoặc URL vào |
-| `run_template` | Chạy (mặc định chờ xong, trả đường dẫn ảnh); `count` chạy nhiều lần; `comfy_server` = URL hoặc tên server đã lưu |
-| `get_run` / `wait_for_run` / `list_active_runs` / `cancel_run` | Theo dõi, chờ, hủy lệnh |
+| `run_template` | Chạy (`count` nhiều lần; `comfy_server` = URL hoặc tên server đã lưu); chờ ≤ 50 giây |
+| `wait_for_run` / `get_run` / `list_active_runs` / `cancel_run` | Chờ tiếp (≤ 50 giây mỗi lần), xem, hủy lệnh |
 | `list_history` / `view_output` / `delete_history` | Lịch sử, xem ảnh kết quả (thu nhỏ), xóa |
+
+Mỗi lần gọi chờ tối đa ~50 giây vì Codex / Claude Desktop ngắt tool sau ~60 giây; lệnh dài thì AI gọi
+`wait_for_run` lặp lại. Đổi bằng biến `APIX_MCP_MAX_WAIT` (giây) nếu client cho phép chờ lâu hơn.
 
 Giá trị trường trong `run_template.values` theo `key` của `get_template` (cũng nhận id hoặc nhãn):
 
@@ -52,8 +70,7 @@ Giá trị trường trong `run_template.values` theo `key` của `get_template`
 - `seed`: số hoặc `"random"`; menu: tên lựa chọn
 - trường con của menu-sub: `"cha.con"` (ví dụ `"menu.menu": "3800"` khi `menu` = `+ Upscale`)
 
-Lệnh chạy qua MCP vào cùng hàng đợi và lịch sử với app, nên hiện ngay trong giao diện aPix.
-Đợt này hỗ trợ template ComfyUI; RunningHub chưa có.
+Hiện hỗ trợ template ComfyUI; RunningHub chưa có.
 
 ## CLI
 

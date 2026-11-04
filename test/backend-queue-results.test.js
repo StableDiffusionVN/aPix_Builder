@@ -19,6 +19,17 @@ describe("backend queue results", () => {
     expect(runIds).toEqual(["queue-1", "queue-2"]);
   });
 
+  test("theo dõi lệnh MCP đang chạy và lệnh MCP vừa xong sau khi client bắt đầu theo dõi", () => {
+    const since = Date.parse("2026-11-04T10:00:00.000Z");
+    const external = [
+      { runId: "mcp-running", runKind: "mcp", status: "running" },
+      { runId: "mcp-new", runKind: "mcp", status: "success", completedAt: "2026-11-04T10:00:05.000Z" },
+      { runId: "mcp-old", runKind: "mcp", status: "success", completedAt: "2026-11-04T09:00:00.000Z" },
+      { runId: "mcp-error", runKind: "mcp", status: "error", completedAt: "2026-11-04T10:00:05.000Z" }
+    ];
+    expect(collectBackendFormRunIds(external, null, { externalSince: since })).toEqual(["mcp-running", "mcp-new"]);
+  });
+
   test("nhận runId đã kết thúc hoặc không còn trong run log", () => {
     const settled = pickSettledRunIds(["queue-1", "queue-2", "done", "gone"], sessions);
     expect(settled).toEqual(["done", "gone"]);

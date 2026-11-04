@@ -251,7 +251,8 @@ export class ApixClient {
       }
       if (done.size === runIds.length) break;
       if (Date.now() > deadline) {
-        for (const runId of runIds) if (!done.has(runId)) done.set(runId, { runId, status: "timeout" });
+        // Still running: report the current state so the caller can wait again.
+        for (const runId of runIds) if (!done.has(runId)) done.set(runId, await this.getRun(runId));
         break;
       }
       await new Promise(resolve => setTimeout(resolve, intervalMs));

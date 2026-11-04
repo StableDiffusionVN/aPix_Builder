@@ -17,6 +17,7 @@ import { createRunningHubRoutes } from "./routes/runninghub.js";
 import { createStorageRoutes } from "./routes/storage.js";
 import { createTemplateRoutes } from "./routes/templates.js";
 import { publishRuntimeInfo } from "./lib/runtimeInfo.js";
+import { createMcpRoutes } from "./routes/mcp.js";
 
 const routes = [
   createTemplateRoutes(routeContext),
@@ -27,7 +28,8 @@ const routes = [
   createImagesRoutes(routeContext),
   createPresetsRoutes(routeContext),
   createLutRoutes(routeContext),
-  createRunLogRoutes(routeContext)
+  createRunLogRoutes(routeContext),
+  createMcpRoutes(routeContext)
 ];
 
 export function createRequestHandler() {

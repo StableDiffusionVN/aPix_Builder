@@ -8,6 +8,13 @@ import { readFile } from "node:fs/promises";
 import { ApixClient, ApixError } from "./apixClient.mjs";
 
 const SERVER_INFO = { name: "apix-builder", version: "1.0.0" };
+// MCP clients (Codex, Claude Desktop) usually cut a tool call off around 60 s, so
+// one call waits at most this long; unfinished runs are returned for wait_for_run.
+const MAX_WAIT_SECONDS = Number(process.env.APIX_MCP_MAX_WAIT || 50);
+const waitMs = seconds => Math.max(1, Math.min(MAX_WAIT_SECONDS, Number(seconds) || MAX_WAIT_SECONDS)) * 1000;
+const pendingHint = runs => (runs.some(run => !["success", "error", "cancelled"].includes(run.status))
+  ? { hint: "Còn lệnh chưa xong — gọi wait_for_run với các runId này để chờ tiếp." }
+  : {});
 const DEFAULT_PROTOCOL = "2025-06-18";
 const client = new ApixClient();
 
@@ -46,7 +53,7 @@ const TOOLS = [
   },
   {
     name: "run_template",
-    description: "Chạy một template. values: object {key_trường: giá_trị} theo get_template (ảnh = đường dẫn file, URL hoặc tên ảnh input; seed = số hoặc \"random\"; menu = tên lựa chọn). Trường không truyền dùng mặc định. Mặc định chờ chạy xong và trả đường dẫn ảnh kết quả.",
+    description: "Chạy một template. values: object {key_trường: giá_trị} theo get_template (ảnh = đường dẫn file, URL hoặc tên ảnh input; seed = số hoặc \"random\"; menu = tên lựa chọn). Trường không truyền dùng mặc định. Chờ tối đa ~50 giây rồi trả kết quả; lệnh chưa xong thì gọi wait_for_run.",
     inputSchema: {
       type: "object",
       properties: {
@@ -55,15 +62,15 @@ const TOOLS = [
         count: { type: "integer", minimum: 1, maximum: 20, default: 1, description: "Số lần chạy (mỗi lần một lệnh; seed random sẽ khác nhau)" },
         comfy_server: { type: "string", description: "URL hoặc tên server ComfyUI đã lưu; bỏ trống = server đang chọn trong app" },
         wait: { type: "boolean", default: true },
-        timeout_minutes: { type: "number", default: 15 }
+        wait_seconds: { type: "number", default: 50, description: "Chờ tối đa (≤ 50 giây mỗi lần gọi)" }
       },
       required: ["template_id"]
     },
-    run: async ({ template_id: templateId, values = {}, count = 1, comfy_server: address, wait = true, timeout_minutes: timeout = 15 }) => {
+    run: async ({ template_id: templateId, values = {}, count = 1, comfy_server: address, wait = true, wait_seconds: seconds }) => {
       const submitted = await client.submitRun(templateId, values, { count, address });
-      if (!wait) return { ...submitted, status: "queued", hint: "Dùng get_run với runId để xem kết quả." };
-      const runs = await client.waitForRuns(submitted.runIds, { timeoutMs: Math.max(1, timeout) * 60000 });
-      return { comfyServer: submitted.address, values: submitted.values, runs };
+      if (!wait) return { ...submitted, status: "queued", hint: "Dùng wait_for_run hoặc get_run với runId để xem kết quả." };
+      const runs = await client.waitForRuns(submitted.runIds, { timeoutMs: waitMs(seconds) });
+      return { comfyServer: submitted.address, values: submitted.values, runs, ...pendingHint(runs) };
     }
   },
   {
@@ -74,13 +81,16 @@ const TOOLS = [
   },
   {
     name: "wait_for_run",
-    description: "Chờ một hoặc nhiều lệnh chạy xong rồi trả kết quả.",
+    description: "Chờ một hoặc nhiều lệnh chạy xong (tối đa ~50 giây mỗi lần gọi; gọi lại nếu còn lệnh đang chạy).",
     inputSchema: {
       type: "object",
-      properties: { run_ids: { type: "array", items: { type: "string" } }, timeout_minutes: { type: "number", default: 15 } },
+      properties: { run_ids: { type: "array", items: { type: "string" } }, wait_seconds: { type: "number", default: 50 } },
       required: ["run_ids"]
     },
-    run: ({ run_ids: runIds, timeout_minutes: timeout = 15 }) => client.waitForRuns(runIds, { timeoutMs: Math.max(1, timeout) * 60000 })
+    run: async ({ run_ids: runIds, wait_seconds: seconds }) => {
+      const runs = await client.waitForRuns(runIds, { timeoutMs: waitMs(seconds) });
+      return { runs, ...pendingHint(runs) };
+    }
   },
   {
     name: "list_active_runs",
@@ -166,7 +176,7 @@ async function handle(message) {
       protocolVersion: params.protocolVersion || DEFAULT_PROTOCOL,
       capabilities: { tools: {} },
       serverInfo: SERVER_INFO,
-      instructions: "aPix Builder: chạy workflow sinh ảnh ComfyUI qua app aPix đang mở trên máy. Quy trình: list_templates → get_template → run_template (chờ kết quả) → view_output / list_history."
+      instructions: "aPix Builder: chạy workflow sinh ảnh ComfyUI qua app aPix đang mở trên máy. Quy trình: list_templates → get_template → run_template → (wait_for_run lặp lại tới khi xong) → view_output / list_history."
     };
   }
   if (method === "ping") return {};

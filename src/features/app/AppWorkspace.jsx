@@ -94,6 +94,7 @@ import { WorkspaceModals } from "./WorkspaceModals.jsx";
 import { usePressHold } from "../../hooks/usePressHold.js";
 import { useAdjustedOutputPreview } from "../../hooks/useAdjustedOutputPreview.js";
 import { ColabButton } from "./ColabButton.jsx";
+import { ColabSheet, setColabSheet } from "./ColabSheet.jsx";
 import { useComfyServerGate } from "./useComfyServerGate.jsx";
 
 const InfiniteCanvas = lazy(() => import("../canvas/InfiniteCanvas.jsx").then(module => ({ default: module.InfiniteCanvas })));
@@ -397,7 +398,7 @@ export function AppWorkspace() {
 
   // In-app browser (desktop) for Colab / remote servers; the web build opens a normal tab.
   const openAppBrowser = useCallback(() => {
-    if (window.apixDesktop?.openBrowser) window.apixDesktop.openBrowser();
+    if (window.apixDesktop?.colabSheet) setColabSheet("toggle");
     else window.open("https://colab.research.google.com/github/StableDiffusionVN/SDVN-WebUI/blob/main/SDVN_ComfyUI.ipynb", "_blank", "noopener");
   }, []);
 
@@ -2255,6 +2256,7 @@ export function AppWorkspace() {
         </Suspense>
       ) : null}
 
+      <ColabSheet />
     </main>
   );
 }

@@ -12,6 +12,25 @@ contextBridge.exposeInMainWorld("apixDesktop", {
   openExternal: url => ipcRenderer.invoke("app:open-external", url),
   exportRunningHubShortcut: payload => ipcRenderer.invoke("runninghub:export-shortcut", payload),
   openBrowser: url => ipcRenderer.invoke("browser:open", url),
+  colabSheet: {
+    useComfyUrl: url => ipcRenderer.invoke("browser:use-comfy-url", url),
+    openExternal: url => ipcRenderer.invoke("browser:open-external", url),
+    onOpen: callback => {
+      const listener = (_event, payload) => callback(payload || {});
+      ipcRenderer.on("colab-sheet:open", listener);
+      return () => ipcRenderer.removeListener("colab-sheet:open", listener);
+    },
+    onNavigate: callback => {
+      const listener = (_event, url) => callback(url);
+      ipcRenderer.on("browser:navigate", listener);
+      return () => ipcRenderer.removeListener("browser:navigate", listener);
+    },
+    onShortcut: callback => {
+      const listener = (_event, action) => callback(action);
+      ipcRenderer.on("browser:shortcut", listener);
+      return () => ipcRenderer.removeListener("browser:shortcut", listener);
+    }
+  },
   colab: {
     start: () => ipcRenderer.invoke("colab:start"),
     stop: () => ipcRenderer.invoke("colab:stop"),

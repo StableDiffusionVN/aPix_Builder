@@ -4,7 +4,7 @@
 // public API — and falls back to keyboard shortcuts; anything needing the user
 // (sign-in, Drive permission, captcha) is reported, never bypassed.
 import { webContents } from "electron";
-import { getBrowserWindow, openBrowserWindow } from "./browser-window.mjs";
+import { colabHostContents, openBrowserWindow } from "./browser-window.mjs";
 
 export const COLAB_NOTEBOOK_URL = "https://colab.research.google.com/github/StableDiffusionVN/SDVN-WebUI/blob/main/SDVN_ComfyUI.ipynb";
 
@@ -81,10 +81,10 @@ export function createColabController({ appRoot, getMainWindow, getSavedServers 
   // The notebook colab_open last opened: later calls (run, status…) act on that tab.
   let lastNotebook = null;
   function colabGuests() {
-    const host = getBrowserWindow()?.webContents;
-    if (!host) return [];
+    const hosts = colabHostContents();
+    if (!hosts.length) return [];
     return webContents.getAllWebContents().filter(contents => contents.getType() === "webview"
-      && contents.hostWebContents === host
+      && hosts.includes(contents.hostWebContents)
       && /^https:\/\/colab\.research\.google\.com\//.test(contents.getURL()));
   }
 

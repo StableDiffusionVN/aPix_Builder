@@ -4,7 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { isVersionNewer } from "../shared/version.js";
 import { createSignedRunningHubShortcut, resolveShortcutAssetsDir } from "./runninghub-shortcut.mjs";
-import { registerBrowserIpc } from "./browser-window.mjs";
+import { guardWebviewHost, registerBrowserIpc } from "./browser-window.mjs";
 import { createColabController } from "./colabControl.mjs";
 import { createColabSession } from "./colabSession.mjs";
 
@@ -154,9 +154,11 @@ async function createWindow() {
       preload: preloadPath,
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: true
+      sandbox: true,
+      webviewTag: true // Colab sheet (guarded: no preload, forced session)
     }
   });
+  guardWebviewHost(mainWindow.webContents);
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:/i.test(url)) shell.openExternal(url);
@@ -172,7 +174,7 @@ async function createWindow() {
 }
 
 function registerIpcHandlers() {
-  registerBrowserIpc({ appRoot });
+  registerBrowserIpc({ appRoot, getMainWindow: () => mainWindow });
   ipcMain.handle("colab:start", () => colabSession?.start());
   ipcMain.handle("colab:stop", () => colabSession?.stop());
   ipcMain.handle("colab:get-state", () => colabSession?.getState() || null);

@@ -1,6 +1,7 @@
-// "aPix Browser": a single-page window showing the SDVN ComfyUI Colab notebook, with
-// its own persistent session so Google sign-in survives restarts. Closing it only
-// hides it, so the Colab session can still read / stop the runtime afterwards.
+// Colab view: the SDVN ComfyUI notebook in a <webview> with its own persistent session
+// (Google sign-in survives restarts). It lives in the main window as a bottom sheet
+// (src/features/app/ColabSheet.jsx); a separate hidden window is only the fallback
+// host when the main window is gone (e.g. releasing the runtime on quit).
 import { app, BrowserWindow, ipcMain, session, shell } from "electron";
 import path from "node:path";
 
@@ -8,6 +9,7 @@ const PARTITION = "persist:apix-browser";
 const SHORTCUTS = { r: "reload" };
 
 let browserWindow = null;
+let getMainWindow = () => null;
 let sessionConfigured = false;
 let appQuitting = false;
 app.on("before-quit", () => {
@@ -43,36 +45,61 @@ function isHttpUrl(url) {
   return typeof url === "string" && /^https?:\/\//i.test(url);
 }
 
-function attachGuest(guest) {
+function attachGuest(guest, host) {
+  const hostWindow = () => BrowserWindow.fromWebContents(host);
   guest.setWindowOpenHandler(({ url, disposition }) => {
     if (!isHttpUrl(url)) return { action: "deny" };
-    // window.open popups (Google auth, Drive mount) keep their opener; other links
-    // open in the system browser (this window only shows the Colab notebook).
+    // window.open popups (Google auth, Drive mount) keep their opener.
     if (disposition === "new-window") {
       return {
         action: "allow",
-        overrideBrowserWindowOptions: { width: 520, height: 680, parent: browserWindow, autoHideMenuBar: true }
+        overrideBrowserWindowOptions: { width: 520, height: 680, parent: hostWindow() || undefined, autoHideMenuBar: true }
       };
     }
-    // Google account / Drive / Colab pages (sign out, add account…) stay in this window
+    // Google account / Drive / Colab pages (sign out, add account…) stay in the view
     // so the session keeps the sign-in; anything else opens in the system browser.
-    if (isGoogleUrl(url)) browserWindow?.webContents.send("browser:navigate", url);
+    if (isGoogleUrl(url) && !host.isDestroyed()) host.send("browser:navigate", url);
     else void shell.openExternal(url);
     return { action: "deny" };
   });
-  // Shortcuts still work while a page has keyboard focus.
+  // Shortcuts still work while the page has keyboard focus.
   guest.on("before-input-event", (event, input) => {
     if (input.type !== "keyDown" || !(input.meta || input.control) || input.shift || input.alt) return;
-    const action = SHORTCUTS[input.key.toLowerCase()];
-    if (input.key.toLowerCase() === "w") {
-      event.preventDefault();
-      browserWindow?.close();
+    const key = input.key.toLowerCase();
+    if (key !== "w" && !SHORTCUTS[key]) return;
+    event.preventDefault();
+    if (host.isDestroyed()) return;
+    if (key === "w") {
+      if (host === browserWindow?.webContents) browserWindow.close();
+      else host.send("browser:shortcut", "hide");
       return;
     }
-    if (!action) return;
-    event.preventDefault();
-    browserWindow?.webContents.send("browser:shortcut", action);
+    host.send("browser:shortcut", SHORTCUTS[key]);
   });
+}
+
+/** Lets a window host the Colab <webview>: no preload / Node in pages, forced session. */
+export function guardWebviewHost(contents) {
+  configureSession();
+  contents.on("will-attach-webview", (event, webPreferences, params) => {
+    delete webPreferences.preload;
+    webPreferences.nodeIntegration = false;
+    webPreferences.contextIsolation = true;
+    webPreferences.sandbox = true;
+    params.partition = PARTITION;
+    if (params.src && !isHttpUrl(params.src) && params.src !== "about:blank") event.preventDefault();
+  });
+  contents.on("did-attach-webview", (_event, guest) => attachGuest(guest, contents));
+}
+
+function liveMainWindow() {
+  const main = getMainWindow();
+  return main && !main.isDestroyed() ? main : null;
+}
+
+/** Web contents that may host the Colab view (main window sheet, fallback window). */
+export function colabHostContents() {
+  return [liveMainWindow()?.webContents, getBrowserWindow()?.webContents].filter(Boolean);
 }
 
 export function getBrowserWindow() {
@@ -83,6 +110,17 @@ export function getBrowserWindow() {
 export function openBrowserWindow(appRoot, url, { show = true } = {}) {
   configureSession();
   const target = isHttpUrl(url) ? url : null;
+  const main = liveMainWindow();
+  if (main) {
+    // Bottom sheet in the main window (mounts the view, slides up when show).
+    main.webContents.send("colab-sheet:open", { url: target, show });
+    if (show) {
+      if (main.isMinimized()) main.restore();
+      main.show();
+      main.focus();
+    }
+    return;
+  }
   if (browserWindow && !browserWindow.isDestroyed()) {
     if (target) browserWindow.webContents.send("browser:navigate", target);
     if (!show) return;
@@ -114,16 +152,7 @@ export function openBrowserWindow(appRoot, url, { show = true } = {}) {
 
   const shellContents = browserWindow.webContents;
   shellContents.setWindowOpenHandler(() => ({ action: "deny" }));
-  // Pages run without any preload or Node access, always in the browser session.
-  shellContents.on("will-attach-webview", (event, webPreferences, params) => {
-    delete webPreferences.preload;
-    webPreferences.nodeIntegration = false;
-    webPreferences.contextIsolation = true;
-    webPreferences.sandbox = true;
-    params.partition = PARTITION;
-    if (params.src && !isHttpUrl(params.src) && params.src !== "about:blank") event.preventDefault();
-  });
-  shellContents.on("did-attach-webview", (_event, guest) => attachGuest(guest));
+  guardWebviewHost(shellContents);
 
   browserWindow.loadFile(path.join(appRoot, "electron", "browser", "browser.html"), target ? { query: { url: target } } : undefined);
   browserWindow.on("close", event => {
@@ -136,8 +165,9 @@ export function openBrowserWindow(appRoot, url, { show = true } = {}) {
   });
 }
 
-export function registerBrowserIpc({ appRoot }) {
-  const fromBrowser = event => browserWindow && !browserWindow.isDestroyed() && event.sender === browserWindow.webContents;
+export function registerBrowserIpc({ appRoot, getMainWindow: mainGetter }) {
+  getMainWindow = mainGetter || getMainWindow;
+  const fromBrowser = event => colabHostContents().includes(event.sender);
 
   ipcMain.handle("browser:open", (_event, url) => {
     openBrowserWindow(appRoot, url);

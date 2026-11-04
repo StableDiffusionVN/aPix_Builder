@@ -1,0 +1,189 @@
+/* Colab notebook as a bottom sheet (desktop) */
+.colabSheet {
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  bottom: 0;
+  z-index: 80;
+  display: flex;
+  flex-direction: column;
+  height: min(78vh, calc(100vh - 64px));
+  border: 1px solid var(--border-strong);
+  border-bottom: 0;
+  border-radius: 14px 14px 0 0;
+  background: var(--panel-strong, var(--panel));
+  box-shadow: 0 -18px 48px rgba(0, 0, 0, 0.45);
+  transform: translateY(calc(100% + 24px));
+  transition: transform 0.32s cubic-bezier(0.22, 0.8, 0.24, 1);
+  pointer-events: none;
+}
+
+.colabSheet.isOpen {
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.colabSheetBar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 42px;
+  padding: 6px 10px 0;
+  flex: none;
+}
+
+.colabSheetHandle {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 72px;
+  height: 14px;
+  padding: 0;
+  transform: translateX(-50%);
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.colabSheetHandle span {
+  display: block;
+  width: 40px;
+  height: 4px;
+  margin: 5px auto 0;
+  border-radius: 999px;
+  background: var(--border-strong);
+}
+
+.colabSheetHandle:hover span { background: var(--muted); }
+
+.colabSheetNav,
+.colabSheetActions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.colabSheetBar button:not(.colabSheetHandle) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 28px;
+  min-width: 28px;
+  padding: 0 6px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.colabSheetBar button:not(.colabSheetHandle):hover:not(:disabled) {
+  border-color: var(--border);
+  background: var(--panel-soft);
+  color: var(--text);
+}
+
+.colabSheetBar button:disabled { opacity: 0.35; cursor: default; }
+
+.colabSheetBar .colabSheetLink {
+  padding: 0 10px;
+  border-color: rgba(var(--accent-rgb), 0.45);
+  color: var(--accent);
+}
+
+.colabSheetTitle {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.colabSheetBody {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  margin: 6px 0 0;
+  overflow: hidden;
+  border-top: 1px solid var(--border);
+  background: #fff;
+}
+
+.colabSheetView {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+.colabSheetToast {
+  position: absolute;
+  left: 50%;
+  bottom: 18px;
+  padding: 8px 14px;
+  transform: translateX(-50%);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.82);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  pointer-events: none;
+}
+
+/* Hidden: a slim bar on the bottom edge to pull the sheet back up */
+.colabSheetPeek {
+  position: fixed;
+  left: 50%;
+  bottom: 0;
+  z-index: 79;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  width: min(420px, 60vw);
+  height: 18px;
+  padding: 5px 0 0;
+  transform: translateX(-50%);
+  border: 1px solid var(--border);
+  border-bottom: 0;
+  border-radius: 10px 10px 0 0;
+  background: var(--panel-strong, var(--panel));
+  color: var(--muted);
+  cursor: pointer;
+  overflow: hidden;
+  transition: height 0.18s ease, color 0.18s ease;
+}
+
+.colabSheetPeekGrip {
+  width: 40px;
+  height: 4px;
+  flex: none;
+  border-radius: 999px;
+  background: var(--border-strong);
+}
+
+.colabSheetPeekLabel {
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 0.18s ease;
+}
+
+.colabSheetPeek:hover {
+  height: 30px;
+  color: var(--text);
+}
+
+.colabSheetPeek:hover .colabSheetPeekLabel { opacity: 1; }
+.colabSheetPeek:hover .colabSheetPeekGrip { background: var(--accent); }

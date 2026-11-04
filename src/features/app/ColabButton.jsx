@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Cloud, CloudOff, Loader2 } from "lucide-react";
 import { useI18n } from "../../i18n/I18nContext";
 import { getSetting, setSetting } from "../../lib/appSettings.js";
+import { setColabSheet } from "./ColabSheet.jsx";
 import "../../styles/colabButton.css";
 
 const BUSY = new Set(["opening", "starting", "waiting", "stopping"]);
@@ -80,7 +81,7 @@ export function ColabButton() {
                 {t("colab.stop")}
               </button>
             )}
-            <button type="button" className="colabAction" onClick={() => window.apixDesktop?.openBrowser?.()}>{t("colab.openBrowser")}</button>
+            <button type="button" className="colabAction" onClick={() => { setColabSheet("open"); setOpen(false); }}>{t("colab.openBrowser")}</button>
           </div>
           <label className="colabSetting">
             <span>{t("colab.idle")}</span>

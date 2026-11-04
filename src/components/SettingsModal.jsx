@@ -13,6 +13,7 @@ import { ConnectionPanel, SavedServerList, AddServerForm } from "./ConnectionPan
 import { RunningHubSettings } from "./RunningHubSettings";
 import { StorageSettings } from "./StorageSettings";
 import { AiConnectSettings } from "../features/settings/AiConnectSettings.jsx";
+import { ApixKeySettings } from "../features/settings/ApixKeySettings.jsx";
 import { ComfyUiLogomark } from "./icons/ComfyUiIcon";
 import { RunningHubLogomark } from "./icons/RunningHubIcon";
 import {
@@ -295,6 +296,7 @@ export function SettingsModal() {
                     {t("server.saveAddress")}
                   </button>
                 )}
+                <ApixKeySettings />
               </section>
             ) : null}
 

@@ -402,3 +402,44 @@
   opacity: 0.6;
   cursor: progress;
 }
+
+/* ComfyUI settings → aPix key */
+.apixKeyPanel {
+  display: grid;
+  gap: 6px;
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel-soft);
+}
+
+.apixKeyHeader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.apixKeyRow {
+  display: flex;
+  gap: 6px;
+}
+
+.apixKeyRow input {
+  flex: 1;
+  min-width: 0;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.25);
+  color: var(--text);
+  font: 12px ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.apixKeyOk {
+  margin: 0;
+  color: var(--success);
+  font-size: 11px;
+}

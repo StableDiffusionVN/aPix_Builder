@@ -26,6 +26,7 @@ import {
   validateWorkflowMappings
 } from "../lib/workflowPatcher.js";
 import { decorateCanvasHistoryItem, mergeCanvasHistoryItem } from "../lib/canvasHistory.js";
+import { pushApixKey } from "../lib/apixLicense.js";
 
 const comfyTimeoutMs = Number(process.env.COMFY_TIMEOUT_MS || 10 * 60 * 1000);
 
@@ -78,6 +79,7 @@ export function createComfyService({ storage, runCoordinator, readBody, send }) 
       const target = normalizeComfyTarget(body.address || server.address);
       const workflow = await assertTemplateWorkflow(config, template);
       run.target = target;
+      await pushApixKey(target, storage.getPaths());
   
       const normalized = await normalizeValues(body.values || {});
       const request = mapValuesToRequest(config, normalized);

@@ -23,3 +23,6 @@ aPix_builder_pts/
 aPix_builder_web_extension/
 aPix_builder_ios_app/
 aPix_builder_android_app/
+
+# aPix license server data (hashed keys, usage log)
+license-data/

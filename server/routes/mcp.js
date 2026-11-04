@@ -2,6 +2,7 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { installMcpClient, listMcpClients, uninstallMcpClient } from "../lib/mcpClients.js";
+import { checkApixKey } from "../lib/apixLicense.js";
 
 const scriptPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "mcp", "apix-mcp.mjs");
 
@@ -19,8 +20,12 @@ export function mcpLaunchConfig() {
   };
 }
 
-export function createMcpRoutes({ readBody, send }) {
+export function createMcpRoutes({ getStoragePaths, readBody, send }) {
   return async function mcpRoutes(req, res, url) {
+    if (req.method === "GET" && url.pathname === "/api/apix-license/status") {
+      send(res, 200, await checkApixKey(getStoragePaths()));
+      return true;
+    }
     if (req.method === "GET" && url.pathname === "/api/mcp-config") {
       send(res, 200, mcpLaunchConfig());
       return true;

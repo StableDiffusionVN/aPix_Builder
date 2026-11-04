@@ -1,0 +1,21 @@
+[Unit]
+Description=aPix license server (signed links for private SDVN models)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=apix-license
+Group=apix-license
+EnvironmentFile=/etc/apix-license/apix-license.env
+ExecStart=/opt/apix-license/node/bin/node /opt/apix-license/app/server.mjs
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/apix-license
+
+[Install]
+WantedBy=multi-user.target

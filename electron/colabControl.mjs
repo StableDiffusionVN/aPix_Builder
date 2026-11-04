@@ -240,8 +240,35 @@ export function createColabController({ appRoot, getMainWindow, getSavedServers 
     };
   }
 
-  async function stop({ deleteRuntime = true } = {}) {
-    const contents = await requireGuest();
+  // Reopens the notebook (in the background) when the browser window is gone, and
+  // waits until Colab has reconnected to the runtime so it can be released.
+  async function guestForStop({ background }) {
+    let contents = guest();
+    if (!contents) {
+      openBrowserWindow(appRoot, lastNotebook || COLAB_NOTEBOOK_URL, { show: !background });
+      const deadline = Date.now() + 20000;
+      while (!(contents = guest()) && Date.now() < deadline) await sleep(500);
+      if (!contents) throw new Error("Không mở được notebook Colab để tắt runtime.");
+    }
+    const deadline = Date.now() + 15000;
+    while (Date.now() < deadline) {
+      const state = await contents.executeJavaScript(STATUS_SCRIPT).catch(() => null);
+      if (state?.ready && state.connected) break;
+      await sleep(1000);
+    }
+    return contents;
+  }
+
+  // Whether the notebook in the aPix Browser is attached to a runtime right now.
+  async function hasRuntime() {
+    const contents = guest();
+    if (!contents) return false;
+    const state = await contents.executeJavaScript(STATUS_SCRIPT).catch(() => null);
+    return Boolean(state?.connected || state?.executing);
+  }
+
+  async function stop({ deleteRuntime = true, background = false } = {}) {
+    const contents = await guestForStop({ background });
     const result = await contents.executeJavaScript(`(() => {
       const nb = window.colab && window.colab.global && window.colab.global.notebook;
       const kernel = nb && nb.kernel;
@@ -258,5 +285,5 @@ export function createColabController({ appRoot, getMainWindow, getSavedServers 
     return { action: result, confirmed, ...(await contents.executeJavaScript(STATUS_SCRIPT)) };
   }
 
-  return { open, status, run, findServer, stop };
+  return { open, status, run, findServer, stop, hasRuntime };
 }

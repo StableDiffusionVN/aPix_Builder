@@ -9,9 +9,8 @@ function subscribe(channel, callback) {
 
 contextBridge.exposeInMainWorld("apixBrowser", {
   platform: process.platform,
-  probeComfy: url => ipcRenderer.invoke("browser:probe-comfy", url),
   useComfyUrl: url => ipcRenderer.invoke("browser:use-comfy-url", url),
   openExternal: url => ipcRenderer.invoke("browser:open-external", url),
-  onOpenTab: callback => subscribe("browser:open-tab", callback),
+  onNavigate: callback => subscribe("browser:navigate", callback),
   onShortcut: callback => subscribe("browser:shortcut", callback)
 });

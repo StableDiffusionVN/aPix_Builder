@@ -14,6 +14,8 @@ const shortcutAssetsDir = resolveShortcutAssetsDir(appRoot);
 const UPDATE_MANIFEST_URL = process.env.APIX_UPDATE_MANIFEST_URL ?? "https://apix.sdvn.vn/releases/latest.json";
 const UPDATE_CHECK_DELAY_MS = 5000;
 
+// Dev only: a separate profile so a source build can run beside the installed app.
+if (!app.isPackaged && process.env.APIX_ELECTRON_USER_DATA) app.setPath("userData", process.env.APIX_ELECTRON_USER_DATA);
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 if (!gotSingleInstanceLock) {
   app.quit();
@@ -160,13 +162,17 @@ async function createWindow() {
     if (/^https?:/i.test(url)) shell.openExternal(url);
     return { action: "deny" };
   });
+  // The Colab browser only hides on close, so it would keep Windows/Linux running.
+  mainWindow.on("closed", () => {
+    if (process.platform !== "darwin") app.quit();
+  });
 
   await mainWindow.loadURL(`http://${backend.host}:${backend.port}/`);
   scheduleUpdateCheck();
 }
 
 function registerIpcHandlers() {
-  registerBrowserIpc({ appRoot, getMainWindow: () => mainWindow });
+  registerBrowserIpc({ appRoot });
   ipcMain.handle("colab:start", () => colabSession?.start());
   ipcMain.handle("colab:stop", () => colabSession?.stop());
   ipcMain.handle("colab:get-state", () => colabSession?.getState() || null);
@@ -270,10 +276,17 @@ if (gotSingleInstanceLock) {
 
   app.on("before-quit", event => {
     // Free the Colab GPU before quitting (best effort, ≤ 15 s).
-    if (!quittingAfterColab && colabSession?.shouldStopOnQuit()) {
+    if (!quittingAfterColab && colabSession) {
       event.preventDefault();
       quittingAfterColab = true;
-      Promise.race([colabSession.stop({ reason: "quit" }), new Promise(resolve => setTimeout(resolve, 15000))])
+      const stopColab = async () => {
+        if (!(await colabSession.shouldStopOnQuit())) return;
+        // Looks quit already while the runtime is released in the background.
+        for (const window of BrowserWindow.getAllWindows()) window.hide();
+        await colabSession.stop({ reason: "quit", force: true });
+      };
+      // ≤ 45 s: the notebook may have to be reopened in the background first.
+      Promise.race([stopColab().catch(error => console.error("Colab stop on quit failed:", error)), new Promise(resolve => setTimeout(resolve, 45000))])
         .finally(() => app.quit());
       return;
     }

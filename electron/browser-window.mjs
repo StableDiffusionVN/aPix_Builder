@@ -1,13 +1,18 @@
-// "aPix Browser": a small tabbed browser window (Colab, remote ComfyUI servers…)
-// with its own persistent session, so Google sign-in survives restarts.
+// "aPix Browser": a single-page window showing the SDVN ComfyUI Colab notebook, with
+// its own persistent session so Google sign-in survives restarts. Closing it only
+// hides it, so the Colab session can still read / stop the runtime afterwards.
 import { app, BrowserWindow, ipcMain, session, shell } from "electron";
 import path from "node:path";
 
 const PARTITION = "persist:apix-browser";
-const SHORTCUTS = { t: "new-tab", w: "close-tab", l: "focus-address", r: "reload" };
+const SHORTCUTS = { r: "reload" };
 
 let browserWindow = null;
 let sessionConfigured = false;
+let appQuitting = false;
+app.on("before-quit", () => {
+  appQuitting = true;
+});
 
 // Google refuses sign-in from user agents that advertise Electron.
 function chromeLikeUserAgent() {
@@ -33,20 +38,26 @@ function isHttpUrl(url) {
 function attachGuest(guest) {
   guest.setWindowOpenHandler(({ url, disposition }) => {
     if (!isHttpUrl(url)) return { action: "deny" };
-    // window.open popups (Google auth, Drive mount) keep their opener; links become tabs.
+    // window.open popups (Google auth, Drive mount) keep their opener; other links
+    // open in the system browser (this window only shows the Colab notebook).
     if (disposition === "new-window") {
       return {
         action: "allow",
         overrideBrowserWindowOptions: { width: 520, height: 680, parent: browserWindow, autoHideMenuBar: true }
       };
     }
-    browserWindow?.webContents.send("browser:open-tab", url);
+    void shell.openExternal(url);
     return { action: "deny" };
   });
   // Shortcuts still work while a page has keyboard focus.
   guest.on("before-input-event", (event, input) => {
     if (input.type !== "keyDown" || !(input.meta || input.control) || input.shift || input.alt) return;
     const action = SHORTCUTS[input.key.toLowerCase()];
+    if (input.key.toLowerCase() === "w") {
+      event.preventDefault();
+      browserWindow?.close();
+      return;
+    }
     if (!action) return;
     event.preventDefault();
     browserWindow?.webContents.send("browser:shortcut", action);
@@ -57,11 +68,13 @@ export function getBrowserWindow() {
   return browserWindow && !browserWindow.isDestroyed() ? browserWindow : null;
 }
 
-export function openBrowserWindow(appRoot, url) {
+// show: false opens it in the background (e.g. to stop the runtime when quitting).
+export function openBrowserWindow(appRoot, url, { show = true } = {}) {
   configureSession();
   const target = isHttpUrl(url) ? url : null;
   if (browserWindow && !browserWindow.isDestroyed()) {
-    if (target) browserWindow.webContents.send("browser:open-tab", target);
+    if (target) browserWindow.webContents.send("browser:navigate", target);
+    if (!show) return;
     if (browserWindow.isMinimized()) browserWindow.restore();
     browserWindow.show();
     browserWindow.focus();
@@ -74,7 +87,8 @@ export function openBrowserWindow(appRoot, url) {
     height: 860,
     minWidth: 720,
     minHeight: 480,
-    title: "aPix Browser",
+    title: "SDVN ComfyUI — Colab",
+    show,
     backgroundColor: "#111318",
     titleBarStyle: isMac ? "hiddenInset" : "hidden",
     titleBarOverlay: isMac ? undefined : { color: "#191c23", symbolColor: "#f1f3f7", height: 38 },
@@ -101,24 +115,17 @@ export function openBrowserWindow(appRoot, url) {
   shellContents.on("did-attach-webview", (_event, guest) => attachGuest(guest));
 
   browserWindow.loadFile(path.join(appRoot, "electron", "browser", "browser.html"), target ? { query: { url: target } } : undefined);
+  browserWindow.on("close", event => {
+    if (appQuitting) return;
+    event.preventDefault();
+    browserWindow.hide();
+  });
   browserWindow.on("closed", () => {
     browserWindow = null;
   });
 }
 
-async function probeComfy(url) {
-  try {
-    const { origin } = new URL(url);
-    const response = await fetch(`${origin}/system_stats`, { signal: AbortSignal.timeout(4000) });
-    if (!response.ok) return false;
-    const data = await response.json();
-    return Boolean(data?.system || data?.devices);
-  } catch {
-    return false;
-  }
-}
-
-export function registerBrowserIpc({ appRoot, getMainWindow }) {
+export function registerBrowserIpc({ appRoot }) {
   const fromBrowser = event => browserWindow && !browserWindow.isDestroyed() && event.sender === browserWindow.webContents;
 
   ipcMain.handle("browser:open", (_event, url) => {
@@ -126,11 +133,9 @@ export function registerBrowserIpc({ appRoot, getMainWindow }) {
     return true;
   });
 
-  ipcMain.handle("browser:probe-comfy", (event, url) => (fromBrowser(event) ? probeComfy(url) : false));
-
   ipcMain.handle("browser:use-comfy-url", async (event, url) => {
     if (!fromBrowser(event) || !isHttpUrl(url)) return { ok: false, error: "Địa chỉ không hợp lệ" };
-    // On a Colab tab the server is the ComfyUI link the notebook prints, not Colab itself.
+    // The server is the ComfyUI link the notebook prints, not Colab itself.
     if (isColabUrl(url)) {
       const colab = globalThis.apixDesktopBridge?.colab;
       if (!colab) return { ok: false, error: "Không đọc được Colab" };
@@ -143,11 +148,7 @@ export function registerBrowserIpc({ appRoot, getMainWindow }) {
         return { ok: false, error: error.message };
       }
     }
-    const address = new URL(url).origin;
-    const mainWindow = getMainWindow();
-    if (!mainWindow || mainWindow.isDestroyed()) return { ok: false, error: "Cửa sổ aPix chưa mở" };
-    mainWindow.webContents.send("app:use-comfy-url", address);
-    return { ok: true, address, comfy: await probeComfy(address) };
+    return { ok: false, error: "Trang này không phải notebook Colab — bấm ⌂ để về notebook SDVN ComfyUI." };
   });
 
   ipcMain.handle("browser:open-external", async (event, url) => {

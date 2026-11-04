@@ -118,13 +118,13 @@ export function createColabSession({ colab, getBackend, onState }) {
     return state;
   }
 
-  async function stop({ reason = "user" } = {}) {
+  async function stop({ reason = "user", force = false } = {}) {
     runToken++;
     stopMonitor();
-    if (state.phase === "off") return state;
+    if (state.phase === "off" && !force) return state;
     set({ phase: "stopping", message: "Đang tắt runtime Colab…" });
     try {
-      await colab.stop({ deleteRuntime: true });
+      await colab.stop({ deleteRuntime: true, background: reason === "quit" });
       set({ phase: "off", message: reason === "idle" ? "Đã tự tắt Colab do không dùng" : "Đã tắt Colab", address: "", readyAt: null });
     } catch (error) {
       set({ phase: "off", message: `Không tắt được qua trình duyệt (${error.message}) — kiểm tra trong Colab`, address: "" });
@@ -147,6 +147,12 @@ export function createColabSession({ colab, getBackend, onState }) {
     noteActivity() {
       lastActivity = Date.now();
     },
-    shouldStopOnQuit: () => config.stopOnQuit && ["ready", "waiting", "starting", "needs-user"].includes(state.phase)
+    // Any phase but "off" may hold a runtime (an "error" can be a dropped link with
+    // the VM still assigned); "off" still counts when the notebook is attached.
+    async shouldStopOnQuit() {
+      if (!config.stopOnQuit) return false;
+      if (state.phase !== "off") return true;
+      return colab.hasRuntime().catch(() => false);
+    }
   };
 }

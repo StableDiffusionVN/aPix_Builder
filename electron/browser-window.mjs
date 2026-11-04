@@ -3,6 +3,7 @@
 // (src/features/app/ColabSheet.jsx); a separate hidden window is only the fallback
 // host when the main window is gone (e.g. releasing the runtime on quit).
 import { app, BrowserWindow, ipcMain, session, shell } from "electron";
+import fs from "node:fs";
 import path from "node:path";
 
 const PARTITION = "persist:apix-browser";
@@ -45,23 +46,51 @@ function isHttpUrl(url) {
   return typeof url === "string" && /^https?:\/\//i.test(url);
 }
 
+// Small diagnostics log (userData/colab-browser.log): popups and failed loads of the
+// Colab view, so account / Drive problems can be traced without a debugger.
+function logBrowser(message) {
+  try {
+    const file = path.join(app.getPath("userData"), "colab-browser.log");
+    if (fs.existsSync(file) && fs.statSync(file).size > 512 * 1024) fs.rmSync(file);
+    fs.appendFileSync(file, `${new Date().toISOString()} ${message}\n`);
+  } catch {
+    // Logging must never break the browser.
+  }
+}
+
+const shortUrl = url => String(url || "").replace(/([?#]).*$/, "$1…").slice(0, 160);
+
 function attachGuest(guest, host) {
   const hostWindow = () => BrowserWindow.fromWebContents(host);
+  const popupOptions = () => ({
+    action: "allow",
+    overrideBrowserWindowOptions: { width: 520, height: 700, parent: hostWindow() || undefined, autoHideMenuBar: true }
+  });
   guest.setWindowOpenHandler(({ url, disposition }) => {
+    logBrowser(`open ${disposition} ${shortUrl(url)}`);
+    // A blank popup the page fills in itself (Google account menu, OAuth): allow it.
+    if (!url || /^about:blank/i.test(url)) return popupOptions();
     if (!isHttpUrl(url)) return { action: "deny" };
     // window.open popups (Google auth, Drive mount) keep their opener.
-    if (disposition === "new-window") {
-      return {
-        action: "allow",
-        overrideBrowserWindowOptions: { width: 520, height: 680, parent: hostWindow() || undefined, autoHideMenuBar: true }
-      };
-    }
+    if (disposition === "new-window") return popupOptions();
     // Google account / Drive / Colab pages (sign out, add account…) stay in the view
     // so the session keeps the sign-in; anything else opens in the system browser.
     if (isGoogleUrl(url) && !host.isDestroyed()) host.send("browser:navigate", url);
     else void shell.openExternal(url);
     return { action: "deny" };
   });
+  // Account popups (add account, sign out) change the sign-in: reload the notebook
+  // when one closes so it shows the current account.
+  guest.on("did-create-window", child => {
+    child.webContents.on("did-navigate", (_event, url) => logBrowser(`popup ${shortUrl(url)}`));
+    child.on("closed", () => {
+      if (!guest.isDestroyed()) guest.reload();
+    });
+  });
+  guest.on("did-fail-load", (_event, code, description, url, isMainFrame) => {
+    if (code !== -3) logBrowser(`fail ${code} ${description} ${isMainFrame ? "main" : "frame"} ${shortUrl(url)}`);
+  });
+  guest.on("will-navigate", (_event, url) => logBrowser(`navigate ${shortUrl(url)}`));
   // Shortcuts still work while the page has keyboard focus.
   guest.on("before-input-event", (event, input) => {
     if (input.type !== "keyDown" || !(input.meta || input.control) || input.shift || input.alt) return;

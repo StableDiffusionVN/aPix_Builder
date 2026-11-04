@@ -6,6 +6,17 @@ import "../../styles/colabSheet.css";
 export const COLAB_NOTEBOOK_URL = "https://colab.research.google.com/github/StableDiffusionVN/SDVN-WebUI/blob/main/SDVN_ComfyUI.ipynb";
 const PARTITION = "persist:apix-browser";
 const TOGGLE_EVENT = "apix:colab-sheet";
+const LAST_URL_KEY = "apix.colabSheet.lastNotebook";
+
+// The notebook with the Google account last used (e.g. ?authuser=1 for a second account).
+function savedNotebookUrl() {
+  try {
+    const url = localStorage.getItem(LAST_URL_KEY) || "";
+    return url.startsWith(COLAB_NOTEBOOK_URL) ? url : COLAB_NOTEBOOK_URL;
+  } catch {
+    return COLAB_NOTEBOOK_URL;
+  }
+}
 
 let sheetIsOpen = false;
 
@@ -30,7 +41,7 @@ export function ColabSheet() {
   const [toast, setToast] = useState("");
   const hostRef = useRef(null);
   const viewRef = useRef(null);
-  const pendingUrlRef = useRef(COLAB_NOTEBOOK_URL);
+  const pendingUrlRef = useRef(savedNotebookUrl());
   const toastTimer = useRef(null);
 
   const showToast = useCallback(text => {
@@ -52,11 +63,13 @@ export function ColabSheet() {
     const view = document.createElement("webview");
     view.setAttribute("partition", PARTITION);
     view.setAttribute("allowpopups", "");
-    view.setAttribute("src", pendingUrlRef.current || COLAB_NOTEBOOK_URL);
+    view.setAttribute("src", pendingUrlRef.current || savedNotebookUrl());
     view.className = "colabSheetView";
     const refresh = () => {
       try {
         setCanGoBack(view.canGoBack());
+        const url = view.getURL();
+        if (url.startsWith(COLAB_NOTEBOOK_URL)) localStorage.setItem(LAST_URL_KEY, url.split("#")[0]);
       } catch {
         setCanGoBack(false);
       }
@@ -73,7 +86,18 @@ export function ColabSheet() {
     if (!api) return undefined;
     const offOpen = api.onOpen(({ url, show }) => {
       setMounted(true);
-      if (url) navigate(url);
+      // The app asks for the plain notebook: keep the account last used (?authuser=N),
+      // and do not reload a notebook that is already open.
+      const target = url === COLAB_NOTEBOOK_URL ? savedNotebookUrl() : url;
+      const current = (() => {
+        try {
+          return viewRef.current?.getURL() || "";
+        } catch {
+          return "";
+        }
+      })();
+      if (!viewRef.current) pendingUrlRef.current = target || pendingUrlRef.current;
+      else if (target && current.split("#")[0] !== target) navigate(target);
       if (show !== false) setOpen(true);
     });
     const offNavigate = api.onNavigate(navigate);
@@ -151,7 +175,7 @@ export function ColabSheet() {
         <div className="colabSheetNav">
           <button type="button" onClick={() => canGoBack && view()?.goBack()} disabled={!canGoBack} title={t("colabSheet.back")}><ChevronLeft size={15} /></button>
           <button type="button" onClick={() => view()?.reload()} title={t("colabSheet.reload")}><RotateCw size={14} /></button>
-          <button type="button" onClick={() => navigate(COLAB_NOTEBOOK_URL)} title={t("colabSheet.home")}><Home size={14} /></button>
+          <button type="button" onClick={() => navigate(savedNotebookUrl())} title={t("colabSheet.home")}><Home size={14} /></button>
         </div>
         <div className="colabSheetTitle">{title || t("colabSheet.title")}</div>
         <div className="colabSheetActions">

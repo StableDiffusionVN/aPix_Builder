@@ -69,6 +69,8 @@ export function useColorAdjustments({
   const rafRef = useRef(null);
   const healingStrokesRef = useRef([]);
   const activeHealingStrokeRef = useRef(null);
+  // Alt+click source point (normalized), like Photoshop's healing brush.
+  const healingSourceRef = useRef(null);
   const healingActiveRef = useRef(false);
   const healingBrushSizeRef = useRef(DEFAULT_HEALING_BRUSH_SIZE);
   const healingPointerIdRef = useRef(null);
@@ -323,6 +325,7 @@ export function useColorAdjustments({
     setHealingCursor(null);
     setHealingBrushDiameter(loaded.healingBrushSize);
     activeHealingStrokeRef.current = null;
+    healingSourceRef.current = null;
     healingPointerIdRef.current = null;
     healingBrushSizeRef.current = loaded.healingBrushSize;
     previewMetaRef.current = { width: 0, height: 0, scale: 1 };
@@ -429,7 +432,9 @@ export function useColorAdjustments({
     const stroke = activeHealingStrokeRef.current;
     const meta = previewMetaRef.current;
     const path = el.querySelector("path");
-    if (!stroke?.points?.length || !meta?.width || !path) {
+    const marker = el.querySelector(".healingSourceMarker");
+    const source = healingSourceRef.current;
+    if ((!stroke?.points?.length && !source) || !meta?.width || !path) {
       el.style.display = "none";
       path?.setAttribute("d", "");
       return;
@@ -437,11 +442,31 @@ export function useColorAdjustments({
     const fullWidth = meta.width / (meta.scale || 1);
     const fullHeight = meta.height / (meta.scale || 1);
     el.setAttribute("viewBox", `0 0 ${fullWidth} ${fullHeight}`);
-    const d = stroke.points
-      .map((point, index) => `${index ? "L" : "M"}${(point.x * fullWidth).toFixed(1)} ${(point.y * fullHeight).toFixed(1)}`)
-      .join(" ");
-    path.setAttribute("d", stroke.points.length === 1 ? `${d} l0.01 0.01` : d);
-    path.setAttribute("stroke-width", String(Math.max(2, stroke.size)));
+    if (stroke?.points?.length) {
+      const d = stroke.points
+        .map((point, index) => `${index ? "L" : "M"}${(point.x * fullWidth).toFixed(1)} ${(point.y * fullHeight).toFixed(1)}`)
+        .join(" ");
+      path.setAttribute("d", stroke.points.length === 1 ? `${d} l0.01 0.01` : d);
+      path.setAttribute("stroke-width", String(Math.max(2, stroke.size)));
+    } else {
+      path.setAttribute("d", "");
+    }
+    // Source marker: at the picked point, or following the brush while painting.
+    if (marker) {
+      const last = stroke?.points?.[stroke.points.length - 1];
+      const at = stroke?.source && last
+        ? { x: last.x + stroke.source.dx, y: last.y + stroke.source.dy }
+        : source;
+      if (at) {
+        const size = Math.max(6, (stroke?.size || healingBrushSizeRef.current) / 2);
+        marker.setAttribute("transform", `translate(${(at.x * fullWidth).toFixed(1)} ${(at.y * fullHeight).toFixed(1)})`);
+        marker.querySelector("circle")?.setAttribute("r", String(size));
+        marker.querySelector("path")?.setAttribute("d", `M${-size * 1.5} 0H${size * 1.5}M0 ${-size * 1.5}V${size * 1.5}`);
+        marker.style.display = "";
+      } else {
+        marker.style.display = "none";
+      }
+    }
     el.style.display = "";
   }, []);
   const setHealingOverlayElement = useCallback((el) => {
@@ -760,12 +785,20 @@ export function useColorAdjustments({
     if (!point) return false;
     event.preventDefault();
     event.stopPropagation();
+    if (event.altKey) {
+      // Alt+click: pick the area to copy from (next strokes sample relative to it).
+      healingSourceRef.current = point;
+      drawHealingStrokeOverlay();
+      return true;
+    }
     event.currentTarget.setPointerCapture(event.pointerId);
     healingPointerIdRef.current = event.pointerId;
+    const source = healingSourceRef.current;
     activeHealingStrokeRef.current = {
       tool: "healing",
       size: healingBrushSizeRef.current,
-      points: [point]
+      points: [point],
+      ...(source ? { source: { dx: source.x - point.x, dy: source.y - point.y } } : {})
     };
     drawHealingStrokeOverlay();
     return true;

@@ -344,6 +344,8 @@ export function ImageEditorModal({ source, title = "Image Editor", initialState 
   const strokesRef = useRef([]);
   const panStartRef = useRef(null);
   const activeStrokeRef = useRef(null);
+  // Healing: Alt+click source point (normalized), like Photoshop.
+  const healingSourceRef = useRef(null);
   const zoomStartRef = useRef(null);
   const zoomRef = useRef(1);
   const panRef = useRef({ x: 0, y: 0 });
@@ -370,6 +372,9 @@ export function ImageEditorModal({ source, title = "Image Editor", initialState 
   const [hoveredZone, setHoveredZone] = useState(null);
   const histogramDragRef = useRef(null);
   const [activeTool, setActiveTool] = useState("hand");
+  // Read by the canvas compositor without making it depend on tool / brush state.
+  const healingToolRef = useRef({ tool: "hand", size: DEFAULT_BRUSH.size });
+  healingToolRef.current = { tool: activeTool, size: brush.size };
   const [openSections, setOpenSections] = useState({ basic: true, presets: false });
   const [activeColorTab, setActiveColorTab] = useState("reds");
   const [colorPickTarget, setColorPickTarget] = useState(null);
@@ -778,6 +783,28 @@ export function ImageEditorModal({ source, title = "Image Editor", initialState 
       }
     } else if (layer) {
       tctx.drawImage(layer, 0, 0);
+    }
+    // Healing source marker (Alt+click), following the brush while painting.
+    const healingSource = healingSourceRef.current;
+    if (healingToolRef.current.tool === "healing" && healingSource) {
+      const last = active?.tool === "healing" ? active.points[active.points.length - 1] : null;
+      const at = last && active.source ? { x: last.x + active.source.dx, y: last.y + active.source.dy } : healingSource;
+      const radius = Math.max(6, (healingToolRef.current.size * meta.scale) / 2);
+      const mx = at.x * tmp.width;
+      const my = at.y * tmp.height;
+      tctx.save();
+      for (const [color, width] of [["rgba(0,0,0,0.7)", 3], ["#fff", 1.5]]) {
+        tctx.strokeStyle = color;
+        tctx.lineWidth = width;
+        tctx.beginPath();
+        tctx.arc(mx, my, radius, 0, Math.PI * 2);
+        tctx.moveTo(mx - radius * 1.5, my);
+        tctx.lineTo(mx + radius * 1.5, my);
+        tctx.moveTo(mx, my - radius * 1.5);
+        tctx.lineTo(mx, my + radius * 1.5);
+        tctx.stroke();
+      }
+      tctx.restore();
     }
 
     if (editorCompareMode) {
@@ -1812,8 +1839,14 @@ export function ImageEditorModal({ source, title = "Image Editor", initialState 
       setActiveTool("brush");
       return;
     }
+    if (activeTool === "healing" && event.altKey) {
+      healingSourceRef.current = point;
+      compositePreview();
+      return;
+    }
     if (activeTool === "brush" || activeTool === "eraser" || activeTool === "healing") {
       event.currentTarget.setPointerCapture(event.pointerId);
+      const healingSource = activeTool === "healing" ? healingSourceRef.current : null;
       // The in-progress stroke lives outside React state and is drawn live, so
       // dragging never churns state (avoids re-render storms and array races).
       activeStrokeRef.current = {
@@ -1822,7 +1855,8 @@ export function ImageEditorModal({ source, title = "Image Editor", initialState 
         size: brush.size,
         opacity: brush.opacity,
         hardness: brush.hardness ?? 100,
-        points: [point]
+        points: [point],
+        ...(healingSource ? { source: { dx: healingSource.x - point.x, dy: healingSource.y - point.y } } : {})
       };
       compositePreview();
       return;

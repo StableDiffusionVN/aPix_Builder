@@ -212,6 +212,10 @@ export function PreviewPanel({
                 // Live healing stroke, drawn imperatively by the colour engine.
                 <svg ref={healingOverlayRef} className="healingStrokeOverlay" preserveAspectRatio="none" aria-hidden="true" style={{ display: "none" }}>
                   <path fill="none" stroke="rgba(239, 68, 68, 0.75)" strokeOpacity="0.55" strokeLinecap="round" strokeLinejoin="round" />
+                  <g className="healingSourceMarker" style={{ display: "none" }}>
+                    <circle fill="none" stroke="#fff" strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
+                    <path stroke="#fff" strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
+                  </g>
                 </svg>
               ) : null}
             </div>

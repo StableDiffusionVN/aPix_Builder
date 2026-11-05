@@ -286,14 +286,17 @@ export function ImageAdjustmentControls({
   const showHealingSizeStrip = showHealingTool && healingActive && openSections.presets;
   const selectedCurvePoint = getCurvePoint(adjustments.curves, activeCurveChannel, selectedCurvePointIndex);
   const healingSizeRange = (
-    <EditorRange
-      label="Size"
-      value={healingBrushSize}
-      min={1}
-      max={180}
-      resetValue={DEFAULT_HEALING_BRUSH_SIZE}
-      onChange={updateHealingBrushSize}
-    />
+    <>
+      <EditorRange
+        label="Size"
+        value={healingBrushSize}
+        min={1}
+        max={180}
+        resetValue={DEFAULT_HEALING_BRUSH_SIZE}
+        onChange={updateHealingBrushSize}
+      />
+      <p className="healingSourceHint">{t("editor.healingSourceHint")}</p>
+    </>
   );
 
   return (

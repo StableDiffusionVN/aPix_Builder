@@ -162,15 +162,33 @@ export function PreviewPanel({
             <ColorPickCursorOverlay x={colorPickCursor.x} y={colorPickCursor.y} />
           ) : null}
           {healingActive && healingCursor ? (
-            <div
-              className="brushCursorCircle healingMode"
-              style={{
-                left: healingCursor.x,
-                top: healingCursor.y,
-                width: Math.max(4, healingBrushDiameter),
-                height: Math.max(4, healingBrushDiameter)
-              }}
-            />
+            healingCursor.alt ? (
+              // Alt held: pick the copy source (fixed screen size, like Photoshop).
+              <svg className="healingTargetCursor" width="17" height="17" viewBox="0 0 17 17" style={{ left: healingCursor.x, top: healingCursor.y }} aria-hidden="true">
+                <circle cx="8.5" cy="8.5" r="5" />
+                <path d="M8.5 0.5V5.5M8.5 11.5V16.5M0.5 8.5H5.5M11.5 8.5H16.5" />
+              </svg>
+            ) : (
+              <div
+                className={`brushCursorCircle healingMode${healingCursor.sample ? " hasSample" : ""}`}
+                style={{
+                  left: healingCursor.x,
+                  top: healingCursor.y,
+                  width: Math.max(4, healingBrushDiameter),
+                  height: Math.max(4, healingBrushDiameter),
+                  ...(healingCursor.sample ? {
+                    backgroundImage: `url("${healingCursor.sample.url}")`,
+                    backgroundSize: `${healingCursor.sample.width}px ${healingCursor.sample.height}px`,
+                    backgroundPosition: `${healingCursor.sample.x}px ${healingCursor.sample.y}px`
+                  } : {})
+                }}
+              />
+            )
+          ) : null}
+          {healingActive && healingCursor?.samplePoint ? (
+            <svg className="healingSamplePlus" width="13" height="13" viewBox="0 0 13 13" style={{ left: healingCursor.samplePoint.x, top: healingCursor.samplePoint.y }} aria-hidden="true">
+              <path d="M6.5 0.5V12.5M0.5 6.5H12.5" />
+            </svg>
           ) : null}
           {showRunningScreen ? (
             <div className={`emptyState ${isRunningHub ? "rhEmptyState" : ""}`}>
@@ -210,10 +228,6 @@ export function PreviewPanel({
                 // Live healing stroke, drawn imperatively by the colour engine.
                 <svg ref={healingOverlayRef} className="healingStrokeOverlay" preserveAspectRatio="none" aria-hidden="true" style={{ display: "none" }}>
                   <path fill="none" stroke="rgba(239, 68, 68, 0.75)" strokeOpacity="0.55" strokeLinecap="round" strokeLinejoin="round" />
-                  <g className="healingSourceMarker" style={{ display: "none" }}>
-                    <circle fill="none" stroke="#fff" strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
-                    <path stroke="#fff" strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
-                  </g>
                 </svg>
               ) : null}
             </div>

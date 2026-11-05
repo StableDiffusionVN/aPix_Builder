@@ -24,9 +24,24 @@
   pointer-events: none;
 }
 
-/* Healing brush: Alt+click source marker + hint */
-.healingSourceMarker {
-  filter: drop-shadow(0 0 1.5px rgba(0, 0, 0, 0.9));
+/* Healing brush (Photoshop-style): Alt target cursor, clone-source preview, sample "+" */
+.healingTargetCursor,
+.healingSamplePlus {
+  position: absolute;
+  z-index: 11;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  overflow: visible;
+  fill: none;
+  stroke: #fff;
+  stroke-width: 1;
+  filter: drop-shadow(0 0 0.6px rgba(0, 0, 0, 0.95)) drop-shadow(0 0 0.6px rgba(0, 0, 0, 0.95));
+}
+
+.brushCursorCircle.healingMode.hasSample {
+  background-repeat: no-repeat;
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.55);
 }
 
 .healingSourceHint {

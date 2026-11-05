@@ -372,9 +372,6 @@ export function ImageEditorModal({ source, title = "Image Editor", initialState 
   const [hoveredZone, setHoveredZone] = useState(null);
   const histogramDragRef = useRef(null);
   const [activeTool, setActiveTool] = useState("hand");
-  // Read by the canvas compositor without making it depend on tool / brush state.
-  const healingToolRef = useRef({ tool: "hand", size: DEFAULT_BRUSH.size });
-  healingToolRef.current = { tool: activeTool, size: brush.size };
   const [openSections, setOpenSections] = useState({ basic: true, presets: false });
   const [activeColorTab, setActiveColorTab] = useState("reds");
   const [colorPickTarget, setColorPickTarget] = useState(null);
@@ -391,6 +388,19 @@ export function ImageEditorModal({ source, title = "Image Editor", initialState 
   const [error, setError] = useState("");
   const [isReady, setIsReady] = useState(false);
   const [brushCursor, setBrushCursor] = useState(null);
+  useEffect(() => {
+    const onKey = event => {
+      if (event.key !== "Alt") return;
+      const alt = event.type === "keydown";
+      setBrushCursor(current => (current && current.alt !== alt ? { ...current, alt } : current));
+    };
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("keyup", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("keyup", onKey);
+    };
+  }, []);
   const canvasScaleRef = useRef(1);
 
   const [editorCompareMode, setEditorCompareMode] = useState(false);
@@ -784,24 +794,24 @@ export function ImageEditorModal({ source, title = "Image Editor", initialState 
     } else if (layer) {
       tctx.drawImage(layer, 0, 0);
     }
-    // Healing source marker (Alt+click), following the brush while painting.
-    const healingSource = healingSourceRef.current;
-    if (healingToolRef.current.tool === "healing" && healingSource) {
-      const last = active?.tool === "healing" ? active.points[active.points.length - 1] : null;
-      const at = last && active.source ? { x: last.x + active.source.dx, y: last.y + active.source.dy } : healingSource;
-      const radius = Math.max(6, (healingToolRef.current.size * meta.scale) / 2);
-      const mx = at.x * tmp.width;
-      const my = at.y * tmp.height;
+    // Photoshop-style thin "+" where the healing brush samples, only while painting;
+    // sized in screen pixels so zooming the editor does not scale it.
+    if (active?.tool === "healing" && active.source && active.points.length) {
+      const last = active.points[active.points.length - 1];
+      const displayWidth = canvas.getBoundingClientRect().width || tmp.width;
+      const perScreenPx = tmp.width / displayWidth;
+      const arm = 6 * perScreenPx;
+      const mx = (last.x + active.source.dx) * tmp.width;
+      const my = (last.y + active.source.dy) * tmp.height;
       tctx.save();
-      for (const [color, width] of [["rgba(0,0,0,0.7)", 3], ["#fff", 1.5]]) {
+      for (const [color, width] of [["rgba(0,0,0,0.75)", 2.5], ["#fff", 1]]) {
         tctx.strokeStyle = color;
-        tctx.lineWidth = width;
+        tctx.lineWidth = width * perScreenPx;
         tctx.beginPath();
-        tctx.arc(mx, my, radius, 0, Math.PI * 2);
-        tctx.moveTo(mx - radius * 1.5, my);
-        tctx.lineTo(mx + radius * 1.5, my);
-        tctx.moveTo(mx, my - radius * 1.5);
-        tctx.lineTo(mx, my + radius * 1.5);
+        tctx.moveTo(mx - arm, my);
+        tctx.lineTo(mx + arm, my);
+        tctx.moveTo(mx, my - arm);
+        tctx.lineTo(mx, my + arm);
         tctx.stroke();
       }
       tctx.restore();
@@ -1841,7 +1851,6 @@ export function ImageEditorModal({ source, title = "Image Editor", initialState 
     }
     if (activeTool === "healing" && event.altKey) {
       healingSourceRef.current = point;
-      compositePreview();
       return;
     }
     if (activeTool === "brush" || activeTool === "eraser" || activeTool === "healing") {
@@ -1911,7 +1920,7 @@ export function ImageEditorModal({ source, title = "Image Editor", initialState 
         const stageRect = stage.getBoundingClientRect();
         const canvasRect = canvas.getBoundingClientRect();
         if (canvas.width > 0) canvasScaleRef.current = canvasRect.width / canvas.width;
-        setBrushCursor({ x: event.clientX - stageRect.left, y: event.clientY - stageRect.top });
+        setBrushCursor({ x: event.clientX - stageRect.left, y: event.clientY - stageRect.top, alt: Boolean(event.altKey) });
       }
     }
     if (activeStrokeRef.current && (activeTool === "brush" || activeTool === "eraser" || activeTool === "healing")) {
@@ -2152,7 +2161,13 @@ export function ImageEditorModal({ source, title = "Image Editor", initialState 
             {colorPickTarget && colorPickCursor ? (
               <ColorPickCursorOverlay x={colorPickCursor.x} y={colorPickCursor.y} />
             ) : null}
-            {brushCursor && (activeTool === "brush" || activeTool === "eraser" || activeTool === "healing") ? (
+            {brushCursor?.alt && activeTool === "healing" ? (
+              // Alt held: pick the healing copy source (fixed screen size).
+              <svg className="healingTargetCursor" width="17" height="17" viewBox="0 0 17 17" style={{ left: brushCursor.x, top: brushCursor.y }} aria-hidden="true">
+                <circle cx="8.5" cy="8.5" r="5" />
+                <path d="M8.5 0.5V5.5M8.5 11.5V16.5M0.5 8.5H5.5M11.5 8.5H16.5" />
+              </svg>
+            ) : brushCursor && (activeTool === "brush" || activeTool === "eraser" || activeTool === "healing") ? (
               <div
                 className={`brushCursorCircle ${activeTool === "eraser" ? "eraserMode" : activeTool === "healing" ? "healingMode" : "brushMode"}`}
                 style={{

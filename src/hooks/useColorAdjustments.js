@@ -432,9 +432,7 @@ export function useColorAdjustments({
     const stroke = activeHealingStrokeRef.current;
     const meta = previewMetaRef.current;
     const path = el.querySelector("path");
-    const marker = el.querySelector(".healingSourceMarker");
-    const source = healingSourceRef.current;
-    if ((!stroke?.points?.length && !source) || !meta?.width || !path) {
+    if (!stroke?.points?.length || !meta?.width || !path) {
       el.style.display = "none";
       path?.setAttribute("d", "");
       return;
@@ -450,22 +448,6 @@ export function useColorAdjustments({
       path.setAttribute("stroke-width", String(Math.max(2, stroke.size)));
     } else {
       path.setAttribute("d", "");
-    }
-    // Source marker: at the picked point, or following the brush while painting.
-    if (marker) {
-      const last = stroke?.points?.[stroke.points.length - 1];
-      const at = stroke?.source && last
-        ? { x: last.x + stroke.source.dx, y: last.y + stroke.source.dy }
-        : source;
-      if (at) {
-        const size = Math.max(6, (stroke?.size || healingBrushSizeRef.current) / 2);
-        marker.setAttribute("transform", `translate(${(at.x * fullWidth).toFixed(1)} ${(at.y * fullHeight).toFixed(1)})`);
-        marker.querySelector("circle")?.setAttribute("r", String(size));
-        marker.querySelector("path")?.setAttribute("d", `M${-size * 1.5} 0H${size * 1.5}M0 ${-size * 1.5}V${size * 1.5}`);
-        marker.style.display = "";
-      } else {
-        marker.style.display = "none";
-      }
     }
     el.style.display = "";
   }, []);
@@ -701,13 +683,59 @@ export function useColorAdjustments({
     }
     const areaRect = previewArea.getBoundingClientRect();
     lastHoverImageRef.current = imageElement;
+    const diameter = computeHealingBrushDiameter(imageElement);
+    // Clone-source preview inside the brush (Photoshop): the area the next dab copies —
+    // the Alt+clicked point, or brush position + offset while painting.
+    let sample = null;
+    const source = healingSourceRef.current;
+    const stroke = activeHealingStrokeRef.current;
+    const rect = imageElement?.getBoundingClientRect();
+    if (source && rect?.width && !event.altKey) {
+      const lastPoint = stroke?.points?.[stroke.points.length - 1];
+      const center = stroke?.source && lastPoint ? { x: lastPoint.x + stroke.source.dx, y: lastPoint.y + stroke.source.dy } : source;
+      sample = {
+        url: imageElement.currentSrc || imageElement.src,
+        width: rect.width,
+        height: rect.height,
+        x: diameter / 2 - center.x * rect.width,
+        y: diameter / 2 - center.y * rect.height
+      };
+    }
+    // Thin "+" where the brush samples while painting — screen-space, so its size
+    // does not change with the preview zoom.
+    const last = stroke?.points?.[stroke.points.length - 1];
+    const samplePoint = stroke?.source && last && rect?.width
+      ? {
+        x: rect.left - areaRect.left + (last.x + stroke.source.dx) * rect.width,
+        y: rect.top - areaRect.top + (last.y + stroke.source.dy) * rect.height
+      }
+      : null;
     setHealingCursor({
       x: event.clientX - areaRect.left,
-      y: event.clientY - areaRect.top
+      y: event.clientY - areaRect.top,
+      alt: Boolean(event.altKey),
+      sample,
+      samplePoint
     });
-    setHealingBrushDiameter(computeHealingBrushDiameter(imageElement));
+    setHealingBrushDiameter(diameter);
     return true;
   }, [computeHealingBrushDiameter]);
+
+  useEffect(() => {
+    if (!healingActive) return undefined;
+    const onKey = event => {
+      if (event.key !== "Alt") return;
+      const alt = event.type === "keydown";
+      setHealingCursor(current => (current && current.alt !== alt ? { ...current, alt } : current));
+      if (alt) event.preventDefault();
+    };
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("keyup", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("keyup", onKey);
+    };
+  }, [healingActive]);
 
   const clearHealingCursor = useCallback(() => {
     lastHoverImageRef.current = null;
@@ -788,7 +816,6 @@ export function useColorAdjustments({
     if (event.altKey) {
       // Alt+click: pick the area to copy from (next strokes sample relative to it).
       healingSourceRef.current = point;
-      drawHealingStrokeOverlay();
       return true;
     }
     event.currentTarget.setPointerCapture(event.pointerId);

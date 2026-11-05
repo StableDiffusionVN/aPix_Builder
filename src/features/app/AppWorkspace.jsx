@@ -440,14 +440,17 @@ export function AppWorkspace() {
   useEffect(() => {
     if (!rhFeaturesEnabled && (executionMode === "runninghub-app" || executionMode === "runninghub-wf")) setExecutionMode("local");
   }, [rhFeaturesEnabled, executionMode, setExecutionMode]);
-  const onLocalServerChosen = useCallback(() => {
-    setStatus(t("serverGate.localStatus", { address: comfyAddress || "http://127.0.0.1:8188" }));
-  }, [comfyAddress, setStatus, t]);
+  const onUseLocalServer = useCallback(address => {
+    setComfyAddress(address);
+    setDiscoveryReload(current => current + 1);
+    setStatus(t("serverGate.localConnected", { address }));
+  }, [setComfyAddress, setStatus, t]);
   const serverGate = useComfyServerGate({
     enabled: executionMode === "local" && !isCanvasView,
     healthStatus,
+    comfyAddress,
     onRun: runWithBatchExpansion,
-    onLocalChosen: onLocalServerChosen
+    onUseServer: onUseLocalServer
   });
   const handleRunClick = serverGate.handleRun;
   const outputs = useMemo(() => Object.values(config?.output || {}), [config]);

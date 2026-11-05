@@ -221,7 +221,9 @@ export function createColabController({ appRoot, getMainWindow, getSavedServers 
           return false;
         }
       });
-      const address = savedMatch ? savedMatch.address : parsed.origin;
+      // Keep a login the notebook printed (pinggy {token}:user:pass → https://user:pass@host).
+      const printed = parsed.username ? `${parsed.protocol}//${parsed.username}:${parsed.password}@${parsed.host}` : parsed.origin;
+      const address = savedMatch ? savedMatch.address : printed;
       if (candidates.some(item => item.address === address)) continue;
       candidates.push({ address, label: savedMatch?.label || "", rank: tunnelRank(parsed.hostname), ...(await probe(address)) });
     }

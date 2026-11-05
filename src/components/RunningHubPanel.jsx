@@ -114,7 +114,8 @@ const EXECUTION_MODE_OPTIONS = [
   { id: "runninghub-app", label: "RH App", title: "RunningHub App (Alt/Option+3)", icon: RunningHubLogomark, iconTitle: "RunningHub", shortcut: "Alt+3" }
 ];
 
-export function ExecutionModeToggle({ mode, onChange, canvasActive = false, onCanvasToggle, onLibraryOpen, onLibraryHover, children }) {
+export function ExecutionModeToggle({ mode, onChange, canvasActive = false, onCanvasToggle, onLibraryOpen, onLibraryHover, rhEnabled = true, children }) {
+  const modeOptions = rhEnabled ? EXECUTION_MODE_OPTIONS : EXECUTION_MODE_OPTIONS.filter(option => option.id === "local");
   const { locale } = useI18n();
   const trackRef = useRef(null);
   const formOptionsRef = useRef(null);
@@ -158,7 +159,7 @@ export function ExecutionModeToggle({ mode, onChange, canvasActive = false, onCa
 
   useLayoutEffect(() => {
     syncIndicator();
-  }, [syncIndicator, canvasActive, mode]);
+  }, [syncIndicator, canvasActive, mode, rhEnabled]);
 
   useEffect(() => {
     const track = trackRef.current;
@@ -181,7 +182,7 @@ export function ExecutionModeToggle({ mode, onChange, canvasActive = false, onCa
       aria-label={workspaceLabel}
     >
       <div className="executionModeTrack" ref={trackRef}>
-        {onLibraryOpen ? (
+        {onLibraryOpen && rhEnabled ? (
           <button
             type="button"
             className="executionModeLibraryToggle hasModeIcon"
@@ -234,7 +235,7 @@ export function ExecutionModeToggle({ mode, onChange, canvasActive = false, onCa
                   }}
                   aria-hidden="true"
                 />
-                {EXECUTION_MODE_OPTIONS.map(option => {
+                {modeOptions.map(option => {
                   const Icon = option.icon;
                   const isActive = mode === option.id;
                   return (

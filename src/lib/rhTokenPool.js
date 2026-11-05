@@ -54,7 +54,10 @@ export function normalizeRhSettings(raw = {}) {
     workflowId: parsed.workflowId || "",
     tokens,
     tokenPolicy,
-    rotateIndex
+    rotateIndex,
+    // RH App / RH Workflow tabs are hidden unless turned on in Settings → RunningHub
+    // (RunningHub API keys now only spend paid RH coins).
+    featuresEnabled: parsed.featuresEnabled === true
   };
 }
 

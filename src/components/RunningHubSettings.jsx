@@ -138,6 +138,18 @@ export function RunningHubSettings({
         <p>{t("rh.intro")}</p>
       </header>
 
+      <label className="rhFeatureToggle">
+        <input
+          type="checkbox"
+          checked={settings?.featuresEnabled === true}
+          onChange={event => onChange({ featuresEnabled: event.target.checked })}
+        />
+        <span>
+          <b>{t("rh.featuresEnabled")}</b>
+          <small>{t("rh.featuresEnabledHint")}</small>
+        </span>
+      </label>
+
       <section className="rhAccountOverview" aria-label={t("rh.accountOverview")}>
         <div className="rhAccountHeader">
           <div>
@@ -186,6 +198,15 @@ export function RunningHubSettings({
             <Plus size={14} />
             {t("rh.addToken")}
           </button>
+        </div>
+
+        <div className="rhPolicyNote" role="note">
+          <b>{t("rh.policyTitle")}</b>
+          <ul>
+            <li>{t("rh.policyConsumer")}</li>
+            <li>{t("rh.policyEnterprise")}</li>
+            <li>{t("rh.policyFailover")}</li>
+          </ul>
         </div>
 
         <div className="rhTokenPolicy" role="radiogroup" aria-label={t("rh.tokenPolicy")}>

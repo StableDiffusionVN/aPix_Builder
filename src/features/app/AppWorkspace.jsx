@@ -430,6 +430,11 @@ export function AppWorkspace() {
     setStatus,
     setShowWaitScreen
   });
+  // RH App / RH Workflow only when turned on in Settings → RunningHub.
+  const rhFeaturesEnabled = rhSettings?.featuresEnabled === true;
+  useEffect(() => {
+    if (!rhFeaturesEnabled && (executionMode === "runninghub-app" || executionMode === "runninghub-wf")) setExecutionMode("local");
+  }, [rhFeaturesEnabled, executionMode, setExecutionMode]);
   const onLocalServerChosen = useCallback(() => {
     setStatus(t("serverGate.localStatus", { address: comfyAddress || "http://127.0.0.1:8188" }));
   }, [comfyAddress, setStatus, t]);
@@ -1744,6 +1749,7 @@ export function AppWorkspace() {
               canvasActive={isCanvasView}
               onCanvasToggle={() => setWorkspaceView(isCanvasView ? "form" : "canvas")}
               onLibraryOpen={() => setRhLibraryOpen(true)}
+              rhEnabled={rhFeaturesEnabled}
               onLibraryHover={preloadRhLibraryModal}
             >
               <div

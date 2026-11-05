@@ -10909,3 +10909,34 @@ html[data-theme] .historyIconFilter.historyFilterWithCount {
 .historyMoreTile:hover { background: var(--surface-3); border-color: var(--accent); color: var(--text-primary); }
 .historyMoreTile:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; }
 .historyList > .historyMoreTile { height: 77px; align-self: start; box-sizing: border-box; }
+
+/* Settings → RunningHub: feature switch + API policy note */
+.rhFeatureToggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0 0 12px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel-soft);
+  cursor: pointer;
+}
+
+.rhFeatureToggle input { margin-top: 2px; }
+.rhFeatureToggle span { display: grid; gap: 3px; }
+.rhFeatureToggle small { color: var(--muted); font-size: 12px; line-height: 1.45; }
+
+.rhPolicyNote {
+  margin: 10px 0 12px;
+  padding: 10px 12px;
+  border: 1px solid rgba(var(--accent-rgb), 0.35);
+  border-radius: 8px;
+  background: rgba(var(--accent-rgb), 0.07);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.rhPolicyNote b { color: var(--accent); }
+.rhPolicyNote ul { margin: 6px 0 0; padding-left: 18px; color: var(--muted); }
+.rhPolicyNote li + li { margin-top: 3px; }

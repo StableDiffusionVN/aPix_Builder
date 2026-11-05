@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from "electron";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -173,6 +173,40 @@ async function createWindow() {
   scheduleUpdateCheck();
 }
 
+// Default menus + View → show / hide the Colab sheet on Cmd+~ / Cmd+` (Ctrl on Windows).
+// macOS claims Cmd+` for "cycle windows" before the page sees it, so it must be a
+// menu accelerator.
+function installAppMenu() {
+  const toggleColab = () => {
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("browser:shortcut", "toggle");
+  };
+  const isMac = process.platform === "darwin";
+  const template = [
+    ...(isMac ? [{ role: "appMenu" }] : []),
+    { role: "fileMenu" },
+    { role: "editMenu" },
+    {
+      label: "View",
+      submenu: [
+        { label: "Hiện / ẩn notebook Colab", accelerator: "CommandOrControl+`", click: toggleColab },
+        { label: "Hiện / ẩn notebook Colab (~)", accelerator: "CommandOrControl+Shift+`", click: toggleColab, visible: false, acceleratorWorksWhenHidden: true },
+        { type: "separator" },
+        { role: "reload" },
+        { role: "forceReload" },
+        { role: "toggleDevTools" },
+        { type: "separator" },
+        { role: "resetZoom" },
+        { role: "zoomIn" },
+        { role: "zoomOut" },
+        { type: "separator" },
+        { role: "togglefullscreen" }
+      ]
+    },
+    { role: "windowMenu" }
+  ];
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
+
 function registerIpcHandlers() {
   registerBrowserIpc({ appRoot, getMainWindow: () => mainWindow });
   ipcMain.handle("colab:start", () => colabSession?.start());
@@ -244,6 +278,7 @@ function registerIpcHandlers() {
 if (gotSingleInstanceLock) {
   app.whenReady().then(async () => {
     registerIpcHandlers();
+    installAppMenu();
     await readDismissedUpdateVersion();
     await createWindow();
   }).catch(error => {

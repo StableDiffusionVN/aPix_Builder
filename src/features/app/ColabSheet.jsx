@@ -104,6 +104,7 @@ export function ColabSheet() {
     const offShortcut = api.onShortcut(action => {
       if (action === "reload") viewRef.current?.reload();
       else if (action === "hide") setOpen(false);
+      else if (action === "toggle") setOpen(current => !current);
     });
     const onToggle = event => {
       setMounted(true);
@@ -169,7 +170,7 @@ export function ColabSheet() {
     {mounted ? (
     <section className={`colabSheet${open ? " isOpen" : ""}`} aria-hidden={!open} aria-label={t("colabSheet.title")}>
       <header className="colabSheetBar">
-        <button type="button" className="colabSheetHandle" onClick={() => setOpen(false)} {...swipe(1, () => setOpen(false))} title={t("colabSheet.hide")} aria-label={t("colabSheet.hide")}>
+        <button type="button" className="colabSheetHandle" onClick={() => setOpen(false)} {...swipe(1, () => setOpen(false))} title={t("colabSheet.hide")} aria-label={t("colabSheet.hide")} aria-keyshortcuts="Meta+Backquote">
           <span />
         </button>
         <div className="colabSheetNav">

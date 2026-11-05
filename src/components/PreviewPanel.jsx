@@ -13,7 +13,8 @@ import {
 } from "lucide-react";
 import { ColorPickCursorOverlay } from "./colorPickUi";
 import { useI18n } from "../i18n/I18nContext";
-import { mediaKindFromUrl } from "../lib/mediaKind";
+import { outputMediaKind } from "../lib/mediaKind";
+import { OutputMediaThumb, OutputMediaView } from "./OutputMediaView.jsx";
 import { RunningHubRunningState } from "./RunningHubRunningState";
 import { RunLogPanel } from "./lazyModals";
 import "../styles/holdOriginal.css";
@@ -90,7 +91,8 @@ export function PreviewPanel({
   // Press-and-hold on the preview shows the unadjusted output.
   const previewImage = showOriginal ? heroImage : displayImage || heroImage;
   // Output video/âm thanh: tắt pan/zoom/compare để <video>/<audio> nhận được click vào controls.
-  const previewKind = mediaKindFromUrl(previewImage);
+  // The selected output's kind (server sets `kind`; older history items: from the url).
+  const previewKind = outputMediaKind(selectedOutput || previewImage);
   const isPlayableOutput = previewKind !== "image";
   const panelOnLeft = colorPanelAlign === "left";
   const colorPanelToggleTitle = `${colorPanelOpen ? t("colorPanel.close") : t("colorPanel.open")} (Tab)`;
@@ -118,7 +120,9 @@ export function PreviewPanel({
                 </button>
               ) : null}
               <button className="downloadButton" onClick={resetImageView} title={t("preview.reset")}><RotateCcw size={14} /></button>
-              <button className="downloadButton" onClick={onOpenEditor} title={t("preview.editor")}><Pencil size={14} /></button>
+              {!isPlayableOutput ? (
+                <button className="downloadButton" onClick={onOpenEditor} title={t("preview.editor")}><Pencil size={14} /></button>
+              ) : null}
               <button className="downloadButton" onClick={() => onDownload(selectedOutput)} title={t("preview.download")}><Download size={14} /></button>
               <button
                 type="button"
@@ -127,7 +131,7 @@ export function PreviewPanel({
                 title={colorPanelToggleTitle}
                 aria-label={colorPanelToggleTitle}
                 aria-expanded={colorPanelOpen}
-                disabled={!colorPanelOpen && (!heroImage || showRunningScreen)}
+                disabled={!colorPanelOpen && (!heroImage || showRunningScreen || isPlayableOutput)}
               >
                 {colorUpdating ? (
                   <Loader2 size={14} className="spin" />
@@ -178,14 +182,8 @@ export function PreviewPanel({
             </div>
           ) : heroImage && isPlayableOutput ? (
             // Video/âm thanh: stage riêng full khung, KHÔNG dùng imageStage (kích thước/transform tính cho ảnh)
-            <div className="mediaStage">
-              {previewKind === "video" ? (
-                <video key={previewImage} className="resultVideo" src={previewImage} controls playsInline preload="metadata" />
-              ) : (
-                <div className="resultAudioWrap">
-                  <audio key={previewImage} src={previewImage} controls preload="metadata" />
-                </div>
-              )}
+            <div className={`mediaStage kind-${previewKind}`}>
+              <OutputMediaView output={{ ...(selectedOutput || {}), url: previewImage }} />
             </div>
           ) : heroImage ? (
             <div
@@ -250,10 +248,8 @@ export function PreviewPanel({
                   aria-label={t("preview.viewOutput", { index: index + 1 })}
                   aria-pressed={index === selectedOutputIndex}
                 >
-                  {mediaKindFromUrl(output.url) === "video" ? (
-                    <video src={output.url} muted preload="metadata" />
-                  ) : mediaKindFromUrl(output.url) === "audio" ? (
-                    <span className="outputThumbAudio" aria-hidden="true">♪</span>
+                  {outputMediaKind(output) !== "image" ? (
+                    <OutputMediaThumb output={output} />
                   ) : (
                     <img src={output.url} alt={output.filename || `Output ${index + 1}`} draggable="false" />
                   )}

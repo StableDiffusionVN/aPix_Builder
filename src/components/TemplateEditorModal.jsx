@@ -25,6 +25,12 @@ import { DEFAULT_RH_WF_ID } from "../hooks/useRunningHub";
 import { menuChoiceOptions, menuChoiceValue, parseMenuChoices, resolveMenuStoredValue } from "../../shared/menuChoices.js";
 import { RunningHubLogomark } from "./icons/RunningHubIcon";
 import { localizeRuntimeMessage, useI18n } from "../i18n/I18nContext";
+
+// Nodes that produce a result aPix can collect: Save* (image / video / audio / 3D),
+// Preview*, VHS_VideoCombine, show / preview text nodes.
+function isOutputNodeClass(classType = "") {
+  return /save|preview|videocombine|combine.*video|showtext|show_text|displaytext|display_any|showany/i.test(String(classType));
+}
 import {
   defaultValueForType,
   defaultsForType,
@@ -463,7 +469,7 @@ function MenuSubDetailPanel({ row, nodes, workflow, fieldTypes, onAttachWorkflow
   const choiceWorkflow = row.workflows?.[activeChoice];
   const branchWorkflow = choiceWorkflow?.workflow || workflow;
   const branchNodes = choiceWorkflow?.workflow ? workflowNodes(choiceWorkflow.workflow) : nodes;
-  const outputNodes = branchNodes.filter(node => node.classType.toLowerCase().includes("save"));
+  const outputNodes = branchNodes.filter(node => isOutputNodeClass(node.classType));
   const activeChoiceLabel = parsedChoices.find(choice => choice.value === activeChoice)?.label || activeChoice;
 
   return (
@@ -1028,7 +1034,7 @@ export function TemplateEditorModal({
   const [editingDefaultTemplate, setEditingDefaultTemplate] = useState(false);
 
   const nodes = useMemo(() => workflowNodes(workflow), [workflow]);
-  const saveNodes = useMemo(() => nodes.filter(node => node.classType.toLowerCase().includes("save")), [nodes]);
+  const saveNodes = useMemo(() => nodes.filter(node => isOutputNodeClass(node.classType)), [nodes]);
   const selectedInputRow = useMemo(
     () => inputRows.find(row => row.rowId === selectedInputId) || null,
     [inputRows, selectedInputId]
@@ -1096,7 +1102,8 @@ export function TemplateEditorModal({
     setInputRows(current => pruneInputRows(current, nextWorkflow));
     if (!isRhWf) {
       const nextNodes = workflowNodes(nextWorkflow);
-      const firstSave = nextNodes.find(node => node.classType.toLowerCase().includes("save"));
+      // Prefer a Save* node as the default output, then any preview / combine node.
+      const firstSave = nextNodes.find(node => /save/i.test(node.classType)) || nextNodes.find(node => isOutputNodeClass(node.classType));
       setOutputRows(firstSave ? [{ rowId: crypto.randomUUID(), nodeId: firstSave.id, label: l("Ảnh kết quả", "Output image") }] : []);
     } else {
       setOutputRows([]);
@@ -1301,7 +1308,7 @@ export function TemplateEditorModal({
     setError("");
     try {
       const json = assertApiWorkflow(JSON.parse(await readTextFile(file)), file.name);
-      const firstOutput = workflowNodes(json).find(node => node.classType.toLowerCase().includes("save"));
+      const firstOutput = workflowNodes(json).find(node => /save/i.test(node.classType)) || workflowNodes(json).find(node => isOutputNodeClass(node.classType));
       setInputRows(current => current.map(row => row.rowId !== menuRowId ? row : {
         ...row, workflows: { ...row.workflows, [choice]: {
           file: `workflows/${crypto.randomUUID()}.json`, name: file.name, workflow: json, outputNodeId: firstOutput?.id || ""

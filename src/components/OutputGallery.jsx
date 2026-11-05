@@ -4,7 +4,8 @@ import { useMemo, useState } from "react";
 import { Download, Filter, History, Loader2, Star, Workflow, X } from "lucide-react";
 import { useI18n } from "../i18n/I18nContext";
 import { getSetting, setSetting } from "../lib/appSettings.js";
-import { mediaKindFromUrl } from "../lib/mediaKind.js";
+import { outputMediaKind } from "../lib/mediaKind.js";
+import { OutputMediaThumb } from "./OutputMediaView.jsx";
 
 function formatTime(value, locale) {
   if (!value) return "";
@@ -201,7 +202,8 @@ export function OutputGallery({
               key={item.id}
               role="button"
               tabIndex={0}
-              draggable={Boolean(primaryOutput)}
+              // Only images can be dropped into image fields.
+              draggable={Boolean(primaryOutput) && outputMediaKind(primaryOutput) === "image"}
               onDragStart={event => {
                 if (!primaryOutput) return;
                 event.dataTransfer.effectAllowed = "copy";
@@ -225,10 +227,8 @@ export function OutputGallery({
             >
               <span className="historyThumb">
                 {primaryOutput ? (
-                  mediaKindFromUrl(primaryOutput.url) === "video" ? (
-                    <video src={primaryOutput.url} muted preload="metadata" />
-                  ) : mediaKindFromUrl(primaryOutput.url) === "audio" ? (
-                    <span className="historyThumbAudio" aria-hidden="true">♪</span>
+                  outputMediaKind(primaryOutput) !== "image" ? (
+                    <OutputMediaThumb output={primaryOutput} />
                   ) : (
                     <img
                       src={primaryOutput.url}

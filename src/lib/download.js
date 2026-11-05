@@ -3,8 +3,8 @@ export async function downloadImage(output) {
   const response = await fetch(output.url);
   if (!response.ok) {
     throw new Error(document.documentElement.lang === "vi"
-      ? `Không tải được ảnh: ${response.status}`
-      : `Could not download the image: ${response.status}`);
+      ? `Không tải được file: ${response.status}`
+      : `Could not download the file: ${response.status}`);
   }
   downloadBlob(await response.blob(), output.filename || "comfyui-output.png");
 }

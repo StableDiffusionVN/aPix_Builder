@@ -4,7 +4,8 @@ import { ChevronLeft, ChevronRight, Download, X } from "lucide-react";
 import { useI18n } from "../i18n/I18nContext.jsx";
 import { useZoomableImage } from "../hooks/useZoomableImage.js";
 import { downloadImage } from "../lib/download.js";
-import { mediaKindFromUrl } from "../lib/mediaKind.js";
+import { outputMediaKind } from "../lib/mediaKind.js";
+import { OutputMediaView } from "./OutputMediaView.jsx";
 
 export function ImageLightboxOverlay({ open, image, images, title, onClose, zoomable = true }) {
   const { t } = useI18n();
@@ -99,10 +100,10 @@ export function ImageLightboxOverlay({ open, image, images, title, onClose, zoom
           style={zoom.stageStyle}
           {...zoom.stageProps}
         >
-          {mediaKindFromUrl(currentImage.url) === "video" ? (
-            <video src={currentImage.url} controls autoPlay playsInline preload="metadata" />
-          ) : mediaKindFromUrl(currentImage.url) === "audio" ? (
-            <audio src={currentImage.url} controls autoPlay preload="metadata" />
+          {outputMediaKind(currentImage) !== "image" ? (
+            <div className={`imageLightboxMedia kind-${outputMediaKind(currentImage)}`} onPointerDown={event => event.stopPropagation()}>
+              <OutputMediaView output={currentImage} />
+            </div>
           ) : (
             <img src={currentImage.url} alt={currentImage.name || title || ""} />
           )}

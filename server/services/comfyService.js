@@ -1,3 +1,4 @@
+import { collectNodeMedia } from "../../shared/outputMedia.js";
 import { validateWorkflowVariants } from "../lib/workflowVariants.js";
 import { prepareCropInpaint } from "../lib/cropInpaint.js";
 import { randomUUID } from "node:crypto";
@@ -119,7 +120,7 @@ export function createComfyService({ storage, runCoordinator, readBody, send }) 
       const outputs = collectOutputs(config, history, target);
       if (outputs.length === 0) {
         const status = history?.status ? ` Status: ${JSON.stringify(history.status)}` : "";
-        throw new Error(`ComfyUI finished prompt ${queued.prompt_id}, but no images were found for output node(s) in this template.${status}`);
+        throw new Error(`ComfyUI finished prompt ${queued.prompt_id}, but the template's output node(s) produced no image / video / audio / 3D / text.${status}`);
       }
       const historyItem = await archiveOutputRun({
         stitchOutput,
@@ -270,8 +271,18 @@ export function createComfyService({ storage, runCoordinator, readBody, send }) 
     let index = 0;
   
     for (const nodeId of outputIds) {
-      const images = history?.outputs?.[nodeId]?.images || [];
-      for (const image of images) {
+      for (const media of collectNodeMedia(history?.outputs?.[nodeId])) {
+        if (media.kind === "text") {
+          // Text outputs (PreviewAny…) are kept as a .txt file next to the media.
+          const filename = `${Date.now()}_${runId}_${index}_text.txt`;
+          await writeFile(path.join(outputDir, filename), media.text, "utf8");
+          archivedOutputs.push({ nodeId, kind: "text", filename, originalFilename: "text.txt", url: storage.outputImageUrl(filename), text: media.text.slice(0, 20000) });
+          index += 1;
+          continue;
+        }
+        const image = media;
+        // Crop-inpaint stitching only applies to images.
+        const stitch = media.kind === "image" ? stitchOutput : null;
         const query = new URLSearchParams({
           filename: image.filename,
           subfolder: image.subfolder || "",
@@ -286,33 +297,34 @@ export function createComfyService({ storage, runCoordinator, readBody, send }) 
                 attempt,
                 waitMs,
                 filename: image.filename,
-                label: `Đang thử tải lại ảnh kết quả (${attempt})...`
+                label: `Đang thử tải lại kết quả (${attempt})...`
               });
             }
           });
           const originalName = safeFileName(image.filename || `output_${index}.png`);
-          const ext = stitchOutput ? ".png" : path.extname(originalName) || ".png";
+          const ext = stitch ? ".png" : path.extname(originalName) || ".png";
           const base = originalName.replace(/\.[^.]+$/, "") || "output";
           const filename = `${Date.now()}_${runId}_${index}_${base}${ext}`;
           const downloaded = Buffer.from(await response.arrayBuffer());
-          const buffer = stitchOutput ? await stitchOutput(downloaded) : downloaded;
+          const buffer = stitch ? await stitch(downloaded) : downloaded;
           await writeFile(path.join(outputDir, filename), buffer);
           archivedOutputs.push({
             nodeId,
+            kind: media.kind,
             filename,
             originalFilename: image.filename,
             url: storage.outputImageUrl(filename)
           });
           index += 1;
         } catch (error) {
-          if (stitchOutput) throw error;
+          if (stitch) throw error;
           // Try remaining outputs; fail only if nothing could be archived.
         }
       }
     }
-  
+
     if (!archivedOutputs.length) {
-      throw new Error("ComfyUI hoàn tất nhưng không tải được ảnh kết quả sau nhiều lần thử");
+      throw new Error("ComfyUI hoàn tất nhưng không tải được kết quả (ảnh / video / audio / 3D / text) sau nhiều lần thử");
     }
   
     const item = decorateCanvasHistoryItem({

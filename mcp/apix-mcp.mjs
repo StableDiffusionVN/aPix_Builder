@@ -3,6 +3,7 @@
 // aPix image-generation workflows on the user's ComfyUI server through the
 // running aPix app. Register with Claude Code:
 //   claude mcp add apix -- node /path/to/aPix_Builder/mcp/apix-mcp.mjs
+import { mediaKindFromFilename, mimeForFilename } from "../shared/outputMedia.js";
 import { createInterface } from "node:readline";
 import { readFile } from "node:fs/promises";
 import { ApixClient, ApixError } from "./apixClient.mjs";
@@ -109,13 +110,13 @@ const TOOLS = [
   },
   {
     name: "list_history",
-    description: "Lịch sử ảnh đã tạo (mới nhất trước), kèm đường dẫn file kết quả.",
+    description: "Lịch sử kết quả đã tạo (mới nhất trước): ảnh, video, audio, model 3D, text — kèm đường dẫn file và kind.",
     inputSchema: { type: "object", properties: { limit: { type: "integer", default: 10 }, template_id: { type: "string" } } },
     run: ({ limit, template_id: templateId }) => client.listHistory({ limit, templateId })
   },
   {
     name: "view_output",
-    description: "Xem ảnh kết quả (thu nhỏ) của một lệnh để đánh giá. index = thứ tự ảnh khi lệnh có nhiều ảnh.",
+    description: "Xem kết quả của một lệnh: ảnh (thu nhỏ để đánh giá), audio (gửi file nếu ≤ 8 MB), text (nội dung); video / model 3D trả đường dẫn file để mở. index = thứ tự kết quả khi lệnh có nhiều file.",
     inputSchema: {
       type: "object",
       properties: { run_id: { type: "string" }, index: { type: "integer", default: 0 }, max_size: { type: "integer", default: 1024 } },
@@ -190,10 +191,33 @@ const TOOLS = [
   }
 ];
 
+async function readOutput(output) {
+  try {
+    return await readFile(output.path);
+  } catch {
+    const response = await fetch(output.url);
+    if (!response.ok) throw new ApixError(`Không đọc được file ${output.filename}`);
+    return Buffer.from(await response.arrayBuffer());
+  }
+}
+
 async function viewOutput(runId, index, maxSize) {
   const run = await client.getRun(runId);
   const output = run.outputs[index];
-  if (!output) throw new ApixError(`Lệnh ${runId} chưa có ảnh kết quả #${index} (trạng thái: ${run.status})`);
+  if (!output) throw new ApixError(`Lệnh ${runId} chưa có kết quả #${index} (trạng thái: ${run.status})`);
+  const kind = mediaKindFromFilename(output.filename);
+  const where = { type: "text", text: `${kind}: ${output.filename}\n${output.path}${output.url ? `\n${output.url}` : ""}` };
+  if (kind === "text") {
+    return { content: [{ type: "text", text: (await readOutput(output)).toString("utf8").slice(0, 50000) }, where] };
+  }
+  if (kind === "audio") {
+    const buffer = await readOutput(output);
+    if (buffer.length <= 8 * 1024 * 1024) {
+      return { content: [{ type: "audio", data: buffer.toString("base64"), mimeType: mimeForFilename(output.filename, "audio/mpeg") }, where] };
+    }
+    return { content: [where] };
+  }
+  if (kind !== "image") return { content: [where] }; // video / 3D: open the file
   let buffer;
   try {
     buffer = await readFile(output.path);

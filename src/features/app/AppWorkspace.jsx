@@ -29,7 +29,7 @@ import { PresetBar } from "../../components/PresetBar";
 import { RunControls } from "../../components/RunControls";
 import { TemplateSelector } from "../../components/TemplateSelector";
 import { downloadBlob, downloadImage } from "../../lib/download";
-import { mediaKindFromUrl } from "../../lib/mediaKind.js";
+import { outputMediaKind } from "../../lib/mediaKind.js";
 import { hasPendingColorAdjust, mimeTypeForFilename, renderAdjustedOutputBlob } from "../../lib/adjustedRender.js";
 import { canonicalDynamicType, dynamicFieldChoices } from "../../lib/dynamicTypes";
 import { fieldChoicesWithSdvn, sdvnFieldPending } from "../../lib/sdvnModels";
@@ -645,14 +645,21 @@ export function AppWorkspace() {
   ]);
   const resultOutputs = result?.outputs || [];
   const selectedOutput = resultOutputs[selectedOutputIndex] || resultOutputs[0];
+  // Label of the template output node this result came from (video / audio / … nodes).
+  const selectedOutputConfig = outputs.find(item => String(item?.id) === String(selectedOutput?.nodeId));
   const outputLabel = selectedOutput?.label || (isRunningHub
     ? t("preview.rhResult")
-    : outputs[0]?.ui?.label || t("preview.result"));
+    : selectedOutputConfig?.ui?.label || outputs[0]?.ui?.label || t("preview.result"));
   const heroImage = selectedOutput?.url;
+  // Colour panel / Image Editor work on images only (not video · audio · 3D · text).
+  const selectedIsImage = !selectedOutput || outputMediaKind(selectedOutput) === "image";
   const activeHistoryId = result?.runId || result?.historyItem?.id || null;
   const lastColorPanelSourceRef = useRef(null);
-  if (heroImage) lastColorPanelSourceRef.current = heroImage;
-  const colorPanelSource = heroImage || lastColorPanelSourceRef.current;
+  if (heroImage && selectedIsImage) lastColorPanelSourceRef.current = heroImage;
+  const colorPanelSource = (selectedIsImage ? heroImage : null) || lastColorPanelSourceRef.current;
+  useEffect(() => {
+    if (!selectedIsImage && colorPanelOpen) setColorPanelOpen(false);
+  }, [selectedIsImage, colorPanelOpen, setColorPanelOpen]);
   const colorAdjustTarget = useMemo(() => {
     const historyId = activeHistoryId;
     const outputIndex = selectedOutputIndex;
@@ -687,10 +694,11 @@ export function AppWorkspace() {
   const colorResultRef = useRef(null);
   const [outputEditorInitialState, setOutputEditorInitialState] = useState(null);
   const openOutputEditor = useCallback(() => {
+    if (!selectedIsImage) return;
     const live = colorResultRef.current;
     setOutputEditorInitialState(live && live.persistKey === colorAdjustTarget.key ? live.getState() : persistedColorState);
     setOutputEditorOpen(true);
-  }, [colorAdjustTarget.key, persistedColorState, setOutputEditorOpen]);
+  }, [colorAdjustTarget.key, persistedColorState, selectedIsImage, setOutputEditorOpen]);
   const colorSyncTargetCount = useMemo(() => {
     if (!activeHistoryId) return selectedHistoryIds.size;
     return [...selectedHistoryIds].filter(id => id !== activeHistoryId).length;
@@ -1381,7 +1389,7 @@ export function AppWorkspace() {
 
   // Downloads apply the colour adjustments that have not been baked in with "Update".
   async function downloadAdjustedOutput(output) {
-    if (!output?.url || mediaKindFromUrl(output.url) !== "image") return false;
+    if (!output?.url || outputMediaKind(output) !== "image") return false;
     const filename = output.filename || "comfyui-output.png";
     const live = colorResultRef.current;
     if (live && live.source === output.url && live.persistKey === colorAdjustTarget.key) {

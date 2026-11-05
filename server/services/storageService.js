@@ -1,3 +1,4 @@
+import { mimeForFilename } from "../../shared/outputMedia.js";
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { createReadStream } from "node:fs";
@@ -1205,21 +1206,8 @@ export function createStorageService({ resourceRoot, dataRoot, readBody, send, h
   }
 
   function imageContentType(filename) {
-    const ext = path.extname(filename).toLowerCase();
-    if (ext === ".jpg" || ext === ".jpeg") return "image/jpeg";
-    if (ext === ".webp") return "image/webp";
-    if (ext === ".gif") return "image/gif";
-    if (ext === ".avif") return "image/avif";
-    if (ext === ".mp4" || ext === ".m4v") return "video/mp4";
-    if (ext === ".webm") return "video/webm";
-    if (ext === ".mov") return "video/quicktime";
-    if (ext === ".mp3") return "audio/mpeg";
-    if (ext === ".wav") return "audio/wav";
-    if (ext === ".m4a") return "audio/mp4";
-    if (ext === ".aac") return "audio/aac";
-    if (ext === ".ogg" || ext === ".opus") return "audio/ogg";
-    if (ext === ".flac") return "audio/flac";
-    return "image/png";
+    // Images, video, audio, 3D models and text (shared/outputMedia.js); unknown → png.
+    return mimeForFilename(filename, "image/png");
   }
 
   async function serveLocalImageFile(req, res, filePath, filename) {

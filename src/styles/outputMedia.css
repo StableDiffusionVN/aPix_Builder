@@ -1,0 +1,111 @@
+/* Non-image outputs: video · audio · 3D model · text */
+.outputMediaVideo {
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  background: #000;
+  border-radius: inherit;
+}
+
+.outputMediaAudio {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 14px;
+  width: 100%;
+  height: 100%;
+  min-height: 120px;
+  padding: 16px;
+  color: var(--muted);
+}
+
+.outputMediaAudio audio { width: min(520px, 100%); }
+
+.outputMedia3d,
+.model3dViewer {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 220px;
+}
+
+.model3dViewer canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+  cursor: grab;
+}
+
+.model3dStatus {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 12px;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+  pointer-events: none;
+}
+
+.model3dStatus.isError { color: var(--danger); }
+
+.outputTextView {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 14px 16px;
+  overflow: auto;
+  border-radius: inherit;
+  background: rgba(0, 0, 0, 0.28);
+  color: var(--text);
+  font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: text;
+}
+
+.outputTextView.isCompact {
+  padding: 8px 10px;
+  font-size: 11px;
+}
+
+.outputMediaThumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  background: #000;
+}
+
+.outputMediaThumb.isIcon {
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 3px;
+  background: var(--panel-soft);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.outputMediaThumb.kind-model3d { color: #a78bfa; }
+.outputMediaThumb.kind-audio { color: #60a5fa; }
+.outputMediaThumb.kind-text { color: #fbbf24; }
+
+.imageLightboxMedia {
+  width: min(1100px, 92vw);
+  height: min(760px, 82vh);
+  display: grid;
+  place-items: center;
+}
+
+.imageLightboxMedia.kind-audio { height: auto; }
+.mediaStage.kind-model3d,
+.mediaStage.kind-text { padding: 0; }
+
+/* Canvas node: media output fills the preview stage */
+.canvasNodePreviewMedia .canvasNodePreviewStage { min-height: 140px; }
+.canvasNodePreviewMedia.kind-audio .canvasNodePreviewStage { min-height: 90px; }
+.canvasNodePreviewMedia .outputTextView { max-height: 260px; }

@@ -1,3 +1,4 @@
+import { extensionFromFileType, mediaKindFromFilename } from "../../shared/outputMedia.js";
 import { prepareCropInpaint } from "../lib/cropInpaint.js";
 import { randomUUID } from "node:crypto";
 import { access, mkdir, readFile, writeFile } from "node:fs/promises";
@@ -330,17 +331,22 @@ export function createRunningHubService({ storage, runCoordinator, readBody, sen
               attempt,
               waitMs,
               fileUrl,
-              label: `Đang thử tải lại ảnh kết quả RunningHub (${attempt})...`
+              label: `Đang thử tải lại kết quả RunningHub (${attempt})...`
             });
           }
         });
-        const ext = stitchOutput ? "png" : String(output.fileType || path.extname(fileUrl).slice(1) || "png").replace(/^\./, "");
+        // fileType may be "mp4", "video/mp4" or empty (→ URL extension); stitching is image-only.
+        const fileExt = extensionFromFileType(output.fileType, fileUrl);
+        const kind = mediaKindFromFilename(`x.${fileExt}`);
+        const stitch = kind === "image" ? stitchOutput : null;
+        const ext = stitch ? "png" : fileExt;
         const filename = `${Date.now()}_${runId}_${index}_rh.${ext}`;
         const downloaded = Buffer.from(await response.arrayBuffer());
-        const buffer = stitchOutput ? await stitchOutput(downloaded) : downloaded;
+        const buffer = stitch ? await stitch(downloaded) : downloaded;
         await writeFile(path.join(outputDir, filename), buffer);
         archivedOutputs.push({
           nodeId: output.nodeId || "runninghub",
+          kind,
           filename,
           originalFilename: path.basename(fileUrl.split("?")[0]),
           url: storage.outputImageUrl(filename),
@@ -348,7 +354,7 @@ export function createRunningHubService({ storage, runCoordinator, readBody, sen
         });
         index += 1;
       } catch (error) {
-        if (stitchOutput) throw error;
+        if (stitchOutput && mediaKindFromFilename(`x.${extensionFromFileType(output.fileType, fileUrl)}`) === "image") throw error;
         // Try remaining outputs; fail only if nothing could be archived.
       }
     }

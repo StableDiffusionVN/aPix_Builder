@@ -1,4 +1,5 @@
 // @ts-check
+import { collectNodeMedia } from "../../shared/outputMedia.js";
 import { imageValueForUi } from "../../shared/cropInpaint.js";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -382,16 +383,21 @@ export function collectOutputs(config, history, target) {
   const outputIds = Object.values(config.output || {}).map(item => String(item.id));
   const outputs = [];
   for (const nodeId of outputIds) {
-    const images = history?.outputs?.[nodeId]?.images || [];
-    for (const image of images) {
+    // Images, video (SaveVideo / VHS "gifs"), audio, 3D models and text (shared/outputMedia.js).
+    for (const media of collectNodeMedia(history?.outputs?.[nodeId])) {
+      if (media.kind === "text") {
+        outputs.push({ nodeId, kind: "text", text: media.text });
+        continue;
+      }
       const query = new URLSearchParams({
-        filename: image.filename,
-        subfolder: image.subfolder || "",
-        type: image.type || "output"
+        filename: media.filename,
+        subfolder: media.subfolder || "",
+        type: media.type || "output"
       });
       outputs.push({
         nodeId,
-        filename: image.filename,
+        kind: media.kind,
+        filename: media.filename,
         url: `/api/comfy-view?address=${encodeURIComponent(target.proxyAddress)}&${query.toString()}`
       });
     }

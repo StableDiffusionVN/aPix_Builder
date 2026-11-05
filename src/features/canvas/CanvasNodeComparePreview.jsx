@@ -5,6 +5,8 @@ import { Eye, Pencil } from "lucide-react";
 import { ImageLightboxOverlay } from "../../components/ImageLightboxOverlay.jsx";
 import { ImageEditorModal } from "../../components/lazyModals.js";
 import { useI18n } from "../../i18n/I18nContext.jsx";
+import { mediaKindFromUrl } from "../../lib/mediaKind.js";
+import { OutputMediaView } from "../../components/OutputMediaView.jsx";
 
 function PreviewImage({ src, alt, className = "", onSize }) {
   return (
@@ -66,13 +68,13 @@ function PreviewToolbar({ onOpen, onEdit }) {
       >
         <Eye size={13} />
       </button>
-      <button
+      {onEdit ? <button
         type="button"
         onClick={event => { event.preventDefault(); event.stopPropagation(); onEdit(); }}
         title={t("preview.editor")}
       >
         <Pencil size={13} />
-      </button>
+      </button> : null}
     </div>
   );
 }
@@ -183,6 +185,28 @@ export function CanvasNodeComparePreview({
   const rootClass = embedded
     ? "canvasNodePreview isEmbedded"
     : "canvasNodePreview";
+
+  // Video · audio · 3D · text: play / show in the node (no compare, no image editor).
+  const outputKind = mediaKindFromUrl(outputUrl);
+  if (outputKind !== "image") {
+    return (
+      <div className={`${rootClass} canvasNodePreviewMedia kind-${outputKind} nodrag nowheel`} onContextMenu={handleContextMenu}>
+        <div className="canvasNodePreviewStage">
+          <OutputMediaView url={outputUrl} compact />
+          {outputTimingLabel ? (
+            <div className="canvasPreviewMetaStack is-output"><div className="canvasPreviewTimingBadge">{outputTimingLabel}</div></div>
+          ) : null}
+          <PreviewToolbar onOpen={() => setLightboxOpen(true)} />
+        </div>
+        <ImageLightboxOverlay
+          open={lightboxOpen}
+          image={lightboxOpen ? { url: outputUrl, name: t("canvas.preview.output") } : null}
+          title={t("canvas.preview.output")}
+          onClose={() => setLightboxOpen(false)}
+        />
+      </div>
+    );
+  }
 
   if (!canCompare) {
     return (

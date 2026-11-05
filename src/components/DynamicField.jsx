@@ -31,6 +31,7 @@ import { areDynamicFieldPropsEqual } from "../features/fields/fieldMemo.js";
 import { InputLibraryModal } from "./InputLibraryModal.jsx";
 import { ImageLightboxOverlay } from "./ImageLightboxOverlay.jsx";
 import { ImageMaskOverlay } from "./ImageMaskOverlay.jsx";
+import { mediaKindFromUrl } from "../lib/mediaKind.js";
 
 function readImageFieldValue(value) {
   return Array.isArray(value) ? value : value ? [value] : [];
@@ -410,6 +411,8 @@ const DynamicFieldInner = memo(function DynamicFieldInner({
     if (payload) {
       try {
         const image = JSON.parse(payload);
+        // Video / audio / 3D / text outputs are not images.
+        if (mediaKindFromUrl(image.filename || image.url) !== "image" && mediaKindFromUrl(image.url) !== "image") return;
         await handlePickedImageUrl(image.url, image.filename, replaceIndex);
         return;
       } catch {

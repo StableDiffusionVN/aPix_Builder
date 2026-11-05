@@ -1,5 +1,6 @@
 // Client for a running aPix Builder server (desktop app or `npm run server`),
 // shared by the MCP server (mcp/apix-mcp.mjs) and the `apix` CLI.
+import { mediaKindFromFilename } from "../shared/outputMedia.js";
 import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import os from "node:os";
@@ -338,6 +339,7 @@ export class ApixClient {
   async outputFiles(item) {
     const dir = await this.outputDir();
     return (item.outputs || []).map(output => ({
+      kind: output.kind || mediaKindFromFilename(output.filename),
       filename: output.filename,
       path: dir && output.filename ? path.join(dir, output.filename) : "",
       url: output.url ? `${this.baseUrl}${output.url}` : ""

@@ -182,7 +182,14 @@ function InfiniteCanvasInner({
   discovery = null
 }) {
   const { locale, t } = useI18n();
-  const { library, loading, error, reload } = useStepLibrary();
+  const { library: fullLibrary, loading, error, reload } = useStepLibrary();
+  // RH Workflow / RH App templates only when enabled in Settings → RunningHub
+  // (steps already on a canvas keep working).
+  const rhFeaturesEnabled = rhSettings?.featuresEnabled === true;
+  const library = useMemo(
+    () => (rhFeaturesEnabled ? fullLibrary : { ...fullLibrary, rhWf: [], rhApp: [] }),
+    [fullLibrary, rhFeaturesEnabled]
+  );
   const {
     nodes, edges,
     orderedTabs, activeId, activeName, viewport,

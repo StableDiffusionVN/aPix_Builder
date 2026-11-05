@@ -10,6 +10,16 @@ function tooltipProps(description, extraClass = "") {
     : { className };
 }
 
+const RANDOM_SEED_CAP = 2 ** 48;
+
+/** A new random seed inside the field's range (an empty field still means "random each run"). */
+export function randomSeedValue(minimum = 0, maximum) {
+  const low = Math.max(0, Math.ceil(Number(minimum) || 0));
+  const max = Number(maximum);
+  const high = Number.isFinite(max) && max > low ? Math.floor(max) : RANDOM_SEED_CAP;
+  return low + Math.floor(Math.random() * (Math.min(high, Number.MAX_SAFE_INTEGER) - low + 1));
+}
+
 function SeedFieldInner({
   fieldKey,
   label,
@@ -19,6 +29,7 @@ function SeedFieldInner({
   maximum,
   step = 1,
   randomSeedLabel,
+  newSeedLabel,
   onChange
 }) {
   void fieldKey;
@@ -40,7 +51,7 @@ function SeedFieldInner({
             onChange(Number.isFinite(next) ? next : "random_seed");
           }}
         />
-        <button type="button" className="fieldResetButton" onClick={() => onChange("random_seed")} title={randomSeedLabel}>
+        <button type="button" className="fieldResetButton" onClick={() => onChange(randomSeedValue(minimum, maximum))} title={newSeedLabel || randomSeedLabel}>
           <RefreshCcw size={13} />
         </button>
       </div>

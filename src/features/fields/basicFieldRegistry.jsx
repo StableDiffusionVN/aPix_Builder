@@ -43,6 +43,7 @@ const renderers = {
         maximum={ui.maximum}
         step={ui.step ?? 1}
         randomSeedLabel={t("field.randomSeed")}
+        newSeedLabel={t("field.newRandomSeed")}
         onChange={onChange}
         choicesSignature=""
       />

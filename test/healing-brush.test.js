@@ -98,6 +98,37 @@ describe("healing brush", () => {
     expect(Math.abs(inside.mean - ring.mean)).toBeLessThan(6);
   });
 
+  it("does not pick a smooth area to copy from when the surroundings are textured", () => {
+    const px = withWrinkle();
+    // A smooth band right where a perpendicular source would land (below the stroke).
+    for (let y = 88; y < 130; y++) {
+      for (let x = 0; x < W; x++) {
+        const i = (y * W + x) * 4;
+        px[i] = 165;
+        px[i + 1] = 132;
+        px[i + 2] = 115;
+      }
+    }
+    healRegion(px, W, H, [A, B], R);
+    const inside = stats(px, W, H, inHole);
+    const ring = stats(px, W, H, (x, y) => around(x, y) && y < 80);
+    expect(inside.std).toBeGreaterThan(ring.std * 0.7);
+  });
+
+  it("keeps detail along a curved stroke (no blending between parts)", () => {
+    const px = texture(W, H);
+    const curve = Array.from({ length: 20 }, (_, i) => ({ x: 30 + i * 7, y: 80 + 25 * Math.sin(i / 3) }));
+    healRegion(px, W, H, curve, R);
+    const near = (x, y) => {
+      let d = Infinity;
+      for (let i = 0; i < curve.length - 1; i++) d = Math.min(d, distToSegment(x + 0.5, y + 0.5, curve[i], curve[i + 1]));
+      return d;
+    };
+    const inside = stats(px, W, H, (x, y) => near(x, y) <= R - 1);
+    const ring = stats(px, W, H, (x, y) => near(x, y) > R + 3 && near(x, y) < R + 14);
+    expect(inside.std).toBeGreaterThan(ring.std * 0.85);
+  });
+
   it("leaves pixels outside the stroke untouched", () => {
     const px = withWrinkle();
     const before = new Uint8ClampedArray(px);

@@ -58,6 +58,8 @@ export function healRegion(pixels, w, h, points, radius, fixedOffset = null) {
   const total = w * h;
   const original = new Uint8ClampedArray(pixels);
   const holeLimit = radius + 1;
+  const band = Math.max(2, Math.round(radius * 0.6));
+  const fieldLimit = holeLimit + band + 1; // distance field also covers the border band
 
   // Distance to the stroke + which chunk each hole pixel belongs to.
   const chunkLength = Math.max(radius * 4, 12);
@@ -72,10 +74,10 @@ export function healRegion(pixels, w, h, points, radius, fixedOffset = null) {
     for (let i = 0; i < chunk.length - 1 || i === 0; i++) {
       const a = chunk[i];
       const b = chunk[Math.min(i + 1, chunk.length - 1)];
-      const x0 = Math.max(0, Math.floor(Math.min(a.x, b.x) - holeLimit - 1));
-      const x1 = Math.min(w - 1, Math.ceil(Math.max(a.x, b.x) + holeLimit + 1));
-      const y0 = Math.max(0, Math.floor(Math.min(a.y, b.y) - holeLimit - 1));
-      const y1 = Math.min(h - 1, Math.ceil(Math.max(a.y, b.y) + holeLimit + 1));
+      const x0 = Math.max(0, Math.floor(Math.min(a.x, b.x) - fieldLimit));
+      const x1 = Math.min(w - 1, Math.ceil(Math.max(a.x, b.x) + fieldLimit));
+      const y0 = Math.max(0, Math.floor(Math.min(a.y, b.y) - fieldLimit));
+      const y1 = Math.min(h - 1, Math.ceil(Math.max(a.y, b.y) + fieldLimit));
       for (let y = y0; y <= y1; y++) {
         for (let x = x0; x <= x1; x++) {
           const d = distanceToSegment(x + 0.5, y + 0.5, a.x, a.y, b.x, b.y);
@@ -99,100 +101,116 @@ export function healRegion(pixels, w, h, points, radius, fixedOffset = null) {
       if (x > maxX) maxX = x;
       if (y < minY) minY = y;
       if (y > maxY) maxY = y;
-    } else {
-      owner[index] = -1;
     }
   }
   if (minX > maxX) return;
 
-  // Source offset per chunk: try offsets around the chunk (perpendicular first) and
-  // keep the one whose border band best matches the destination border band.
-  const band = Math.max(2, Math.round(radius * 0.6));
-  const offsets = fixedOffset ? chunks.map(() => ({ ox: Math.round(fixedOffset.ox), oy: Math.round(fixedOffset.oy), score: 0 })) : chunks.map(chunk => {
-    const first = chunk[0];
-    const last = chunk[chunk.length - 1];
-    const dirX = last.x - first.x;
-    const dirY = last.y - first.y;
-    const dirLen = Math.hypot(dirX, dirY);
-    const baseAngle = dirLen > 1 ? Math.atan2(dirY, dirX) + Math.PI / 2 : 0;
-    const cx = (first.x + last.x) / 2;
-    const cy = (first.y + last.y) / 2;
-    const reach = dirLen / 2 + holeLimit + band;
-    // Border band of this chunk (pixels just outside the hole, near the chunk).
-    const ring = [];
-    const rx0 = Math.max(0, Math.floor(cx - reach));
-    const rx1 = Math.min(w - 1, Math.ceil(cx + reach));
-    const ry0 = Math.max(0, Math.floor(cy - reach));
-    const ry1 = Math.min(h - 1, Math.ceil(cy + reach));
-    const step = Math.max(1, Math.round(radius / 6));
-    for (let y = ry0; y <= ry1; y += step) {
-      for (let x = rx0; x <= rx1; x += step) {
-        const index = y * w + x;
-        if (hole[index]) continue;
-        let near = Infinity;
-        for (let i = 0; i < chunk.length - 1 || i === 0; i++) {
-          const a = chunk[i];
-          const b = chunk[Math.min(i + 1, chunk.length - 1)];
-          near = Math.min(near, distanceToSegment(x + 0.5, y + 0.5, a.x, a.y, b.x, b.y));
-          if (chunk.length < 2) break;
-        }
-        if (near <= holeLimit + band) ring.push(index);
-      }
-    }
-    // Hole pixels near this chunk — the source must not land in a hole.
+  // ---- Choose where to copy from --------------------------------------------------
+  // Score = how well the source's surroundings match the destination border
+  // (mean colour difference removed — the Laplace step fixes tone) × a penalty when
+  // the source has less texture than the surroundings (a plain SSD prefers smooth
+  // sources, which is what made auto-healing look blurry).
+  const sampleStep = Math.max(1, Math.round(radius / 6));
+  const luma = index4 => 0.299 * original[index4] + 0.587 * original[index4 + 1] + 0.114 * original[index4 + 2];
+  const detailAt = (x, y) => {
+    if (x < 1 || y < 1 || x >= w - 1 || y >= h - 1) return 0;
+    const i = (y * w + x) * 4;
+    return Math.abs(4 * luma(i) - luma(i - 4) - luma(i + 4) - luma(i - w * 4) - luma(i + w * 4));
+  };
+  // Hole pixels (all — validity) and border band pixels (sampled) of the whole stroke
+  // (chunkIndex = -1) or of one chunk, from the precomputed distance field.
+  const fieldBox = { x0: Math.max(0, Math.floor(minX - band - 1)), x1: Math.min(w - 1, Math.ceil(maxX + band + 1)), y0: Math.max(0, Math.floor(minY - band - 1)), y1: Math.min(h - 1, Math.ceil(maxY + band + 1)) };
+  const regionOf = chunkIndex => {
     const own = [];
-    for (let y = ry0; y <= ry1; y++) {
-      for (let x = rx0; x <= rx1; x++) {
+    const ring = [];
+    let detail = 0;
+    for (let y = fieldBox.y0; y <= fieldBox.y1; y++) {
+      for (let x = fieldBox.x0; x <= fieldBox.x1; x++) {
         const index = y * w + x;
-        if (hole[index]) own.push(index);
+        if (chunkIndex >= 0 && owner[index] !== chunkIndex) continue;
+        if (hole[index]) {
+          own.push(index);
+        } else if (dist[index] <= holeLimit + band && (x - fieldBox.x0) % sampleStep === 0 && (y - fieldBox.y0) % sampleStep === 0) {
+          ring.push(index);
+          detail += detailAt(x, y);
+        }
       }
     }
+    return { own, ring, detail: ring.length ? detail / ring.length : 0 };
+  };
+  const scoreOffset = (ox, oy, region, distance) => {
+    for (const index of region.own) {
+      const x = (index % w) + ox;
+      const y = ((index - (index % w)) / w) + oy;
+      if (x < 0 || y < 0 || x >= w || y >= h || hole[y * w + x]) return null;
+    }
+    const sum = [0, 0, 0];
+    let sq = 0;
+    let count = 0;
+    for (const index of region.ring) {
+      const x = (index % w) + ox;
+      const y = ((index - (index % w)) / w) + oy;
+      if (x < 0 || y < 0 || x >= w || y >= h || hole[y * w + x]) continue;
+      const source = (y * w + x) * 4;
+      const dest = index * 4;
+      for (let c = 0; c < 3; c++) {
+        const d = original[dest + c] - original[source + c];
+        sum[c] += d;
+        sq += d * d;
+      }
+      count++;
+    }
+    if (count < 4) return null;
+    const structure = sq / count - (sum[0] ** 2 + sum[1] ** 2 + sum[2] ** 2) / (count * count);
+    let detail = 0;
+    let samples = 0;
+    for (let k = 0; k < region.own.length; k += sampleStep) {
+      const index = region.own[k];
+      detail += detailAt((index % w) + ox, ((index - (index % w)) / w) + oy);
+      samples++;
+    }
+    const sourceDetail = samples ? detail / samples : 0;
+    const smoother = Math.max(0, region.detail - sourceDetail) / Math.max(region.detail, 1);
+    return Math.max(1, structure) * (1 + 4 * smoother) * (1 + distance / (radius * 60));
+  };
+  const searchOffsets = (region, baseAngle) => {
     let best = null;
-    const distances = [1.25, 1.75, 2.5, 3.5].map(f => f * radius * 2);
-    const angles = [0, Math.PI, Math.PI / 4, -Math.PI / 4, (3 * Math.PI) / 4, (-3 * Math.PI) / 4, Math.PI / 2, -Math.PI / 2];
+    const distances = [1.3, 1.8, 2.5, 3.5, 5].map(f => f * radius * 2);
     for (const distance of distances) {
-      for (const angle of angles) {
-        const ox = Math.round(Math.cos(baseAngle + angle) * distance);
-        const oy = Math.round(Math.sin(baseAngle + angle) * distance);
+      for (let k = 0; k < 12; k++) {
+        // Perpendicular to the stroke first (k = 0, 6), then around it.
+        const angle = baseAngle + (k * Math.PI) / 6;
+        const ox = Math.round(Math.cos(angle) * distance);
+        const oy = Math.round(Math.sin(angle) * distance);
         if (!ox && !oy) continue;
-        let valid = true;
-        for (const index of own) {
-          const x = (index % w) + ox;
-          const y = ((index - (index % w)) / w) + oy;
-          if (x < 0 || y < 0 || x >= w || y >= h || hole[y * w + x]) {
-            valid = false;
-            break;
-          }
-        }
-        if (!valid) continue;
-        let cost = 0;
-        let count = 0;
-        for (const index of ring) {
-          const x = (index % w) + ox;
-          const y = ((index - (index % w)) / w) + oy;
-          if (x < 0 || y < 0 || x >= w || y >= h) continue;
-          const source = (y * w + x) * 4;
-          if (hole[y * w + x]) {
-            cost += 3 * 255 * 255;
-            count++;
-            continue;
-          }
-          const dest = index * 4;
-          // Compare structure, not brightness: the Laplace step fixes the colour.
-          const dr = original[dest] - original[source];
-          const dg = original[dest + 1] - original[source + 1];
-          const db = original[dest + 2] - original[source + 2];
-          cost += dr * dr + dg * dg + db * db;
-          count++;
-        }
-        if (!count) continue;
-        // Prefer close sources a little (similar lighting / texture scale).
-        const score = (cost / count) * (1 + distance / (radius * 40));
-        if (!best || score < best.score) best = { ox, oy, score };
+        const score = scoreOffset(ox, oy, region, distance);
+        if (score != null && (!best || score < best.score)) best = { ox, oy, score };
       }
     }
-    return best || { ox: Math.round(radius * 3), oy: 0, score: Infinity };
-  });
+    return best;
+  };
+  const strokeAngle = chunkList => {
+    const pts = chunkList.flat();
+    const first = pts[0];
+    const last = pts[pts.length - 1];
+    return Math.hypot(last.x - first.x, last.y - first.y) > 1 ? Math.atan2(last.y - first.y, last.x - first.x) + Math.PI / 2 : 0;
+  };
+
+  let offsets;
+  let blendSigma = Math.max(1.5, radius);
+  if (fixedOffset) {
+    offsets = chunks.map(() => ({ ox: Math.round(fixedOffset.ox), oy: Math.round(fixedOffset.oy), score: 0 }));
+  } else {
+    // One offset for the whole stroke whenever possible: a single coherent patch
+    // keeps all the detail (like Alt+click). Per-part offsets only as a fallback.
+    const whole = searchOffsets(regionOf(-1), strokeAngle(chunks));
+    if (whole) {
+      offsets = chunks.map(() => whole);
+    } else {
+      blendSigma = Math.max(1, radius * 0.35);
+      offsets = chunks.map((chunk, k) => searchOffsets(regionOf(k), strokeAngle([chunk])) || { ox: Math.round(radius * 3), oy: 0, score: Infinity });
+    }
+  }
 
   // Copy the source texture, then solve D = dest − source on the hole with Laplace
   // (D is fixed on the hole's outer border), and set result = source + D.
@@ -208,7 +226,7 @@ export function healRegion(pixels, w, h, points, radius, fixedOffset = null) {
     }
     return d;
   };
-  const sigma = Math.max(1.5, radius);
+  const sigma = blendSigma;
   const sourceValue = new Float32Array(total * 3);
   const sourceReady = new Uint8Array(total);
   const computeSource = index => {
@@ -312,12 +330,12 @@ export function applyHealingStroke(ctx, stroke, scale) {
     if (y < minY) minY = y;
     if (y > maxY) maxY = y;
   });
-  // Room for the source search (up to 3.5 × the brush size away) and its border band,
+  // Room for the source search (up to 5 × the brush size away) and its border band,
   // or for the Alt+clicked source however far it is.
   const sourcePad = Number.isFinite(stroke.source?.dx) && Number.isFinite(stroke.source?.dy)
     ? Math.max(Math.abs(stroke.source.dx * width), Math.abs(stroke.source.dy * height)) + radius + 4
     : 0;
-  const pad = Math.ceil(Math.max(radius * 9 + 8, sourcePad));
+  const pad = Math.ceil(Math.max(radius * 12 + 8, sourcePad));
   const x0 = Math.max(0, Math.floor(minX - pad));
   const y0 = Math.max(0, Math.floor(minY - pad));
   const x1 = Math.min(width - 1, Math.ceil(maxX + pad));

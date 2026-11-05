@@ -1,3 +1,4 @@
+import { imageValueForUi } from "../../../shared/cropInpaint.js";
 import { flattenInputs, requestPayload } from "../../lib/template.js";
 import { buildRunningHubJob, buildRunningHubWfJob } from "../../hooks/useRunningHubExecution.js";
 import { activeStepInputPorts, incomingEdgesByInput, resolveEffectiveNodeOutputValue, resolveEffectiveImageSource, coerceImageRef, STEP_KINDS, portTypeForUi, toServerImagePath, serverImageFileExists, finalizeCanvasImageValue } from "./canvasModel.js";
@@ -183,12 +184,12 @@ function buildCanvasRunningHubJob({ runId, rhAuth, webappId, nodes, values }) {
     nodes: (nodes || []).map(tpl => {
       const key = nodeFieldKey(tpl);
       const isImage = String(tpl.fieldType || "").toLowerCase() === "image";
-      const raw = values?.[key];
+      const raw = imageValueForUi(values?.[key], { type: tpl.fieldType, inpaintCrop: tpl.inpaintCrop === true });
       return {
         nodeId: tpl.nodeId,
         fieldName: tpl.fieldName,
         fieldType: tpl.fieldType,
-        fieldValue: isImage ? coerceImageRef(raw) : (raw ?? tpl.fieldValue ?? "")
+        fieldValue: isImage ? (raw?.cropInpaint ? finalizeCanvasImageValue(raw) : coerceImageRef(raw)) : (raw ?? tpl.fieldValue ?? "")
       };
     })
   };
@@ -201,7 +202,7 @@ function finalizeStepImageValues(node, values) {
     const key = port.valueKey;
     const current = values[key];
     if (!current) continue;
-    values[key] = finalizeCanvasImageValue(current);
+    values[key] = finalizeCanvasImageValue(imageValueForUi(current, { type: "image", inpaintCrop: port.inpaintCrop === true }));
   }
 }
 

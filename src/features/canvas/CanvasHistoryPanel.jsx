@@ -1,3 +1,5 @@
+import { useHistoryWindow } from "../../hooks/useHistoryWindow.js";
+import { HistoryCount, HistoryPagination } from "../../components/HistoryPagination.jsx";
 import { useEffect, useRef, useState } from "react";
 import { Loader2, RefreshCcw, ScrollText } from "lucide-react";
 import { ImageLightboxOverlay } from "../../components/ImageLightboxOverlay.jsx";
@@ -39,6 +41,8 @@ export function CanvasHistoryPanel({
   const [loadingLogs, setLoadingLogs] = useState(false);
   const [lightboxItem, setLightboxItem] = useState(null);
   const didAutoRefreshRef = useRef(false);
+  const outputsWindow = useHistoryWindow(outputHistory, maxHistoryDisplay);
+  const logsWindow = useHistoryWindow(runLogSessions, maxHistoryDisplay);
 
   useEffect(() => {
     if (didAutoRefreshRef.current) return;
@@ -81,7 +85,7 @@ export function CanvasHistoryPanel({
       {tab === "outputs" ? (
         <div className="canvasHistorySection">
           <div className="canvasHistorySectionHeader">
-            <span>{t("canvas.history.createdImages")}</span>
+            <span className="historyHeadingWithCount">{t("canvas.history.createdImages")} <HistoryCount shown={outputsWindow.items.length} total={outputHistory.length} /></span>
             <button type="button" className="canvasNodeBtn" onClick={refreshOutputs} title={t("canvas.history.reload")}>
               {loadingOutputs ? <Loader2 size={13} className="spin" /> : <RefreshCcw size={13} />}
             </button>
@@ -90,7 +94,7 @@ export function CanvasHistoryPanel({
             <p className="canvasFlyoutEmpty">{t("canvas.history.noOutputs")}</p>
           ) : (
             <ul className="canvasHistoryOutputs">
-              {outputHistory.slice(0, maxHistoryDisplay).map(item => {
+              {outputsWindow.items.map(item => {
                 const outputs = (item.outputs || []).filter(output => output?.url);
                 const thumb = outputs[0]?.url;
                 const outputName = item.templateName
@@ -133,6 +137,9 @@ export function CanvasHistoryPanel({
                   </li>
                 );
               })}
+              {outputsWindow.items.length < outputHistory.length ? <li>
+                <HistoryPagination shown={outputsWindow.items.length} total={outputHistory.length} onMore={outputsWindow.showMore} />
+              </li> : null}
             </ul>
           )}
         </div>
@@ -141,7 +148,7 @@ export function CanvasHistoryPanel({
       {tab === "runs" ? (
         <div className="canvasHistorySection">
           <div className="canvasHistorySectionHeader">
-            <span>{t("canvas.history.sessions")}</span>
+            <span className="historyHeadingWithCount">{t("canvas.history.sessions")} <HistoryCount shown={logsWindow.items.length} total={runLogSessions.length} /></span>
             <button type="button" className="canvasNodeBtn" onClick={refreshLogs} title={t("canvas.history.reload")}>
               {loadingLogs ? <Loader2 size={13} className="spin" /> : <RefreshCcw size={13} />}
             </button>
@@ -150,7 +157,7 @@ export function CanvasHistoryPanel({
             <p className="canvasFlyoutEmpty">{t("canvas.history.noLogs")}</p>
           ) : (
             <ul className="canvasHistoryRuns">
-              {runLogSessions.slice(0, maxHistoryDisplay).map(session => (
+              {logsWindow.items.map(session => (
                 <li key={session.id} className="canvasHistoryRunItem">
                   <strong>{sessionLabel(session)}</strong>
                   <small>
@@ -159,6 +166,9 @@ export function CanvasHistoryPanel({
                   </small>
                 </li>
               ))}
+              {logsWindow.items.length < runLogSessions.length ? <li>
+                <HistoryPagination shown={logsWindow.items.length} total={runLogSessions.length} onMore={logsWindow.showMore} />
+              </li> : null}
             </ul>
           )}
         </div>

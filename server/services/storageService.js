@@ -1,9 +1,11 @@
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { access, chmod, cp, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { access, chmod, cp, mkdir, mkdtemp, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { collectInpaintAssets, isLegacyInpaintAsset } from "../../shared/inpaintAssets.js";
+import { localImageRefToUpload } from "../lib/localImageRef.js";
 import { parseDataUrl } from "../lib/comfyClient.js";
 import { scanLocalImageFolder } from "../lib/localImageFolder.js";
 import { safeFileName } from "../lib/fileNames.js";
@@ -12,9 +14,8 @@ import { normalizeCanvasHistory } from "../lib/canvasHistory.js";
 import { atomicWriteFile, readJsonFileWithBackup } from "../lib/atomicFile.js";
 
 const maxImageBodyBytes = Number(process.env.MAX_IMAGE_BODY_BYTES || 512 * 1024 * 1024);
-const maxOutputHistoryItems = 500;
 
-export function createStorageService({ resourceRoot, dataRoot, readBody, send, hasActiveRuns }) {
+export function createStorageService({ resourceRoot, dataRoot, readBody, send, hasActiveRuns, getProtectedInpaintValues = () => [] }) {
   const resourceConfigDir = path.join(resourceRoot, "config");
   const defaultTemplateDir = path.join(resourceConfigDir, "default");
   const defaultRhDir = path.join(resourceConfigDir, "default-rh");
@@ -27,6 +28,7 @@ export function createStorageService({ resourceRoot, dataRoot, readBody, send, h
     configDir: path.join(defaultUserDir, "config"),
     personalDataDir: defaultUserDir
   };
+  const pendingInpaintDeletes = new Set();
   let configDir;
   let userTemplatesDir;
   let templatesRhDir;
@@ -200,6 +202,7 @@ export function createStorageService({ resourceRoot, dataRoot, readBody, send, h
     inputDir = normalized.inputDir;
     outputDir = normalized.outputDir;
     outputHistoryPath = path.join(outputDir, "history.json");
+    await migrateLegacyInpaintAssets();
     configDir = normalized.configDir;
     userTemplatesDir = nextUserTemplatesDir;
     templatesRhDir = nextTemplatesRhDir;
@@ -1025,7 +1028,7 @@ export function createStorageService({ resourceRoot, dataRoot, readBody, send, h
     await mkdir(inputDir, { recursive: true });
     const entries = await readdir(inputDir, { withFileTypes: true });
     const fileEntries = entries.filter(entry => (
-      entry.isFile() && /\.(png|jpe?g|webp|gif)$/i.test(entry.name)
+      entry.isFile() && !isLegacyInpaintAsset(entry.name) && /\.(png|jpe?g|webp|gif)$/i.test(entry.name)
     ));
 
     const images = await Promise.all(fileEntries.map(async entry => {
@@ -1050,6 +1053,47 @@ export function createStorageService({ resourceRoot, dataRoot, readBody, send, h
 
   function invalidateInputImagesCache() {
     inputImagesListCache = null;
+  }
+
+  async function migrateLegacyInpaintAssets() {
+    const dir = path.join(inputDir, ".inpaint");
+    await mkdir(dir, { recursive: true });
+    const names = await readdir(inputDir);
+    for (const name of names.filter(isLegacyInpaintAsset)) {
+      try { await access(path.join(dir, name)); }
+      catch { await rename(path.join(inputDir, name), path.join(dir, name)); }
+    }
+  }
+
+  async function handleInpaintUpload(req, res) {
+    const body = JSON.parse(await readBody(req) || "{}");
+    const parsed = parseDataUrl(body.dataUrl);
+    if (!parsed || parsed.mimeType !== "image/png") {
+      send(res, 400, { error: "Invalid inpaint PNG data" }); return;
+    }
+    const dir = path.join(inputDir, ".inpaint");
+    await mkdir(dir, { recursive: true });
+    const name = `${randomUUID()}.png`;
+    await writeFile(path.join(dir, name), parsed.buffer);
+    send(res, 200, { image: { name, url: `/api/inpaint-image?name=${encodeURIComponent(name)}`, storage: "inpaint" } });
+  }
+
+  async function handleInpaintImage(req, res, url) {
+    const name = safeFileName(url.searchParams.get("name"));
+    if (!name) { send(res, 400, { error: "Missing inpaint image name" }); return; }
+    await serveLocalImageFile(req, res, path.join(inputDir, ".inpaint", name), name);
+  }
+
+  async function cleanupInpaintAssets() {
+    if (!pendingInpaintDeletes.size) return;
+    const retained = collectInpaintAssets(await readOutputHistory());
+    const protectedNames = collectInpaintAssets(getProtectedInpaintValues());
+    for (const name of pendingInpaintDeletes) {
+      if (retained.has(name)) { pendingInpaintDeletes.delete(name); continue; }
+      if (protectedNames.has(name)) continue;
+      await rm(path.join(inputDir, ".inpaint", name), { force: true });
+      pendingInpaintDeletes.delete(name);
+    }
   }
 
   async function handleInputUpload(req, res) {
@@ -1236,6 +1280,14 @@ export function createStorageService({ resourceRoot, dataRoot, readBody, send, h
       send(res, 400, { error: "Missing image name" });
       return;
     }
+    if (isLegacyInpaintAsset(filename)) {
+      try {
+        const image = await localImageRefToUpload({ kind: "input", name: filename }, { inputDir, outputDir });
+        res.writeHead(200, { "content-type": image.mimeType, "content-length": image.buffer.length, "cache-control": "no-store" });
+        res.end(req.method === "HEAD" ? undefined : image.buffer);
+      } catch { send(res, 404, { error: "Inpaint image not found" }); }
+      return;
+    }
     const filePath = path.join(inputDir, filename);
     if (!filePath.startsWith(inputDir)) {
       send(res, 400, { error: "Invalid image path" });
@@ -1278,7 +1330,7 @@ export function createStorageService({ resourceRoot, dataRoot, readBody, send, h
 
   async function writeOutputHistory(items) {
     await mkdir(outputDir, { recursive: true });
-    await writeFile(outputHistoryPath, JSON.stringify(items.slice(0, maxOutputHistoryItems), null, 2));
+    await writeFile(outputHistoryPath, JSON.stringify(items, null, 2));
   }
 
   function trimHistoryValue(value) {
@@ -1321,6 +1373,8 @@ export function createStorageService({ resourceRoot, dataRoot, readBody, send, h
       )));
     }
     await writeOutputHistory(next);
+    if (targetItem) collectInpaintAssets(targetItem).forEach(name => pendingInpaintDeletes.add(name));
+    await cleanupInpaintAssets();
     send(res, 200, { history: next });
   }
 
@@ -1364,7 +1418,7 @@ export function createStorageService({ resourceRoot, dataRoot, readBody, send, h
     const history = [...current];
     history[itemIndex] = updatedItem;
     await writeOutputHistory(history);
-    send(res, 200, { historyItem: updatedItem, history: history.slice(0, maxOutputHistoryItems) });
+    send(res, 200, { historyItem: updatedItem, history: history });
   }
 
   async function handleSaveEditedOutput(req, res) {
@@ -1423,7 +1477,7 @@ export function createStorageService({ resourceRoot, dataRoot, readBody, send, h
     const current = await readOutputHistory();
     const history = [item, ...current];
     await writeOutputHistory(history);
-    send(res, 200, { historyItem: item, history: history.slice(0, maxOutputHistoryItems) });
+    send(res, 200, { historyItem: item, history: history });
   }
 
   async function handleReplaceOutputImage(req, res) {
@@ -1513,11 +1567,12 @@ export function createStorageService({ resourceRoot, dataRoot, readBody, send, h
     await writeOutputHistory(history);
     send(res, 200, {
       historyItem: updatedItem,
-      history: history.slice(0, maxOutputHistoryItems)
+      history: history
     });
   }
 
   async function cleanupUploads(maxAgeMs = 24 * 60 * 60 * 1000) {
+    await cleanupInpaintAssets();
     try {
       const now = Date.now();
       const files = await readdir(uploadDir);
@@ -1573,6 +1628,9 @@ export function createStorageService({ resourceRoot, dataRoot, readBody, send, h
     handleInputImage,
     handleInputScanFolder,
     handleInputUpload,
+    handleInpaintUpload,
+    handleInpaintImage,
+    cleanupInpaintAssets,
     handleOutputImage,
     handleReplaceOutputImage,
     handleSaveColorAdjust,

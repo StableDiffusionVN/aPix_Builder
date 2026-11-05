@@ -114,6 +114,7 @@ function SourceNodeComponent({ id, data, selected }) {
     label: data.name || meta.label,
     type: sourceType,
     uiType: data.port?.uiType,
+    inpaintCrop: data.port?.inpaintCrop === true,
     choices: data.port?.choices,
     menuLabelSyntax: data.port?.menuLabelSyntax,
     minimum: data.port?.minimum,

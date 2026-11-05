@@ -62,6 +62,7 @@ export function NodeField({ port, value, onChange, linked, onContextMenu, sdvnMo
     return (
       <CanvasImageField
         label={port.label}
+        inpaintCrop={port.inpaintCrop === true}
         value={value}
         onChange={onChange}
         onContextMenu={onContextMenu}

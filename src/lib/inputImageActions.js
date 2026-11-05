@@ -39,15 +39,15 @@ export async function uploadInputImageFile(file, { updateInputImages, fallbackTo
   return fallbackToDataUrl ? dataUrl : null;
 }
 
-export async function uploadInputImageDataUrl(dataUrl, { filename = "image.png", updateInputImages } = {}) {
-  const response = await fetch("/api/input-images", {
+export async function uploadInputImageDataUrl(dataUrl, { filename = "image.png", updateInputImages, privateInpaint = false } = {}) {
+  const response = await fetch(privateInpaint ? "/api/inpaint-images" : "/api/input-images", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ filename, dataUrl })
   });
   if (!response.ok) return null;
   const data = await response.json();
-  updateInputImages?.(data.images || []);
+  if (!privateInpaint) updateInputImages?.(data.images || []);
   return data.image ? makeInputImageValue(data.image) : null;
 }
 
@@ -64,11 +64,11 @@ export async function loadInputImageFromUrl(sourceUrl, { updateInputImages, erro
   throw new Error(errorMessage);
 }
 
-export async function saveEditedInputImage(dataUrl, { selectedName = "", updateInputImages } = {}) {
+export async function saveEditedInputImage(dataUrl, { selectedName = "", updateInputImages, privateInpaint = false } = {}) {
   const filename = selectedName
     ? selectedName.replace(/(\.[^.]+)?$/, "_edited.png")
     : "edited.png";
-  return uploadInputImageDataUrl(dataUrl, { filename, updateInputImages });
+  return uploadInputImageDataUrl(dataUrl, { filename, updateInputImages, privateInpaint });
 }
 
 export async function deleteInputImage(image, { updateInputImages } = {}) {

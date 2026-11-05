@@ -2,6 +2,8 @@
 import { readdir, readFile, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import YAML from "yaml";
+import { selectWorkflowVariant, workflowVariantEntries, validateVariantFile } from "../../shared/workflowVariants.js";
+import { unusedVariantFiles } from "./workflowVariants.js";
 
 export const TEMPLATE_SCOPES = {
   local: "local",
@@ -28,6 +30,9 @@ export function validateTemplateConfig(config, template, scope = TEMPLATE_SCOPES
   }
   if (isRhWf && !String(config?.runninghub?.workflowId || "").trim()) {
     errors.push("YAML is missing required runninghub.workflowId");
+  }
+  if (isRhWf && config?.runninghub?.saveWorkflowJson === false && workflowVariantEntries(config).length) {
+    errors.push("Bật lưu JSON workflow để sử dụng JSON riêng cho option menu-sub");
   }
   if (errors.length > 0) {
     throw new Error(`Invalid template "${template.id}": ${errors.join("; ")}`);
@@ -244,6 +249,22 @@ export function createTemplateService({
     }
   }
 
+  async function readWorkflowFiles(config, template) {
+    const files = {};
+    for (const { entry } of workflowVariantEntries(config)) {
+      const file = validateVariantFile(entry?.file);
+      files[file] = JSON.parse(await readFile(resolveTemplatePath(template, file, "option workflow"), "utf8"));
+    }
+    return files;
+  }
+
+  async function resolveWorkflow(config, template, values = {}) {
+    const selected = selectWorkflowVariant(config, values);
+    const workflowPath = selected.file ? resolveTemplatePath(template, selected.file, "option workflow") : template.workflowPath;
+    const resolvedConfig = selected.config;
+    return { config: resolvedConfig, template: { ...template, workflowPath }, choice: selected.choice };
+  }
+
   async function loadConfig(templateId, scope = TEMPLATE_SCOPES.local) {
     const template = await resolveTemplate(templateId, scope);
     const raw = await readFile(template.yamlPath, "utf8");
@@ -334,15 +355,25 @@ export function createTemplateService({
   async function getTemplateExportSource(templateId, scope = TEMPLATE_SCOPES.local) {
     const template = await resolveTemplate(templateId, scope);
     assertExportableTemplateDir(template.baseDir, scope);
+    // Option JSONs left behind by older saves are not part of the template.
+    let excludeFiles = [];
+    try {
+      excludeFiles = await unusedVariantFiles(template.baseDir, YAML.parse(await readFile(template.yamlPath, "utf8")));
+    } catch {
+      excludeFiles = [];
+    }
     return {
       id: template.id,
       name: template.name,
       baseDir: template.baseDir,
-      folderName: path.basename(template.baseDir)
+      folderName: path.basename(template.baseDir),
+      excludeFiles
     };
   }
 
   return {
+    readWorkflowFiles,
+    resolveWorkflow,
     loadTemplateRegistry,
     loadConfig,
     discoverTemplates,

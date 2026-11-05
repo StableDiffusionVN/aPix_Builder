@@ -1,3 +1,4 @@
+import { assertApiWorkflow, workflowVariantEntries } from "../../shared/workflowVariants.js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Box,
@@ -205,6 +206,16 @@ function InputDetailPanel({ row, nodes, fieldTypes, onUpdate, onDelete }) {
             onChange={event => onUpdate({ description: event.target.value })}
           />
         </label>
+        {["image", "image_mask", "file"].includes(row.type) ? (
+          <div className="inputDetailFieldWide">
+            <RhWfSwitch compact
+              title="Inpaint Crop"
+              hint={t("templateEditor.inpaintCropHint")}
+              checked={row.inpaintCrop === true}
+              onChange={event => onUpdate({ inpaintCrop: event.target.checked })}
+            />
+          </div>
+        ) : null}
         {(row.type === "int" || row.type === "float" || row.type === "seed") ? (
           <div className="inputDetailNumericGrid">
             <label className="field">
@@ -343,6 +354,16 @@ function SubInputEditor({ subRow, nodes, fieldTypes, onUpdate, onDelete }) {
             onChange={event => onUpdate({ description: event.target.value })}
           />
         </label>
+        {["image", "image_mask", "file"].includes(subRow.type) ? (
+          <div className="inputDetailFieldWide">
+            <RhWfSwitch compact
+              title="Inpaint Crop"
+              hint={t("templateEditor.inpaintCropHint")}
+              checked={subRow.inpaintCrop === true}
+              onChange={event => onUpdate({ inpaintCrop: event.target.checked })}
+            />
+          </div>
+        ) : null}
         {(subRow.type === "int" || subRow.type === "float" || subRow.type === "seed") ? (
           <div className="inputDetailNumericGrid">
             <label className="field">
@@ -422,7 +443,7 @@ function SubInputEditor({ subRow, nodes, fieldTypes, onUpdate, onDelete }) {
   );
 }
 
-function MenuSubDetailPanel({ row, nodes, workflow, fieldTypes, onUpdate, onDelete, onUpdateSubInput, onAddSubInput, onDeleteSubInput }) {
+function MenuSubDetailPanel({ row, nodes, workflow, fieldTypes, onAttachWorkflow, onUpdate, onDelete, onUpdateSubInput, onAddSubInput, onDeleteSubInput }) {
   const { t } = useI18n();  const menuOpts = menuOptsFromRow(row);
   const parsedChoices = parseMenuChoices(parseChoicesText(row.choicesText), menuOpts);
   const [activeChoice, setActiveChoice] = useState(parsedChoices[0]?.value || "");
@@ -439,6 +460,10 @@ function MenuSubDetailPanel({ row, nodes, workflow, fieldTypes, onUpdate, onDele
 
   const selectedNode = nodes.find(node => node.id === row.nodeId);
   const subRows = row.sub?.[activeChoice] || [];
+  const choiceWorkflow = row.workflows?.[activeChoice];
+  const branchWorkflow = choiceWorkflow?.workflow || workflow;
+  const branchNodes = choiceWorkflow?.workflow ? workflowNodes(choiceWorkflow.workflow) : nodes;
+  const outputNodes = branchNodes.filter(node => node.classType.toLowerCase().includes("save"));
   const activeChoiceLabel = parsedChoices.find(choice => choice.value === activeChoice)?.label || activeChoice;
 
   return (
@@ -520,6 +545,7 @@ function MenuSubDetailPanel({ row, nodes, workflow, fieldTypes, onUpdate, onDele
             ]));
             onUpdate({
               menuLabelSyntax,
+              workflows: Object.fromEntries(nextParsed.filter(choice => row.workflows?.[choice.value] || row.workflows?.[choice.raw]).map(choice => [choice.value, row.workflows[choice.value] || row.workflows[choice.raw]])),
               sub: nextSub,
               value: resolveMenuStoredValue(row.value, choices, nextOpts) || nextParsed[0]?.value || ""
             });
@@ -540,6 +566,7 @@ function MenuSubDetailPanel({ row, nodes, workflow, fieldTypes, onUpdate, onDele
               ]));
               onUpdate({
                 choicesText,
+                workflows: Object.fromEntries(nextParsed.filter(choice => row.workflows?.[choice.value] || row.workflows?.[choice.raw]).map(choice => [choice.value, row.workflows[choice.value] || row.workflows[choice.raw]])),
                 sub: nextSub,
                 value: nextParsed.some(choice => choice.value === row.value)
                   ? row.value
@@ -568,12 +595,40 @@ function MenuSubDetailPanel({ row, nodes, workflow, fieldTypes, onUpdate, onDele
             className={`menuSubChoiceTab ${activeChoice === choice.value ? "active" : ""}`}
             onClick={() => setActiveChoice(choice.value)}
           >
+            {row.workflows?.[choice.value] ? <FileJson size={12} /> : null}
             {choice.label}
             <span>{row.sub?.[choice.value]?.length || 0}</span>
           </button>
         ))}
         {parsedChoices.length === 0 ? <span className="menuSubChoiceEmpty">{t("templateEditor.addMenuChoices")}</span> : null}
       </div>
+      {activeChoice ? <div className="inputDetailForm menuSubWorkflow">
+        <div className="inputDetailFieldWide menuSubSubInputsHeader">
+          <div><h5>{t("templateEditor.optionWorkflow")}</h5>
+            <small className="fieldDescription">{choiceWorkflow?.name || choiceWorkflow?.file || t("templateEditor.optionWorkflowDefault")}</small>
+          </div>
+          <label className="smallActionButton">
+            <FileJson size={14} /><span>{t("templateEditor.attachOptionJson")}</span>
+            <input type="file" accept=".json,application/json" className="srOnly" onChange={event => {
+              const file = event.target.files?.[0];
+              if (file) onAttachWorkflow(activeChoice, file);
+              event.target.value = "";
+            }} />
+          </label>
+          {choiceWorkflow ? <button type="button" className="smallActionButton" onClick={() => {
+            const workflows = { ...row.workflows }; delete workflows[activeChoice]; onUpdate({ workflows });
+          }}>{t("templateEditor.useMainWorkflow")}</button> : null}
+        </div>
+        {choiceWorkflow ? <label className="field inputDetailFieldWide">
+          <span>{t("templateEditor.optionOutputNode")}</span>
+          <select value={choiceWorkflow.outputNodeId || ""} onChange={event => onUpdate({ workflows: {
+            ...row.workflows, [activeChoice]: { ...choiceWorkflow, outputNodeId: event.target.value }
+          } })}>
+            <option value="">{t("templateEditor.useMainOutput")}</option>
+            {outputNodes.map(node => <option key={node.id} value={node.id}>{node.id} - {node.title}</option>)}
+          </select>
+        </label> : null}
+      </div> : null}
       <div className="menuSubSubInputs">
         <div className="menuSubSubInputsHeader">
           <h5>{t("templateEditor.subInputsFor")} <b>{activeChoiceLabel || "—"}</b></h5>
@@ -586,8 +641,8 @@ function MenuSubDetailPanel({ row, nodes, workflow, fieldTypes, onUpdate, onDele
           <SubInputEditor
             key={subRow.rowId}
             subRow={subRow}
-            nodes={nodes}
-            workflow={workflow}
+            nodes={branchNodes}
+            workflow={branchWorkflow}
             fieldTypes={fieldTypes}
             onUpdate={patch => onUpdateSubInput(activeChoice, subRow.rowId, patch)}
             onDelete={() => onDeleteSubInput(activeChoice, subRow.rowId)}
@@ -634,6 +689,7 @@ function subRowFromConfig(item, workflow, fallbackKey) {
     field,
     label: item.ui?.label || fallbackKey,
     description: item.ui?.description || "",
+    inpaintCrop: item.ui?.inpaintCrop === true,
     type,
     display: item.ui?.type === "text" ? "multiline" : item.ui?.display === "slider" ? "slider" : "input",
     minimum: item.ui?.minimum ?? (type === "float" ? 0 : 0),
@@ -649,7 +705,7 @@ function subRowFromConfig(item, workflow, fallbackKey) {
   };
 }
 
-function rowFromConfig(item, workflow, fallbackKey) {
+function rowFromConfig(item, workflow, fallbackKey, workflowFiles = {}) {
   const ui = item.ui || {};
   if (ui.type === "note" || ui.type === "markdown") {
     return {
@@ -663,15 +719,20 @@ function rowFromConfig(item, workflow, fallbackKey) {
     const field = fieldParts[fieldParts[0] === "inputs" ? 1 : 0] || "";
     const choiceLines = ui.choices || [];
     const menuOpts = menuChoiceOptions(ui);
+    const optionWorkflows = Object.fromEntries(parseMenuChoices(choiceLines, menuOpts).flatMap(choice => {
+      const entry = ui.workflows?.[choice.value] || ui.workflows?.[choice.raw];
+      return entry ? [[choice.value, { ...entry, workflow: workflowFiles[entry.file] }]] : [];
+    }));
     const sub = {};
     for (const choiceLine of choiceLines) {
       const apiValue = menuChoiceValue(choiceLine, menuOpts);
       const legacyFields = ui.sub?.[apiValue] || ui.sub?.[choiceLine] || {};
-      sub[apiValue] = Object.entries(legacyFields).map(([key, child]) => subRowFromConfig(child, workflow, key));
+      sub[apiValue] = Object.entries(legacyFields).map(([key, child]) => subRowFromConfig(child, optionWorkflows[apiValue]?.workflow || workflow, key));
     }
     return {
       rowId: crypto.randomUUID(),
       kind: "menu-sub",
+      workflows: optionWorkflows,
       hasTargetId: Boolean(item.id),
       nodeId: item.id ? nodeId : "",
       field: item.id ? field : "",
@@ -694,6 +755,7 @@ function rowFromConfig(item, workflow, fallbackKey) {
     field,
     label: ui.label || fallbackKey,
     description: ui.description || "",
+    inpaintCrop: ui.inpaintCrop === true,
     type,
     display: ui.type === "text" ? "multiline" : ui.display === "slider" ? "slider" : "input",
     minimum: ui.minimum ?? (type === "float" ? 0 : 0),
@@ -724,6 +786,7 @@ function buildInputUiFromRow(row) {
   };
   const description = String(row.description || "").trim();
   if (description) ui.description = description;
+  if (["image", "image_mask", "file"].includes(row.type) && row.inpaintCrop === true) ui.inpaintCrop = true;
   if ((row.type === "int" || row.type === "float" || row.type === "seed") && row.minimum !== "") {
     ui.minimum = numericValue(row.minimum);
   }
@@ -790,6 +853,11 @@ function buildConfig({
       const description = String(row.description || "").trim();
       if (description) ui.description = description;
       if (row.menuLabelSyntax) ui.menuLabelSyntax = true;
+      const workflows = Object.fromEntries(parsedChoices.filter(choice => row.workflows?.[choice.value]?.file).map(choice => {
+        const entry = row.workflows[choice.value];
+        return [choice.value, { file: entry.file, ...(entry.name ? { name: entry.name } : {}), ...(entry.outputNodeId ? { outputNodeId: entry.outputNodeId } : {}) }];
+      }));
+      if (Object.keys(workflows).length) ui.workflows = workflows;
       for (const choice of parsedChoices) {
         const usedSubKeys = new Set();
         ui.sub[choice.value] = {};
@@ -996,7 +1064,7 @@ export function TemplateEditorModal({
         setAccessPassword(rh.accessPassword || "");
         setUsePersonalQueue(Boolean(rh.usePersonalQueue));
         setWorkflow(data.workflow || null);
-        setInputRows(Object.entries(data.config?.input || {}).map(([key, item]) => rowFromConfig(item, data.workflow, key)));
+        setInputRows(Object.entries(data.config?.input || {}).map(([key, item]) => rowFromConfig(item, data.workflow, key, data.workflowFiles)));
         setOutputRows(isRhWf ? [] : Object.values(data.config?.output || {}).map(item => outputFromConfig(item, locale)));
       } catch (err) {
         if (!cancelled) setError(localizeRuntimeMessage(err.message, locale));
@@ -1021,7 +1089,7 @@ export function TemplateEditorModal({
     }
     if (nextConfig?.runninghub?.workflowId) setWorkflowId(nextConfig.runninghub.workflowId);
     if (nextConfig) {
-      setInputRows(Object.entries(nextConfig.input || {}).map(([key, item]) => rowFromConfig(item, nextWorkflow, key)));
+      setInputRows(Object.entries(nextConfig.input || {}).map(([key, item]) => rowFromConfig(item, nextWorkflow, key, options.workflowFiles)));
       setOutputRows(isRhWf ? [] : Object.values(nextConfig.output || {}).map(item => outputFromConfig(item, locale)));
       return;
     }
@@ -1100,7 +1168,16 @@ export function TemplateEditorModal({
       } else if (isRhWf) {
         setSaveWorkflowJson(true);
       }
-      await applyWorkflow(nextWorkflow, (jsonFile || yamlFile).name, nextConfig);
+      const workflowFiles = {};
+      for (const { entry } of workflowVariantEntries(nextConfig)) {
+        const candidates = files.filter(file => {
+          const name = file.webkitRelativePath || file.name;
+          return name === entry.file || name.endsWith(`/${entry.file}`) || (!name.includes("/") && name === entry.file.split("/").pop());
+        });
+        if (candidates.length !== 1) throw new Error(`Không tìm thấy JSON option duy nhất: ${entry.file}`);
+        workflowFiles[entry.file] = assertApiWorkflow(JSON.parse(await readTextFile(candidates[0])), entry.file);
+      }
+      await applyWorkflow(nextWorkflow, (jsonFile || yamlFile).name, nextConfig, { workflowFiles });
     } catch (err) {
       setError(l(`Không đọc được tệp upload: ${err.message}`, `Could not read the uploaded file: ${localizeRuntimeMessage(err.message, locale)}`));
     }
@@ -1115,7 +1192,7 @@ export function TemplateEditorModal({
       const entries = unzipSync(bytes);
       const files = Object.entries(entries)
         .filter(([name]) => !name.endsWith("/"))
-        .map(([name, data]) => new File([data], name.split("/").pop() || name));
+        .map(([name, data]) => new File([data], name));
       if (!files.length) throw new Error(l("Tệp .zip rỗng", "The .zip file is empty"));
       await handleTemplateUpload(files);
     } catch (err) {
@@ -1220,13 +1297,31 @@ export function TemplateEditorModal({
     setInputRows(current => current.filter(item => item.rowId !== rowId));
   }
 
+  async function attachMenuWorkflow(menuRowId, choice, file) {
+    setError("");
+    try {
+      const json = assertApiWorkflow(JSON.parse(await readTextFile(file)), file.name);
+      const firstOutput = workflowNodes(json).find(node => node.classType.toLowerCase().includes("save"));
+      setInputRows(current => current.map(row => row.rowId !== menuRowId ? row : {
+        ...row, workflows: { ...row.workflows, [choice]: {
+          file: `workflows/${crypto.randomUUID()}.json`, name: file.name, workflow: json, outputNodeId: firstOutput?.id || ""
+        } },
+        sub: { ...row.sub, [choice]: pruneInputRows(row.sub?.[choice] || [], json) }
+      }));
+      if (isRhWf) setSaveWorkflowJson(true);
+    } catch (error) { setError(error.message); }
+  }
+
   function updateMenuSubInput(menuRowId, choice, subRowId, patch) {
+    const currentWorkflow = workflow;
     setInputRows(current => current.map(row => {
       if (row.rowId !== menuRowId || row.kind !== "menu-sub") return row;
       const sub = { ...(row.sub || {}) };
       sub[choice] = (sub[choice] || []).map(subRow => {
         if (subRow.rowId !== subRowId) return subRow;
         const next = { ...subRow, ...patch };
+        const workflow = row.workflows?.[choice]?.workflow || currentWorkflow;
+        const nodes = workflowNodes(workflow);
         if (patch.nodeId) {
           const node = nodes.find(node => node.id === patch.nodeId);
           const field = node?.fields?.[0] || "";
@@ -1252,9 +1347,11 @@ export function TemplateEditorModal({
   }
 
   function addMenuSubInput(menuRowId, choice) {
+    const branch = inputRows.find(row => row.rowId === menuRowId)?.workflows?.[choice]?.workflow || workflow;
+    const nodes = workflowNodes(branch);
     const firstNode = nodes.find(node => node.fields.length > 0);
     const field = firstNode?.fields?.[0] || "";
-    const value = firstNode ? workflow?.[firstNode.id]?.inputs?.[field] : "";
+    const value = firstNode ? branch?.[firstNode.id]?.inputs?.[field] : "";
     const typeDefaults = defaultsForType(inferRowType({ field, nodeClass: firstNode?.classType, value }, mode), value);
     setInputRows(current => current.map(row => {
       if (row.rowId !== menuRowId || row.kind !== "menu-sub") return row;
@@ -1363,6 +1460,7 @@ export function TemplateEditorModal({
           templateId,
           workflow: !isRhWf || saveWorkflowJson ? workflow : null,
           config,
+          workflowFiles: Object.fromEntries(inputRows.flatMap(row => Object.values(row.workflows || {}).map(entry => [entry.file, entry.workflow]))),
           scope: apiScope
         })
       });
@@ -1669,6 +1767,7 @@ export function TemplateEditorModal({
                     nodes={nodes}
                     workflow={workflow}
                     fieldTypes={fieldTypes}
+                    onAttachWorkflow={(choice, file) => attachMenuWorkflow(selectedInputRow.rowId, choice, file)}
                     onUpdate={patch => updateInputRow(selectedInputRow.rowId, patch)}
                     onDelete={() => deleteInputRow(selectedInputRow.rowId)}
                     onUpdateSubInput={(choice, subRowId, patch) => updateMenuSubInput(selectedInputRow.rowId, choice, subRowId, patch)}

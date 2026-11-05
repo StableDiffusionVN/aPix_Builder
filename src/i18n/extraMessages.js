@@ -2,6 +2,16 @@
 
 export const extraMessages = {
   vi: {
+    "history.more": "Xem thêm",
+    "history.showMore": "Xem thêm lịch sử",
+    "history.showingCount": "Đang hiện {shown} / {total} mục",
+    "templateEditor.optionWorkflow": "Workflow JSON cho lựa chọn này",
+    "templateEditor.optionWorkflowDefault": "Đang dùng workflow chính của template",
+    "templateEditor.attachOptionJson": "Gắn JSON API",
+    "templateEditor.useMainWorkflow": "Dùng workflow chính",
+    "templateEditor.optionOutputNode": "Node output của JSON này",
+    "templateEditor.useMainOutput": "Dùng output chung của template",
+
     "notify.rhComplete": "RunningHub đã hoàn thành!",
     "notify.workflowComplete": "Workflow đã hoàn thành!",
     "notify.canvasStarted": "Canvas: bắt đầu {label}",
@@ -222,7 +232,7 @@ export const extraMessages = {
     "settings.appearance": "Giao diện",
     "settings.appearanceHint": "Chủ đề, font, ngôn ngữ",
     "settings.appearanceDesc": "Tùy chỉnh cách ứng dụng hiển thị trên thiết bị này.",
-    "settings.history.maxDisplay": "Số lịch sử hiển thị tối đa",
+    "settings.history.maxDisplay": "Số mục lịch sử mỗi lần tải",
     "settings.comfyDesc": "Quản lý kết nối local hoặc remote ComfyUI.",
     "settings.rhDesc": "API và kết nối cloud",
     "settings.canvas.tab": "Canvas",
@@ -419,6 +429,7 @@ export const extraMessages = {
     "templateEditor.displayName": "Tên hiển thị",
     "templateEditor.description": "Mô tả",
     "templateEditor.descriptionPlaceholder": "Hiển thị dưới dạng tooltip khi giữ chuột trên trường",
+    "templateEditor.inpaintCropHint": "Cho phép chọn vùng crop và ghép kết quả về ảnh gốc cho trường ảnh này",
     "templateEditor.labelSyntax": "Cú pháp Nhãn:giá trị",
     "templateEditor.labelSyntaxHint": "Bật để hiển thị nhãn khác giá trị gửi API",
     "templateEditor.menuChoices": "Menu choices, mỗi dòng một lựa chọn",
@@ -607,6 +618,16 @@ export const extraMessages = {
     "rh.appDeleted": "Đã xóa app — quay về app mặc định"
   },
   en: {
+    "history.more": "Show more",
+    "history.showMore": "Show more history",
+    "history.showingCount": "Showing {shown} / {total} items",
+    "templateEditor.optionWorkflow": "Workflow JSON for this option",
+    "templateEditor.optionWorkflowDefault": "Using the template's main workflow",
+    "templateEditor.attachOptionJson": "Attach API JSON",
+    "templateEditor.useMainWorkflow": "Use main workflow",
+    "templateEditor.optionOutputNode": "Output node for this JSON",
+    "templateEditor.useMainOutput": "Use the template's shared output",
+
     "notify.rhComplete": "RunningHub has completed!",
     "notify.workflowComplete": "Workflow has completed!",
     "notify.canvasStarted": "Canvas: started {label}",
@@ -827,7 +848,7 @@ export const extraMessages = {
     "settings.appearance": "Appearance",
     "settings.appearanceHint": "Theme, font, language",
     "settings.appearanceDesc": "Customize how the application appears on this device.",
-    "settings.history.maxDisplay": "Max history items shown",
+    "settings.history.maxDisplay": "History items per batch",
     "settings.comfyDesc": "Manage your local or remote ComfyUI connection.",
     "settings.rhDesc": "API and cloud connection",
     "settings.canvas.tab": "Canvas",
@@ -1024,6 +1045,7 @@ export const extraMessages = {
     "templateEditor.displayName": "Display name",
     "templateEditor.description": "Description",
     "templateEditor.descriptionPlaceholder": "Shown as a tooltip after hovering over the field",
+    "templateEditor.inpaintCropHint": "Allow cropping a region and stitching results back into the original for this image field",
     "templateEditor.labelSyntax": "Label:value syntax",
     "templateEditor.labelSyntaxHint": "Show a label that differs from the value sent to the API",
     "templateEditor.menuChoices": "Menu choices, one per line",

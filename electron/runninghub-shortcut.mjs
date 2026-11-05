@@ -1,8 +1,13 @@
+import { workflowMenus } from "../shared/workflowVariants.js";
 import { spawn } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
+
+function assertSingleShortcutWorkflow(config) {
+  if (workflowMenus(config).length) throw new Error("Shortcut chưa hỗ trợ JSON riêng theo option. Hãy chạy template trong aPix Builder hoặc xuất thư mục/ZIP.");
+}
 
 const SKIPPED_TYPES = new Set(["note", "checkpoints"]);
 const NUMBER_TYPES = new Set(["int", "float", "seed"]);
@@ -392,6 +397,7 @@ function addRequestStringField(items, key, value, prototypeKey = "instanceType")
 }
 
 export function buildRunningHubShortcut(template, config, apiKey, options = {}) {
+  assertSingleShortcutWorkflow(config);
   const { kind, resourceId } = detectRunningHubResource(config, options.kind, options.resourceId);
   const controls = collectShortcutControls(config);
   if (!controls.length) throw new Error("Configuration contains no supported input controls.");
@@ -485,6 +491,7 @@ export async function createSignedRunningHubShortcut({
   resourceId,
   workflow: embeddedWorkflow
 }) {
+  assertSingleShortcutWorkflow(config);
   if (process.platform !== "darwin") {
     throw new Error("Export Shortcut requires macOS.");
   }

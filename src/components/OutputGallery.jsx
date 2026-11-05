@@ -1,3 +1,5 @@
+import { useHistoryWindow } from "../hooks/useHistoryWindow.js";
+import { HistoryCount, HistoryPagination } from "./HistoryPagination.jsx";
 import { useMemo, useState } from "react";
 import { Download, Filter, History, Loader2, Star, Workflow, X } from "lucide-react";
 import { useI18n } from "../i18n/I18nContext";
@@ -78,10 +80,8 @@ export function OutputGallery({
     if (templateFilter !== "all" && (item.templateId || item.templateName) !== templateFilter) return false;
     return matchesTimeFilter(item.createdAt || item.completedAt || item.submittedAt, timeFilter);
   }), [favorites, favoritesOnly, history, templateFilter, timeFilter]);
-  const displayHistory = useMemo(
-    () => visibleHistory.slice(0, maxHistoryDisplay),
-    [maxHistoryDisplay, visibleHistory]
-  );
+  const historyWindow = useHistoryWindow(visibleHistory, maxHistoryDisplay, JSON.stringify([timeFilter, templateFilter, favoritesOnly]));
+  const displayHistory = historyWindow.items;
 
   function toggleFavorite(id) {
     if (!id) return;
@@ -136,8 +136,9 @@ export function OutputGallery({
           <small className="historyMultiSelectHint">{t("history.multiSelectHint")}</small>
         </div>
         <div className="historyHeaderTools">
-          <label className={`historyIconFilter ${timeFilter !== "all" ? "active" : ""}`} title={t("history.filterTime")}>
+          <label className={`historyIconFilter historyFilterWithCount ${timeFilter !== "all" ? "active" : ""}`} title={t("history.filterTime")}>
             <Filter size={14} />
+            <HistoryCount shown={displayHistory.length} total={visibleHistory.length} />
             <select value={timeFilter} onChange={event => setTimeFilter(event.target.value)} aria-label={t("history.filterTime")}>
               <option value="all">{t("history.allTime")}</option>
               <option value="day">{t("history.today")}</option>
@@ -288,6 +289,8 @@ export function OutputGallery({
             </span>
           </div>
         ) : null}
+        <HistoryPagination shown={displayHistory.length} total={visibleHistory.length}
+          onMore={historyWindow.showMore} />
       </div>
     </section>
   );

@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { parseDataUrl } from "./comfyClient.js";
-import { parseLocalImageRef, readLocalImageFromDir } from "./localImageRef.js";
+import { parseLocalImageRef, localImageRefToUpload } from "./localImageRef.js";
 
 export const RUNNINGHUB_HOST = "www.runninghub.ai";
 export const RUNNINGHUB_BASE = `https://${RUNNINGHUB_HOST}`;
@@ -334,12 +334,10 @@ async function resolveImageFieldValue(apiKey, value, { inputDir, outputDir, sign
     if (value.startsWith("api/")) return value;
     const localRef = parseLocalImageRef(value);
     if (localRef) {
-      const dir = localRef.kind === "output" ? outputDir : inputDir;
-      if (!dir) throw new Error(`Missing ${localRef.kind} image directory`);
       let localImage;
       try {
         onProgress?.({ type: "upload", label: `Đọc ảnh ${localRef.kind}: ${localRef.name}...` });
-        localImage = await readLocalImageFromDir(dir, localRef.name);
+        localImage = await localImageRefToUpload(localRef, { inputDir, outputDir });
         if (!localImage.buffer?.length) {
           throw new Error(`File ảnh rỗng (${localRef.name})`);
         }

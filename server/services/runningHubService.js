@@ -1,3 +1,4 @@
+import { prepareCropInpaint } from "../lib/cropInpaint.js";
 import { randomUUID } from "node:crypto";
 import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -219,6 +220,7 @@ export function createRunningHubService({ storage, runCoordinator, readBody, sen
       try { client.res.end(); } catch {}
     }
     activeRhRuns.delete(runId);
+    void storage.cleanupInpaintAssets?.().catch(console.error);
     queueMicrotask(drainBackendRunQueue);
   }
   
@@ -307,7 +309,8 @@ export function createRunningHubService({ storage, runCoordinator, readBody, sen
     submittedAt,
     signal,
     onDownloadRetry,
-    canvasHistory
+    canvasHistory,
+    stitchOutput
   }) {
     const { outputDir } = storage.getPaths();
     await mkdir(outputDir, { recursive: true });
@@ -331,9 +334,11 @@ export function createRunningHubService({ storage, runCoordinator, readBody, sen
             });
           }
         });
-        const ext = String(output.fileType || path.extname(fileUrl).slice(1) || "png").replace(/^\./, "");
+        const ext = stitchOutput ? "png" : String(output.fileType || path.extname(fileUrl).slice(1) || "png").replace(/^\./, "");
         const filename = `${Date.now()}_${runId}_${index}_rh.${ext}`;
-        await writeFile(path.join(outputDir, filename), Buffer.from(await response.arrayBuffer()));
+        const downloaded = Buffer.from(await response.arrayBuffer());
+        const buffer = stitchOutput ? await stitchOutput(downloaded) : downloaded;
+        await writeFile(path.join(outputDir, filename), buffer);
         archivedOutputs.push({
           nodeId: output.nodeId || "runninghub",
           filename,
@@ -342,7 +347,8 @@ export function createRunningHubService({ storage, runCoordinator, readBody, sen
           remoteUrl: fileUrl
         });
         index += 1;
-      } catch {
+      } catch (error) {
+        if (stitchOutput) throw error;
         // Try remaining outputs; fail only if nothing could be archived.
       }
     }
@@ -416,6 +422,7 @@ export function createRunningHubService({ storage, runCoordinator, readBody, sen
     const rotateIndex = Number(body.rotateIndex) || 0;
     const abortController = new AbortController();
     const run = attachRhRun(runId, abortController);
+    run.inpaintValues = body.values || body.nodes;
     const existingRunSession = getRunLogSessions().find(session => session.runId === runId);
     ensureRunLogSession({
       runId,
@@ -554,6 +561,9 @@ export function createRunningHubService({ storage, runCoordinator, readBody, sen
         throw new Error("Missing RunningHub node list");
       }
 
+      const stitchOutput = await prepareCropInpaint(
+        body.nodes.filter(node => String(node.fieldType).toUpperCase() === "IMAGE").map(node => node.fieldValue), storage.getPaths()
+      );
       await withRhTokenFailover(ctx.failoverOptions("app"), async (apiKey) => {
         const coinsBefore = await beginRhAttempt(ctx, apiKey);
         emitRhStatus("upload", "Đang upload dữ liệu lên RunningHub...");
@@ -574,7 +584,7 @@ export function createRunningHubService({ storage, runCoordinator, readBody, sen
           coinsBefore,
           submitData,
           res,
-          archiveExtra: { webappId, rhMode: "app", nodes: body.nodes, canvasHistory: body },
+          archiveExtra: { webappId, rhMode: "app", nodes: body.nodes, canvasHistory: body, stitchOutput },
           responseExtra: { rhMode: "app", webappId }
         });
       });
@@ -595,7 +605,8 @@ export function createRunningHubService({ storage, runCoordinator, readBody, sen
       if (!ctx.apiKeys.length) throw new Error("Missing RunningHub API key");
       if (!templateId) throw new Error("Missing RunningHub Workflow template");
 
-      const { config, template } = await storage.getTemplates().loadConfig(templateId, TEMPLATE_SCOPES.runninghubWf);
+      const loaded = await storage.getTemplates().loadConfig(templateId, TEMPLATE_SCOPES.runninghubWf);
+      const { config, template, choice: workflowChoice } = await storage.getTemplates().resolveWorkflow(loaded.config, loaded.template, body.values || {});
       const sourceWorkflowId = String(config.runninghub?.workflowId || "").trim();
       const taskOptions = storage.getTemplates().runningHubTaskOptions(config);
       const useSavedWorkflowJson = storage.getTemplates().usesSavedWorkflowJson(config, template);
@@ -605,7 +616,8 @@ export function createRunningHubService({ storage, runCoordinator, readBody, sen
 
       const normalized = await normalizeValues(body.values || {});
       const request = mapValuesToRequest(config, normalized);
-      if (!Object.keys(request).length) {
+      const stitchOutput = await prepareCropInpaint(request, storage.getPaths());
+      if (!Object.keys(request).length && workflowChoice == null) {
         throw new Error("Template chưa có input nào để gửi");
       }
 
@@ -665,6 +677,7 @@ export function createRunningHubService({ storage, runCoordinator, readBody, sen
           submitData,
           res,
           archiveExtra: {
+            stitchOutput,
             workflowId: sourceWorkflowId,
             rhMode: "wf",
             rhWfTemplateId: templateId,

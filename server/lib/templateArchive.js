@@ -9,13 +9,15 @@ export function isInsideAsar(filePath) {
   return normalized.includes(ASAR_SEGMENT) || normalized.endsWith(`${path.sep}app.asar`);
 }
 
-async function collectFiles(dir, into, prefix) {
+async function collectFiles(dir, into, prefix, exclude = new Set(), relDir = "") {
   const entries = await readdir(dir, { withFileTypes: true });
   for (const entry of entries) {
     const full = path.join(dir, entry.name);
     const rel = `${prefix}/${entry.name}`;
+    const relPath = relDir ? `${relDir}/${entry.name}` : entry.name;
+    if (exclude.has(relPath)) continue;
     if (entry.isDirectory()) {
-      await collectFiles(full, into, rel);
+      await collectFiles(full, into, rel, exclude, relPath);
     } else {
       into[rel] = new Uint8Array(await readFile(full));
     }
@@ -24,9 +26,10 @@ async function collectFiles(dir, into, prefix) {
 
 /** Đóng gói thư mục template thành ZIP (cross-platform, không phụ thuộc CLI).
  *  ZIP chứa thư mục gốc <archiveName>/ ôm app_build.yaml + api.json + tài nguyên. */
-export async function archiveTemplateDirectory(baseDir, folderName = path.basename(baseDir)) {
+export async function archiveTemplateDirectory(baseDir, folderName = path.basename(baseDir), { exclude = [] } = {}) {
   const archiveName = String(folderName || path.basename(baseDir)).trim() || "template";
   const files = {};
-  await collectFiles(baseDir, files, archiveName);
+  // exclude: paths relative to baseDir ("workflows/old.json").
+  await collectFiles(baseDir, files, archiveName, new Set(exclude));
   return Buffer.from(zipSync(files, { level: 6 }));
 }

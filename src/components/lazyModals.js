@@ -42,3 +42,7 @@ export const SettingsModal = lazy(() =>
 export function preloadSettingsModal() {
   void loadSettingsModal();
 }
+
+export const CropInpaintModal = lazy(() =>
+  withModalStyles(() => import("./CropInpaintModal.jsx")).then(m => ({ default: m.CropInpaintModal }))
+);

@@ -1,8 +1,10 @@
+import { inpaintAssetName } from "../../../shared/inpaintAssets.js";
+import { imageValueForUi } from "../../../shared/cropInpaint.js";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Eye, Folder, Images, Link, Loader2, Pencil, Scissors, Upload, X } from "lucide-react";
+import { Crop, Eye, Folder, Images, Link, Loader2, Pencil, Scissors, Upload, X } from "lucide-react";
 import { ImageLightboxOverlay } from "../../components/ImageLightboxOverlay.jsx";
-import { ImageEditorModal } from "../../components/lazyModals.js";
+import { CropInpaintModal, ImageEditorModal } from "../../components/lazyModals.js";
 import { ImageMaskOverlay } from "../../components/ImageMaskOverlay.jsx";
 import { useI18n } from "../../i18n/I18nContext.jsx";
 import { clearPickedFolderFiles, registerPickedFolderFiles } from "../../lib/folderFileCache.js";
@@ -13,7 +15,8 @@ import {
   loadInputImageFromUrl,
   makeInputImageValue,
   saveEditedInputImage,
-  uploadInputImageFile
+  uploadInputImageFile,
+  uploadInputImageDataUrl
 } from "../../lib/inputImageActions.js";
 import { useInputImageField } from "../../hooks/useInputImageField.js";
 import { imageDisplayUrl, filenameFromImageUrl } from "./canvasModel.js";
@@ -37,7 +40,7 @@ function readCanvasImageValues(value) {
   return values.filter(item => imageDisplayUrl(item));
 }
 
-export function CanvasImageField({ label, value, onChange, onContextMenu }) {
+export function CanvasImageField({ label, value, onChange, onContextMenu, inpaintCrop = false }) {
   const { t } = useI18n();
   const { inputImages, refreshInputImages, updateInputImages } = useCanvasActions();
   const fileRef = useRef(null);
@@ -45,6 +48,7 @@ export function CanvasImageField({ label, value, onChange, onContextMenu }) {
   const reorderDragRef = useRef(null);
   const [dragging, setDragging] = useState(false);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const [cropInpaintOpen, setCropInpaintOpen] = useState(false);
   const inputField = useInputImageField({ inputImages, refreshInputImages });
   const [previewBroken, setPreviewBroken] = useState(false);
   const [previewSize, setPreviewSize] = useState(null);
@@ -78,7 +82,7 @@ export function CanvasImageField({ label, value, onChange, onContextMenu }) {
   } = inputField;
 
   const folderValue = readLocalFolderValue(value);
-  const selectedImages = readCanvasImageValues(value);
+  const selectedImages = readCanvasImageValues(imageValueForUi(value, { type: "image", inpaintCrop }));
   const activeImage = selectedImages[Math.min(activeImageIndex, Math.max(0, selectedImages.length - 1))] || null;
   const preview = previewBroken ? "" : imageDisplayUrl(activeImage);
   const inputImageValue = activeImage?.kind === "input-image" ? activeImage : null;
@@ -112,19 +116,30 @@ export function CanvasImageField({ label, value, onChange, onContextMenu }) {
     }
   }
 
-  async function handleFiles(files) {
+  function commitIncomingImages(images, replaceIndex = null) {
+    if (!images.length) return;
+    const next = [...selectedImages];
+    if (Number.isInteger(replaceIndex) && replaceIndex >= 0 && replaceIndex < next.length) {
+      next[replaceIndex] = images[0];
+      setActiveImageIndex(replaceIndex);
+    } else {
+      next.push(...images);
+      setActiveImageIndex(Math.max(0, next.length - images.length));
+    }
+    commitImages(next);
+  }
+
+  async function handleFiles(files, replaceIndex = null) {
     const pickedFiles = [...(files || [])].filter(file => file?.type?.startsWith("image/"));
     if (!pickedFiles.length) return;
     setUrlError("");
     const uploaded = [];
-    for (const file of pickedFiles) {
+    for (const file of replaceIndex == null ? pickedFiles : pickedFiles.slice(0, 1)) {
       const image = await uploadInputImageFile(file, { updateInputImages });
       if (image) uploaded.push(image);
     }
     if (!uploaded.length) return;
-    const next = [...selectedImages, ...uploaded];
-    commitImages(next);
-    setActiveImageIndex(Math.max(0, next.length - uploaded.length));
+    commitIncomingImages(uploaded, replaceIndex);
   }
 
   async function handleUrlSubmit(event) {
@@ -152,7 +167,7 @@ export function CanvasImageField({ label, value, onChange, onContextMenu }) {
     }
   }
 
-  async function handleDrop(event) {
+  async function handleDrop(event, replaceIndex = null) {
     event.preventDefault();
     event.stopPropagation();
     setDragging(false);
@@ -170,8 +185,7 @@ export function CanvasImageField({ label, value, onChange, onContextMenu }) {
           updateInputImages,
           errorMessage: t("field.urlError")
         });
-        commitImages([...selectedImages, next]);
-        setActiveImageIndex(selectedImages.length);
+        commitIncomingImages([next], replaceIndex);
         setUrlInput("");
       } catch (error) {
         setUrlError(error.message || t("field.urlError"));
@@ -180,7 +194,7 @@ export function CanvasImageField({ label, value, onChange, onContextMenu }) {
       }
       return;
     }
-    await handleFiles(event.dataTransfer.files);
+    await handleFiles(event.dataTransfer.files, replaceIndex);
   }
 
   function selectInputImage(name) {
@@ -269,11 +283,12 @@ export function CanvasImageField({ label, value, onChange, onContextMenu }) {
     try {
       const nextImage = await saveEditedInputImage(dataUrl, {
         selectedName: selectedInputName,
+        privateInpaint: Boolean(inpaintAssetName(activeImage)),
         updateInputImages
       });
       if (nextImage) {
         const next = [...selectedImages];
-        next[activeImageIndex] = nextImage;
+        next[activeImageIndex] = activeImage?.cropInpaint ? { ...nextImage, cropInpaint: activeImage.cropInpaint } : nextImage;
         commitImages(next);
         return;
       }
@@ -283,7 +298,12 @@ export function CanvasImageField({ label, value, onChange, onContextMenu }) {
     commitImages(next);
   }
 
-  function handleSaveMask(nextMaskDataUrl) {
+  async function handleSaveMask(nextMaskDataUrl) {
+    if (nextMaskDataUrl && inpaintAssetName(activeImage)) {
+      const saved = await uploadInputImageDataUrl(nextMaskDataUrl, { filename: "inpaint_mask.png", privateInpaint: true });
+      if (!saved) throw new Error("Không lưu được mask / Could not save mask");
+      nextMaskDataUrl = saved.url;
+    }
     let imageValue = activeImage && typeof activeImage === "object"
       ? activeImage
       : { kind: "input-image", url: preview };
@@ -354,7 +374,12 @@ export function CanvasImageField({ label, value, onChange, onContextMenu }) {
             </button>
           </div>
         ) : preview ? (
-          <div className="canvasImageThumb">
+          <div className="canvasImageThumb" onDrop={event => {
+            if (event.dataTransfer.types.includes("application/x-apix-canvas-image-index")) {
+              event.preventDefault(); event.stopPropagation(); return;
+            }
+            void handleDrop(event, activeImageIndex);
+          }}>
             <img
               src={preview}
               alt={label}
@@ -378,7 +403,7 @@ export function CanvasImageField({ label, value, onChange, onContextMenu }) {
             ) : null}
             {previewSize ? (
               <div className="imageSizeBadge" title={`${label}: ${previewSize.width} x ${previewSize.height}`}>
-                {previewSize.width} x {previewSize.height}
+                {activeImage?.cropInpaint ? "Crop · " : ""}{previewSize.width} x {previewSize.height}
               </div>
             ) : null}
             {selectedImages.length > 1 ? (
@@ -387,6 +412,13 @@ export function CanvasImageField({ label, value, onChange, onContextMenu }) {
               </span>
             ) : null}
             <div className="multiImageActions">
+              {inpaintCrop ? <button type="button"
+                className={`nodrag${activeImage?.cropInpaint ? " cropInpaintActive" : ""}`}
+                aria-label="Crop Inpaint" aria-pressed={Boolean(activeImage?.cropInpaint)}
+                title={activeImage?.cropInpaint ? "Crop Inpaint ✓" : "Crop Inpaint"}
+                onClick={event => {
+                  event.preventDefault(); event.stopPropagation(); setCropInpaintOpen(true);
+                }}><Crop size={13} /></button> : null}
               <button
                 type="button"
                 className="nodrag"
@@ -464,11 +496,15 @@ export function CanvasImageField({ label, value, onChange, onContextMenu }) {
                     event.dataTransfer.setData("application/x-apix-canvas-image-index", String(index));
                   }}
                   onDragOver={event => {
-                    if (!event.dataTransfer.types.includes("application/x-apix-canvas-image-index")) return;
                     event.preventDefault();
-                    event.dataTransfer.dropEffect = "move";
+                    event.stopPropagation();
+                    event.dataTransfer.dropEffect = event.dataTransfer.types.includes("application/x-apix-canvas-image-index") ? "move" : "copy";
                   }}
                   onDrop={event => {
+                    if (!event.dataTransfer.types.includes("application/x-apix-canvas-image-index")) {
+                      void handleDrop(event, index);
+                      return;
+                    }
                     const transferredIndex = Number(event.dataTransfer.getData("application/x-apix-canvas-image-index"));
                     const fromIndex = Number.isInteger(transferredIndex)
                       ? transferredIndex
@@ -591,6 +627,16 @@ export function CanvasImageField({ label, value, onChange, onContextMenu }) {
         }}
       />
 
+      {inpaintCrop && cropInpaintOpen && preview ? createPortal(
+        <Suspense fallback={null}>
+          <CropInpaintModal value={activeImage}
+            updateInputImages={updateInputImages}
+            onClose={() => setCropInpaintOpen(false)}
+            onSave={nextImage => {
+              const next = [...selectedImages]; next[activeImageIndex] = nextImage; commitImages(next);
+            }} />
+        </Suspense>, document.body
+      ) : null}
       {editorOpen && preview ? createPortal(
         <Suspense fallback={null}>
           <ImageEditorModal
@@ -613,8 +659,8 @@ export function CanvasImageField({ label, value, onChange, onContextMenu }) {
             initialMask={maskDataUrl}
             title={`${label} - ${t("mask.title")}`}
             onClose={() => setMaskEditorOpen(false)}
-            onSave={nextMask => {
-              handleSaveMask(nextMask);
+            onSave={async nextMask => {
+              await handleSaveMask(nextMask);
               setMaskEditorOpen(false);
             }}
           />

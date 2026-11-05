@@ -4,7 +4,8 @@ import { fileURLToPath } from "node:url";
 import YAML from "yaml";
 import { readBody, send } from "./lib/http.js";
 import { TEMPLATE_SCOPES } from "./lib/templateService.js";
-import { validateWorkflowMappings } from "./lib/workflowPatcher.js";
+import { pruneUnusedVariantFiles, validateWorkflowVariants } from "./lib/workflowVariants.js";
+import { workflowVariantEntries, validateVariantFile } from "../shared/workflowVariants.js";
 import {
   appendRunLog,
   appendRunLogs,
@@ -260,6 +261,7 @@ async function drainBackendRunQueue() {
       backendRunQueueActive = false;
       try {
         await persistBackendRunQueue();
+        await storage.cleanupInpaintAssets();
         setImmediate(() => void drainBackendRunQueue());
       } catch (error) {
         appendRunLog(job.runId, "error", `Không thể cập nhật hàng chờ backend: ${error.message || error}`, {
@@ -530,6 +532,7 @@ const storage = createStorageService({
   dataRoot,
   readBody,
   send,
+  getProtectedInpaintValues: () => [...Array.from(activeRuns.values(), run => run.inpaintValues), ...Array.from(activeRhRuns.values(), run => run.inpaintValues), ...backendRunQueue.map(job => job.body), backendRunQueueCurrent?.body],
   hasActiveRuns: () => activeRuns.size > 0 || activeRhRuns.size > 0
 });
 
@@ -567,6 +570,7 @@ async function handleTemplateEditor(req, res, url) {
     config,
     raw,
     workflow,
+    workflowFiles: await storage.getTemplates().readWorkflowFiles(config, template),
     scope,
     template: {
       id: template.id,
@@ -584,7 +588,7 @@ async function handleTemplateExport(req, res, url) {
   const templateId = url.searchParams.get("template");
   try {
     const source = await storage.getTemplates().getTemplateExportSource(templateId, scope);
-    const archive = await archiveTemplateDirectory(source.baseDir, source.folderName);
+    const archive = await archiveTemplateDirectory(source.baseDir, source.folderName, { exclude: source.excludeFiles });
     const fileName = `${source.folderName}.zip`;
     res.writeHead(200, {
       "content-type": "application/zip",
@@ -678,9 +682,17 @@ async function handleTemplateSave(req, res, url) {
   }
 
   if (!isRhWf || saveWorkflowJson) {
-    validateWorkflowMappings(nextConfig, workflow, { requireOutput: !isRhWf });
+    validateWorkflowVariants(nextConfig, workflow, body.workflowFiles || {}, { requireOutput: !isRhWf });
+  }
+  if (workflowVariantEntries(nextConfig).length && isRhWf && !saveWorkflowJson) {
+    throw new Error("Bật lưu JSON workflow để gắn JSON riêng cho từng option.");
   }
   await mkdir(targetRoot, { recursive: true });
+  for (const { entry } of workflowVariantEntries(nextConfig)) {
+    const file = validateVariantFile(entry.file);
+    await mkdir(path.join(targetRoot, "workflows"), { recursive: true });
+    await writeFile(path.join(targetRoot, file), `${JSON.stringify(body.workflowFiles[file], null, 2)}\n`);
+  }
   const workflowPath = path.join(targetRoot, "api.json");
   if (!isRhWf || saveWorkflowJson) {
     await writeFile(workflowPath, `${JSON.stringify(workflow, null, 2)}\n`);
@@ -688,6 +700,8 @@ async function handleTemplateSave(req, res, url) {
     await rm(workflowPath, { force: true });
   }
   await writeFile(path.join(targetRoot, "app_build.yaml"), YAML.stringify(nextConfig));
+  // A replaced or detached option JSON is no longer needed (and must not ship in the ZIP).
+  await pruneUnusedVariantFiles(targetRoot, nextConfig);
 
   const nextRegistry = await storage.getTemplates().loadTemplateRegistry(scope);
   send(res, 200, {
@@ -782,6 +796,8 @@ export const routeContext = {
   handleInputImage: storage.handleInputImage,
   handleInputScanFolder: storage.handleInputScanFolder,
   handleInputUpload: storage.handleInputUpload,
+  handleInpaintUpload: storage.handleInpaintUpload,
+  handleInpaintImage: storage.handleInpaintImage,
   handleOpenDirectory: storage.handleOpenDirectory,
   handleOutputImage: storage.handleOutputImage,
   handleReplaceOutputImage: storage.handleReplaceOutputImage,

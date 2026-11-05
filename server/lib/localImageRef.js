@@ -1,6 +1,7 @@
 // @ts-check
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { isLegacyInpaintAsset } from "../../shared/inpaintAssets.js";
 
 export function safeBasename(rawName = "") {
   return path.basename(String(rawName)).replace(/[^\w.-]+/g, "_");
@@ -17,7 +18,7 @@ export function mimeFromFilename(filename = "") {
 /**
  * Parse ref ảnh local của app (`/api/output-image?name=` — ảnh kết quả node trước
  * trên canvas — hoặc `/api/input-image?name=`), dạng path hoặc URL tuyệt đối.
- * @returns {{kind: "output"|"input", name: string}|null}
+ * @returns {{kind: "output"|"input"|"inpaint", name: string}|null}
  */
 export function parseLocalImageRef(value) {
   if (!value || typeof value !== "string") return null;
@@ -35,6 +36,10 @@ export function parseLocalImageRef(value) {
     return null;
   }
   const refUrl = new URL(`${pathname}${search}`, "http://localhost");
+  if (refUrl.pathname === "/api/inpaint-image") {
+    const name = safeBasename(refUrl.searchParams.get("name") || "");
+    return name ? { kind: "inpaint", name } : null;
+  }
   if (pathname.startsWith("/api/output-image")) {
     const name = safeBasename(refUrl.searchParams.get("name") || "");
     return name ? { kind: "output", name } : null;
@@ -58,11 +63,16 @@ export async function readLocalImageFromDir(dir, name) {
 
 /** Ref local (`output`/`input`) → upload payload cho ComfyUI/RunningHub. */
 export async function localImageRefToUpload(ref, { inputDir, outputDir }) {
-  const dir = ref.kind === "output" ? outputDir : inputDir;
+  const privateAsset = ref.kind === "inpaint" || (ref.kind === "input" && isLegacyInpaintAsset(ref.name));
+  const dir = privateAsset ? (inputDir ? path.join(inputDir, ".inpaint") : null) : ref.kind === "output" ? outputDir : inputDir;
   if (!dir) throw new Error(`Missing ${ref.kind} image directory`);
   let image;
   try {
-    image = await readLocalImageFromDir(dir, ref.name);
+    try { image = await readLocalImageFromDir(dir, ref.name); }
+    catch (error) {
+      if (ref.kind !== "input" || !privateAsset || error.code !== "ENOENT") throw error;
+      image = await readLocalImageFromDir(inputDir, ref.name);
+    }
   } catch (error) {
     throw new Error(`Không đọc được ảnh local (${ref.kind}/${ref.name}): ${error.message}`);
   }

@@ -1,4 +1,5 @@
 // @ts-check
+import { cropInpaintSource } from "../../../shared/cropInpaint.js";
 import { flattenInputs, isMenuSub, itemValueKey, normalizeId } from "../../lib/template.js";
 import { nodeFieldKey } from "../../hooks/useRunningHub.js";
 import {
@@ -83,6 +84,7 @@ function inputItemToPort(item, extra = {}) {
     valueKey,
     label: item.ui?.label || item.key,
     uiType: item.ui?.type,
+    inpaintCrop: item.ui?.inpaintCrop === true,
     type,
     choices: parseChoiceList(item.ui?.choices),
     menuLabelSyntax: item.ui?.menuLabelSyntax === true,
@@ -188,6 +190,7 @@ export function deriveRhAppPorts(nodes = []) {
       valueKey: key,
       label: node.fieldName || key,
       uiType: node.fieldType,
+      inpaintCrop: node.inpaintCrop === true,
       type,
       choices: parseChoiceList(node.choices),
       connectable: isConnectablePortType(type)
@@ -577,7 +580,8 @@ export function cloneImageValueForSource(value) {
         kind: "input-image",
         url: value.url || "",
         ...(name ? { name } : {}),
-        ...(value.maskDataUrl ? { maskDataUrl: value.maskDataUrl } : {})
+        ...(value.maskDataUrl ? { maskDataUrl: value.maskDataUrl } : {}),
+        ...(value.cropInpaint ? { cropInpaint: value.cropInpaint } : {})
       };
     }
     const url = coerceImageRef(value);
@@ -628,7 +632,7 @@ export function filenameFromImageUrl(url) {
     const parsed = url.startsWith("/")
       ? new URL(url, "http://localhost")
       : new URL(url, typeof window !== "undefined" ? window.location.href : "http://localhost");
-    if (parsed.pathname !== "/api/input-image" && parsed.pathname !== "/api/output-image") return "";
+    if (!["/api/input-image", "/api/output-image", "/api/inpaint-image"].includes(parsed.pathname)) return "";
     const raw = parsed.searchParams.get("name") || "";
     const decoded = (() => {
       try { return decodeURIComponent(raw); } catch { return raw; }
@@ -661,7 +665,8 @@ export function finalizeCanvasImageValue(value) {
     kind: "input-image",
     url,
     ...(name ? { name } : {}),
-    ...(maskDataUrl ? { maskDataUrl } : {})
+    ...(maskDataUrl ? { maskDataUrl } : {}),
+    ...(value.cropInpaint ? { cropInpaint: value.cropInpaint } : {})
   };
 }
 
@@ -676,7 +681,7 @@ export function toServerImagePath(url) {
   } catch {
     return "";
   }
-  if (parsed.pathname !== "/api/output-image" && parsed.pathname !== "/api/input-image") {
+  if (!["/api/input-image", "/api/output-image", "/api/inpaint-image"].includes(parsed.pathname)) {
     return "";
   }
   parsed.searchParams.delete("v");
@@ -781,13 +786,14 @@ export function findNodeInputImageUrl(node, nodes, edges) {
   for (const port of imagePorts) {
     const edge = incoming[port.valueKey];
     if (!edge) continue;
-    const url = resolveEffectiveNodeOutputUrl(edge.source, edge.sourceHandle, nodes, edges);
+    const value = resolveEffectiveNodeOutputValue(port, edge, nodes, edges);
+    const url = imageDisplayUrl(cropInpaintSource(value));
     if (url) return url;
   }
 
   for (const port of imagePorts) {
     if (incoming[port.valueKey]) continue;
-    const url = imageDisplayUrl(node.data?.values?.[port.valueKey]);
+    const url = imageDisplayUrl(cropInpaintSource(node.data?.values?.[port.valueKey]));
     if (url) return url;
   }
   return "";

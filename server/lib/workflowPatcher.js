@@ -1,4 +1,5 @@
 // @ts-check
+import { imageValueForUi } from "../../shared/cropInpaint.js";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { localFileToUpload } from "./localImageFolder.js";
@@ -31,16 +32,16 @@ function collectMenuSubRequest(item, yamlKey, values, request) {
     choices,
     menuOpts
   );
-  if (item.id && item.id in values) request[item.id] = values[item.id];
+  if (item.id && item.id in values) request[item.id] = imageValueForUi(values[item.id], item.ui);
   const subs = lookupMenuSubFields(item.ui?.sub || {}, selected, choices, menuOpts);
   for (const subItem of Object.values(subs)) {
     if (!subItem?.id) continue;
     if (Array.isArray(subItem.id)) {
       subItem.id.forEach(childId => {
-        if (childId in values) request[childId] = values[childId];
+        if (childId in values) request[childId] = imageValueForUi(values[childId], subItem.ui);
       });
     } else if (subItem.id in values) {
-      request[subItem.id] = values[subItem.id];
+      request[subItem.id] = imageValueForUi(values[subItem.id], subItem.ui);
     }
   }
 }
@@ -69,10 +70,10 @@ export function mapValuesToRequest(config, values) {
         if (!child?.id) continue;
         if (Array.isArray(child.id)) {
           child.id.forEach(childId => {
-            if (childId in values) request[childId] = values[childId];
+            if (childId in values) request[childId] = imageValueForUi(values[childId], child.ui);
           });
         } else if (child.id in values) {
-          request[child.id] = values[child.id];
+          request[child.id] = imageValueForUi(values[child.id], child.ui);
         }
       }
       continue;
@@ -84,10 +85,10 @@ export function mapValuesToRequest(config, values) {
     if (!item?.id) continue;
     if (Array.isArray(item.id)) {
       item.id.forEach(childId => {
-        if (childId in values) request[childId] = values[childId];
+        if (childId in values) request[childId] = imageValueForUi(values[childId], item.ui);
       });
     } else if (item.id in values) {
-      request[item.id] = values[item.id];
+      request[item.id] = imageValueForUi(values[item.id], item.ui);
     }
   }
   return request;
@@ -250,7 +251,8 @@ async function inputImageToUpload(inputDir, value, options = {}) {
 async function applyMask(target, uploaded, maskDataUrl, signal, options) {
   const { uploadMaskToComfy, parseDataUrl } = options;
   if (!maskDataUrl || !uploadMaskToComfy || !parseDataUrl) return null;
-  const parsed = parseDataUrl(maskDataUrl);
+  const ref = parseLocalImageRef(maskDataUrl);
+  const parsed = ref ? await localImageRefToUpload(ref, options) : parseDataUrl(maskDataUrl);
   if (!parsed) return null;
   const originalRef = {
     filename: uploaded.name || uploaded.filename,

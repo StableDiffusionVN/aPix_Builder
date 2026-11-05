@@ -11,6 +11,7 @@ export function fieldPropsAreEqual(prev, next) {
 
 export function areDynamicFieldPropsEqual(prev, next) {
   if (prev.item?.key !== next.item?.key) return false;
+  if (prev.item?.ui?.inpaintCrop !== next.item?.ui?.inpaintCrop) return false;
   if (prev.value !== next.value) return false;
   if (prev.discovery !== next.discovery) return false;
   if (prev.discoveryLoading !== next.discoveryLoading) return false;

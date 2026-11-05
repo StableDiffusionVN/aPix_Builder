@@ -72,15 +72,17 @@ Giao diện chính — form template, preview kết quả, panel chỉnh màu v�
 - Run **RunningHub App** (hosted WebApp) and **RunningHub Workflow** (YAML template + workflow ID) in the cloud — no local GPU required.
 - Save and manage favorite RunningHub apps; support multiple API keys with rotation/failover.
 - Export the selected RunningHub Workflow or App as a signed Apple `.shortcut`, embedding the active API key.
+- A `menu-sub` can select different API JSON workflows: in Template Editor, choose an option tab, attach its API JSON, then map its sub-inputs and output node. Options without an attachment use the main JSON. Common inputs must exist in every selected JSON. One workflow selector menu is supported per template; other menus continue to control inputs. Option JSONs are included in folder/ZIP export and import. Supported in ComfyUI and RunningHub Workflow (with saved JSON enabled). Shortcut export does not support per-option JSONs.
 - Preserve advanced YAML menus: `Label:value` displays `Label` in Shortcuts and sends `value` to RunningHub.
 - Template workflows with `app_build.yaml` and `api.json`.
 - Auto-discover models, checkpoints, LoRAs, samplers, and schedulers from ComfyUI.
 - Upload images, drag-and-drop, and pick from the local `user/input/` library.
 - Drag output history images back into input fields for quick reuse.
 - Real-time progress via Server-Sent Events; workflow queue and cancel/interrupt.
-- Output history in `user/output/history.json` (latest 500 items), download, favorite, and delete.
+- Output history in `user/output/history.json` without automatic truncation, download, favorite, and delete. Use “Show more history” to browse older records.
 - Built-in **Image Editor** (crop, curves, HSL, brush, healing, color picker, presets).
 - **Mask Editor** with grow/shrink, invert, undo/redo.
+- **Crop Inpaint**: enable **Inpaint Crop** for the image field in Template Editor (`ui.inpaintCrop: true`, off by default), then use the crop icon at the top-right of an input image, drag/select a region, and adjust edge feathering. ComfyUI and RunningHub receive only the crop; each image result is resized and stitched into the original before saving history. Available in forms and Canvas; one crop source per workflow run (including batch runs). Reopen the picker to remove the crop and restore the original. Crop assets and source snapshots stay in the hidden `.inpaint/` folder under the input directory; deleting history removes assets after their last history reference is gone.
 - **Template Editor** to create and edit YAML/JSON configs in-app.
 - Multiple themes, fonts, and Vietnamese/English UI.
 
@@ -195,15 +197,17 @@ Local builds use ad-hoc signing on macOS. For wide distribution, use Apple Devel
 - Chạy **RunningHub App** (WebApp hosted) và **RunningHub Workflow** (template YAML + workflow ID) trên cloud — không cần GPU local.
 - Lưu và quản lý RunningHub app yêu thích; hỗ trợ nhiều API Key với xoay vòng/failover.
 - Xuất RunningHub Workflow hoặc App đang chọn thành tệp Apple `.shortcut` đã ký, nhúng API key đang dùng.
+- Mỗi option của `menu-sub` có thể gắn JSON API riêng: vào trình sửa template → chọn tab option → **Gắn JSON API**, cấu hình input con và node output. Option không gắn JSON dùng workflow chính. Input chung phải tồn tại trong tất cả JSON. Mỗi template dùng một menu chọn workflow; các menu khác vẫn điều khiển input bình thường. JSON option đi kèm khi xuất/nhập thư mục hoặc ZIP. Hỗ trợ ComfyUI và RH Workflow (bật lưu JSON). Chưa hỗ trợ xuất Shortcut cho template có JSON riêng theo option.
 - Hỗ trợ menu nâng cao `Nhãn:giá_trị`: Shortcut hiển thị `Nhãn` nhưng gửi `giá_trị` tới RunningHub.
 - Template hóa workflow bằng `app_build.yaml` và `api.json`.
 - Tự quét model/checkpoint/LoRA/sampler/scheduler từ ComfyUI.
 - Upload ảnh, kéo-thả, chọn ảnh từ thư mục `user/input/`.
 - Kéo ảnh từ lịch sử output vào ô upload input để tái sử dụng nhanh.
 - Theo dõi tiến trình real-time bằng Server-Sent Events; hàng chờ workflow và Stop/interrupt.
-- Lưu lịch sử output trong `user/output/history.json` (500 mục gần nhất), tải về, favorite, xóa.
+- Lưu lịch sử output trong `user/output/history.json` không tự cắt bỏ bản ghi cũ; hỗ trợ tải về, favorite, xóa. Bấm “Xem thêm lịch sử” để xem các mục cũ hơn.
 - **Image Editor** tích hợp (crop, curves, HSL, brush, healing, color picker, preset).
 - **Mask Editor** với grow/shrink, invert, undo/redo.
+- **Crop Inpaint**: bật **Inpaint Crop** cho trường ảnh trong trình sửa template (`ui.inpaintCrop: true`, mặc định tắt), sau đó bấm icon crop ở góc phải trên ảnh input, kéo chọn vùng và chỉnh độ mềm viền. ComfyUI và RunningHub chỉ nhận ảnh crop; từng ảnh kết quả được đưa về đúng kích thước vùng crop và ghép vào ảnh gốc trước khi lưu lịch sử. Hỗ trợ form và Canvas, mỗi lượt chạy một nguồn crop (kể cả chạy hàng loạt). Mở lại popup để tắt crop và trở về ảnh gốc. Ảnh crop, mask và bản sao ảnh gốc lưu riêng trong thư mục ẩn `.inpaint/` bên trong thư mục input; xóa lịch sử sẽ dọn các tệp không còn được mục lịch sử khác sử dụng.
 - **Template Editor** tạo/sửa cấu hình YAML và workflow JSON ngay trong app.
 - Nhiều theme, font và giao diện tiếng Việt/tiếng Anh.
 

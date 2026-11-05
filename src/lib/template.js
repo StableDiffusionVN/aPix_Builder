@@ -1,4 +1,5 @@
 // @ts-check
+import { cropInpaintSource, imageValueForUi } from "../../shared/cropInpaint.js";
 import { isDynamicFieldType } from "./dynamicTypes";
 import { lookupMenuSubFields, menuChoiceOptions, resolveMenuStoredValue } from "../../shared/menuChoices.js";
 
@@ -104,17 +105,17 @@ export function requestPayload(items, values) {
         const key = normalizeId(subItem.id);
         if (Array.isArray(subItem.id)) {
           subItem.id.forEach((id, index) => {
-            payload[id] = Array.isArray(values[key]) ? values[key][index] : values[key];
+            payload[id] = imageValueForUi(Array.isArray(values[key]) ? values[key][index] : values[key], subItem.ui);
           });
         } else {
-          payload[subItem.id] = values[key];
+          payload[subItem.id] = imageValueForUi(values[key], subItem.ui);
         }
       }
       continue;
     }
     if (!item.id) continue;
     const key = normalizeId(item.id);
-    const value = values[key];
+    const value = imageValueForUi(values[key], item.ui);
     if (Array.isArray(item.id)) {
       item.id.forEach((id, index) => {
         payload[id] = Array.isArray(value) ? value[index] : value;
@@ -133,6 +134,7 @@ export function itemValueKey(item) {
 }
 
 export function extractImageValueUrl(value) {
+  value = cropInpaintSource(value);
   if (typeof value === "string" && value.startsWith("data:image")) return value;
   if (value?.kind === "input-image" && value.url) return value.url;
   if (value?.kind === "local-folder") return "";

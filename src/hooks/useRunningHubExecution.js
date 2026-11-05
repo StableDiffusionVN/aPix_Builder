@@ -1,3 +1,4 @@
+import { imageValueForUi } from "../../shared/cropInpaint.js";
 import { useRef, useState } from "react";
 import { describeJob } from "../lib/runLog";
 import { nodeFieldKey } from "./useRunningHub";
@@ -361,7 +362,7 @@ export function buildRunningHubJob({
     nodeId: node.nodeId,
     fieldName: node.fieldName,
     fieldType: node.fieldType,
-    fieldValue: values[nodeFieldKey(node)] ?? node.fieldValue ?? ""
+    fieldValue: imageValueForUi(values[nodeFieldKey(node)] ?? node.fieldValue ?? "", { type: node.fieldType, inpaintCrop: node.inpaintCrop === true })
   }));
   const keys = Array.isArray(apiKeys) && apiKeys.length
     ? apiKeys

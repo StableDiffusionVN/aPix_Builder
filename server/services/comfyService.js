@@ -1,3 +1,5 @@
+import { validateWorkflowVariants } from "../lib/workflowVariants.js";
+import { prepareCropInpaint } from "../lib/cropInpaint.js";
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -44,7 +46,8 @@ export function createComfyService({ storage, runCoordinator, readBody, send }) 
 
   async function assertTemplateWorkflow(config, template, options = {}) {
     const workflow = JSON.parse(await readFile(template.workflowPath, "utf8"));
-    validateWorkflowMappings(config, workflow, options);
+    if (options.selectedWorkflow) validateWorkflowMappings(config, workflow, options);
+    else validateWorkflowVariants(config, workflow, await storage.getTemplates().readWorkflowFiles(config, template), options);
     return workflow;
   }
   
@@ -55,6 +58,7 @@ export function createComfyService({ storage, runCoordinator, readBody, send }) 
     const abortController = new AbortController();
     const run = {
       id: runId,
+      inpaintValues: body.values,
       abortController,
       cancelled: false,
       target: null,
@@ -75,14 +79,17 @@ export function createComfyService({ storage, runCoordinator, readBody, send }) 
   
     let settled = false;
     try {
-      const { config, server, template } = await storage.getTemplates().loadConfig(body.template);
+      const loaded = await storage.getTemplates().loadConfig(body.template);
+      const { config, template } = await storage.getTemplates().resolveWorkflow(loaded.config, loaded.template, body.values || {});
+      const server = loaded.server;
       const target = normalizeComfyTarget(body.address || server.address);
-      const workflow = await assertTemplateWorkflow(config, template);
+      const workflow = await assertTemplateWorkflow(config, template, { selectedWorkflow: true });
       run.target = target;
       await pushApixKey(target, storage.getPaths());
   
       const normalized = await normalizeValues(body.values || {});
       const request = mapValuesToRequest(config, normalized);
+      const stitchOutput = await prepareCropInpaint(request, storage.getPaths());
       const responseRequest = {};
       const { inputDir, uploadDir, outputDir } = storage.getPaths();
     const patchOptions = {
@@ -115,6 +122,7 @@ export function createComfyService({ storage, runCoordinator, readBody, send }) 
         throw new Error(`ComfyUI finished prompt ${queued.prompt_id}, but no images were found for output node(s) in this template.${status}`);
       }
       const historyItem = await archiveOutputRun({
+        stitchOutput,
         runId,
         promptId: queued.prompt_id,
         template,
@@ -165,6 +173,7 @@ export function createComfyService({ storage, runCoordinator, readBody, send }) 
         try { client.res.end(); } catch {}
       }
       activeRuns.delete(runId);
+      await storage.cleanupInpaintAssets?.();
       queueMicrotask(drainBackendRunQueue);
     }
   }
@@ -248,7 +257,8 @@ export function createComfyService({ storage, runCoordinator, readBody, send }) 
     submittedAt,
     signal,
     onDownloadRetry,
-    canvasHistory
+    canvasHistory,
+    stitchOutput
   }) {
     const { outputDir } = storage.getPaths();
 
@@ -281,10 +291,12 @@ export function createComfyService({ storage, runCoordinator, readBody, send }) 
             }
           });
           const originalName = safeFileName(image.filename || `output_${index}.png`);
-          const ext = path.extname(originalName) || ".png";
+          const ext = stitchOutput ? ".png" : path.extname(originalName) || ".png";
           const base = originalName.replace(/\.[^.]+$/, "") || "output";
           const filename = `${Date.now()}_${runId}_${index}_${base}${ext}`;
-          await writeFile(path.join(outputDir, filename), Buffer.from(await response.arrayBuffer()));
+          const downloaded = Buffer.from(await response.arrayBuffer());
+          const buffer = stitchOutput ? await stitchOutput(downloaded) : downloaded;
+          await writeFile(path.join(outputDir, filename), buffer);
           archivedOutputs.push({
             nodeId,
             filename,
@@ -292,7 +304,8 @@ export function createComfyService({ storage, runCoordinator, readBody, send }) 
             url: storage.outputImageUrl(filename)
           });
           index += 1;
-        } catch {
+        } catch (error) {
+          if (stitchOutput) throw error;
           // Try remaining outputs; fail only if nothing could be archived.
         }
       }

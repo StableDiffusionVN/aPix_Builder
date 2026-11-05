@@ -33,7 +33,7 @@ function pruneInputRow(row, workflow) {
     const sub = {};
     for (const [choice, subRows] of Object.entries(row.sub || {})) {
       sub[choice] = (subRows || []).filter(subRow => (
-        workflowFieldExists(workflow, subRow.nodeId, subRow.field)
+        workflowFieldExists(row.workflows?.[choice]?.workflow || workflow, subRow.nodeId, subRow.field)
       ));
     }
     return { ...row, sub };

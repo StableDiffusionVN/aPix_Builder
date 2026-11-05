@@ -61,6 +61,7 @@ export function RunningHubField({
     id: key,
     ui: {
       type: uiType,
+      inpaintCrop: node.inpaintCrop === true,
       label,
       choices,
       lines: isLongText ? 4 : undefined

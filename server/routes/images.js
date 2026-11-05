@@ -6,6 +6,8 @@ export function createImagesRoutes(context) {
     handleInputImage,
     handleInputScanFolder,
     handleInputUpload,
+    handleInpaintUpload,
+    handleInpaintImage,
     handleOutputImage,
     handleReplaceOutputImage,
     handleSaveColorAdjust,
@@ -31,6 +33,7 @@ export function createImagesRoutes(context) {
     }
     const inputPostRoutes = {
       "/api/input-images": handleInputUpload,
+      "/api/inpaint-images": handleInpaintUpload,
       "/api/input-images/scan-folder": handleInputScanFolder,
       "/api/input-images/from-url": handleInputFromUrl,
       "/api/input-images/delete": handleDeleteInputImage
@@ -38,6 +41,9 @@ export function createImagesRoutes(context) {
     if (req.method === "POST" && inputPostRoutes[url.pathname]) {
       await inputPostRoutes[url.pathname](req, res);
       return true;
+    }
+    if ((req.method === "GET" || req.method === "HEAD") && url.pathname === "/api/inpaint-image") {
+      await handleInpaintImage(req, res, url); return true;
     }
     if ((req.method === "GET" || req.method === "HEAD") && url.pathname === "/api/input-image") {
       await handleInputImage(req, res, url);

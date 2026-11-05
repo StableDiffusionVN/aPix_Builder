@@ -249,9 +249,13 @@ export function AppWorkspace() {
   const shouldDiscoverComfy = isCanvasView
     ? (canvasRuntime.hasLocalNodes || canvasRuntime.activeKind === "local")
     : executionMode === "local";
+  // Bumped when Colab links its server: the link is often the same fixed address,
+  // which would otherwise keep the old "offline" scan.
+  const [discoveryReload, setDiscoveryReload] = useState(0);
   const { discovery, discoveryRaw, discoveryLoading } = useDiscovery(
     shouldDiscoverComfy ? comfyAddress : "",
-    config?.sdvnModelFields
+    config?.sdvnModelFields,
+    discoveryReload
   );
   const {
     settings: rhSettings,
@@ -404,6 +408,7 @@ export function AppWorkspace() {
 
   useEffect(() => window.apixDesktop?.onUseComfyUrl?.(address => {
     setComfyAddress(address);
+    setDiscoveryReload(current => current + 1);
     setStatus(t("browser.comfyLinked", { address }));
   }), [setComfyAddress, setStatus, t]);
   const healthStatus = discoveryLoading ? "loading" : discovery ? "online" : "offline";

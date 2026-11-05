@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { augmentDiscoveryWithSdvn } from "../lib/sdvnModels";
 
-export function useDiscovery(comfyAddress, sdvnModelFields) {
+// reloadToken: bump it to rescan the same address (e.g. Colab came up on a fixed link).
+export function useDiscovery(comfyAddress, sdvnModelFields, reloadToken = 0) {
   const [discovery, setDiscovery] = useState(null);
   const [discoveryRaw, setDiscoveryRaw] = useState(null);
   const [discoveryLoading, setDiscoveryLoading] = useState(false);
@@ -28,7 +29,7 @@ export function useDiscovery(comfyAddress, sdvnModelFields) {
       .catch(err => { if (err.name !== "AbortError") { setDiscovery(null); setDiscoveryRaw(null); } })
       .finally(() => { if (!controller.signal.aborted) setDiscoveryLoading(false); });
     return () => controller.abort();
-  }, [comfyAddress, fieldsKey]);
+  }, [comfyAddress, fieldsKey, reloadToken]);
 
   return { discovery, discoveryRaw, setDiscovery, discoveryLoading };
 }

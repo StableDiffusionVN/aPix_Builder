@@ -2,6 +2,13 @@
 import { getNodeRunCache, incomingEdgesByInput } from "./canvasModel.js";
 
 let handler = null;
+// Last run started through the bridge — module level, so switching Form ⇄ Canvas
+// (which remounts the Canvas) does not lose track of it.
+let lastRun = null;
+export const getCanvasBridgeRun = () => lastRun;
+export function setCanvasBridgeRun(run) {
+  lastRun = run;
+}
 
 /** InfiniteCanvas registers itself while mounted. */
 export function registerCanvasBridgeHandler(next) {
@@ -74,8 +81,9 @@ export function validateNodeValues(node, values, edges) {
 
 /** State of the last run started through the bridge. */
 export function canvasRunState(run, nodes, busy, now = Date.now(), graceMs = 15000) {
-  if (!run) return "idle";
+  // Busy first: a run may have been started from the app, or the Canvas remounted.
   if (busy) return "running";
+  if (!run) return "idle";
   const targets = nodes.filter(node => node.type === "step" && !node.data?.bypassed && (!run.nodeId || node.id === run.nodeId));
   if (targets.some(node => node.data?.status === "error")) return "error";
   if (targets.length && targets.every(node => (getNodeRunCache(node)?.runAt || 0) >= run.startedAt)) return "done";

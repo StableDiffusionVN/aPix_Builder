@@ -42,7 +42,7 @@ import { CanvasActionsContext, CanvasGraphContext } from "./canvasContext.js";
 import { useCanvasProject } from "./useCanvasProject.js";
 import { loadStepDefinition, useStepLibrary } from "./useStepLibrary.js";
 import { runCanvasNode, bypassCanvasNode, prepareCanvasNodeRunRequest } from "./canvasRunner.js";
-import { canvasRunState, registerCanvasBridgeHandler, summarizeCanvas, validateNodeValues } from "./canvasBridge.js";
+import { canvasRunState, getCanvasBridgeRun, registerCanvasBridgeHandler, setCanvasBridgeRun, summarizeCanvas, validateNodeValues } from "./canvasBridge.js";
 import { buildCanvasNodeDefaults, arePortsCompatible, STEP_KINDS, topoOrder, upstreamStepsNeedingRunAsync, upstreamStepsWithStaleFilesAsync, linkedImageInputsMissingSource, beginNodeExecutionPatch, getNodeRunCache, nodeRunCachePatch } from "./canvasModel.js";
 import { buildDefaults, flattenInputs } from "../../lib/template.js";
 import { getPrimaryRhApiKey, hasRhApiKey } from "../../lib/rhTokenPool.js";
@@ -1729,7 +1729,6 @@ function InfiniteCanvasInner({
   ]);
 
   // MCP / CLI commands (useCanvasBridgeClient → canvasBridge.js); always reads the latest state.
-  const bridgeRunRef = useRef(null);
   const bridgeLatestRef = useRef({});
   bridgeLatestRef.current = {
     activeId,
@@ -1750,8 +1749,8 @@ function InfiniteCanvasInner({
       projectName: latest().activeName,
       running: latest().busy,
       run: {
-        state: canvasRunState(bridgeRunRef.current, nodesRef.current, latest().busy),
-        ...(bridgeRunRef.current?.nodeId ? { nodeId: bridgeRunRef.current.nodeId } : {})
+        state: canvasRunState(getCanvasBridgeRun(), nodesRef.current, latest().busy),
+        ...(getCanvasBridgeRun()?.nodeId ? { nodeId: getCanvasBridgeRun().nodeId } : {})
       },
       ...summarizeCanvas(nodesRef.current, edgesRef.current)
     });
@@ -1771,7 +1770,7 @@ function InfiniteCanvasInner({
         await new Promise(resolve => setTimeout(resolve, 100));
       }
       await new Promise(resolve => setTimeout(resolve, 100));
-      bridgeRunRef.current = null;
+      setCanvasBridgeRun(null);
       return view();
     }
     if (action === "set_values") {
@@ -1789,7 +1788,7 @@ function InfiniteCanvasInner({
         if (!args.nodeId || node.id === args.nodeId) latest().updateNodeData(node.id, { status: "idle", error: "" });
       }
       await new Promise(resolve => setTimeout(resolve, 50));
-      bridgeRunRef.current = { startedAt: Date.now(), nodeId: args.nodeId || "" };
+      setCanvasBridgeRun({ startedAt: Date.now(), nodeId: args.nodeId || "" });
       if (args.nodeId) await latest().runNode(args.nodeId);
       else await latest().runGraph();
       return view();

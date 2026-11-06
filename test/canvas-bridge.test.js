@@ -102,6 +102,7 @@ describe("canvas bridge (view)", () => {
     const done = { ...step, data: { ...step.data, runCache: { ...step.data.runCache, runAt: 2000 } } };
     const failed = { ...step, data: { ...step.data, status: "error" } };
     expect(canvasRunState(null, [step], false)).toBe("idle");
+    expect(canvasRunState(null, [step], true)).toBe("running"); // run not started through the bridge
     expect(canvasRunState({ startedAt: 1500 }, [done], true, 1600)).toBe("running");
     expect(canvasRunState({ startedAt: 1500 }, [done], false, 1600)).toBe("done");
     expect(canvasRunState({ startedAt: 1500 }, [failed], false, 1600)).toBe("error");

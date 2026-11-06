@@ -64,7 +64,6 @@ export function ApixKeySettings() {
         <KeyRound size={15} />
         <strong>{t("apixKey.title")}</strong>
       </div>
-      <p className="aiConnectHint">{t("apixKey.hint")}</p>
       <div className="apixKeyRow">
         <div className="apixKeyInput">
           <input

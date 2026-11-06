@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import "../../styles/fieldInfo.css";
-import { KeyRound, Loader2 } from "lucide-react";
+import { Check, Copy, Eye, EyeOff, KeyRound, Loader2 } from "lucide-react";
 import { useI18n } from "../../i18n/I18nContext";
 import { getSetting, setSetting } from "../../lib/appSettings.js";
 import { syncVipTemplates } from "../../lib/vipTemplates.js";
@@ -15,6 +15,8 @@ export function ApixKeySettings() {
   const [status, setStatus] = useState(null);
   const [checking, setChecking] = useState(false);
   const [vip, setVip] = useState(null);
+  const [revealed, setRevealed] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const check = async () => {
     setChecking(true);
@@ -45,6 +47,16 @@ export function ApixKeySettings() {
     }
   };
 
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(value.trim());
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      setCopied(false);
+    }
+  };
+
   const expires = status?.expiresAt ? new Date(status.expiresAt).toLocaleString() : "";
   return (
     <div className="apixKeyPanel">
@@ -54,17 +66,37 @@ export function ApixKeySettings() {
       </div>
       <p className="aiConnectHint">{t("apixKey.hint")}</p>
       <div className="apixKeyRow">
-        <input
-          type="password"
-          value={value}
-          placeholder="apx_…"
-          autoComplete="off"
-          spellCheck={false}
-          onChange={event => setValue(event.target.value)}
-          onKeyDown={event => {
-            if (event.key === "Enter") void save();
-          }}
-        />
+        <div className="apixKeyInput">
+          <input
+            type={revealed ? "text" : "password"}
+            value={value}
+            placeholder="apx_…"
+            autoComplete="off"
+            spellCheck={false}
+            onChange={event => setValue(event.target.value)}
+            onKeyDown={event => {
+              if (event.key === "Enter") void save();
+            }}
+          />
+          <button
+            type="button"
+            onClick={() => setRevealed(current => !current)}
+            title={t(revealed ? "apixKey.hide" : "apixKey.show")}
+            aria-label={t(revealed ? "apixKey.hide" : "apixKey.show")}
+            aria-pressed={revealed}
+          >
+            {revealed ? <EyeOff size={14} /> : <Eye size={14} />}
+          </button>
+          <button
+            type="button"
+            disabled={!value.trim()}
+            onClick={() => void copy()}
+            title={t(copied ? "apixKey.copied" : "apixKey.copy")}
+            aria-label={t(copied ? "apixKey.copied" : "apixKey.copy")}
+          >
+            {copied ? <Check size={14} /> : <Copy size={14} />}
+          </button>
+        </div>
         <button type="button" className="aiConnectCopy primary" disabled={checking} onClick={() => void save()}>
           {checking ? <Loader2 size={13} className="spin" /> : null}
           {t("apixKey.save")}

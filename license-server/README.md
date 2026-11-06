@@ -44,16 +44,18 @@ Mã chỉ hiện **một lần** khi tạo — gửi cho khách. Khách nhập t
 
 ## Workflow VIP
 
-Đặt file `<id>.zip` (định dạng xuất zip của aPix, `id` chỉ gồm a-z, 0-9, `-`) vào `<LICENSE_DATA_DIR>/vip/` — trên VPS là `/var/lib/apix-license/vip/`, thuộc user `apix-license`. Không cần khởi động lại.
+Đặt file `<id>.zip` (định dạng xuất zip của aPix, `id` chỉ gồm a-z, 0-9, `-`) vào `<LICENSE_DATA_DIR>/vip/` — trên VPS là `/var/lib/apix-license/vip/`, thuộc user `apix-license` (sau khi chép: `chown -R apix-license:apix-license /var/lib/apix-license/vip`). Không cần khởi động lại.
 App có mã hợp lệ tự tải về (`vip-templates/` trong thư mục config), hiện với dấu ★, chỉ đọc và không xuất zip. Mã hết hạn / bị thu hồi thì bị gỡ khi app kiểm tra lại (lúc mở app hoặc lưu mã); mất mạng thì giữ bản đã tải. Đổi file zip → app tự cập nhật theo checksum.
 
 ## Cập nhật / deploy lại
 
 ```bash
 set -a; source _local/apix-vps.env; set +a
+export COPYFILE_DISABLE=1
 S=$(mktemp -d); mkdir -p $S/deploy; cp license-server/*.mjs $S/; cp license-server/deploy/* $S/deploy/
 expect website/deploy/upload-tar.exp "$S" /opt/apix-license/app
-expect website/deploy/ssh-run.exp 'bash /opt/apix-license/app/deploy/remote-setup.sh'
+# BẮT BUỘC: tar giữ quyền 700 + chủ sở hữu của thư mục mktemp → service không đọc được (502)
+expect website/deploy/ssh-run.exp 'chown -R root:root /opt/apix-license/app; chmod 755 /opt/apix-license/app /opt/apix-license/app/deploy; bash /opt/apix-license/app/deploy/remote-setup.sh'
 ```
 
 `remote-setup.sh` idempotent: kiểm checksum Node, tạo user `apix-license`, cài unit systemd, chèn

@@ -443,3 +443,13 @@
   color: var(--success);
   font-size: 11px;
 }
+
+.apixKeyInfo {
+  margin: 0 0 4px;
+  padding-left: 18px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.apixKeyInfo a { color: var(--accent); }

@@ -64,6 +64,10 @@ export function ApixKeySettings() {
         <KeyRound size={15} />
         <strong>{t("apixKey.title")}</strong>
       </div>
+      <ul className="apixKeyInfo">
+        <li>{t("apixKey.infoVip")}</li>
+        <li>{t("apixKey.infoStore")} <a href="https://hungdiffusion.com/" target="_blank" rel="noreferrer">https://hungdiffusion.com/</a></li>
+      </ul>
       <div className="apixKeyRow">
         <div className="apixKeyInput">
           <input

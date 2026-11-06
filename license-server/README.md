@@ -37,7 +37,7 @@ Mã chỉ hiện **một lần** khi tạo — gửi cho khách. Khách nhập t
 | Route | Body | Trả |
 |---|---|---|
 | `GET /v1/health` | | `{ ok, protectedRepos, hfToken }` |
-| `POST /v1/session` | `{ key }` | `{ token, expiresAt, label }` (token HMAC, ≤ 12 giờ) |
+| `POST /v1/session` | `{ key }` | `{ token, expiresAt, keyExpiresAt, label }` (token HMAC, phiên ≤ 12 giờ; `keyExpiresAt` = hạn của mã, `null` = không hết hạn) |
 | `POST /v1/vip/list` | `{ token }` | `{ workflows: [{ id, sha256 }] }` |
 | `POST /v1/vip/download` | `{ token, id }` | file zip |
 | `POST /v1/download-url` | `{ token, url }` | `{ url }` link ký tạm · `{ public: true }` nếu không phải repo riêng · 401/403/429 |

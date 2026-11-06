@@ -67,6 +67,16 @@ describe("aPix license server", () => {
     expect(allowsModel({ models: ["flux_*"] }, "sdxl.safetensors")).toBe(false);
   });
 
+  test("session reports the key's own expiry, not only the session's", async () => {
+    const dated = await store.add({ label: "co-han", days: 30 });
+    const forever = await store.add({ label: "vinh-vien" });
+    const a = await post("/v1/session", { key: dated.key });
+    const b = await post("/v1/session", { key: forever.key });
+    expect(a.body.keyExpiresAt).toBe(dated.record.expiresAt);
+    expect(Date.parse(a.body.keyExpiresAt)).toBeGreaterThan(Date.parse(a.body.expiresAt));
+    expect(b.body.keyExpiresAt).toBeNull();
+  });
+
   test("key → session → signed link; public repos pass through; limits apply", async () => {
     expect((await post("/v1/session", { key: "apx_wrong" })).status).toBe(401);
 

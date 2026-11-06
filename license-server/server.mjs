@@ -133,7 +133,8 @@ export function createLicenseServer(options = {}) {
       const expiresAt = Math.min(Date.now() + config.sessionMs, record.expiresAt ? Date.parse(record.expiresAt) : Infinity);
       const token = signToken({ kid: record.id, exp: expiresAt }, config.secret);
       await store.logUsage({ kid: record.id, action: "session", ip: clientIp(req) });
-      send(res, 200, { token, expiresAt: new Date(expiresAt).toISOString(), label: record.label || "" });
+      // expiresAt: this session (≤ SESSION_HOURS); keyExpiresAt: the key itself (null = never).
+      send(res, 200, { token, expiresAt: new Date(expiresAt).toISOString(), keyExpiresAt: record.expiresAt || null, label: record.label || "" });
       return;
     }
 

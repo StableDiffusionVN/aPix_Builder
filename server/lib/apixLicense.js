@@ -61,7 +61,9 @@ export async function checkApixKey(appSettingsPath) {
     const data = await response.json().catch(() => ({}));
     if (!response.ok) return { configured: true, valid: false, error: data.error || `HTTP ${response.status}` };
     pushed.clear();
-    return { configured: true, valid: true, label: data.label || "", expiresAt: data.expiresAt || null };
+    // The key's own expiry, not the short session's (older license servers: session).
+    const expiresAt = data.keyExpiresAt !== undefined ? data.keyExpiresAt : data.expiresAt;
+    return { configured: true, valid: true, label: data.label || "", expiresAt: expiresAt || null };
   } catch (error) {
     return { configured: true, valid: false, error: `Không kết nối được license server: ${error.message}` };
   }

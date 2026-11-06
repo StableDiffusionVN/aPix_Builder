@@ -32,6 +32,7 @@ import { InputLibraryModal } from "./InputLibraryModal.jsx";
 import { ImageLightboxOverlay } from "./ImageLightboxOverlay.jsx";
 import { ImageMaskOverlay } from "./ImageMaskOverlay.jsx";
 import { mediaKindFromUrl } from "../lib/mediaKind.js";
+import { FieldInfo } from "../features/fields/FieldInfo.jsx";
 
 function readImageFieldValue(value) {
   return Array.isArray(value) ? value : value ? [value] : [];
@@ -540,10 +541,8 @@ const DynamicFieldInner = memo(function DynamicFieldInner({
     return (
       <section className="menuSubField">
         <label
-          className={`field ${description ? "fieldWithTooltip" : ""}`}
-          data-field-tooltip={description || undefined}
-        >
-          <span>{label}</span>
+          className="field">
+          <span>{label}<FieldInfo text={description} /></span>
           <SearchableSelect
             selected={menuValue}
             choices={parsedChoices}
@@ -603,10 +602,8 @@ const DynamicFieldInner = memo(function DynamicFieldInner({
     };
     return (
       <label
-        className={`field ${description ? "fieldWithTooltip" : ""}`}
-        data-field-tooltip={description || undefined}
-      >
-        <span>{label}</span>
+        className="field">
+        <span>{label}<FieldInfo text={description} /></span>
         <div
           className={`mediaFieldDropzone ${isDraggingFile ? "isDragging" : ""}`}
           onDragEnter={event => { event.preventDefault(); setIsDraggingFile(true); }}
@@ -657,10 +654,8 @@ const DynamicFieldInner = memo(function DynamicFieldInner({
     return (
       <>
         <label
-          className={`field ${description ? "fieldWithTooltip" : ""}`}
-          data-field-tooltip={description || undefined}
-        >
-          <span>{label}</span>
+          className="field">
+          <span>{label}<FieldInfo text={description} /></span>
           <div
             className={`multiImageDropzone ${isDraggingFile ? "isDragging" : ""}`}
             onDragEnter={event => {

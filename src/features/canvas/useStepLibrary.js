@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { fetchDefaultRhApps, fetchSavedRhApps, listRhAppOptions } from "../../lib/rhSavedApps.js";
+import { TEMPLATES_CHANGED_EVENT } from "../../lib/vipTemplates.js";
 import { deriveRhAppPorts, deriveStepPorts, STEP_KINDS } from "./canvasModel.js";
 
 async function fetchTemplateList(scope) {
@@ -46,6 +47,12 @@ export function useStepLibrary() {
 
   useEffect(() => {
     reload();
+  }, [reload]);
+
+  // VIP workflows appear / disappear with the aPix key.
+  useEffect(() => {
+    window.addEventListener(TEMPLATES_CHANGED_EVENT, reload);
+    return () => window.removeEventListener(TEMPLATES_CHANGED_EVENT, reload);
   }, [reload]);
 
   return { library, loading, error, reload };

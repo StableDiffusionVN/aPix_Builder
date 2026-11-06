@@ -40,7 +40,7 @@ export function TemplateSelector({
             <Workflow size={16} />
             <select value={selectedTemplate} onChange={event => onChange(event.target.value)}>
               {templates.map(template => (
-                <option key={template.id} value={template.id}>{template.name || template.id}</option>
+                <option key={template.id} value={template.id}>{template.vip ? "★ " : ""}{template.name || template.id}</option>
               ))}
             </select>
           </div>

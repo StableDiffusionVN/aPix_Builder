@@ -14,15 +14,8 @@ import { normalizeId } from "../../lib/template.js";
 import { DropdownField } from "./DropdownField.jsx";
 import { SeedField } from "./SeedField.jsx";
 import { SliderField } from "./SliderField.jsx";
+import { FieldInfo } from "./FieldInfo.jsx";
 import { TextField } from "./TextField.jsx";
-
-function tooltipProps(description, extraClass = "") {
-  const text = String(description || "").trim();
-  const className = ["field", text ? "fieldWithTooltip" : "", extraClass].filter(Boolean).join(" ");
-  return text
-    ? { className, "data-field-tooltip": text }
-    : { className };
-}
 
 function choicesSignature(rawChoices, choices) {
   if (choices?.length) {
@@ -133,8 +126,8 @@ const renderers = {
     const choices = parseMenuChoices(ui.choices || [], options);
     const selected = resolveMenuStoredValue(value, ui.choices, options);
     return (
-      <fieldset {...tooltipProps(description, "radioGroup")}>
-        <legend>{label}</legend>
+      <fieldset className="field radioGroup">
+        <legend>{label}<FieldInfo text={description} /></legend>
         {choices.map(choice => (
           <label key={choice.value}>
             <input type="radio" checked={selected === choice.value} onChange={() => onChange(choice.value)} />
@@ -147,8 +140,8 @@ const renderers = {
   boolean({ label, description, value, onChange }) {
     const checked = value === true;
     return (
-      <label {...tooltipProps(description, "booleanField")}>
-        <span>{label}</span>
+      <label className="field booleanField">
+        <span>{label}<FieldInfo text={description} /></span>
         <button
           type="button"
           role="switch"
@@ -163,8 +156,8 @@ const renderers = {
   },
   number({ ui, label, description, value, onChange, parseNumber, resetValue, isAtResetValue, t }) {
     return (
-      <label {...tooltipProps(description, "compact")}>
-        <span>{label}</span>
+      <label className="field compact">
+        <span>{label}<FieldInfo text={description} /></span>
         <div className="inlineControl">
           <input
             type="number"
@@ -182,10 +175,10 @@ const renderers = {
     );
   },
   colorpicker({ label, description, value, onChange }) {
-    return <label {...tooltipProps(description, "compact colorField")}><span>{label}</span><input type="color" value={value || "#10b981"} onChange={event => onChange(event.target.value)} /></label>;
+    return <label className="field compact colorField"><span>{label}<FieldInfo text={description} /></span><input type="color" value={value || "#10b981"} onChange={event => onChange(event.target.value)} /></label>;
   },
   date({ label, description, value, onChange }) {
-    return <label {...tooltipProps(description, "compact")}><span>{label}</span><input type="date" value={value || ""} onChange={event => onChange(event.target.value)} /></label>;
+    return <label className="field compact"><span>{label}<FieldInfo text={description} /></span><input type="date" value={value || ""} onChange={event => onChange(event.target.value)} /></label>;
   },
   json({ item, label, description, value, onChange }) {
     return (

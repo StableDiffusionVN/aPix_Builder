@@ -1,14 +1,7 @@
 import { memo } from "react";
 import { RefreshCcw } from "lucide-react";
+import { FieldInfo } from "./FieldInfo.jsx";
 import { fieldPropsAreEqual } from "./fieldMemo.js";
-
-function tooltipProps(description, extraClass = "") {
-  const text = String(description || "").trim();
-  const className = ["field", text ? "fieldWithTooltip" : "", extraClass].filter(Boolean).join(" ");
-  return text
-    ? { className, "data-field-tooltip": text }
-    : { className };
-}
 
 const RANDOM_SEED_CAP = 2 ** 48;
 
@@ -35,8 +28,8 @@ function SeedFieldInner({
   void fieldKey;
   const isRandomSeed = value === "random_seed" || value === "";
   return (
-    <label {...tooltipProps(description, "compact")}>
-      <span>{label}</span>
+    <label className="field compact">
+      <span>{label}<FieldInfo text={description} /></span>
       <div className="inlineControl">
         <input
           type="number"

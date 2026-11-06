@@ -83,6 +83,7 @@ function inputItemToPort(item, extra = {}) {
     key: item.key,
     valueKey,
     label: item.ui?.label || item.key,
+    description: item.ui?.description || item.ui?.help || "",
     uiType: item.ui?.type,
     inpaintCrop: item.ui?.inpaintCrop === true,
     type,

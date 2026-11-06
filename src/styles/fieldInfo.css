@@ -1,0 +1,65 @@
+/* "i" after a field title; click shows the description */
+.fieldInfoButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin-left: 4px;
+  padding: 0;
+  flex: none;
+  vertical-align: -2px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.fieldInfoButton:hover,
+.fieldInfoButton.isOpen {
+  color: var(--accent);
+}
+
+.fieldInfoPopover {
+  position: fixed;
+  z-index: 3000;
+  width: max-content;
+  max-width: min(300px, calc(100vw - 16px));
+  max-height: calc(100vh - 16px);
+  overflow: auto;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border-radius: 7px;
+  background: #3b3b42;
+  box-shadow: 0 5px 14px rgba(0, 0, 0, 0.3);
+  color: #f2f2f4;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* Settings → aPix key: VIP workflow list */
+.apixVipList {
+  margin-top: 12px;
+  font-size: 12px;
+}
+
+.apixVipList ul {
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+  color: var(--text);
+}
+
+.apixVipList li + li { margin-top: 3px; }
+
+/* Keep the "i" right after the title (field titles are space-between rows). */
+.field > span:has(> .fieldInfoButton),
+.editorRange > span:has(> .fieldInfoButton),
+.canvasFieldLabel:has(> .fieldInfoButton) {
+  justify-content: flex-start;
+  align-items: center;
+}

@@ -7,7 +7,8 @@ import {
   Wifi,
   WifiOff,
   X,
-  Grid
+  Grid,
+  KeyRound
 } from "lucide-react";
 import { ConnectionPanel, SavedServerList, AddServerForm } from "./ConnectionPanel";
 import { RunningHubSettings } from "./RunningHubSettings";
@@ -104,6 +105,13 @@ export function SettingsModal() {
 
         <div className="appSettingsBody">
           <nav className="settingsTabs" role="tablist" aria-label={t("settings.sections")}>
+            <button type="button" role="tab" aria-selected={settingsTab === "apix"} className={settingsTab === "apix" ? "active" : ""} onClick={() => setSettingsTab("apix")}>
+              <KeyRound size={17} />
+              <span>
+                <b>{t("apixKey.title")}</b>
+                <small>{t("apixKey.tabHint")}</small>
+              </span>
+            </button>
             <button type="button" role="tab" aria-selected={settingsTab === "appearance"} className={settingsTab === "appearance" ? "active" : ""} onClick={() => setSettingsTab("appearance")}>
               <Palette size={17} />
               <span>
@@ -150,6 +158,12 @@ export function SettingsModal() {
           </nav>
 
           <div className="settingsTabContent">
+            {settingsTab === "apix" ? (
+              <section className="settingsPane" role="tabpanel">
+                <ApixKeySettings />
+              </section>
+            ) : null}
+
             {settingsTab === "appearance" ? (
               <section className="settingsPane" role="tabpanel">
                 <header className="settingsPaneHeader">
@@ -296,7 +310,6 @@ export function SettingsModal() {
                     {t("server.saveAddress")}
                   </button>
                 )}
-                <ApixKeySettings />
               </section>
             ) : null}
 

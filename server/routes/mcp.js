@@ -1,4 +1,5 @@
 // How to launch the aPix MCP server from this install (shown in Settings → AI connect).
+import { syncVipTemplates } from "../lib/vipTemplates.js";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { installMcpClient, listMcpClients, uninstallMcpClient } from "../lib/mcpClients.js";
@@ -24,6 +25,10 @@ export function createMcpRoutes({ getStoragePaths, readBody, send }) {
   return async function mcpRoutes(req, res, url) {
     if (req.method === "GET" && url.pathname === "/api/apix-license/status") {
       send(res, 200, await checkApixKey(getStoragePaths()));
+      return true;
+    }
+    if (req.method === "POST" && url.pathname === "/api/apix-license/sync-vip") {
+      send(res, 200, await syncVipTemplates(getStoragePaths()));
       return true;
     }
     if (req.method === "GET" && url.pathname === "/api/mcp-config") {

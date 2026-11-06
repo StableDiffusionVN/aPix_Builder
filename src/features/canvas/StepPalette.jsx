@@ -56,7 +56,7 @@ export function StepPalette({ library, loading, error, onReload, onAddStep, onAd
 
   const filtered = useMemo(() => {
     const match = (list, kind) => (list || [])
-      .map(item => ({ kind, ref: item.id, name: item.name || item.id }))
+      .map(item => ({ kind, ref: item.id, name: `${item.vip ? "★ " : ""}${item.name || item.id}` }))
       .filter(item => item.name.toLowerCase().includes(query.trim().toLowerCase()));
     return {
       local: match(library.local, STEP_KINDS.LOCAL),

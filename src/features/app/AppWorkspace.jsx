@@ -95,6 +95,7 @@ import { usePressHold } from "../../hooks/usePressHold.js";
 import { useAdjustedOutputPreview } from "../../hooks/useAdjustedOutputPreview.js";
 import { ColabButton } from "./ColabButton.jsx";
 import { useCanvasBridgeClient } from "../canvas/useCanvasBridgeClient.js";
+import { syncVipTemplates, TEMPLATES_CHANGED_EVENT } from "../../lib/vipTemplates.js";
 import { ColabSheet, setColabSheet } from "./ColabSheet.jsx";
 import { useComfyServerGate } from "./useComfyServerGate.jsx";
 
@@ -1715,6 +1716,16 @@ export function AppWorkspace() {
   const handleRunClickRef = useShortcutActionRefs(handleRunClick);
   const handleColorPanelToggleRef = useShortcutActionRefs(handleColorPanelToggle);
   const stepOutputRef = useShortcutActionRefs(stepOutput);
+
+  // VIP workflows follow the aPix key: checked at start and whenever the key changes.
+  const reloadTemplatesRef = useRef(reloadTemplates);
+  reloadTemplatesRef.current = reloadTemplates;
+  useEffect(() => {
+    void syncVipTemplates();
+    const onChanged = () => void reloadTemplatesRef.current?.();
+    window.addEventListener(TEMPLATES_CHANGED_EVENT, onChanged);
+    return () => window.removeEventListener(TEMPLATES_CHANGED_EVENT, onChanged);
+  }, []);
 
   const { toggleFullscreen } = useWorkspaceShortcuts({
     isCanvasView,

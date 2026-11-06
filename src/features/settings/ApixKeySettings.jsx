@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
+import "../../styles/fieldInfo.css";
 import { KeyRound, Loader2 } from "lucide-react";
 import { useI18n } from "../../i18n/I18nContext";
 import { getSetting, setSetting } from "../../lib/appSettings.js";
+import { syncVipTemplates } from "../../lib/vipTemplates.js";
 
 /**
  * aPix key for paid workflows: aPix sends it to the SDVN nodes of the ComfyUI server
@@ -12,12 +14,14 @@ export function ApixKeySettings() {
   const [value, setValue] = useState(() => getSetting("license.apixKey", ""));
   const [status, setStatus] = useState(null);
   const [checking, setChecking] = useState(false);
+  const [vip, setVip] = useState(null);
 
   const check = async () => {
     setChecking(true);
     try {
       const response = await fetch("/api/apix-license/status");
       setStatus(await response.json());
+      setVip(await syncVipTemplates());
     } catch (error) {
       setStatus({ configured: true, valid: false, error: error.message });
     } finally {
@@ -35,7 +39,10 @@ export function ApixKeySettings() {
     // Settings are synced to the app server shortly after; give it a moment before checking.
     await new Promise(resolve => setTimeout(resolve, 600));
     if (key) await check();
-    else setStatus(null);
+    else {
+      setStatus(null);
+      setVip(await syncVipTemplates());
+    }
   };
 
   const expires = status?.expiresAt ? new Date(status.expiresAt).toLocaleString() : "";
@@ -69,6 +76,15 @@ export function ApixKeySettings() {
             ? t("apixKey.valid", { label: status.label || "—", expires: expires || t("apixKey.noExpiry") })
             : `${t("apixKey.invalid")} ${status.error || ""}`}
         </p>
+      ) : null}
+      {vip && status?.valid ? (
+        <div className="apixVipList">
+          <strong>{t("apixKey.vipTitle")}</strong>
+          {vip.offline ? <p className="aiConnectHint">{t("apixKey.vipOffline")}</p> : null}
+          {vip.workflows?.length ? (
+            <ul>{vip.workflows.map(item => <li key={item.id}>★ {item.name}</li>)}</ul>
+          ) : <p className="aiConnectHint">{t("apixKey.vipNone")}</p>}
+        </div>
       ) : null}
     </div>
   );

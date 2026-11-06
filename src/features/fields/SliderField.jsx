@@ -1,15 +1,8 @@
 import { memo, useCallback } from "react";
 import { EditorRange } from "../../components/ImageAdjustmentControls.jsx";
 import { useDebouncedCommit } from "../../hooks/useDebouncedCommit.js";
+import { FieldInfo } from "./FieldInfo.jsx";
 import { fieldPropsAreEqual } from "./fieldMemo.js";
-
-function tooltipProps(description) {
-  const text = String(description || "").trim();
-  const className = ["field", text ? "fieldWithTooltip" : ""].filter(Boolean).join(" ");
-  return text
-    ? { className, "data-field-tooltip": text }
-    : { className };
-}
 
 function SliderFieldInner({
   fieldKey,
@@ -31,9 +24,10 @@ function SliderFieldInner({
   }, [parseNumber, setDebounced]);
 
   return (
-    <div {...tooltipProps(description)}>
+    <div className="field">
       <EditorRange
         label={label}
+        labelExtra={<FieldInfo text={description} />}
         value={localValue}
         min={minimum}
         max={maximum}

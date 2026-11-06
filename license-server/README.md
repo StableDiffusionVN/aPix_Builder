@@ -38,7 +38,14 @@ Mã chỉ hiện **một lần** khi tạo — gửi cho khách. Khách nhập t
 |---|---|---|
 | `GET /v1/health` | | `{ ok, protectedRepos, hfToken }` |
 | `POST /v1/session` | `{ key }` | `{ token, expiresAt, label }` (token HMAC, ≤ 12 giờ) |
+| `POST /v1/vip/list` | `{ token }` | `{ workflows: [{ id, sha256 }] }` |
+| `POST /v1/vip/download` | `{ token, id }` | file zip |
 | `POST /v1/download-url` | `{ token, url }` | `{ url }` link ký tạm · `{ public: true }` nếu không phải repo riêng · 401/403/429 |
+
+## Workflow VIP
+
+Đặt file `<id>.zip` (định dạng xuất zip của aPix, `id` chỉ gồm a-z, 0-9, `-`) vào `<LICENSE_DATA_DIR>/vip/` — trên VPS là `/var/lib/apix-license/vip/`, thuộc user `apix-license`. Không cần khởi động lại.
+App có mã hợp lệ tự tải về (`vip-templates/` trong thư mục config), hiện với dấu ★, chỉ đọc và không xuất zip. Mã hết hạn / bị thu hồi thì bị gỡ khi app kiểm tra lại (lúc mở app hoặc lưu mã); mất mạng thì giữ bản đã tải. Đổi file zip → app tự cập nhật theo checksum.
 
 ## Cập nhật / deploy lại
 

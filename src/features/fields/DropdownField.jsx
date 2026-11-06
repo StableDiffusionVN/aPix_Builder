@@ -1,14 +1,7 @@
 import { memo } from "react";
 import { fieldPropsAreEqual } from "./fieldMemo.js";
+import { FieldInfo } from "./FieldInfo.jsx";
 import { SearchableSelect } from "./SearchableSelect.jsx";
-
-function tooltipProps(description) {
-  const text = String(description || "").trim();
-  const className = ["field", text ? "fieldWithTooltip" : ""].filter(Boolean).join(" ");
-  return text
-    ? { className, "data-field-tooltip": text }
-    : { className };
-}
 
 function DropdownFieldInner({
   fieldKey,
@@ -23,8 +16,8 @@ function DropdownFieldInner({
 }) {
   void fieldKey;
   return (
-    <label {...tooltipProps(description)}>
-      <span>{label}</span>
+    <label className="field">
+      <span>{label}<FieldInfo text={description} /></span>
       <SearchableSelect
         selected={selected}
         choices={choices}

@@ -4,6 +4,7 @@ import path from "node:path";
 import YAML from "yaml";
 import { selectWorkflowVariant, workflowVariantEntries, validateVariantFile } from "../../shared/workflowVariants.js";
 import { unusedVariantFiles } from "./workflowVariants.js";
+import { isKnownVipTemplate, vipTemplatesDir } from "./vipTemplates.js";
 
 export const TEMPLATE_SCOPES = {
   local: "local",
@@ -72,9 +73,12 @@ export function createTemplateService({
 }) {
   const rhDefaultDir = defaultRhDir || path.join(configDir, "default-rh");
   const rhTemplatesDir = templatesRhDir || path.join(configDir, "templates-rh");
+  const vipDir = vipTemplatesDir(configDir);
   const scopeRoots = {
     [TEMPLATE_SCOPES.local]: [
       { dir: defaultDir || path.join(configDir, "default"), isDefault: true },
+      // Downloaded while the aPix key is valid (vipTemplates.js); read-only like defaults.
+      { dir: vipDir, isDefault: true, vip: true },
       { dir: templatesDir || path.join(configDir, "templates"), isDefault: false }
     ],
     [TEMPLATE_SCOPES.runninghubWf]: [
@@ -167,7 +171,7 @@ export function createTemplateService({
       const yamlPaths = await findTemplateConfigs(root.dir);
       for (const yamlPath of yamlPaths) {
         try {
-          discovered.push(await loadTemplateDefinition(yamlPath, root.isDefault, normalizedScope));
+          discovered.push({ ...(await loadTemplateDefinition(yamlPath, root.isDefault, normalizedScope)), ...(root.vip ? { vip: true } : {}) });
         } catch (error) {
           console.warn(`Skipping invalid template config ${yamlPath}: ${error.message}`);
         }
@@ -214,7 +218,12 @@ export function createTemplateService({
     const registry = await loadTemplateRegistry(scope);
     const id = templateId || registry.default;
     const allTemplates = await discoverTemplates(scope);
-    const template = allTemplates.find(item => item.id === id)
+    const found = allTemplates.find(item => item.id === id);
+    // Never run another workflow in place of a VIP one (canvas nodes keep the id).
+    if (!found && templateId && await isKnownVipTemplate(configDir, templateId)) {
+      throw new Error("Workflow VIP này cần mã aPix hợp lệ (Settings → Mã aPix).");
+    }
+    const template = found
       || allTemplates.find(item => item.id === registry.default)
       || allTemplates[0];
     if (!template) {
@@ -330,6 +339,7 @@ export function createTemplateService({
     if (!id) throw new Error("Missing template id");
     const allTemplates = await discoverTemplates(scope);
     const existing = allTemplates.find(item => item.id === id);
+    if (existing?.vip) throw new Error("Không sửa được workflow VIP — hãy lưu với Template ID khác.");
     if (existing?.isDefault) {
       return { targetRoot: path.join(getScopeRoot(scope), id), savedAsCopy: true };
     }
@@ -354,6 +364,7 @@ export function createTemplateService({
 
   async function getTemplateExportSource(templateId, scope = TEMPLATE_SCOPES.local) {
     const template = await resolveTemplate(templateId, scope);
+    if (template.vip) throw new Error("Không xuất được workflow VIP.");
     assertExportableTemplateDir(template.baseDir, scope);
     // Option JSONs left behind by older saves are not part of the template.
     let excludeFiles = [];

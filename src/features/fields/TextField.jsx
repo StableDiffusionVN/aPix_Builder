@@ -1,14 +1,7 @@
 import { memo, useCallback } from "react";
 import { useDebouncedCommit } from "../../hooks/useDebouncedCommit.js";
+import { FieldInfo } from "./FieldInfo.jsx";
 import { fieldPropsAreEqual } from "./fieldMemo.js";
-
-function tooltipProps(description) {
-  const text = String(description || "").trim();
-  const className = ["field", text ? "fieldWithTooltip" : ""].filter(Boolean).join(" ");
-  return text
-    ? { className, "data-field-tooltip": text }
-    : { className };
-}
 
 function TextFieldInner({
   fieldKey,
@@ -28,8 +21,8 @@ function TextFieldInner({
   }, [setDebounced]);
 
   return (
-    <label {...tooltipProps(description)}>
-      <span>{label}</span>
+    <label className="field">
+      <span>{label}<FieldInfo text={description} /></span>
       {multiline ? (
         <textarea
           rows={rows}

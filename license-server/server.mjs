@@ -7,12 +7,15 @@
 // Env: PORT (8790), HOST (127.0.0.1), LICENSE_DATA_DIR (./license-data), HF_TOKEN,
 // LICENSE_SECRET (HMAC for session tokens), PROTECTED_REPOS ("owner/repo,owner/*"),
 // SESSION_HOURS (12), MAX_LINKS_PER_HOUR (120), BASE_PATH ("" or "/license" behind a proxy).
+import { createHash } from "node:crypto";
+import { readdir, readFile } from "node:fs/promises";
 import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { allowsModel, LicenseStore, signToken, verifyToken } from "./licenseStore.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
+const VIP_ZIP = /^[a-z0-9][a-z0-9-]*\.zip$/;
 
 // "owner/repo" or "owner/*" (every repo of that account).
 export function isProtectedRepo(repo, protectedRepos) {
@@ -167,6 +170,46 @@ export function createLicenseServer(options = {}) {
       const signed = await config.signUrl(target, config.hfToken);
       await store.logUsage({ kid: record.id, action: "download", repo: target.repo, file: target.file, ip: clientIp(req) });
       send(res, 200, { url: signed, file: path.posix.basename(target.file) });
+      return;
+    }
+
+    // VIP workflows: <dataDir>/vip/<id>.zip, only for a live session of a valid key.
+    if (req.method === "POST" && (route === "/v1/vip/list" || route === "/v1/vip/download")) {
+      const body = await readJson(req);
+      const session = verifyToken(body.token, config.secret);
+      if (!session) {
+        send(res, 401, { error: "Phiên aPix hết hạn, cần đăng nhập lại bằng mã aPix", code: "session_expired" });
+        return;
+      }
+      const record = await store.byId(session.kid);
+      if (!record || record.disabled || (record.expiresAt && Date.parse(record.expiresAt) <= Date.now())) {
+        send(res, 403, { error: "Mã aPix không còn hiệu lực" });
+        return;
+      }
+      const vipDir = path.join(config.dataDir, "vip");
+      if (route === "/v1/vip/list") {
+        const names = await readdir(vipDir).catch(() => []);
+        const workflows = [];
+        for (const name of names.filter(item => VIP_ZIP.test(item)).sort()) {
+          const data = await readFile(path.join(vipDir, name));
+          workflows.push({ id: name.replace(/\.zip$/, ""), sha256: createHash("sha256").update(data).digest("hex") });
+        }
+        send(res, 200, { workflows });
+        return;
+      }
+      const file = `${body.id}.zip`;
+      if (!VIP_ZIP.test(file)) {
+        send(res, 400, { error: "Workflow không hợp lệ" });
+        return;
+      }
+      const data = await readFile(path.join(vipDir, file)).catch(() => null);
+      if (!data) {
+        send(res, 404, { error: "Không có workflow này" });
+        return;
+      }
+      await store.logUsage({ kid: record.id, action: "vip-download", file, ip: clientIp(req) });
+      res.writeHead(200, { "content-type": "application/zip", "content-length": data.length, "cache-control": "no-store" });
+      res.end(data);
       return;
     }
 

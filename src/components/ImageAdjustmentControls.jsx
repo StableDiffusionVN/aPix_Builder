@@ -80,12 +80,12 @@ export function AccordionSection({ icon: Icon, title, open, onToggle, children }
   );
 }
 
-export function EditorRange({ label, value, min, max, step = 1, resetValue = 0, onChange, onCommit, onDragStart }) {
+export function EditorRange({ label, labelExtra = null, value, min, max, step = 1, resetValue = 0, onChange, onCommit, onDragStart }) {
   const { t } = useI18n();
   const isDefault = Number(value) === Number(resetValue);
   return (
     <label className="editorRange">
-      <span>{label}</span>
+      <span>{label}{labelExtra}</span>
       <b>{value}</b>
       <button
         type="button"

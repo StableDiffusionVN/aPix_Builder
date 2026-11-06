@@ -7,6 +7,7 @@ import { fetchSdvnLibraryNames } from "../../lib/sdvnModels.js";
 import { SearchableSelect } from "../fields/SearchableSelect.jsx";
 import { portTypeForUi } from "./canvasModel.js";
 import { CanvasImageField } from "./CanvasImageField.jsx";
+import { FieldInfo } from "../fields/FieldInfo.jsx";
 import { useCanvasActions } from "./canvasContext.js";
 
 export function NodeField({ port, value, onChange, linked, onContextMenu, sdvnModelTypes, sdvnModelFields }) {
@@ -52,7 +53,7 @@ export function NodeField({ port, value, onChange, linked, onContextMenu, sdvnMo
     if (linked) {
       return (
         <div className="canvasField" onContextMenu={onContextMenu}>
-          <span className="canvasFieldLabel">{port.label}</span>
+          <span className="canvasFieldLabel">{port.label}<FieldInfo text={port.description} /></span>
           <div className="canvasImageLinked">
             <Link2 size={12} /> <span>{t("canvas.node.linked")}</span>
           </div>
@@ -62,6 +63,7 @@ export function NodeField({ port, value, onChange, linked, onContextMenu, sdvnMo
     return (
       <CanvasImageField
         label={port.label}
+        description={port.description}
         inpaintCrop={port.inpaintCrop === true}
         value={value}
         onChange={onChange}
@@ -73,7 +75,7 @@ export function NodeField({ port, value, onChange, linked, onContextMenu, sdvnMo
   if (linked) {
     return (
       <div className="canvasField" onContextMenu={onContextMenu}>
-        <span className="canvasFieldLabel">{port.label}</span>
+        <span className="canvasFieldLabel">{port.label}<FieldInfo text={port.description} /></span>
         <div className="canvasImageLinked">
           <Link2 size={12} /> <span>{t("canvas.node.linked")}</span>
         </div>
@@ -85,7 +87,7 @@ export function NodeField({ port, value, onChange, linked, onContextMenu, sdvnMo
     return (
       <label className="canvasField canvasFieldInline nodrag" onContextMenu={onContextMenu}>
         <input type="checkbox" checked={Boolean(value)} onChange={event => onChange(event.target.checked)} />
-        <span className="canvasFieldLabel">{port.label}</span>
+        <span className="canvasFieldLabel">{port.label}<FieldInfo text={port.description} /></span>
       </label>
     );
   }
@@ -93,7 +95,7 @@ export function NodeField({ port, value, onChange, linked, onContextMenu, sdvnMo
   if (type === "number") {
     return (
       <label className="canvasField nodrag" onContextMenu={onContextMenu}>
-        <span className="canvasFieldLabel">{port.label}</span>
+        <span className="canvasFieldLabel">{port.label}<FieldInfo text={port.description} /></span>
         <input
           type="number"
           className="canvasInput"
@@ -113,7 +115,7 @@ export function NodeField({ port, value, onChange, linked, onContextMenu, sdvnMo
     const selectedValue = resolveMenuStoredValue(value, choices, menuOptions);
     return (
       <label className="canvasField nodrag" onContextMenu={onContextMenu}>
-        <span className="canvasFieldLabel">{port.label}</span>
+        <span className="canvasFieldLabel">{port.label}<FieldInfo text={port.description} /></span>
         <SearchableSelect selected={selectedValue} choices={parsedChoices} onChange={onChange} />
       </label>
     );
@@ -122,7 +124,7 @@ export function NodeField({ port, value, onChange, linked, onContextMenu, sdvnMo
   if (type === "text") {
     return (
       <label className="canvasField nodrag" onContextMenu={onContextMenu}>
-        <span className="canvasFieldLabel">{port.label}</span>
+        <span className="canvasFieldLabel">{port.label}<FieldInfo text={port.description} /></span>
         <textarea
           className="canvasInput canvasTextarea nowheel"
           rows={2}
@@ -135,7 +137,7 @@ export function NodeField({ port, value, onChange, linked, onContextMenu, sdvnMo
 
   return (
     <label className="canvasField nodrag" onContextMenu={onContextMenu}>
-      <span className="canvasFieldLabel">{port.label}</span>
+      <span className="canvasFieldLabel">{port.label}<FieldInfo text={port.description} /></span>
       <input
         className="canvasInput"
         value={value ?? ""}

@@ -1426,68 +1426,6 @@ html[data-theme="light"] select option:focus-visible {
   line-height: 1.45;
 }
 
-.fieldWithTooltip {
-  position: relative;
-}
-
-.fieldWithTooltip::before,
-.fieldWithTooltip::after {
-  pointer-events: none;
-  opacity: 0;
-  visibility: hidden;
-  transition:
-    opacity 0s,
-    transform 0s,
-    visibility 0s;
-}
-
-.fieldWithTooltip::before {
-  content: "";
-  position: absolute;
-  z-index: 81;
-  left: var(--tooltip-pointer-x, 12px);
-  top: calc(var(--tooltip-pointer-y, 28px) - 6px);
-  width: 10px;
-  height: 6px;
-  transform: translateX(-50%);
-  background: #3b3b42;
-  clip-path: polygon(50% 100%, 0 0, 100% 0);
-}
-
-.fieldWithTooltip::after {
-  content: attr(data-field-tooltip);
-  position: absolute;
-  z-index: 80;
-  left: var(--tooltip-pointer-x, 12px);
-  top: var(--tooltip-pointer-y, 28px);
-  width: max-content;
-  max-width: min(260px, calc(100vw - 24px));
-  box-sizing: border-box;
-  padding: 8px 10px;
-  border: 0;
-  border-radius: 7px;
-  background: #3b3b42;
-  box-shadow: 0 5px 14px rgba(0, 0, 0, 0.22);
-  color: #f2f2f4;
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 1.35;
-  letter-spacing: 0;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  transform: translate(-50%, calc(-100% - 6px)) translateY(-3px);
-}
-
-.fieldWithTooltip.isTooltipVisible::before,
-.fieldWithTooltip.isTooltipVisible::after {
-  opacity: 1;
-  visibility: visible;
-  transition:
-    opacity 0.12s ease 0s,
-    transform 0.12s ease 0s,
-    visibility 0s;
-}
-
 .fieldWithTooltip.isTooltipVisible::after {
   transform: translate(-50%, calc(-100% - 6px));
 }

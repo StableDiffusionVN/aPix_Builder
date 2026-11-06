@@ -20,6 +20,7 @@ import {
 } from "../../lib/inputImageActions.js";
 import { useInputImageField } from "../../hooks/useInputImageField.js";
 import { imageDisplayUrl, filenameFromImageUrl } from "./canvasModel.js";
+import { FieldInfo } from "../fields/FieldInfo.jsx";
 import { useCanvasActions } from "./canvasContext.js";
 
 function loadCanvasModal(path) {
@@ -40,7 +41,7 @@ function readCanvasImageValues(value) {
   return values.filter(item => imageDisplayUrl(item));
 }
 
-export function CanvasImageField({ label, value, onChange, onContextMenu, inpaintCrop = false }) {
+export function CanvasImageField({ label, description = "", value, onChange, onContextMenu, inpaintCrop = false }) {
   const { t } = useI18n();
   const { inputImages, refreshInputImages, updateInputImages } = useCanvasActions();
   const fileRef = useRef(null);
@@ -332,7 +333,7 @@ export function CanvasImageField({ label, value, onChange, onContextMenu, inpain
 
   return (
     <div className="canvasField">
-      <span className="canvasFieldLabel">{label}</span>
+      <span className="canvasFieldLabel">{label}<FieldInfo text={description} /></span>
       <div
         className={`canvasImageField nodrag ${dragging ? "isDragging" : ""}`}
         onContextMenu={onContextMenu}

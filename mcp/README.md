@@ -73,7 +73,12 @@ Server chỉ nghe `127.0.0.1` — chỉ chương trình trên chính máy đó k
 | `list_input_images` / `upload_image` | Thư viện ảnh input; đưa ảnh từ file hoặc URL vào |
 | `run_template` | Chạy (`count` nhiều lần; `comfy_server` = URL hoặc tên server đã lưu); chờ ≤ 50 giây |
 | `wait_for_run` / `get_run` / `list_active_runs` / `cancel_run` | Chờ tiếp (≤ 50 giây mỗi lần), xem, hủy lệnh |
-| `list_history` / `view_output` / `delete_history` | Lịch sử, xem ảnh kết quả (thu nhỏ), xóa |
+| `list_history` / `view_output` / `delete_history` | Lịch sử, xem kết quả (ảnh thu nhỏ, audio, text; video/3D trả đường dẫn), xóa |
+| `canvas_list` | Canvas: tab đang mở + workflow đã lưu |
+| `canvas_open` | Canvas: chuyển tab / mở workflow đã lưu, trả về cấu trúc |
+| `canvas_get` | Canvas: node, input, dây nối, trạng thái, kết quả từng node của workflow đang mở |
+| `canvas_set_values` | Canvas: sửa input của một node (ảnh = đường dẫn, URL, tên ảnh input) |
+| `canvas_run` / `canvas_wait` | Canvas: chạy cả workflow hoặc một node như bấm Run; chờ xong. ComfyUI tắt → app desktop tự bật Colab rồi chạy |
 | `colab_open` / `colab_run` / `colab_status` | (App desktop) mở notebook SDVN ComfyUI trong trình duyệt aPix đã đăng nhập Google, Run all, xem trạng thái runtime/ô/output |
 | `colab_wait_server` | Chờ link ComfyUI notebook in ra (ưu tiên pinggy → domain riêng → trycloudflare), kiểm tra chạy được rồi đặt làm server |
 | `colab_stop` | Ngắt và xoá runtime Colab (giải phóng GPU) |
@@ -90,6 +95,8 @@ Giá trị trường trong `run_template.values` theo `key` của `get_template`
 - trường con của menu-sub: `"cha.con"` (ví dụ `"menu.menu": "3800"` khi `menu` = `+ Upscale`)
 
 Hiện hỗ trợ template ComfyUI; RunningHub chưa có.
+
+Các lệnh Canvas (trừ `canvas_list`) cần một cửa sổ aPix đang mở: lệnh được đưa sang Canvas trong app, app tự chuyển sang màn Canvas, và thay đổi hiện ngay trên các node. Chưa thêm / xoá được node và dây nối qua MCP.
 
 ## CLI
 

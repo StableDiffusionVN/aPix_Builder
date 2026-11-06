@@ -42,6 +42,7 @@ import { CanvasActionsContext, CanvasGraphContext } from "./canvasContext.js";
 import { useCanvasProject } from "./useCanvasProject.js";
 import { loadStepDefinition, useStepLibrary } from "./useStepLibrary.js";
 import { runCanvasNode, bypassCanvasNode, prepareCanvasNodeRunRequest } from "./canvasRunner.js";
+import { canvasRunState, registerCanvasBridgeHandler, summarizeCanvas, validateNodeValues } from "./canvasBridge.js";
 import { buildCanvasNodeDefaults, arePortsCompatible, STEP_KINDS, topoOrder, upstreamStepsNeedingRunAsync, upstreamStepsWithStaleFilesAsync, linkedImageInputsMissingSource, beginNodeExecutionPatch, getNodeRunCache, nodeRunCachePatch } from "./canvasModel.js";
 import { buildDefaults, flattenInputs } from "../../lib/template.js";
 import { getPrimaryRhApiKey, hasRhApiKey } from "../../lib/rhTokenPool.js";
@@ -1726,6 +1727,75 @@ function InfiniteCanvasInner({
     submitBackendQueueJobs,
     updateNodeData
   ]);
+
+  // MCP / CLI commands (useCanvasBridgeClient → canvasBridge.js); always reads the latest state.
+  const bridgeRunRef = useRef(null);
+  const bridgeLatestRef = useRef({});
+  bridgeLatestRef.current = {
+    activeId,
+    activeName,
+    busy: canvasRunning || canvasQueueCount > 0 || pendingBackendNodeJobsRef.current.length > 0
+      || nodes.some(node => node.type === "step" && node.data?.status === "running"),
+    openLibraryWorkflow,
+    runGraph,
+    runNode,
+    switchProject,
+    updateNodeData,
+    updateNodeValues
+  };
+  useEffect(() => registerCanvasBridgeHandler(async (action, args = {}) => {
+    const latest = () => bridgeLatestRef.current;
+    const view = () => ({
+      projectId: latest().activeId,
+      projectName: latest().activeName,
+      running: latest().busy,
+      run: {
+        state: canvasRunState(bridgeRunRef.current, nodesRef.current, latest().busy),
+        ...(bridgeRunRef.current?.nodeId ? { nodeId: bridgeRunRef.current.nodeId } : {})
+      },
+      ...summarizeCanvas(nodesRef.current, edgesRef.current)
+    });
+    // The Canvas may have just mounted: wait for its project to load.
+    for (let i = 0; i < 100 && !latest().activeId; i++) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    await new Promise(resolve => setTimeout(resolve, 50));
+    if (action === "get") return view();
+    if (action === "open") {
+      const previous = latest().activeId;
+      if (args.slug) await latest().openLibraryWorkflow(args.slug);
+      else if (args.id) await latest().switchProject(args.id);
+      else throw new Error("Thiếu id tab hoặc slug workflow.");
+      // Wait until React has applied the new graph.
+      for (let i = 0; i < 50 && (args.id ? latest().activeId !== args.id : latest().activeId === previous); i++) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+      await new Promise(resolve => setTimeout(resolve, 100));
+      bridgeRunRef.current = null;
+      return view();
+    }
+    if (action === "set_values") {
+      const node = nodesRef.current.find(item => item.id === args.nodeId);
+      validateNodeValues(node, args.values, edgesRef.current);
+      latest().updateNodeValues(args.nodeId, args.values);
+      await new Promise(resolve => setTimeout(resolve, 100));
+      return view();
+    }
+    if (action === "run") {
+      const steps = nodesRef.current.filter(node => node.type === "step");
+      if (args.nodeId && !steps.some(node => node.id === args.nodeId)) throw new Error("Không có node bước này trong workflow đang mở.");
+      if (!steps.length) throw new Error("Workflow đang mở chưa có node bước nào để chạy.");
+      for (const node of steps) {
+        if (!args.nodeId || node.id === args.nodeId) latest().updateNodeData(node.id, { status: "idle", error: "" });
+      }
+      await new Promise(resolve => setTimeout(resolve, 50));
+      bridgeRunRef.current = { startedAt: Date.now(), nodeId: args.nodeId || "" };
+      if (args.nodeId) await latest().runNode(args.nodeId);
+      else await latest().runGraph();
+      return view();
+    }
+    throw new Error(`Lệnh Canvas không hợp lệ: ${action}`);
+  }), []);
 
   useEffect(() => {
     function handleRunShortcut(event) {

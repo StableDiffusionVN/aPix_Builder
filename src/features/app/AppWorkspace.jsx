@@ -94,6 +94,7 @@ import { WorkspaceModals } from "./WorkspaceModals.jsx";
 import { usePressHold } from "../../hooks/usePressHold.js";
 import { useAdjustedOutputPreview } from "../../hooks/useAdjustedOutputPreview.js";
 import { ColabButton } from "./ColabButton.jsx";
+import { useCanvasBridgeClient } from "../canvas/useCanvasBridgeClient.js";
 import { ColabSheet, setColabSheet } from "./ColabSheet.jsx";
 import { useComfyServerGate } from "./useComfyServerGate.jsx";
 
@@ -245,6 +246,8 @@ export function AppWorkspace() {
     pendingColorSyncSourceRef,
     colorAdjustReloadToken, setColorAdjustReloadToken
   } = useColorAdjustContext();
+
+  useCanvasBridgeClient({ showCanvas: () => setWorkspaceView("canvas") });
 
   const shouldDiscoverComfy = isCanvasView
     ? (canvasRuntime.hasLocalNodes || canvasRuntime.activeKind === "local")

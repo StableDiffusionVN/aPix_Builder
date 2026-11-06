@@ -125,6 +125,46 @@ const TOOLS = [
     run: async ({ run_id: runId, index = 0, max_size: maxSize = 1024 }) => viewOutput(runId, index, maxSize)
   },
   {
+    name: "canvas_list",
+    description: "Canvas: các tab đang mở (id) và workflow đã lưu trong thư viện (slug).",
+    inputSchema: { type: "object", properties: {} },
+    run: () => client.canvasList()
+  },
+  {
+    name: "canvas_open",
+    description: "Canvas: chuyển sang tab (id) hoặc mở workflow đã lưu (slug) trong app, trả về cấu trúc workflow. Các lệnh Canvas khác làm việc trên workflow đang mở.",
+    inputSchema: { type: "object", properties: { id: { type: "string" }, slug: { type: "string" } } },
+    run: ({ id, slug }) => client.canvasCommand("open", { id, slug })
+  },
+  {
+    name: "canvas_get",
+    description: "Canvas: đọc workflow đang mở — node (input, giá trị, trạng thái, lỗi, kết quả theo từng node kèm đường dẫn file và runId cho view_output), dây nối, trạng thái lần chạy (run.state: running | done | error | stopped).",
+    inputSchema: { type: "object", properties: {} },
+    run: () => client.canvasCommand("get")
+  },
+  {
+    name: "canvas_set_values",
+    description: "Canvas: sửa giá trị input của một node trong workflow đang mở; thay đổi hiện ngay trong app. values: {key_input: giá_trị} theo canvas_get (node nguồn dùng key \"main\"; ảnh = đường dẫn file, URL hoặc tên ảnh input; nhiều ảnh = mảng). Input đang nối dây phải sửa ở node nguồn.",
+    inputSchema: {
+      type: "object",
+      properties: { node_id: { type: "string" }, values: { type: "object", additionalProperties: true } },
+      required: ["node_id", "values"]
+    },
+    run: ({ node_id: nodeId, values }) => client.canvasSetValues(nodeId, values)
+  },
+  {
+    name: "canvas_run",
+    description: "Canvas: chạy workflow đang mở, hoặc một node (node_id), như bấm Run trong app. Sau đó gọi canvas_wait. ComfyUI không phản hồi thì app desktop tự bật Colab rồi chạy (held.state = waiting-colab, 2–5 phút).",
+    inputSchema: { type: "object", properties: { node_id: { type: "string" } } },
+    run: ({ node_id: nodeId }) => client.canvasRun(nodeId)
+  },
+  {
+    name: "canvas_wait",
+    description: "Canvas: chờ lần chạy (tối đa ~50 giây mỗi lần gọi; gọi lại khi run.state còn running hoặc held.state = waiting-colab), trả về trạng thái và kết quả từng node.",
+    inputSchema: { type: "object", properties: { wait_seconds: { type: "number", default: 50 } } },
+    run: ({ wait_seconds: seconds }) => client.canvasWait({ timeoutMs: waitMs(seconds) })
+  },
+  {
     name: "colab_auto",
     description: "Một bước: bật Colab tự động như nút Colab trong app (mở notebook SDVN, Run all, chờ link ComfyUI và gắn làm server, tự tắt khi không dùng). action=start|stop|status; start chờ ≤ ~50 giây rồi trả trạng thái — gọi lại với status tới khi phase=ready.",
     inputSchema: { type: "object", properties: { action: { type: "string", enum: ["start", "stop", "status"], default: "status" }, wait_seconds: { type: "number", default: 50 } } },
@@ -259,7 +299,7 @@ async function handle(message) {
       protocolVersion: params.protocolVersion || DEFAULT_PROTOCOL,
       capabilities: { tools: {} },
       serverInfo: SERVER_INFO,
-      instructions: "aPix Builder: chạy workflow sinh ảnh ComfyUI qua app aPix đang mở trên máy. Quy trình: list_templates → get_template → run_template → (wait_for_run lặp lại tới khi xong) → view_output / list_history. Server ComfyUI chưa chạy: cứ run_template — app desktop tự bật Colab và chạy lệnh khi có link (status waiting-colab → gọi wait_for_run tới khi xong); app tự tắt Colab khi không dùng (hoặc colab_auto stop). Điều khiển chi tiết: colab_open / colab_run / colab_wait_server / colab_stop."
+      instructions: "aPix Builder: chạy workflow sinh ảnh ComfyUI qua app aPix đang mở trên máy. Quy trình: list_templates → get_template → run_template → (wait_for_run lặp lại tới khi xong) → view_output / list_history. Workflow Canvas nhiều node: canvas_list → canvas_open → canvas_get → canvas_set_values → canvas_run → canvas_wait (app phải đang mở). Server ComfyUI chưa chạy: cứ run_template — app desktop tự bật Colab và chạy lệnh khi có link (status waiting-colab → gọi wait_for_run tới khi xong); app tự tắt Colab khi không dùng (hoặc colab_auto stop). Điều khiển chi tiết: colab_open / colab_run / colab_wait_server / colab_stop."
     };
   }
   if (method === "ping") return {};

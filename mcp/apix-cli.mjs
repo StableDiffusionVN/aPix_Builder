@@ -14,6 +14,11 @@ const HELP = `aPix Builder CLI
   apix run <id> key=value ...      chạy (ảnh: đường dẫn/URL/tên ảnh input; menu-sub con: cha.con=giá trị)
        --count N  --server URL|tên  --no-wait  --json
   apix get <runId>                 trạng thái + ảnh kết quả
+  apix canvas list                 tab + workflow Canvas đã lưu (cần app đang mở với get/open/set/run)
+  apix canvas get                  đọc workflow Canvas đang mở
+  apix canvas open <id|slug>       chuyển tab / mở workflow đã lưu
+  apix canvas set <nodeId> k=v…    sửa giá trị một node
+  apix canvas run [nodeId]         chạy cả workflow hoặc một node, chờ xong
   apix runs                        lệnh đang chạy / chờ
   apix cancel <runId>              hủy lệnh
   apix history [N]                 lịch sử gần nhất
@@ -95,6 +100,32 @@ async function main() {
     }
     case "get":
       return print(flags.json ? await client.getRun(rest[0]) : describeRun(await client.getRun(rest[0])));
+    case "canvas": {
+      const [sub, target, ...pairs] = rest;
+      if (sub === "list") return print(await client.canvasList(), true);
+      if (sub === "get") return print(await client.canvasCommand("get"), true);
+      if (sub === "open") return print(await client.canvasCommand("open", target?.startsWith("p_") ? { id: target } : { slug: target }), true);
+      if (sub === "set") {
+        const values = {};
+        for (const pair of pairs) {
+          const eq = pair.indexOf("=");
+          if (eq < 1) throw new ApixError(`Giá trị phải dạng key=value: "${pair}"`);
+          values[pair.slice(0, eq)] = parseValue(pair.slice(eq + 1));
+        }
+        return print(await client.canvasSetValues(target, values), true);
+      }
+      if (sub === "run") {
+        await client.canvasRun(target || "");
+        for (;;) {
+          const view = await client.canvasWait();
+          if (view.held?.state !== "waiting-colab" && view.run?.state !== "running") {
+            if (view.run?.state !== "done") process.exitCode = 1;
+            return print(view, true);
+          }
+        }
+      }
+      throw new ApixError("Dùng: canvas list | get | open <id|slug> | set <nodeId> key=value… | run [nodeId]");
+    }
     case "runs":
       return print(await client.activeRuns(), true);
     case "cancel":

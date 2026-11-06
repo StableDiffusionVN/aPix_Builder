@@ -355,6 +355,100 @@ export class ApixClient {
       : this.request(route, { method: "POST", body: body || {}, timeoutMs: 90000 });
   }
 
+  // ---- Canvas (the graph runs in the app window: server/lib/canvasBridge.js) ----
+
+  async canvasCommand(action, args = {}) {
+    return this.decorateCanvas(await this.request("/api/canvas-bridge/command", {
+      method: "POST",
+      body: { action, args },
+      timeoutMs: 45000
+    }));
+  }
+
+  /** Output urls → local file paths, so a chatbot can open the results. */
+  async decorateCanvas(view) {
+    const dir = await this.outputDir();
+    const nodes = (view.nodes || []).map(node => (node.outputs?.length ? {
+      ...node,
+      outputs: node.outputs.map(output => {
+        const filename = output.filename || new URL(output.url, "http://x").searchParams.get("name") || "";
+        return {
+          key: output.key,
+          kind: mediaKindFromFilename(filename),
+          filename,
+          path: dir && filename ? path.join(dir, filename) : "",
+          url: /^https?:/.test(output.url) ? output.url : `${this.baseUrl}${output.url}`
+        };
+      })
+    } : node));
+    return { ...view, nodes };
+  }
+
+  /** Open tabs + saved workflows (no need for the Canvas view to be open). */
+  async canvasList() {
+    const [project, library] = await Promise.all([
+      this.request("/api/canvas-project"),
+      this.request("/api/canvas-workflows")
+    ]);
+    return {
+      activeId: project.activeId,
+      tabs: (project.projects || []).map(item => ({ id: item.id, name: item.name, updatedAt: item.updatedAt })),
+      library: (library.workflows || []).map(item => ({ slug: item.slug, name: item.name, updatedAt: item.updatedAt }))
+    };
+  }
+
+  /** Image inputs accept a file path, URL or input-library name (like run_template). */
+  async canvasSetValues(nodeId, values = {}) {
+    const view = await this.canvasCommand("get");
+    const node = view.nodes.find(item => item.id === nodeId);
+    const resolved = {};
+    for (const [key, value] of Object.entries(values)) {
+      const port = node?.inputs?.find(item => item.key === key);
+      if (port?.type !== "image" || value === "" || value == null) {
+        resolved[key] = value;
+        continue;
+      }
+      const toImage = async item => {
+        const image = await this.resolveImage(item);
+        return image?.kind === "input-image" && !image.url
+          ? { ...image, url: `/api/input-image?name=${encodeURIComponent(image.name)}` }
+          : image;
+      };
+      resolved[key] = Array.isArray(value) ? await Promise.all(value.map(toImage)) : await toImage(value);
+    }
+    return this.canvasCommand("set_values", { nodeId, values: resolved });
+  }
+
+  /** Runs the open workflow or one node; a dead ComfyUI starts Colab first (desktop app). */
+  async canvasRun(nodeId = "") {
+    const args = nodeId ? { nodeId } : {};
+    const view = await this.canvasCommand("get");
+    const targets = view.nodes.filter(node => node.type === "step" && !node.bypassed && (!nodeId || node.id === nodeId));
+    if (targets.some(node => node.kind === "local") && !(await comfyReachable(await this.comfyAddress()))) {
+      try {
+        const held = await this.request("/api/canvas-bridge/run-when-colab", { method: "POST", body: { args } });
+        return { ...view, held };
+      } catch (error) {
+        if (error.status === 501) {
+          throw new ApixError("Server ComfyUI không phản hồi. Mở ComfyUI trên máy, hoặc dùng app aPix desktop để tự bật Google Colab.");
+        }
+        throw error;
+      }
+    }
+    return this.canvasCommand("run", args);
+  }
+
+  /** Waits for the run started through the bridge (returns the current state at timeout). */
+  async canvasWait({ timeoutMs = 50000, intervalMs = 2000 } = {}) {
+    const deadline = Date.now() + timeoutMs;
+    for (;;) {
+      const view = await this.canvasCommand("get");
+      const waiting = view.held?.state === "waiting-colab" || view.run?.state === "running";
+      if (!waiting || Date.now() > deadline) return view;
+      await new Promise(resolve => setTimeout(resolve, intervalMs));
+    }
+  }
+
   async deleteHistory(runId) {
     return this.request("/api/output-history/delete", { method: "POST", body: { id: runId } });
   }

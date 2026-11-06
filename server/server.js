@@ -19,6 +19,7 @@ import { createTemplateRoutes } from "./routes/templates.js";
 import { publishRuntimeInfo } from "./lib/runtimeInfo.js";
 import { createMcpRoutes } from "./routes/mcp.js";
 import { createColabRoutes } from "./routes/colab.js";
+import { createCanvasBridgeRoutes } from "./routes/canvasBridge.js";
 
 const routes = [
   createTemplateRoutes(routeContext),
@@ -31,7 +32,8 @@ const routes = [
   createLutRoutes(routeContext),
   createRunLogRoutes(routeContext),
   createMcpRoutes(routeContext),
-  createColabRoutes(routeContext)
+  createColabRoutes(routeContext),
+  createCanvasBridgeRoutes(routeContext)
 ];
 
 export function createRequestHandler() {

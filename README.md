@@ -174,9 +174,7 @@ Local builds use ad-hoc signing on macOS. For wide distribution, use Apple Devel
 | Template ID | Description |
 | --- | --- |
 | `klein-edit-image` | Klein image editing (local ComfyUI) |
-| `sdvn-klein-upscale-ultimate` | SDVN Klein upscale workflow (local ComfyUI) |
 | `klein-edit-image-lora` | Klein edit with LoRA (RunningHub Workflow) |
-| `sdvn-klein-upscale-ultimate` | SDVN Klein upscale (RunningHub Workflow) |
 
 ### Environment variables
 
@@ -321,9 +319,7 @@ Nếu password có ký tự đặc biệt, hãy URL-encode (ví dụ `@` → `%4
 | ID template | Mô tả |
 | --- | --- |
 | `klein-edit-image` | Chỉnh ảnh Klein (ComfyUI local) |
-| `sdvn-klein-upscale-ultimate` | Upscale Klein SDVN (ComfyUI local) |
 | `klein-edit-image-lora` | Chỉnh ảnh Klein + LoRA (RunningHub Workflow) |
-| `sdvn-klein-upscale-ultimate` | Upscale Klein SDVN (RunningHub Workflow) |
 
 Mỗi template thường gồm:
 

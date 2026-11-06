@@ -62,6 +62,11 @@ describe("VIP workflows", () => {
     await expect(templates.getTemplateExportSource("sdvn-swap")).rejects.toThrow(/VIP/);
     await expect(templates.resolveSaveTargetRoot("sdvn-swap")).rejects.toThrow(/VIP/);
     expect((await sync()).changed).toBe(false); // unchanged zip: nothing to do
+    const other = path.join(paths.configDir, "templates", "aaa-first");
+    await mkdir(other, { recursive: true });
+    await writeFile(path.join(other, "app_build.yaml"), yaml);
+    await writeFile(path.join(other, "api.json"), api);
+    expect((await service().loadTemplateRegistry()).templates.map(item => item.id)).toEqual(["sdvn-swap", "aaa-first"]);
   });
 
   test("disappear without a key or with a rejected key, and never fall back to another workflow", async () => {
@@ -77,6 +82,15 @@ describe("VIP workflows", () => {
     await writeFile(path.join(other, "app_build.yaml"), yaml);
     await writeFile(path.join(other, "api.json"), api);
     await expect(service().loadConfig("sdvn-swap")).rejects.toThrow(/mã aPix/);
+  });
+
+  test("a removed bundled workflow reports an error instead of running another one", async () => {
+    const other = path.join(paths.configDir, "templates", "other");
+    await mkdir(other, { recursive: true });
+    await writeFile(path.join(other, "app_build.yaml"), yaml);
+    await writeFile(path.join(other, "api.json"), api);
+    await expect(service().loadConfig("sdvn-klein-upscale-ultimate")).rejects.toThrow(/đã bị gỡ/);
+    await expect(service().loadConfig("other")).resolves.toBeTruthy();
   });
 
   test("offline keeps what is installed", async () => {

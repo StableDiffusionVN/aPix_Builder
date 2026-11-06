@@ -11,8 +11,11 @@ export const TEMPLATE_SCOPES = {
   runninghubWf: "runninghub-wf"
 };
 
-export const LOCAL_DEFAULT_TEMPLATE_ID = "sdvn-klein-upscale-ultimate";
-export const RH_WF_DEFAULT_TEMPLATE_ID = "sdvn-klein-upscale-ultimate";
+export const LOCAL_DEFAULT_TEMPLATE_ID = "klein-edit-image";
+export const RH_WF_DEFAULT_TEMPLATE_ID = "klein-edit-image-lora";
+// Bundled templates that were removed: a canvas node keeping one must report it,
+// not silently run the default workflow instead.
+const REMOVED_TEMPLATE_IDS = new Set(["sdvn-klein-upscale-ultimate"]);
 
 export function validateTemplateConfig(config, template, scope = TEMPLATE_SCOPES.local) {
   const errors = [];
@@ -184,7 +187,8 @@ export function createTemplateService({
         byId.set(template.id, template);
       }
     }
-    return Array.from(byId.values());
+    // VIP workflows first (sort is stable: the rest keep their order).
+    return Array.from(byId.values()).sort((a, b) => Number(Boolean(b.vip)) - Number(Boolean(a.vip)));
   }
 
   async function loadTemplateRegistry(scope = TEMPLATE_SCOPES.local) {
@@ -222,6 +226,9 @@ export function createTemplateService({
     // Never run another workflow in place of a VIP one (canvas nodes keep the id).
     if (!found && templateId && await isKnownVipTemplate(configDir, templateId)) {
       throw new Error("Workflow VIP này cần mã aPix hợp lệ (Settings → Mã aPix).");
+    }
+    if (!found && REMOVED_TEMPLATE_IDS.has(templateId)) {
+      throw new Error(`Workflow "${templateId}" đã bị gỡ khỏi aPix — hãy chọn workflow khác.`);
     }
     const template = found
       || allTemplates.find(item => item.id === registry.default)

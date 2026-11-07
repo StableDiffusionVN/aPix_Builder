@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { Crop, Eye, Folder, Images, Link, Loader2, Pencil, Scissors, Upload, X } from "lucide-react";
 import { CropInpaintModal, ImageEditorModal } from "./lazyModals";
 import { MaskEditorModal } from "./MaskEditorModal";
-import { defaultValue, getActiveSubInputs, isMenuSub, menuChoiceDefaults, normalizeId } from "../lib/template";
+import { activeMenuValue, defaultValue, getActiveSubInputs, isHiddenField, isMenuSub, menuChoiceDefaults, normalizeId } from "../lib/template";
 import { menuChoiceOptions, parseMenuChoices, resolveMenuStoredValue } from "../../shared/menuChoices.js";
 import { DYNAMIC_FIELD_TYPES, canonicalDynamicType, dynamicFieldChoices, isDynamicFieldType } from "../lib/dynamicTypes";
 import { fieldChoicesWithSdvn, sdvnFieldPending } from "../lib/sdvnModels";
@@ -533,14 +533,17 @@ const DynamicFieldInner = memo(function DynamicFieldInner({
     const choices = ui.choices || [];
     const menuOpts = menuChoiceOptions(ui);
     const parsedChoices = parseMenuChoices(choices, menuOpts);
-    const menuValue = resolveMenuStoredValue(value ?? defaultValue(item), choices, menuOpts);
+    const hidden = isHiddenField(item);
+    const menuValue = resolveMenuStoredValue(hidden ? activeMenuValue(item, {}) : value ?? defaultValue(item), choices, menuOpts);
     const activeSubs = getActiveSubInputs(item, menuValue);
     const valuesMap = allValues || {};
     const patchValue = onValueChange || ((key, next) => onChange(next));
+    // A hidden menu only hides its own dropdown: each sub-input has its own switch.
+    if (hidden && !activeSubs.some(subItem => !isHiddenField(subItem))) return null;
 
     return (
       <section className="menuSubField">
-        <label
+        {hidden ? null : <label
           className="field">
           <span>{label}<FieldInfo text={description} /></span>
           <SearchableSelect
@@ -553,7 +556,7 @@ const DynamicFieldInner = memo(function DynamicFieldInner({
               for (const [key, nextValue] of Object.entries(menuChoiceDefaults(item, next))) onValueChange(key, nextValue);
             }}
           />
-        </label>
+        </label>}
         {activeSubs.length ? (
           <div className="menuSubInputs">
             {activeSubs.map(subItem => (
@@ -1031,6 +1034,9 @@ const DynamicFieldInner = memo(function DynamicFieldInner({
   return null;
 }, areDynamicFieldPropsEqual);
 
-const DynamicField = DynamicFieldInner;
+function DynamicField(props) {
+  if (isHiddenField(props.item) && !isMenuSub(props.item)) return null;
+  return <DynamicFieldInner {...props} />;
+}
 
 export { DynamicField };

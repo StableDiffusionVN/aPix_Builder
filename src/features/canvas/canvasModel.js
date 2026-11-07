@@ -114,6 +114,7 @@ function menuSubChildPorts(item) {
   for (const choice of menuSubChoiceEntries(item)) {
     const fields = lookupMenuSubFields(ui.sub || {}, choice.value, choices, menuOpts);
     for (const [childKey, child] of Object.entries(fields || {})) {
+      if (child?.ui?.hidden === true) continue;
       const childItem = {
         key: `${item.key}.${choice.value}.${childKey}`,
         parentKey: item.key,
@@ -145,7 +146,7 @@ export function canvasInputPortIsActive(port, values = {}) {
 }
 
 export function activeStepInputPorts(inputs = [], values = {}) {
-  return (inputs || []).filter(port => canvasInputPortIsActive(port, values));
+  return (inputs || []).filter(port => !port.hidden && canvasInputPortIsActive(port, values));
 }
 
 /**
@@ -160,11 +161,13 @@ export function deriveStepPorts(config) {
       inputs.push(inputItemToPort(item, {
         menuSubRole: "parent",
         menuSubParentKey: item.key,
-        menuSubValueKey: itemValueKey(item)
+        menuSubValueKey: itemValueKey(item),
+        ...(item.ui.hidden === true ? { hidden: true } : {})
       }));
       inputs.push(...menuSubChildPorts(item));
       continue;
     }
+    if (item.ui.hidden === true) continue;
     inputs.push(inputItemToPort(item));
   }
 

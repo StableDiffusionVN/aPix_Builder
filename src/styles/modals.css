@@ -1095,3 +1095,83 @@ select.isMissingValue {
   border-color: var(--danger);
   color: var(--danger);
 }
+
+/* Template editor: collapsible, draggable sub-inputs and hidden fields */
+.subInputToggle {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.subInputToggle strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.subInputToggle small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.subInputEditorHeader { gap: 8px; }
+.subInputEditorCard.isDragging { opacity: 0.45; }
+.subInputEditorCard.isCollapsed .subInputEditorHeader { margin-bottom: 0; }
+.menuSubSettingsToggle { flex: none; width: 100%; margin-bottom: 10px; }
+.hiddenFieldIcon { flex: none; color: var(--muted); }
+
+.inputDetailActions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 10px;
+}
+
+.hiddenFieldDot {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 4px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  user-select: none;
+}
+
+.hiddenFieldDot.isOn { color: var(--text); }
+
+.hiddenFieldDotMark {
+  flex: none;
+  box-sizing: border-box;
+  width: 14px;
+  height: 14px;
+  border: 1.5px solid var(--muted);
+  border-radius: 50%;
+}
+
+.hiddenFieldDot.isOn .hiddenFieldDotMark {
+  border-color: #22c55e;
+  background: #22c55e;
+}
+
+.hiddenFieldDot input:focus-visible + .hiddenFieldDotMark {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.menuSubSubInputs > .menuSubSubInputsHeader h5 { margin-right: auto; }

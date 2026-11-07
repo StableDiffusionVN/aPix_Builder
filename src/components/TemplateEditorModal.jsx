@@ -2,7 +2,10 @@ import { assertApiWorkflow, workflowVariantEntries } from "../../shared/workflow
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Box,
+  ChevronDown,
+  ChevronRight,
   Dices,
+  EyeOff,
   FileJson,
   FileText,
   GripVertical,
@@ -84,6 +87,17 @@ function MappedSelect({ value, options, onChange }) {
       {missing ? <option value={value ?? ""}>{value ? `⚠ ${value} — ${t("templateEditor.valueMissing")}` : t("templateEditor.valueEmpty")}</option> : null}
       {options.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
     </select>
+  );
+}
+
+function HiddenFieldDot({ row, onUpdate }) {
+  const { t } = useI18n();
+  return (
+    <label className={`hiddenFieldDot ${row.hidden === true ? "isOn" : ""}`} title={t("templateEditor.hideFieldHint")}>
+      <input type="checkbox" className="srOnly" checked={row.hidden === true} onChange={event => onUpdate({ hidden: event.target.checked })} />
+      <span className="hiddenFieldDotMark" aria-hidden="true" />
+      <span>{t("templateEditor.hideField")}</span>
+    </label>
   );
 }
 
@@ -190,9 +204,12 @@ function InputDetailPanel({ row, nodes, fieldTypes, onUpdate, onDelete }) {
             <p>{inputRowMeta(row, nodes, locale)}</p>
           </div>
         </div>
-        <button type="button" className="rowDeleteButton" onClick={onDelete} title={t("templateEditor.deleteInput")}>
-          <Trash2 size={16} />
-        </button>
+        <div className="inputDetailActions">
+          <HiddenFieldDot row={row} onUpdate={onUpdate} />
+          <button type="button" className="rowDeleteButton" onClick={onDelete} title={t("templateEditor.deleteInput")}>
+            <Trash2 size={16} />
+          </button>
+        </div>
       </div>
       <div className="inputDetailForm">
         <label className="field">
@@ -324,17 +341,63 @@ function InputDetailPanel({ row, nodes, fieldTypes, onUpdate, onDelete }) {
   );
 }
 
-function SubInputEditor({ subRow, nodes, fieldTypes, onUpdate, onDelete }) {
+function SubInputEditor({ subRow, nodes, fieldTypes, onUpdate, onDelete, dragging, onDragStart, onDragEnd, onDrop, canDrop, onMove }) {
   const { t } = useI18n();  const selectedNode = nodes.find(node => node.id === subRow.nodeId);
+  const collapsed = subRow.collapsed === true;
   return (
-    <div className="subInputEditorCard">
+    <div
+      className={`subInputEditorCard ${dragging ? "isDragging" : ""} ${collapsed ? "isCollapsed" : ""}`}
+      onDragOver={event => {
+        if (!canDrop) return;
+        event.preventDefault();
+        event.stopPropagation();
+        event.dataTransfer.dropEffect = "move";
+      }}
+      onDrop={event => {
+        if (!canDrop) return;
+        event.preventDefault();
+        event.stopPropagation();
+        onDrop();
+      }}
+    >
       <div className="subInputEditorHeader">
-        <strong>{subRow.label || subRow.field || "Sub-input"}</strong>
+        <button
+          type="button"
+          className="rowDragHandle"
+          draggable
+          onDragStart={event => {
+            onDragStart();
+            event.dataTransfer.effectAllowed = "move";
+            event.dataTransfer.setData("text/plain", subRow.rowId);
+          }}
+          onDragEnd={onDragEnd}
+          onKeyDown={event => {
+            if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+              event.preventDefault();
+              onMove(event.key === "ArrowUp" ? -1 : 1);
+            }
+          }}
+          title={t("templateEditor.dragToReorder")}
+          aria-label={t("templateEditor.dragToReorder")}
+        >
+          <GripVertical size={14} />
+        </button>
+        <button
+          type="button"
+          className="subInputToggle"
+          aria-expanded={!collapsed}
+          onClick={() => onUpdate({ collapsed: !collapsed })}
+        >
+          {collapsed ? <ChevronRight size={15} /> : <ChevronDown size={15} />}
+          <strong>{subRow.label || subRow.field || "Sub-input"}</strong>
+          {collapsed ? <small>{subRow.nodeId} · {subRow.field} · {subRow.type}</small> : null}
+        </button>
+        <HiddenFieldDot row={subRow} onUpdate={onUpdate} />
         <button type="button" className="rowDeleteButton" onClick={onDelete} title={t("templateEditor.deleteSubInput")}>
           <Trash2 size={14} />
         </button>
       </div>
-      <div className="inputDetailForm subInputEditorForm">
+      {collapsed ? null : <div className="inputDetailForm subInputEditorForm">
         <label className="field">
           <span>ID node</span>
           <MappedSelect value={subRow.nodeId} options={nodeOptions(nodes)} onChange={nodeId => onUpdate({ nodeId })} />
@@ -458,15 +521,17 @@ function SubInputEditor({ subRow, nodes, fieldTypes, onUpdate, onDelete }) {
             )}
           </label>
         ) : null}
-      </div>
+      </div>}
     </div>
   );
 }
 
-function MenuSubDetailPanel({ row, nodes, workflow, fieldTypes, onAttachWorkflow, onUpdate, onDelete, onUpdateSubInput, onAddSubInput, onDeleteSubInput }) {
+function MenuSubDetailPanel({ row, nodes, workflow, fieldTypes, onAttachWorkflow, onUpdate, onDelete, onUpdateSubInput, onAddSubInput, onDeleteSubInput, onReorderSubInput, onMoveSubInput, onSetSubInputsCollapsed }) {
   const { t } = useI18n();  const menuOpts = menuOptsFromRow(row);
   const parsedChoices = parseMenuChoices(parseChoicesText(row.choicesText), menuOpts);
   const [activeChoice, setActiveChoice] = useState(parsedChoices[0]?.value || "");
+  const [settingsOpen, setSettingsOpen] = useState(true);
+  const [draggingSubId, setDraggingSubId] = useState("");
 
   useEffect(() => {
     if (!parsedChoices.length) {
@@ -496,11 +561,19 @@ function MenuSubDetailPanel({ row, nodes, workflow, fieldTypes, onAttachWorkflow
             <p>{t("templateEditor.menuSubDesc")}</p>
           </div>
         </div>
-        <button type="button" className="rowDeleteButton" onClick={onDelete} title={t("templateEditor.deleteMenuSub")}>
-          <Trash2 size={16} />
-        </button>
+        <div className="inputDetailActions">
+          <HiddenFieldDot row={row} onUpdate={onUpdate} />
+          <button type="button" className="rowDeleteButton" onClick={onDelete} title={t("templateEditor.deleteMenuSub")}>
+            <Trash2 size={16} />
+          </button>
+        </div>
       </div>
-      <div className="inputDetailForm">
+      <button type="button" className="subInputToggle menuSubSettingsToggle" aria-expanded={settingsOpen} onClick={() => setSettingsOpen(open => !open)}>
+        {settingsOpen ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
+        <strong>{t("templateEditor.menuSettings")}</strong>
+        {settingsOpen ? null : <small>{parsedChoices.length} {t("templateEditor.choicesCount")}{row.hasTargetId ? ` · ${row.nodeId}-${row.field}` : ""}</small>}
+      </button>
+      {settingsOpen ? <div className="inputDetailForm">
         <label className="field inputDetailFieldWide menuSubTargetToggle">
           <span>
             <input
@@ -594,7 +667,7 @@ function MenuSubDetailPanel({ row, nodes, workflow, fieldTypes, onAttachWorkflow
             ))}
           </select>
         </label>
-      </div>
+      </div> : null}
       <div className="menuSubChoiceTabs">
         {parsedChoices.map(choice => (
           <button
@@ -641,6 +714,12 @@ function MenuSubDetailPanel({ row, nodes, workflow, fieldTypes, onAttachWorkflow
       <div className="menuSubSubInputs">
         <div className="menuSubSubInputsHeader">
           <h5>{t("templateEditor.subInputsFor")} <b>{activeChoiceLabel || "—"}</b></h5>
+          {subRows.length > 1 ? (
+            <button type="button" className="smallActionButton" onClick={() => onSetSubInputsCollapsed(activeChoice, !subRows.every(subRow => subRow.collapsed))}>
+              {subRows.every(subRow => subRow.collapsed) ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+              <span>{t(subRows.every(subRow => subRow.collapsed) ? "templateEditor.expandAll" : "templateEditor.collapseAll")}</span>
+            </button>
+          ) : null}
           <button type="button" className="smallActionButton" onClick={() => activeChoice && onAddSubInput(activeChoice)} disabled={!activeChoice}>
             <Plus size={14} />
             <span>{t("templateEditor.addSubInput")}</span>
@@ -655,6 +734,15 @@ function MenuSubDetailPanel({ row, nodes, workflow, fieldTypes, onAttachWorkflow
             fieldTypes={fieldTypes}
             onUpdate={patch => onUpdateSubInput(activeChoice, subRow.rowId, patch)}
             onDelete={() => onDeleteSubInput(activeChoice, subRow.rowId)}
+            dragging={draggingSubId === subRow.rowId}
+            canDrop={Boolean(draggingSubId) && draggingSubId !== subRow.rowId}
+            onDragStart={() => setDraggingSubId(subRow.rowId)}
+            onDragEnd={() => setDraggingSubId("")}
+            onDrop={() => {
+              onReorderSubInput(activeChoice, draggingSubId, subRow.rowId);
+              setDraggingSubId("");
+            }}
+            onMove={direction => onMoveSubInput(activeChoice, subRow.rowId, direction)}
           />
         ))}
         {!subRows.length && activeChoice ? (
@@ -699,6 +787,8 @@ function subRowFromConfig(item, workflow, fallbackKey) {
     field,
     label: item.ui?.label || fallbackKey,
     description: item.ui?.description || "",
+    hidden: item.ui?.hidden === true,
+    collapsed: true,
     inpaintCrop: item.ui?.inpaintCrop === true,
     type,
     display: item.ui?.type === "text" ? "multiline" : item.ui?.display === "slider" ? "slider" : "input",
@@ -748,6 +838,7 @@ export function rowFromConfig(item, workflow, fallbackKey, workflowFiles = {}) {
       field: item.id ? field : "",
       label: ui.label || fallbackKey,
       description: ui.description || "",
+      hidden: ui.hidden === true,
       choicesText: choiceLines.join("\n"),
       menuLabelSyntax: ui.menuLabelSyntax === true,
       value: resolveMenuStoredValue(ui.value, choiceLines, menuOpts),
@@ -765,6 +856,7 @@ export function rowFromConfig(item, workflow, fallbackKey, workflowFiles = {}) {
     field,
     label: ui.label || fallbackKey,
     description: ui.description || "",
+    hidden: ui.hidden === true,
     inpaintCrop: ui.inpaintCrop === true,
     type,
     display: ui.type === "text" ? "multiline" : ui.display === "slider" ? "slider" : "input",
@@ -798,6 +890,7 @@ function buildInputUiFromRow(row) {
   };
   const description = String(row.description || "").trim();
   if (description) ui.description = description;
+  if (row.hidden === true) ui.hidden = true;
   if (["image", "image_mask", "file"].includes(row.type) && row.inpaintCrop === true) ui.inpaintCrop = true;
   if ((row.type === "int" || row.type === "float" || row.type === "seed") && row.minimum !== "") {
     ui.minimum = numericValue(row.minimum);
@@ -886,6 +979,7 @@ export function buildConfig({
       };
       const description = String(row.description || "").trim();
       if (description) ui.description = description;
+      if (row.hidden === true) ui.hidden = true;
       if (row.menuLabelSyntax) ui.menuLabelSyntax = true;
       const workflows = Object.fromEntries(parsedChoices.filter(choice => row.workflows?.[choice.value]?.file).map(choice => {
         const entry = row.workflows[choice.value];
@@ -1410,6 +1504,14 @@ export function TemplateEditorModal({
     }));
   }
 
+  function updateSubRows(menuRowId, choice, change) {
+    setInputRows(current => current.map(row => (
+      row.rowId !== menuRowId || row.kind !== "menu-sub"
+        ? row
+        : { ...row, sub: { ...row.sub, [choice]: change(row.sub?.[choice] || []) } }
+    )));
+  }
+
   function deleteMenuSubInput(menuRowId, choice, subRowId) {
     setInputRows(current => current.map(row => {
       if (row.rowId !== menuRowId || row.kind !== "menu-sub") return row;
@@ -1786,7 +1888,9 @@ export function TemplateEditorModal({
                           <span className="inputListItemLabel">{inputRowLabel(row, locale)}</span>
                           <span className="inputListItemMeta">{inputRowMeta(row, nodes, locale)}</span>
                         </div>
-                        {row.kind === "menu-sub" ? (
+                        {row.hidden ? (
+                          <EyeOff size={15} className="hiddenFieldIcon" aria-label={l("Trường ẩn", "Hidden field")} />
+                        ) : row.kind === "menu-sub" ? (
                           <span className="inputListItemType">menu-sub</span>
                         ) : row.kind !== "note" ? (
                           <span className="inputListItemType">{row.type}</span>
@@ -1815,6 +1919,9 @@ export function TemplateEditorModal({
                     onUpdateSubInput={(choice, subRowId, patch) => updateMenuSubInput(selectedInputRow.rowId, choice, subRowId, patch)}
                     onAddSubInput={choice => addMenuSubInput(selectedInputRow.rowId, choice)}
                     onDeleteSubInput={(choice, subRowId) => deleteMenuSubInput(selectedInputRow.rowId, choice, subRowId)}
+                    onReorderSubInput={(choice, draggedId, targetId) => updateSubRows(selectedInputRow.rowId, choice, rows => reorderRows(rows, draggedId, targetId))}
+                    onMoveSubInput={(choice, subRowId, direction) => updateSubRows(selectedInputRow.rowId, choice, rows => moveRow(rows, subRowId, direction))}
+                    onSetSubInputsCollapsed={(choice, collapsed) => updateSubRows(selectedInputRow.rowId, choice, rows => rows.map(subRow => ({ ...subRow, collapsed })))}
                   />
                 ) : (
                   <InputDetailPanel

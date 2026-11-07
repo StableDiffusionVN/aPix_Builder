@@ -37,7 +37,7 @@ export function parseFieldId(id) {
   return { nodeId, field: parts.join("-") };
 }
 
-const MANAGED_UI = ["type", "label", "description", "inpaintCrop", "value", "menuLabelSyntax"];
+const MANAGED_UI = ["type", "label", "description", "inpaintCrop", "value", "menuLabelSyntax", "hidden"];
 const MANAGED_NUMERIC = ["minimum", "maximum", "step"];
 
 /** ui keys the editor form has no control for: kept untouched so saving does not silently drop them. */
@@ -50,7 +50,7 @@ export function extraUiFrom(ui = {}, rowType = "") {
 }
 
 export function extraMenuSubUiFrom(ui = {}) {
-  const managed = new Set(["type", "label", "description", "choices", "value", "sub", "workflows", "menuLabelSyntax"]);
+  const managed = new Set(["type", "label", "description", "choices", "value", "sub", "workflows", "menuLabelSyntax", "hidden"]);
   return Object.fromEntries(Object.entries(ui).filter(([key]) => !managed.has(key)));
 }
 

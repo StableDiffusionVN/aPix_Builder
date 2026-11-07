@@ -469,17 +469,26 @@ function fieldInfo(key, item) {
 
 export function describeFields(input) {
   const fields = [];
+  const visibleEntries = group => Object.entries(group || {}).filter(([, item]) => item?.ui?.hidden !== true);
   for (const [key, item] of Object.entries(input)) {
     const type = item?.ui?.type;
     if (type === "col") {
-      for (const [childKey, child] of Object.entries(item.ui.col || {})) fields.push(fieldInfo(childKey, child));
+      for (const [childKey, child] of visibleEntries(item.ui.col)) fields.push(fieldInfo(childKey, child));
       continue;
     }
     if (type === "menu-sub") {
+      const hiddenMenu = item.ui.hidden === true;
+      const fixedChoice = hiddenMenu ? resolveMenuStoredValue(item.ui.value, item.ui.choices || [], menuChoiceOptions(item.ui)) : null;
+      // A hidden menu is locked to its default option: only that option's fields can be set.
+      if (hiddenMenu) {
+        const subs = lookupMenuSubFields(item.ui.sub || {}, fixedChoice, item.ui.choices || [], menuChoiceOptions(item.ui));
+        for (const [subKey, subItem] of visibleEntries(subs)) fields.push(fieldInfo(subKey, subItem));
+        continue;
+      }
       const info = fieldInfo(key, item);
       info.subFields = Object.fromEntries(Object.entries(item.ui.sub || {}).map(([choice, sub]) => [
         choice,
-        Object.entries(sub || {}).map(([subKey, subItem]) => fieldInfo(subKey, subItem))
+        visibleEntries(sub).map(([subKey, subItem]) => fieldInfo(subKey, subItem))
       ]));
       if (item.ui.workflows) info.workflowPerChoice = true;
       fields.push(info);
@@ -530,8 +539,14 @@ async function coerce(item, raw, resolveImage) {
 
 async function assignField(request, values, used, key, item, resolveImage, parentKey = "") {
   if (!item?.id) return;
-  const { found, value } = takeValue(values, used, key, item, parentKey);
   const ui = item.ui || {};
+  if (ui.hidden === true) {
+    if (ui.value === undefined || ui.value === null || ui.value === "" || MEDIA_TYPES.has(ui.type)) return;
+    const hiddenValue = ui.type === "seed" ? await coerce(item, ui.value, resolveImage) : ui.value;
+    for (const id of Array.isArray(item.id) ? item.id : [item.id]) request[id] = hiddenValue;
+    return;
+  }
+  const { found, value } = takeValue(values, used, key, item, parentKey);
   if (!found) {
     if (ui.value === undefined || MEDIA_TYPES.has(ui.type)) return;
     request[Array.isArray(item.id) ? item.id[0] : item.id] = ui.type === "seed" ? await coerce(item, ui.value, resolveImage) : ui.value;
@@ -554,7 +569,7 @@ export async function buildValues(input, values = {}, resolveImage = async value
     if (type === "menu-sub") {
       const options = menuChoiceOptions(item.ui);
       const choices = item.ui.choices || [];
-      const picked = takeValue(values, used, key, item);
+      const picked = item.ui.hidden === true ? { found: false } : takeValue(values, used, key, item);
       const selected = resolveMenuStoredValue(picked.found ? String(picked.value) : item.ui.value ?? menuChoiceValue(choices[0], options), choices, options);
       if (!parseMenuChoices(choices, options).some(choice => choice.value === selected)) {
         throw new ApixError(`"${item.ui.label || key}" không có lựa chọn "${selected}". Có: ${choices.join(", ")}`);

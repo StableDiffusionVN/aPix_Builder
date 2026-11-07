@@ -111,3 +111,51 @@ describe("save and reload", () => {
     expect(Object.keys(config.input)).toEqual(["zeta", "f_1024"]);
   });
 });
+
+describe("hidden fields", () => {
+  const hiddenItems = flattenInputs({
+    prompt: { id: "6-positive", ui: { type: "string", value: "fixed", hidden: true } },
+    empty: { id: "6-text", ui: { type: "string", hidden: true } },
+    image: { id: "1-image", ui: { type: "image", hidden: true } },
+    shown: { id: "7-steps", ui: { type: "int", value: 20 } }
+  });
+
+  it("always sends the default, ignoring stale stored values", () => {
+    const payload = requestPayload(hiddenItems, { ...buildDefaults(hiddenItems), "6-positive": "old preset", "7-steps": 5 });
+    expect(payload["6-positive"]).toBe("fixed");
+    expect(payload["7-steps"]).toBe(5);
+  });
+
+  it("sends nothing when no default is set, so the workflow keeps its own value", () => {
+    const payload = requestPayload(hiddenItems, buildDefaults(hiddenItems));
+    expect(payload).not.toHaveProperty("6-text");
+    expect(payload).not.toHaveProperty("1-image");
+  });
+
+  it("a hidden menu is locked to its default option", () => {
+    const items = flattenInputs({ m: { ui: { type: "menu-sub", hidden: true, choices: ["Base", "Turbo"], value: "Base", sub: {
+      Base: { a: { id: "7-steps", ui: { type: "int", value: 20 } } },
+      Turbo: { b: { id: "6-positive", ui: { type: "string", value: "t" } } }
+    } } } });
+    const payload = requestPayload(items, { ...buildDefaults(items), __menu__m: "Turbo" });
+    expect(payload.__menu__m).toBe("Base");
+    expect(payload["7-steps"]).toBe(20);
+    expect(payload).not.toHaveProperty("6-positive");
+  });
+
+  it("survives save and reload, top level and inside a menu", () => {
+    const item = { id: "7-steps", ui: { type: "int", label: "S", hidden: true, value: 20 } };
+    const menuItem = { ui: { type: "menu-sub", label: "M", hidden: true, choices: ["Base"], value: "Base", sub: { Base: { s: item } } } };
+    const config = build([rowFromConfig(item, workflow, "s"), rowFromConfig(menuItem, workflow, "m")]);
+    expect(config.input.s.ui.hidden).toBe(true);
+    expect(config.input.m.ui.hidden).toBe(true);
+    expect(config.input.m.ui.sub.Base.s.ui.hidden).toBe(true);
+  });
+
+  it("sub-input order follows the rows", () => {
+    const a = { ...baseRow, rowId: "a", label: "Bravo" };
+    const b = { ...baseRow, rowId: "b", nodeId: "2", field: "Model", type: "string", label: "Alpha" };
+    const { ui } = build([{ kind: "menu-sub", label: "M", choicesText: "Base", value: "Base", sub: { Base: [a, b] } }]).input.m;
+    expect(Object.keys(ui.sub.Base)).toEqual(["bravo", "alpha"]);
+  });
+});

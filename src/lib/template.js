@@ -3,6 +3,20 @@ import { cropInpaintSource, imageValueForUi } from "../../shared/cropInpaint.js"
 import { isDynamicFieldType } from "./dynamicTypes";
 import { lookupMenuSubFields, menuChoiceOptions, resolveMenuStoredValue } from "../../shared/menuChoices.js";
 
+/** ui.hidden: not shown anywhere in the UI; runs always use the template's default. */
+export function isHiddenField(item) {
+  return item?.ui?.hidden === true;
+}
+
+/** Option of a menu-sub: a hidden menu cannot be changed, so stale stored values must not win. */
+export function activeMenuValue(item, values) {
+  return isHiddenField(item) ? defaultValue(item) : values[menuSubValueKey(item)];
+}
+
+function hasValue(value) {
+  return value !== "" && value !== null && value !== undefined;
+}
+
 export function isMenuSub(item) {
   return item?.ui?.type === "menu-sub";
 }
@@ -112,16 +126,25 @@ export function buildDefaults(items) {
   return values;
 }
 
+function assignHiddenDefault(payload, item) {
+  const value = defaultValue(item);
+  if (!hasValue(value)) return; // nothing configured: keep what the workflow JSON already has
+  for (const id of Array.isArray(item.id) ? item.id : [item.id]) payload[id] = value;
+}
+
 export function requestPayload(items, values) {
   const payload = {};
   for (const item of items) {
     if (isMenuSub(item)) {
-      const menuKey = menuSubValueKey(item);
-      const menuValue = values[menuKey];
+      const menuValue = activeMenuValue(item, values);
       if (item.id) payload[item.id] = menuValue;
       else payload[menuSubSelectionStorageKey(item.key)] = menuValue;
       for (const subItem of getActiveSubInputs(item, menuValue)) {
         if (!subItem.id) continue;
+        if (isHiddenField(subItem)) {
+          assignHiddenDefault(payload, subItem);
+          continue;
+        }
         const key = normalizeId(subItem.id);
         if (Array.isArray(subItem.id)) {
           subItem.id.forEach((id, index) => {
@@ -134,6 +157,10 @@ export function requestPayload(items, values) {
       continue;
     }
     if (!item.id) continue;
+    if (isHiddenField(item)) {
+      assignHiddenDefault(payload, item);
+      continue;
+    }
     const key = normalizeId(item.id);
     const value = imageValueForUi(values[key], item.ui);
     if (Array.isArray(item.id)) {
@@ -171,11 +198,10 @@ function collectActiveImageValueKeys(items, values) {
   const keys = [];
   for (const item of items || []) {
     if (isMenuSub(item)) {
-      const menuValue = values[menuSubValueKey(item)];
-      keys.push(...collectActiveImageValueKeys(getActiveSubInputs(item, menuValue), values));
+      keys.push(...collectActiveImageValueKeys(getActiveSubInputs(item, activeMenuValue(item, values)), values));
       continue;
     }
-    if (!isImageFieldType(item?.ui?.type) || !item.id) continue;
+    if (isHiddenField(item) || !isImageFieldType(item?.ui?.type) || !item.id) continue;
     keys.push(normalizeId(item.id));
   }
   return keys;
@@ -230,12 +256,11 @@ export function findCompareInputImage(items, values) {
       continue;
     }
     if (isMenuSub(item)) {
-      const menuValue = values[menuSubValueKey(item)];
-      const found = findCompareInputImage(getActiveSubInputs(item, menuValue), values);
+      const found = findCompareInputImage(getActiveSubInputs(item, activeMenuValue(item, values)), values);
       if (found) return found;
       continue;
     }
-    if (!isImageFieldType(uiType) || !item.id) continue;
+    if (isHiddenField(item) || !isImageFieldType(uiType) || !item.id) continue;
     const storedValue = values[normalizeId(item.id)];
     const url = extractImageValueUrl(Array.isArray(storedValue) ? storedValue[0] : storedValue);
     if (url) return url;

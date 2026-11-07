@@ -1139,6 +1139,13 @@ select.isMissingValue {
   gap: 10px;
 }
 
+/* Keep the .srOnly input inside the label: otherwise it stays unscrolled outside the pane and
+   focusing it on click scrolls the whole modal (blank area below the footer). */
+.hiddenFieldDot,
+.menuSubWorkflow label.smallActionButton {
+  position: relative;
+}
+
 .hiddenFieldDot {
   display: inline-flex;
   flex: none;

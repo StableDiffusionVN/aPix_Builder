@@ -18,6 +18,13 @@ export function workflowNodes(workflow) {
   }));
 }
 
+/** Menu-sub target: changing the node also moves the field to one that node really has. */
+export function menuTargetPatch(nodes, patch) {
+  if (!patch.nodeId) return patch;
+  const node = nodes.find(item => item.id === patch.nodeId);
+  return { ...patch, field: node?.fields?.[0] || "" };
+}
+
 function workflowFieldExists(workflow, nodeId, field) {
   if (!nodeId || !field) return false;
   const inputs = workflow?.[nodeId]?.inputs;

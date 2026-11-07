@@ -37,6 +37,7 @@ import {
   inferRowType,
   inferValueType,
   moveRow,
+  menuTargetPatch,
   pruneInputRows,
   reorderRows,
   slugifyTemplateKey as slugify,
@@ -1389,7 +1390,7 @@ export function TemplateEditorModal({
     setInputRows(current => current.map(row => {
       if (row.rowId !== rowId) return row;
       const next = { ...row, ...patch };
-      if (row.kind === "menu-sub") return next;
+      if (row.kind === "menu-sub") return { ...row, ...menuTargetPatch(nodes, patch) };
       if (patch.nodeId) {
         const node = nodes.find(node => node.id === patch.nodeId);
         const field = node?.fields?.[0] || "";

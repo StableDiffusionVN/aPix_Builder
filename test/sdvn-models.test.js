@@ -9,6 +9,22 @@ const workflow = {
 };
 
 describe("sdvnModelFieldsFromWorkflow (per-field)", () => {
+  test("field con trong menu-sub cũng được bơm model SDVN, kể cả lựa chọn có JSON riêng", () => {
+    const config = {
+      input: {
+        menu: { ui: { type: "menu-sub", choices: ["Base", "Turbo"], workflows: { Turbo: { file: "workflows/t.json" } }, sub: {
+          Base: { lora: { id: "5-lora_name", ui: { type: "loras" } }, plain: { id: "7-lora_name", ui: { type: "loras" } } },
+          Turbo: { ckpt: { id: "3-ckpt_name", ui: { type: "checkpoints" } } }
+        } } }
+      }
+    };
+    const files = { "workflows/t.json": { "3": { class_type: "SDVN Checkpoint Loader" } } };
+    expect(sdvnModelFieldsFromWorkflow(config, workflow, files)).toEqual({
+      "5-lora_name": "loras",
+      "3-ckpt_name": "checkpoints"
+    });
+  });
+
   test("chỉ field trỏ node SDVN mới vào map; node loader thường bị loại", () => {
     const config = {
       input: {
@@ -39,20 +55,6 @@ describe("sdvnModelFieldsFromWorkflow (per-field)", () => {
     });
   });
 
-  test("KHÔNG duyệt field con menu-sub (top-level-only, thống nhất iOS/Android)", () => {
-    const config = {
-      input: {
-        mode: {
-          ui: {
-            type: "menu-sub",
-            choices: ["A:a"],
-            sub: { a: { subLora: { id: "5-lora_name", ui: { type: "lora" } } } }
-          }
-        }
-      }
-    };
-    expect(sdvnModelFieldsFromWorkflow(config, workflow)).toEqual({});
-  });
 });
 
 describe("fieldChoicesWithSdvn (per-field merge)", () => {

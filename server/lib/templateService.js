@@ -47,11 +47,22 @@ export function validateTemplateConfig(config, template, scope = TEMPLATE_SCOPES
 // Client bơm danh sách model SDVN CHỈ cho các field này (per-field — đồng bộ iOS/Android):
 // model SDVN do node SDVN tự tải theo tên, node loader thường chọn sẽ fail khi chạy.
 // Trả về { [normalizeId(item.id)]: "checkpoints" | "loras" }.
-export function sdvnModelFieldsFromWorkflow(config, workflow) {
+export function sdvnModelFieldsFromWorkflow(config, workflow, workflowFiles = {}) {
   const fields = {};
-  // CHỈ duyệt field top-level (không vào menu-sub/col) — thống nhất 5 codebase theo chuẩn
-  // iOS/Android; muốn hỗ trợ sub-field phải đổi đồng bộ cả 5 nơi một đợt.
+  // Top-level + field con của menu-sub (mọi lựa chọn). Field con của lựa chọn có JSON riêng
+  // được dò trong JSON đó. (iOS/Android hiện vẫn chỉ dò top-level.)
+  const entries = [];
   for (const item of Object.values(config?.input || {})) {
+    if (String(item?.ui?.type || "").toLowerCase() !== "menu-sub") {
+      entries.push([item, workflow]);
+      continue;
+    }
+    for (const [choice, children] of Object.entries(item.ui.sub || {})) {
+      const choiceWorkflow = workflowFiles[item.ui.workflows?.[choice]?.file] || workflow;
+      for (const child of Object.values(children || {})) entries.push([child, choiceWorkflow]);
+    }
+  }
+  for (const [item, itemWorkflow] of entries) {
     const uiType = String(item?.ui?.type || "").toLowerCase();
     const idKey = Array.isArray(item?.id) ? item.id.join("|") : String(item?.id || "");
     let kind = null;
@@ -61,7 +72,7 @@ export function sdvnModelFieldsFromWorkflow(config, workflow) {
     else if (["loras", "lora"].includes(uiType)) kind = "loras";
     if (!kind || !idKey) continue;
     const nodeId = idKey.split("-")[0];
-    const classType = nodeId ? workflow?.[nodeId]?.class_type : null;
+    const classType = nodeId ? itemWorkflow?.[nodeId]?.class_type : null;
     if (typeof classType === "string" && /sdvn/i.test(classType)) fields[idKey] = kind;
   }
   return fields;
@@ -256,10 +267,11 @@ export function createTemplateService({
     return String(value).trim();
   }
 
-  async function computeSdvnModelFields(config, workflowPath) {
-    if (!workflowPath) return {};
+  async function computeSdvnModelFields(config, template) {
+    if (!template.workflowPath) return {};
     try {
-      return sdvnModelFieldsFromWorkflow(config, JSON.parse(await readFile(workflowPath, "utf8")));
+      const workflowFiles = await readWorkflowFiles(config, template).catch(() => ({}));
+      return sdvnModelFieldsFromWorkflow(config, JSON.parse(await readFile(template.workflowPath, "utf8")), workflowFiles);
     } catch {
       return {};
     }
@@ -289,7 +301,7 @@ export function createTemplateService({
       config.runninghub.workflowId = extractRunningHubWorkflowId(raw, config);
     }
     validateConfig(config, template, scope);
-    config.sdvnModelFields = await computeSdvnModelFields(config, template.workflowPath);
+    config.sdvnModelFields = await computeSdvnModelFields(config, template);
     // Giữ sdvnModelTypes (derive từ map) cho canvas project cũ đã lưu config — fallback per-type.
     config.sdvnModelTypes = [...new Set(Object.values(config.sdvnModelFields))];
     return {

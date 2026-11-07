@@ -33,7 +33,8 @@ describe("TemplateEditor model", () => {
       id: "1",
       title: "Sampler",
       classType: "KSampler",
-      fields: ["seed"]
+      fields: ["seed"],
+      linkFields: []
     }]);
     expect(pruneInputRows([
       { rowId: "valid", nodeId: "1", field: "seed" },

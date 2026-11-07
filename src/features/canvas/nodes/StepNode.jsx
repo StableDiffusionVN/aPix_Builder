@@ -15,6 +15,7 @@ import { isStepOutputDetached } from "../canvasNodeLayout.js";
 import { buildFieldContextMenuItems, buildNodeContextMenuItems, buildPreviewContextMenuItems } from "../canvasMenuHelpers.js";
 import { useCanvasActions, useCanvasGraph } from "../canvasContext.js";
 import { handleNodeBodyWheel } from "../canvasWheel.js";
+import { flattenInputs, menuChoiceDefaults } from "../../../lib/template.js";
 import { formatOutputTimingLabel } from "../../../lib/runLog.js";
 import { localizeRuntimeMessage, useI18n } from "../../../i18n/I18nContext.jsx";
 import {
@@ -191,7 +192,12 @@ function StepNodeComponent({ id, data, selected }) {
                 linked={isLinked}
                 sdvnModelTypes={data.config?.sdvnModelTypes}
                 sdvnModelFields={data.config?.sdvnModelFields}
-                onChange={next => updateNodeValues(id, { [port.valueKey]: next })}
+                onChange={next => {
+                  const menuItem = port.menuSubRole === "parent"
+                    ? flattenInputs(data.config?.input || {}).find(item => item.key === port.menuSubParentKey)
+                    : null;
+                  updateNodeValues(id, { [port.valueKey]: next, ...(menuItem ? menuChoiceDefaults(menuItem, next) : {}) });
+                }}
                 onContextMenu={event => openContextMenu?.(event, buildFieldContextMenuItems({
                   node,
                   port,

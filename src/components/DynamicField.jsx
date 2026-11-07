@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { Crop, Eye, Folder, Images, Link, Loader2, Pencil, Scissors, Upload, X } from "lucide-react";
 import { CropInpaintModal, ImageEditorModal } from "./lazyModals";
 import { MaskEditorModal } from "./MaskEditorModal";
-import { defaultValue, getActiveSubInputs, isMenuSub, normalizeId } from "../lib/template";
+import { defaultValue, getActiveSubInputs, isMenuSub, menuChoiceDefaults, normalizeId } from "../lib/template";
 import { menuChoiceOptions, parseMenuChoices, resolveMenuStoredValue } from "../../shared/menuChoices.js";
 import { DYNAMIC_FIELD_TYPES, canonicalDynamicType, dynamicFieldChoices, isDynamicFieldType } from "../lib/dynamicTypes";
 import { fieldChoicesWithSdvn, sdvnFieldPending } from "../lib/sdvnModels";
@@ -547,7 +547,11 @@ const DynamicFieldInner = memo(function DynamicFieldInner({
             selected={menuValue}
             choices={parsedChoices}
             placeholder={parsedChoices.length === 0 ? t("field.noChoices") : ""}
-            onChange={onChange}
+            onChange={next => {
+              onChange(next);
+              if (!onValueChange) return;
+              for (const [key, nextValue] of Object.entries(menuChoiceDefaults(item, next))) onValueChange(key, nextValue);
+            }}
           />
         </label>
         {activeSubs.length ? (

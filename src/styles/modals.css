@@ -1089,3 +1089,9 @@ html[data-theme="light"] .settingsModal select {
 .menuSubWorkflow .menuSubSubInputsHeader > div { flex: 1; min-width: 160px; }
 .menuSubWorkflow h5 { margin: 0 0 4px; font-size: 12px; color: var(--text-primary); }
 .menuSubWorkflow .fieldDescription { overflow-wrap: anywhere; }
+
+/* Template editor: stored value missing from the node (see MappedSelect) */
+select.isMissingValue {
+  border-color: var(--danger);
+  color: var(--danger);
+}

@@ -76,6 +76,23 @@ export function normalizeId(id) {
   return Array.isArray(id) ? id.join("|") : id;
 }
 
+/** Defaults of `choice`'s sub-inputs whose node field another option also uses — apply them when switching option. */
+export function menuChoiceDefaults(item, choice) {
+  const elsewhere = new Set();
+  const selected = new Map();
+  const active = getActiveSubInputs(item, choice);
+  active.forEach(sub => sub.id && selected.set(normalizeId(sub.id), sub));
+  for (const sub of flattenSubInputs(item?.ui?.sub)) {
+    if (!sub.id || sub.choice === active[0]?.choice) continue;
+    elsewhere.add(normalizeId(sub.id));
+  }
+  const values = {};
+  for (const [key, sub] of selected) {
+    if (elsewhere.has(key) && !isImageFieldType(sub.ui?.type)) values[key] = defaultValue(sub);
+  }
+  return values;
+}
+
 export function buildDefaults(items) {
   const values = {};
   for (const item of items) {
@@ -84,6 +101,9 @@ export function buildDefaults(items) {
       for (const subItem of flattenSubInputs(item.ui?.sub)) {
         if (subItem.id) values[normalizeId(subItem.id)] = defaultValue(subItem);
       }
+      // Options may map the same node field with different defaults (Base 20 steps, Turbo 8):
+      // the option selected by default wins.
+      Object.assign(values, menuChoiceDefaults(item, defaultValue(item)));
       continue;
     }
     if (!item.id) continue;

@@ -375,6 +375,8 @@ export async function setWorkflowValue(workflow, id, value, target, signal, opti
     return nodeInputs[field];
   }
 
+  // An empty value must not cut a wire ["9", 1] feeding this input.
+  if (value === "" && Array.isArray(nodeInputs[field])) return nodeInputs[field];
   nodeInputs[field] = value;
   return value;
 }

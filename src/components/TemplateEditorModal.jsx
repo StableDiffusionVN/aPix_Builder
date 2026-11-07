@@ -37,7 +37,13 @@ import {
   inferRowType,
   inferValueType,
   moveRow,
+  defaultFieldForNode,
+  extraMenuSubUiFrom,
+  extraUiFrom,
+  menuTargetDefaults,
   menuTargetPatch,
+  parseFieldId,
+  remapChoiceEntries,
   pruneInputRows,
   reorderRows,
   slugifyTemplateKey as slugify,
@@ -69,6 +75,29 @@ function RhWfSwitch({ checked, onChange, title, hint, compact = false }) {
     </label>
   );
 }
+/** A select that never pretends: a stored value missing from the options shows as a warning instead of the first option. */
+function MappedSelect({ value, options, onChange }) {
+  const { t } = useI18n();
+  const missing = !options.some(option => option.value === value);
+  return (
+    <select className={missing ? "isMissingValue" : ""} value={value ?? ""} onChange={event => onChange(event.target.value)}>
+      {missing ? <option value={value ?? ""}>{value ? `⚠ ${value} — ${t("templateEditor.valueMissing")}` : t("templateEditor.valueEmpty")}</option> : null}
+      {options.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+    </select>
+  );
+}
+
+function nodeOptions(nodes) {
+  return nodes.map(node => ({ value: node.id, label: `${node.id} - ${node.title}` }));
+}
+
+function fieldOptions(node, t) {
+  return (node?.fields || []).map(field => ({
+    value: field,
+    label: node.linkFields?.includes(field) ? `${field} (${t("templateEditor.linkField")})` : field
+  }));
+}
+
 const DISPLAY_TYPES = ["input", "slider"];
 const STRING_DISPLAY_TYPES = ["input", "multiline"];
 
@@ -104,7 +133,7 @@ function inputRowMeta(row, nodes, locale = "vi") {
   if (row.kind === "note") return locale === "vi" ? "Markdown · chú thích" : "Markdown · note";
   if (row.kind === "menu-sub") {
     const choices = parseChoicesText(row.choicesText);
-    const subCount = Object.values(row.sub || {}).reduce((sum, items) => sum + (items?.length || 0), 0);
+    const subCount = parseMenuChoices(choices, menuOptsFromRow(row)).reduce((sum, choice) => sum + (row.sub?.[choice.value]?.length || 0), 0);
     const target = row.hasTargetId ? `${row.nodeId}-${row.field}` : (locale === "vi" ? "không target" : "no target");
     return locale === "vi"
       ? `${choices.length} lựa chọn · ${subCount} sub-input · ${target}`
@@ -168,24 +197,16 @@ function InputDetailPanel({ row, nodes, fieldTypes, onUpdate, onDelete }) {
       <div className="inputDetailForm">
         <label className="field">
           <span>ID node</span>
-          <select value={row.nodeId} onChange={event => onUpdate({ nodeId: event.target.value })}>
-            {nodes.map(node => (
-              <option key={node.id} value={node.id}>{node.id} - {node.title}</option>
-            ))}
-          </select>
+          <MappedSelect value={row.nodeId} options={nodeOptions(nodes)} onChange={nodeId => onUpdate({ nodeId })} />
         </label>
         <label className="field">
           <span>{t("templateEditor.field")}</span>
-          <select value={row.field} onChange={event => onUpdate({ field: event.target.value })}>
-            {(selectedNode?.fields || []).map(field => (
-              <option key={field} value={field}>{field}</option>
-            ))}
-          </select>
+          <MappedSelect value={row.field} options={fieldOptions(selectedNode, t)} onChange={field => onUpdate({ field })} />
         </label>
         <label className="field">
           <span>{t("templateEditor.dataType")}</span>
           <select value={row.type} onChange={event => onUpdate({ type: event.target.value })}>
-            {fieldTypes.map(type => <option key={type} value={type}>{type}</option>)}
+            {[...new Set([...fieldTypes, row.type].filter(Boolean))].map(type => <option key={type} value={type}>{type}</option>)}
           </select>
         </label>
         <label className="field">
@@ -316,24 +337,16 @@ function SubInputEditor({ subRow, nodes, fieldTypes, onUpdate, onDelete }) {
       <div className="inputDetailForm subInputEditorForm">
         <label className="field">
           <span>ID node</span>
-          <select value={subRow.nodeId} onChange={event => onUpdate({ nodeId: event.target.value })}>
-            {nodes.map(node => (
-              <option key={node.id} value={node.id}>{node.id} - {node.title}</option>
-            ))}
-          </select>
+          <MappedSelect value={subRow.nodeId} options={nodeOptions(nodes)} onChange={nodeId => onUpdate({ nodeId })} />
         </label>
         <label className="field">
           <span>{t("templateEditor.field")}</span>
-          <select value={subRow.field} onChange={event => onUpdate({ field: event.target.value })}>
-            {(selectedNode?.fields || []).map(field => (
-              <option key={field} value={field}>{field}</option>
-            ))}
-          </select>
+          <MappedSelect value={subRow.field} options={fieldOptions(selectedNode, t)} onChange={field => onUpdate({ field })} />
         </label>
         <label className="field">
           <span>{t("templateEditor.dataType")}</span>
           <select value={subRow.type} onChange={event => onUpdate({ type: event.target.value })}>
-            {fieldTypes.map(type => <option key={type} value={type}>{type}</option>)}
+            {[...new Set([...fieldTypes, subRow.type].filter(Boolean))].map(type => <option key={type} value={type}>{type}</option>)}
           </select>
         </label>
         <label className="field">
@@ -495,8 +508,7 @@ function MenuSubDetailPanel({ row, nodes, workflow, fieldTypes, onAttachWorkflow
               checked={Boolean(row.hasTargetId)}
               onChange={event => onUpdate({
                 hasTargetId: event.target.checked,
-                nodeId: event.target.checked ? (row.nodeId || nodes[0]?.id || "") : "",
-                field: event.target.checked ? (row.field || nodes[0]?.fields?.[0] || "") : ""
+                ...(event.target.checked ? menuTargetDefaults(nodes) : { nodeId: "", field: "" })
               })}
             />
             {" "}{t("templateEditor.sendMenuValue")}
@@ -506,19 +518,11 @@ function MenuSubDetailPanel({ row, nodes, workflow, fieldTypes, onAttachWorkflow
           <>
             <label className="field">
               <span>ID node</span>
-              <select value={row.nodeId} onChange={event => onUpdate({ nodeId: event.target.value })}>
-                {nodes.map(node => (
-                  <option key={node.id} value={node.id}>{node.id} - {node.title}</option>
-                ))}
-              </select>
+              <MappedSelect value={row.nodeId} options={nodeOptions(nodes)} onChange={nodeId => onUpdate({ nodeId })} />
             </label>
             <label className="field">
               <span>{t("templateEditor.field")}</span>
-              <select value={row.field} onChange={event => onUpdate({ field: event.target.value })}>
-                {(selectedNode?.fields || []).map(field => (
-                  <option key={field} value={field}>{field}</option>
-                ))}
-              </select>
+              <MappedSelect value={row.field} options={fieldOptions(selectedNode, t)} onChange={field => onUpdate({ field })} />
             </label>
           </>
         ) : null}
@@ -566,18 +570,15 @@ function MenuSubDetailPanel({ row, nodes, workflow, fieldTypes, onAttachWorkflow
             onChange={event => {
               const choicesText = event.target.value;
               const nextParsed = parseMenuChoices(parseChoicesText(choicesText), menuOpts);
-              const sub = { ...(row.sub || {}) };
-              const nextSub = Object.fromEntries(nextParsed.map(choice => [
-                choice.value,
-                sub[choice.value] || sub[choice.raw] || []
-              ]));
+              const activeIndex = parsedChoices.findIndex(choice => choice.value === activeChoice);
+              if (nextParsed.length === parsedChoices.length && nextParsed[activeIndex]) setActiveChoice(nextParsed[activeIndex].value);
               onUpdate({
                 choicesText,
-                workflows: Object.fromEntries(nextParsed.filter(choice => row.workflows?.[choice.value] || row.workflows?.[choice.raw]).map(choice => [choice.value, row.workflows[choice.value] || row.workflows[choice.raw]])),
-                sub: nextSub,
+                workflows: remapChoiceEntries(row.workflows, parsedChoices, nextParsed),
+                sub: remapChoiceEntries(row.sub, parsedChoices, nextParsed),
                 value: nextParsed.some(choice => choice.value === row.value)
                   ? row.value
-                  : (nextParsed[0]?.value || "")
+                  : (nextParsed[parsedChoices.findIndex(choice => choice.value === row.value)]?.value || nextParsed[0]?.value || "")
               });
             }}
           />
@@ -623,7 +624,8 @@ function MenuSubDetailPanel({ row, nodes, workflow, fieldTypes, onAttachWorkflow
             }} />
           </label>
           {choiceWorkflow ? <button type="button" className="smallActionButton" onClick={() => {
-            const workflows = { ...row.workflows }; delete workflows[activeChoice]; onUpdate({ workflows });
+            const workflows = { ...row.workflows }; delete workflows[activeChoice];
+            onUpdate({ workflows, sub: { ...row.sub, [activeChoice]: pruneInputRows(row.sub?.[activeChoice] || [], workflow) } });
           }}>{t("templateEditor.useMainWorkflow")}</button> : null}
         </div>
         {choiceWorkflow ? <label className="field inputDetailFieldWide">
@@ -664,10 +666,12 @@ function MenuSubDetailPanel({ row, nodes, workflow, fieldTypes, onAttachWorkflow
 }
 
 function uniqueKey(base, used) {
-  let key = slugify(base);
+  // A purely numeric key ("1024") would jump to the front of the object and break the field order.
+  const slug = /^\d+$/.test(slugify(base)) ? `f_${slugify(base)}` : slugify(base);
+  let key = slug;
   let index = 2;
   while (used.has(key)) {
-    key = `${slugify(base)}_${index}`;
+    key = `${slug}_${index}`;
     index += 1;
   }
   used.add(key);
@@ -685,8 +689,7 @@ function booleanValue(value) {
 }
 
 function subRowFromConfig(item, workflow, fallbackKey) {
-  const [nodeId, ...fieldParts] = String(item.id || "").split("-");
-  const field = fieldParts[fieldParts[0] === "inputs" ? 1 : 0] || "";
+  const { nodeId, field } = parseFieldId(item.id);
   const value = workflow?.[nodeId]?.inputs?.[field];
   const dynamicType = canonicalDynamicType(item.ui?.type);
   const type = dynamicType || (item.ui?.type === "text" ? "string" : item.ui?.type || inferValueType(value));
@@ -708,11 +711,12 @@ function subRowFromConfig(item, workflow, fallbackKey) {
         ? resolveMenuStoredValue(item.ui?.value, item.ui?.choices, menuChoiceOptions(item.ui))
         : item.ui?.value ?? defaultValueForType(item.ui?.type, value),
     choicesText: (item.ui?.choices || []).join("\n"),
-    menuLabelSyntax: item.ui?.menuLabelSyntax === true
+    menuLabelSyntax: item.ui?.menuLabelSyntax === true,
+    extraUi: extraUiFrom(item.ui, type)
   };
 }
 
-function rowFromConfig(item, workflow, fallbackKey, workflowFiles = {}) {
+export function rowFromConfig(item, workflow, fallbackKey, workflowFiles = {}) {
   const ui = item.ui || {};
   if (ui.type === "note" || ui.type === "markdown") {
     return {
@@ -722,8 +726,7 @@ function rowFromConfig(item, workflow, fallbackKey, workflowFiles = {}) {
     };
   }
   if (ui.type === "menu-sub") {
-    const [nodeId, ...fieldParts] = String(item.id || "").split("-");
-    const field = fieldParts[fieldParts[0] === "inputs" ? 1 : 0] || "";
+    const { nodeId, field } = parseFieldId(item.id);
     const choiceLines = ui.choices || [];
     const menuOpts = menuChoiceOptions(ui);
     const optionWorkflows = Object.fromEntries(parseMenuChoices(choiceLines, menuOpts).flatMap(choice => {
@@ -748,11 +751,11 @@ function rowFromConfig(item, workflow, fallbackKey, workflowFiles = {}) {
       choicesText: choiceLines.join("\n"),
       menuLabelSyntax: ui.menuLabelSyntax === true,
       value: resolveMenuStoredValue(ui.value, choiceLines, menuOpts),
-      sub
+      sub,
+      extraUi: extraMenuSubUiFrom(ui)
     };
   }
-  const [nodeId, ...fieldParts] = String(item.id || "").split("-");
-  const field = fieldParts[fieldParts[0] === "inputs" ? 1 : 0] || "";
+  const { nodeId, field } = parseFieldId(item.id);
   const value = workflow?.[nodeId]?.inputs?.[field];
   const dynamicType = canonicalDynamicType(ui.type);
   const type = dynamicType || (ui.type === "text" ? "string" : ui.type || inferValueType(value));
@@ -774,7 +777,8 @@ function rowFromConfig(item, workflow, fallbackKey, workflowFiles = {}) {
         ? resolveMenuStoredValue(ui.value, ui.choices, menuChoiceOptions(ui))
         : ui.value ?? defaultValueForType(ui.type, value),
     choicesText: (ui.choices || []).join("\n"),
-    menuLabelSyntax: ui.menuLabelSyntax === true
+    menuLabelSyntax: ui.menuLabelSyntax === true,
+    extraUi: extraUiFrom(ui, type)
   };
 }
 
@@ -789,7 +793,8 @@ function outputFromConfig(item, locale = "vi") {
 function buildInputUiFromRow(row) {
   const ui = {
     type: row.type === "string" && row.display === "multiline" ? "text" : row.type,
-    label: row.label || row.field
+    label: row.label || row.field,
+    ...(row.extraUi || {})
   };
   const description = String(row.description || "").trim();
   if (description) ui.description = description;
@@ -821,7 +826,27 @@ function buildInputUiFromRow(row) {
   return ui;
 }
 
-function buildConfig({
+function rowName(row) {
+  return row.label || row.field || row.nodeId || "Input";
+}
+
+function assertUniqueId(id, used, locale) {
+  if (used.has(id)) {
+    throw new Error(locale === "vi"
+      ? `Trường ${id} đang được dùng 2 lần — xoá bớt hoặc đổi node/trường.`
+      : `Field ${id} is used twice — remove one or pick another node/field.`);
+  }
+  used.add(id);
+}
+
+function assertRowMapped(row, locale) {
+  if (row.nodeId && row.field && row.type) return;
+  throw new Error(locale === "vi"
+    ? `"${rowName(row)}" chưa chọn được node/trường (node này có thể không có tham số) — chọn lại hoặc xoá dòng này.`
+    : `"${rowName(row)}" has no node/field (the node may have no parameters) — pick another or delete the row.`);
+}
+
+export function buildConfig({
   appName,
   inputRows,
   outputRows,
@@ -834,6 +859,7 @@ function buildConfig({
   locale = "vi"
 }) {
   const usedInputKeys = new Set();
+  const usedIds = new Set();
   const input = {};
   for (const row of inputRows) {
     if (row.kind === "note") {
@@ -851,6 +877,7 @@ function buildConfig({
       const choices = parseChoicesText(row.choicesText);
       const parsedChoices = parseMenuChoices(choices, menuOptsFromRow(row));
       const ui = {
+        ...(row.extraUi || {}),
         type: "menu-sub",
         label: row.label || "Menu",
         choices,
@@ -867,9 +894,11 @@ function buildConfig({
       if (Object.keys(workflows).length) ui.workflows = workflows;
       for (const choice of parsedChoices) {
         const usedSubKeys = new Set();
+        const usedSubIds = new Set();
         ui.sub[choice.value] = {};
         for (const subRow of row.sub?.[choice.value] || []) {
-          if (!subRow.nodeId || !subRow.field || !subRow.type) continue;
+          assertRowMapped(subRow, locale);
+          assertUniqueId(`${subRow.nodeId}-${subRow.field}`, usedSubIds, locale);
           const subKey = uniqueKey(subRow.label || `${subRow.nodeId}_${subRow.field}`, usedSubKeys);
           ui.sub[choice.value][subKey] = {
             id: `${subRow.nodeId}-${subRow.field}`,
@@ -878,13 +907,16 @@ function buildConfig({
         }
       }
       const entry = { ui };
-      if (row.hasTargetId && row.nodeId && row.field) {
+      if (row.hasTargetId) {
+        assertRowMapped({ ...row, type: "menu-sub" }, locale);
         entry.id = `${row.nodeId}-${row.field}`;
+        assertUniqueId(entry.id, usedIds, locale);
       }
       input[key] = entry;
       continue;
     }
-    if (!row.nodeId || !row.field || !row.type) continue;
+    assertRowMapped(row, locale);
+    assertUniqueId(`${row.nodeId}-${row.field}`, usedIds, locale);
     const key = uniqueKey(row.label || `${row.nodeId}_${row.field}`, usedInputKeys);
     input[key] = {
       id: `${row.nodeId}-${row.field}`,
@@ -1255,7 +1287,7 @@ export function TemplateEditorModal({
 
   function addInputRow() {
     const firstNode = nodes.find(node => node.fields.length > 0);
-    const field = firstNode?.fields?.[0] || "";
+    const field = defaultFieldForNode(firstNode);
     const value = firstNode ? workflow?.[firstNode.id]?.inputs?.[field] : "";
     const typeDefaults = defaultsForType(inferRowType({ field, nodeClass: firstNode?.classType, value }, mode), value);
     const rowId = crypto.randomUUID();
@@ -1332,7 +1364,7 @@ export function TemplateEditorModal({
         const nodes = workflowNodes(workflow);
         if (patch.nodeId) {
           const node = nodes.find(node => node.id === patch.nodeId);
-          const field = node?.fields?.[0] || "";
+          const field = defaultFieldForNode(node);
           const value = workflow?.[patch.nodeId]?.inputs?.[field];
           next.field = field;
           next.label = field || next.label;
@@ -1341,9 +1373,10 @@ export function TemplateEditorModal({
         if (patch.field) {
           const node = nodes.find(node => node.id === next.nodeId);
           const value = workflow?.[next.nodeId]?.inputs?.[patch.field];
-          next.label = next.label || patch.field;
+          next.label = !subRow.label || subRow.label === subRow.field ? patch.field : subRow.label;
           Object.assign(next, defaultsForType(inferRowType({ field: patch.field, nodeClass: node?.classType, value }, mode), value));
         }
+        if (patch.nodeId || patch.field || patch.type) next.extraUi = {};
         if (patch.type) {
           const value = workflow?.[next.nodeId]?.inputs?.[next.field];
           Object.assign(next, defaultsForType(patch.type, value));
@@ -1358,7 +1391,7 @@ export function TemplateEditorModal({
     const branch = inputRows.find(row => row.rowId === menuRowId)?.workflows?.[choice]?.workflow || workflow;
     const nodes = workflowNodes(branch);
     const firstNode = nodes.find(node => node.fields.length > 0);
-    const field = firstNode?.fields?.[0] || "";
+    const field = defaultFieldForNode(firstNode);
     const value = firstNode ? branch?.[firstNode.id]?.inputs?.[field] : "";
     const typeDefaults = defaultsForType(inferRowType({ field, nodeClass: firstNode?.classType, value }, mode), value);
     setInputRows(current => current.map(row => {
@@ -1393,7 +1426,7 @@ export function TemplateEditorModal({
       if (row.kind === "menu-sub") return { ...row, ...menuTargetPatch(nodes, patch) };
       if (patch.nodeId) {
         const node = nodes.find(node => node.id === patch.nodeId);
-        const field = node?.fields?.[0] || "";
+        const field = defaultFieldForNode(node);
         const value = workflow?.[patch.nodeId]?.inputs?.[field];
         next.field = field;
         next.label = field || next.label;
@@ -1402,9 +1435,10 @@ export function TemplateEditorModal({
       if (patch.field) {
         const node = nodes.find(node => node.id === next.nodeId);
         const value = workflow?.[next.nodeId]?.inputs?.[patch.field];
-        next.label = next.label || patch.field;
+        next.label = !row.label || row.label === row.field ? patch.field : row.label;
         Object.assign(next, defaultsForType(inferRowType({ field: patch.field, nodeClass: node?.classType, value }, mode), value));
       }
+      if (patch.nodeId || patch.field || patch.type) next.extraUi = {};
       if (patch.type) {
         const value = workflow?.[next.nodeId]?.inputs?.[next.field];
         Object.assign(next, defaultsForType(patch.type, value));
@@ -1849,11 +1883,7 @@ export function TemplateEditorModal({
                   </button>
                   <label className="field">
                     <span>ID node Save</span>
-                    <select value={row.nodeId} onChange={event => updateOutputRow(row.rowId, { nodeId: event.target.value })}>
-                      {(saveNodes.length ? saveNodes : nodes).map(node => (
-                        <option key={node.id} value={node.id}>{node.id} - {node.title}</option>
-                      ))}
-                    </select>
+                    <MappedSelect value={row.nodeId} options={nodeOptions(saveNodes.length ? saveNodes : nodes)} onChange={nodeId => updateOutputRow(row.rowId, { nodeId })} />
                   </label>
                   <label className="field">
                     <span>{l("Tên output", "Output name")}</span>

@@ -1993,7 +1993,7 @@ export function AppWorkspace() {
               <TemplateSelector
                 templates={rhWfTemplates}
                 selectedTemplate={rhWfSelectedTemplate}
-                onChange={loadRhWfConfig}
+                onChange={templateId => loadRhWfConfig(templateId, { resetParams: true })}
                 onEdit={() => setRhWfTemplateEditorOpen(true)}
                 onDelete={deleteTemplate}
                 deleteScope="runninghub-wf"
@@ -2067,7 +2067,7 @@ export function AppWorkspace() {
               <TemplateSelector
                 templates={templates}
                 selectedTemplate={selectedTemplate}
-                onChange={loadConfig}
+                onChange={templateId => loadConfig(templateId, { resetParams: true })}
                 onEdit={() => setTemplateEditorOpen(true)}
                 onDelete={deleteTemplate}
               />

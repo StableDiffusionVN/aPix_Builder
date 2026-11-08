@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef } from "react";
-import { buildDefaults, flattenInputs } from "../../lib/template.js";
+import { flattenInputs, initialValues } from "../../lib/template.js";
 import { rhWfWorkspaceKey } from "../../lib/runningHubTemplate.js";
 import { localizeRuntimeMessage } from "../../i18n/I18nContext.jsx";
 
@@ -71,10 +71,9 @@ export function useTemplateWorkspaceActions({
     try {
       const data = await loadRhWfTemplateConfig(templateId);
       const nextTemplateId = data.template?.id || templateId || "";
-      const defaults = buildDefaults(flattenInputs(data.config?.input));
       const storedValues = nextTemplateId ? getStoredValues(rhWfWorkspaceKey(nextTemplateId)) : null;
       setRhWfConfig(data.config);
-      setRhWfValues(options.values || { ...defaults, ...(storedValues || {}) });
+      setRhWfValues(options.values || initialValues(flattenInputs(data.config?.input), storedValues, { resetParams: options.resetParams }));
       setRhWfSelectedTemplate(nextTemplateId);
       setStatus(`${t("status.rhWfReady")}: ${data.template?.name || data.template?.id || "Default"}`);
     } catch (error) {
@@ -98,10 +97,9 @@ export function useTemplateWorkspaceActions({
     try {
       const data = await loadTemplateConfig(templateId);
       const nextTemplateId = data.template?.id || templateId || "";
-      const defaults = buildDefaults(flattenInputs(data.config?.input));
       const storedValues = nextTemplateId ? getStoredValues(nextTemplateId) : null;
       setConfig(data.config);
-      setValues(options.values || { ...defaults, ...(storedValues || {}) });
+      setValues(options.values || initialValues(flattenInputs(data.config?.input), storedValues, { resetParams: options.resetParams }));
       setSelectedTemplate(nextTemplateId);
       if (!options.preserveServerAddress) {
         setComfyAddress(current => options.address || current || data.server?.address || defaultComfyServer);

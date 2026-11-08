@@ -107,6 +107,32 @@ export function menuChoiceDefaults(item, choice) {
   return values;
 }
 
+/**
+ * Values to start a template with. `resetParams` (user picked another template): every
+ * parameter back to the template default, only the images last used with it are kept.
+ */
+export function initialValues(items, stored, { resetParams = false } = {}) {
+  const defaults = buildDefaults(items);
+  if (!stored) return defaults;
+  if (!resetParams) return { ...defaults, ...stored };
+  const kept = {};
+  for (const key of imageValueKeys(items)) {
+    if (key in stored) kept[key] = stored[key];
+  }
+  return { ...defaults, ...kept };
+}
+
+function imageValueKeys(items) {
+  const keys = [];
+  for (const item of items || []) {
+    const children = isMenuSub(item) ? flattenSubInputs(item.ui?.sub) : [item];
+    for (const child of children) {
+      if (child?.id && isImageFieldType(child.ui?.type)) keys.push(normalizeId(child.id));
+    }
+  }
+  return keys;
+}
+
 export function buildDefaults(items) {
   const values = {};
   for (const item of items) {

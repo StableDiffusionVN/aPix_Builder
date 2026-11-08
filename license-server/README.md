@@ -38,6 +38,8 @@ Mã chỉ hiện **một lần** khi tạo — gửi cho khách. Khách nhập t
 |---|---|---|
 | `GET /v1/health` | | `{ ok, protectedRepos, hfToken }` |
 | `POST /v1/session` | `{ key }` | `{ token, expiresAt, keyExpiresAt, label }` (token HMAC, phiên ≤ 12 giờ; `keyExpiresAt` = hạn của mã, `null` = không hết hạn) |
+| `GET /v1/defaults/list` | | `{ templates: [{ id, sha256 }] }` theo `order.json` (công khai) |
+| `GET /v1/defaults/download?id=` | | file zip (công khai) |
 | `POST /v1/vip/list` | `{ token }` | `{ workflows: [{ id, sha256 }] }` |
 | `POST /v1/vip/download` | `{ token, id }` | file zip |
 | `POST /v1/download-url` | `{ token, url }` | `{ url }` link ký tạm · `{ public: true }` nếu không phải repo riêng · 401/403/429 |
@@ -46,6 +48,23 @@ Mã chỉ hiện **một lần** khi tạo — gửi cho khách. Khách nhập t
 
 Đặt file `<id>.zip` (định dạng xuất zip của aPix, `id` chỉ gồm a-z, 0-9, `-`) vào `<LICENSE_DATA_DIR>/vip/` — trên VPS là `/var/lib/apix-license/vip/`, thuộc user `apix-license` (sau khi chép: `chown -R apix-license:apix-license /var/lib/apix-license/vip`). Không cần khởi động lại.
 App có mã hợp lệ tự tải về (`vip-templates/` trong thư mục config), hiện với dấu ★, chỉ đọc và không xuất zip. Mã hết hạn / bị thu hồi thì bị gỡ khi app kiểm tra lại (lúc mở app hoặc lưu mã); mất mạng thì giữ bản đã tải. Đổi file zip → app tự cập nhật theo checksum.
+
+## Template mặc định
+
+Giống workflow VIP nhưng công khai (không cần mã): `<id>.zip` trong `<LICENSE_DATA_DIR>/defaults/`
+(VPS: `/var/lib/apix-license/defaults/`) + `order.json` = `["id", …]` quyết định thứ tự, id đầu là template
+mặc định của app. Thêm / sửa zip / xoá zip → app cập nhật khi mở lại (theo checksum), không phụ thuộc phiên
+bản app. Template app đã đóng gói (`config/default/`) bị ẩn nếu server không còn liệt kê; server trống hoặc
+không vào được thì app giữ bản đã tải / bản đóng gói.
+
+```bash
+set -a; source _local/apix-vps.env; set +a
+D=$(mktemp -d); cp <các file zip> $D/; echo '["qwen-image-2-1-edit","flux2-klein-edit","z-image"]' > $D/order.json
+expect website/deploy/upload-tar.exp "$D" /var/lib/apix-license/defaults
+expect website/deploy/ssh-run.exp 'chown -R apix-license:apix-license /var/lib/apix-license/defaults; chmod 755 /var/lib/apix-license/defaults; chmod 644 /var/lib/apix-license/defaults/*'
+```
+
+Xoá một template: `expect website/deploy/ssh-run.exp 'rm /var/lib/apix-license/defaults/<id>.zip'` (và bỏ khỏi `order.json`).
 
 ## Cập nhật / deploy lại
 

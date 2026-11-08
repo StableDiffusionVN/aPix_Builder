@@ -174,6 +174,43 @@ export function createLicenseServer(options = {}) {
       return;
     }
 
+    // Default templates: <dataDir>/defaults/<id>.zip, public (no key). order.json (optional) =
+    // ["id", ...] decides the list order; the first is the app's default template.
+    if (req.method === "GET" && (route === "/v1/defaults/list" || route === "/v1/defaults/download")) {
+      const defaultsDir = path.join(config.dataDir, "defaults");
+      if (route === "/v1/defaults/list") {
+        const names = (await readdir(defaultsDir).catch(() => [])).filter(item => VIP_ZIP.test(item));
+        let order = [];
+        try {
+          order = JSON.parse(await readFile(path.join(defaultsDir, "order.json"), "utf8"));
+        } catch {
+          order = [];
+        }
+        const rank = id => (Array.isArray(order) && order.includes(id) ? order.indexOf(id) : Number.MAX_SAFE_INTEGER);
+        const templates = [];
+        for (const name of names) {
+          const data = await readFile(path.join(defaultsDir, name));
+          templates.push({ id: name.replace(/\.zip$/, ""), sha256: createHash("sha256").update(data).digest("hex") });
+        }
+        templates.sort((a, b) => rank(a.id) - rank(b.id) || a.id.localeCompare(b.id));
+        send(res, 200, { templates });
+        return;
+      }
+      const file = `${url.searchParams.get("id") || ""}.zip`;
+      if (!VIP_ZIP.test(file)) {
+        send(res, 400, { error: "Template không hợp lệ" });
+        return;
+      }
+      const data = await readFile(path.join(defaultsDir, file)).catch(() => null);
+      if (!data) {
+        send(res, 404, { error: "Không có template này" });
+        return;
+      }
+      res.writeHead(200, { "content-type": "application/zip", "content-length": data.length, "cache-control": "no-store" });
+      res.end(data);
+      return;
+    }
+
     // VIP workflows: <dataDir>/vip/<id>.zip, only for a live session of a valid key.
     if (req.method === "POST" && (route === "/v1/vip/list" || route === "/v1/vip/download")) {
       const body = await readJson(req);

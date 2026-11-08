@@ -1,0 +1,124 @@
+app:
+  name: Z Image Generate
+input:
+  lora:
+    id: 4-lora_name
+    ui:
+      type: loras
+      label: Lora
+      description: Chọn lora hoặc nhập link url để tải lora tùy chọn
+      value: None
+  custom_lora_url:
+    id: 4-Download_url
+    ui:
+      type: string
+      label: Custom lora url
+  mode:
+    ui:
+      type: menu-sub
+      label: Mode
+      choices:
+        - Generate
+        - Refinder
+        - Edit Mask
+      value: Generate
+      sub:
+        Generate:
+          width:
+            id: 5-tile_width
+            ui:
+              type: int
+              label: Width
+              minimum: 512
+              maximum: 2048
+              step: 1
+              value: 1024
+          height:
+            id: 5-tile_height
+            ui:
+              type: int
+              label: Height
+              minimum: 512
+              maximum: 2048
+              step: 1
+              value: 1536
+        Refinder:
+          image:
+            id: 9-image
+            ui:
+              type: image
+              label: Image
+          image_size:
+            id: 19-value
+            ui:
+              type: int
+              label: Image Size
+              minimum: 0
+              maximum: 2048
+              step: 1
+              value: 2048
+          denoise:
+            id: 5-denoise
+            ui:
+              type: float
+              label: Denoise
+              minimum: 0
+              maximum: 1
+              step: 0.1
+              display: slider
+              value: 0.65
+        Edit Mask:
+          image_mask:
+            id: 9-image
+            ui:
+              type: image
+              label: Image & Mask
+          denoise:
+            id: 5-denoise
+            ui:
+              type: float
+              label: Denoise
+              minimum: 0
+              maximum: 1
+              step: 0.1
+              display: slider
+              value: 0.65
+      description: >-
+        Generate: Tạo hình ảnh mới từ prompt
+
+        Refinder: Sửa hình ảnh từ ảnh gốc theo denoise
+
+        Edit mask: Sửa hình ảnh trong vùng mask tùy chọn (Tô mask bằng cách ấn
+        icon chiếc kéo ở hình ảnh)
+      workflows:
+        Generate:
+          file: workflows/70fbc351-b24f-4028-bb54-e3c383da0391.json
+          name: Z_gen.json
+          outputNodeId: "8"
+        Refinder:
+          file: workflows/8f9f41e4-7933-40a2-98ea-b94aa1d8afda.json
+          name: Z_refinder.json
+          outputNodeId: "8"
+        Edit Mask:
+          file: workflows/8b934a2c-0b1d-4288-a274-ca2ffb6bf305.json
+          name: z_mask.json
+          outputNodeId: "8"
+  prompt:
+    id: 13-value
+    ui:
+      type: text
+      label: Prompt
+  seed:
+    id: 14-seed
+    ui:
+      type: seed
+      label: Seed
+      minimum: 0
+      step: 1
+      value: random_seed
+output:
+  anh_ket_qua:
+    id: "8"
+    ui:
+      type: image
+      label: Ảnh kết quả

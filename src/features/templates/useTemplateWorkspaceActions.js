@@ -118,7 +118,8 @@ export function useTemplateWorkspaceActions({
   const reloadTemplates = useCallback(async (nextTemplateId, options = {}) => {
     const registry = await loadTemplateRegistry();
     setTemplates(registry.templates || []);
-    await loadConfig(nextTemplateId || registry.default);
+    const stillListed = nextTemplateId && (registry.templates || []).some(item => item.id === nextTemplateId);
+    await loadConfig(stillListed ? nextTemplateId : registry.default, options.keepResult ? { keepResult: true } : {});
     if (options.savedAsCopy) setStatus(t("status.templateSavedCopy"));
   }, [loadConfig, loadTemplateRegistry, setStatus, setTemplates, t]);
 

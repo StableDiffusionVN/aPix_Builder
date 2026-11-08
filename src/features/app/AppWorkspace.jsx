@@ -95,7 +95,7 @@ import { usePressHold } from "../../hooks/usePressHold.js";
 import { useAdjustedOutputPreview } from "../../hooks/useAdjustedOutputPreview.js";
 import { ColabButton } from "./ColabButton.jsx";
 import { useCanvasBridgeClient } from "../canvas/useCanvasBridgeClient.js";
-import { syncVipTemplates, TEMPLATES_CHANGED_EVENT } from "../../lib/vipTemplates.js";
+import { syncDefaultTemplates, syncVipTemplates, TEMPLATES_CHANGED_EVENT } from "../../lib/vipTemplates.js";
 import { ColabSheet, setColabSheet } from "./ColabSheet.jsx";
 import { useComfyServerGate } from "./useComfyServerGate.jsx";
 
@@ -1718,11 +1718,16 @@ export function AppWorkspace() {
   const stepOutputRef = useShortcutActionRefs(stepOutput);
 
   // VIP workflows follow the aPix key: checked at start and whenever the key changes.
+  // Default templates come from the license server too (any app version gets new ones).
   const reloadTemplatesRef = useRef(reloadTemplates);
   reloadTemplatesRef.current = reloadTemplates;
+  const selectedTemplateRef = useRef(selectedTemplate);
+  selectedTemplateRef.current = selectedTemplate;
   useEffect(() => {
     void syncVipTemplates();
-    const onChanged = () => void reloadTemplatesRef.current?.();
+    void syncDefaultTemplates();
+    // Keep the template the user is on (falls back to the default when it was removed).
+    const onChanged = () => void reloadTemplatesRef.current?.(selectedTemplateRef.current || undefined, { keepResult: true });
     window.addEventListener(TEMPLATES_CHANGED_EVENT, onChanged);
     return () => window.removeEventListener(TEMPLATES_CHANGED_EVENT, onChanged);
   }, []);

@@ -1,0 +1,67 @@
+app:
+  name: Flux2 Klein Edit
+input:
+  lora:
+    id: 9-lora_name
+    ui:
+      type: loras
+      label: Lora
+      description: Chọn lora hoặc nhập link tải lora huggingface ở ô url
+      value: None
+  custom_lora_url:
+    id: 9-Download_url
+    ui:
+      type: string
+      label: Custom lora url
+  image:
+    id: 1-image
+    ui:
+      type: image
+      label: Image
+  prompt:
+    id: 24-positive
+    ui:
+      type: text
+      label: Prompt
+  ratio:
+    id: 16-ratio
+    ui:
+      type: menu
+      label: Ratio
+      description: Tỉ lệ khung hình ảnh output
+      choices:
+        - None
+        - 1:1
+        - 4:5
+        - 5:4
+        - 2:3
+        - 3:2
+        - 16:9
+        - 9:16
+        - 1:2
+        - 2:1
+      value: None
+  max_size:
+    id: 21-value
+    ui:
+      type: int
+      label: Max Size
+      description: Size cạnh lớn nhất của ảnh output
+      minimum: 0
+      maximum: 5998
+      step: 1
+      value: 2048
+  seed:
+    id: 15-seed
+    ui:
+      type: seed
+      label: Seed
+      minimum: 0
+      step: 1
+      value: random_seed
+output:
+  anh_ket_qua:
+    id: "8"
+    ui:
+      type: image
+      label: Ảnh kết quả

@@ -1,0 +1,293 @@
+{
+  "1": {
+    "inputs": {
+      "Load_url": true,
+      "Url": "https://www.pinterest.com/pin/1139903355668137969/",
+      "image": "None"
+    },
+    "class_type": "SDVN Load Image",
+    "_meta": {
+      "title": "🏞️ Image 1"
+    }
+  },
+  "2": {
+    "inputs": {
+      "Model": "qwen_image_2.1_int8_convrot.safetensors"
+    },
+    "class_type": "SDVN AnyDownload List",
+    "_meta": {
+      "title": "📥  AnyDownload List"
+    }
+  },
+  "3": {
+    "inputs": {
+      "Model": "qwen_image_2.1_vae_bf16.safetensors"
+    },
+    "class_type": "SDVN AnyDownload List",
+    "_meta": {
+      "title": "📥  AnyDownload List"
+    }
+  },
+  "4": {
+    "inputs": {
+      "Model": "qwen3vl_8b_int8_convrot.safetensors"
+    },
+    "class_type": "SDVN AnyDownload List",
+    "_meta": {
+      "title": "📥  AnyDownload List"
+    }
+  },
+  "6": {
+    "inputs": {
+      "positive": "làm cho cô gái có mái tóc vàng, background trắng",
+      "style": "None",
+      "translate": "None",
+      "mode": "max size",
+      "resolution": 2048,
+      "seed": [
+        "15",
+        0
+      ],
+      "clip": [
+        "9",
+        1
+      ],
+      "images.image_1": [
+        "1",
+        0
+      ],
+      "images.image_2": [
+        "10",
+        0
+      ],
+      "images.image_3": [
+        "11",
+        0
+      ],
+      "images.image_4": [
+        "12",
+        0
+      ],
+      "images.image_5": [
+        "13",
+        0
+      ],
+      "images.image_6": [
+        "14",
+        0
+      ],
+      "vae": [
+        "3",
+        0
+      ]
+    },
+    "class_type": "SDVN CLIP Text Encode Qwen Image 2.1",
+    "_meta": {
+      "title": "🔡 SDVN CLIP Text Encode Qwen Image 2.1"
+    }
+  },
+  "7": {
+    "inputs": {
+      "ModelType": "Auto",
+      "StepsType": "None",
+      "denoise": 1,
+      "steps": 20,
+      "cfg": 1,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "seed": [
+        "15",
+        0
+      ],
+      "Tiled": false,
+      "tile_width": 1024,
+      "tile_height": 1024,
+      "FluxGuidance": 3.5,
+      "model": [
+        "9",
+        0
+      ],
+      "positive": [
+        "6",
+        0
+      ],
+      "latent_image": [
+        "19",
+        0
+      ],
+      "vae": [
+        "3",
+        0
+      ]
+    },
+    "class_type": "SDVN KSampler",
+    "_meta": {
+      "title": "⌛️ KSampler"
+    }
+  },
+  "8": {
+    "inputs": {
+      "filename_prefix": "SDVN",
+      "image": [
+        "7",
+        1
+      ],
+      "compare_image": [
+        "1",
+        0
+      ]
+    },
+    "class_type": "SDVN Save Image",
+    "_meta": {
+      "title": "💾 Save Image + Compare"
+    }
+  },
+  "9": {
+    "inputs": {
+      "Download": true,
+      "Download_url": "",
+      "Lora_url_name": "model.safetensors",
+      "lora_name": "None",
+      "strength_model": 1,
+      "strength_clip": 1,
+      "model": [
+        "2",
+        0
+      ],
+      "clip": [
+        "4",
+        0
+      ]
+    },
+    "class_type": "SDVN Load Lora",
+    "_meta": {
+      "title": "🎨 Load Lora"
+    }
+  },
+  "10": {
+    "inputs": {
+      "Load_url": true,
+      "Url": "",
+      "image": "None"
+    },
+    "class_type": "SDVN Load Image",
+    "_meta": {
+      "title": "🏞️ Image 2"
+    }
+  },
+  "11": {
+    "inputs": {
+      "Load_url": true,
+      "Url": "",
+      "image": "None"
+    },
+    "class_type": "SDVN Load Image",
+    "_meta": {
+      "title": "🏞️ Image 3"
+    }
+  },
+  "12": {
+    "inputs": {
+      "Load_url": true,
+      "Url": "",
+      "image": "None"
+    },
+    "class_type": "SDVN Load Image",
+    "_meta": {
+      "title": "🏞️ Image 4"
+    }
+  },
+  "13": {
+    "inputs": {
+      "Load_url": true,
+      "Url": "",
+      "image": "None"
+    },
+    "class_type": "SDVN Load Image",
+    "_meta": {
+      "title": "🏞️ Image 5"
+    }
+  },
+  "14": {
+    "inputs": {
+      "Load_url": true,
+      "Url": "",
+      "image": "None"
+    },
+    "class_type": "SDVN Load Image",
+    "_meta": {
+      "title": "🏞️ Image 6"
+    }
+  },
+  "15": {
+    "inputs": {
+      "seed": 0
+    },
+    "class_type": "SeedNode",
+    "_meta": {
+      "title": "Seed"
+    }
+  },
+  "16": {
+    "inputs": {
+      "ratio": "4:5",
+      "position": "top-left",
+      "image": [
+        "1",
+        0
+      ]
+    },
+    "class_type": "SDVN Crop By Ratio",
+    "_meta": {
+      "title": "✂️ Crop By Ratio"
+    }
+  },
+  "19": {
+    "inputs": {
+      "pixels": [
+        "20",
+        0
+      ],
+      "vae": [
+        "3",
+        0
+      ]
+    },
+    "class_type": "VAEEncode",
+    "_meta": {
+      "title": "VAE Encode"
+    }
+  },
+  "20": {
+    "inputs": {
+      "mode": "Maxsize",
+      "model_name": "None",
+      "scale": 1,
+      "width": [
+        "21",
+        0
+      ],
+      "height": [
+        "21",
+        0
+      ],
+      "image": [
+        "16",
+        0
+      ]
+    },
+    "class_type": "SDVN Upscale Image",
+    "_meta": {
+      "title": "↗️ Upscale Image"
+    }
+  },
+  "21": {
+    "inputs": {
+      "value": 2048
+    },
+    "class_type": "PrimitiveInt",
+    "_meta": {
+      "title": "Int"
+    }
+  }
+}

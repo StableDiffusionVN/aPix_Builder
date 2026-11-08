@@ -1,0 +1,124 @@
+{
+  "1": {
+    "inputs": {
+      "Download": true,
+      "Download_url": "",
+      "Ckpt_url_name": "model.safetensors",
+      "Ckpt_name": "Z_Image_turbo_fp8.safetensors"
+    },
+    "class_type": "SDVN Load Checkpoint",
+    "_meta": {
+      "title": "📀 Load Checkpoint"
+    }
+  },
+  "4": {
+    "inputs": {
+      "Download": true,
+      "Download_url": "",
+      "Lora_url_name": "model.safetensors",
+      "lora_name": "None",
+      "strength_model": 1,
+      "strength_clip": 1,
+      "model": [
+        "1",
+        0
+      ],
+      "clip": [
+        "1",
+        1
+      ]
+    },
+    "class_type": "SDVN Load Lora",
+    "_meta": {
+      "title": "🎨 Load Lora"
+    }
+  },
+  "5": {
+    "inputs": {
+      "ModelType": "Auto",
+      "StepsType": "Denoise",
+      "denoise": 1,
+      "steps": 8,
+      "cfg": 8,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "seed": [
+        "14",
+        0
+      ],
+      "Tiled": false,
+      "tile_width": 1024,
+      "tile_height": 1536,
+      "FluxGuidance": 3.5,
+      "model": [
+        "4",
+        0
+      ],
+      "positive": [
+        "7",
+        0
+      ],
+      "vae": [
+        "1",
+        2
+      ]
+    },
+    "class_type": "SDVN KSampler",
+    "_meta": {
+      "title": "⌛️ KSampler"
+    }
+  },
+  "7": {
+    "inputs": {
+      "positive": [
+        "13",
+        0
+      ],
+      "style": "None",
+      "translate": "None",
+      "seed": [
+        "14",
+        0
+      ],
+      "clip": [
+        "4",
+        1
+      ]
+    },
+    "class_type": "SDVN CLIP Text Encode Simple",
+    "_meta": {
+      "title": "🔡 CLIP Text Encode Simple"
+    }
+  },
+  "8": {
+    "inputs": {
+      "filename_prefix": "SDVN",
+      "image": [
+        "5",
+        1
+      ]
+    },
+    "class_type": "SDVN Save Image",
+    "_meta": {
+      "title": "💾 Save Image + Compare"
+    }
+  },
+  "13": {
+    "inputs": {
+      "value": ""
+    },
+    "class_type": "PrimitiveString",
+    "_meta": {
+      "title": "Prompt"
+    }
+  },
+  "14": {
+    "inputs": {
+      "seed": 0
+    },
+    "class_type": "SeedNode",
+    "_meta": {
+      "title": "Seed"
+    }
+  }
+}

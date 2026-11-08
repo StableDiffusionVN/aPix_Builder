@@ -1,0 +1,234 @@
+app:
+  name: Qwen Image 2.1 Edit
+input:
+  model_type:
+    ui:
+      type: menu-sub
+      label: Model Type
+      choices:
+        - Base:qwen_image_2.1_int8_convrot.safetensors
+        - Turbo:qwen_image_2.1_turbo_int8_convrot.safetensors
+      value: qwen_image_2.1_int8_convrot.safetensors
+      sub:
+        qwen_image_2.1_int8_convrot.safetensors:
+          steps:
+            id: 7-steps
+            ui:
+              type: int
+              label: steps
+              hidden: true
+              minimum: 0
+              step: 1
+              value: 20
+          lora:
+            id: 9-lora_name
+            ui:
+              type: loras
+              label: Lora
+              description: Chọn lora hoặc nhật link huggingface ở ô url để tải lora tùy chọn
+              value: None
+          custom_lora_url:
+            id: 9-Download_url
+            ui:
+              type: string
+              label: Custom lora url
+        qwen_image_2.1_turbo_int8_convrot.safetensors:
+          steps:
+            id: 7-steps
+            ui:
+              type: int
+              label: steps
+              hidden: true
+              minimum: 0
+              step: 1
+              value: 6
+          lora:
+            id: 9-lora_name
+            ui:
+              type: loras
+              label: Lora
+              value: None
+          custom_lora_url:
+            id: 9-Download_url
+            ui:
+              type: string
+              label: Custom lora url
+      description: |-
+        Base: Lâu hơn, chính xác hơn, giải phẫu tốt hơn
+        Turbo: Nhanh, thích hợp với chỉnh sửa nhẹ không phức tạp
+      menuLabelSyntax: true
+    id: 2-Model
+  input_image:
+    ui:
+      type: menu-sub
+      label: Input Image
+      choices:
+        - 1 Image
+        - 2 Image
+        - 3 Image
+        - 4 Image
+        - 5 Image
+        - 6 Image
+      value: 1 Image
+      sub:
+        1 Image:
+          image:
+            id: 1-image
+            ui:
+              type: image
+              label: Image
+        2 Image:
+          image_1:
+            id: 1-image
+            ui:
+              type: image
+              label: Image 1
+          image_2:
+            id: 10-image
+            ui:
+              type: image
+              label: Image 2
+        3 Image:
+          image_1:
+            id: 1-image
+            ui:
+              type: image
+              label: Image 1
+          image_2:
+            id: 10-image
+            ui:
+              type: image
+              label: Image 2
+          image_3:
+            id: 11-image
+            ui:
+              type: image
+              label: Image 3
+        4 Image:
+          image_1:
+            id: 1-image
+            ui:
+              type: image
+              label: Image 1
+          image_2:
+            id: 10-image
+            ui:
+              type: image
+              label: Image 2
+          image_3:
+            id: 11-image
+            ui:
+              type: image
+              label: Image 3
+          image_4:
+            id: 12-image
+            ui:
+              type: image
+              label: Image 4
+        5 Image:
+          image_1:
+            id: 1-image
+            ui:
+              type: image
+              label: Image 1
+          image_2:
+            id: 10-image
+            ui:
+              type: image
+              label: Image 2
+          image_3:
+            id: 11-image
+            ui:
+              type: image
+              label: Image 3
+          image_4:
+            id: 12-image
+            ui:
+              type: image
+              label: Image 4
+          image_5:
+            id: 13-image
+            ui:
+              type: image
+              label: Image 5
+        6 Image:
+          image_1:
+            id: 1-image
+            ui:
+              type: image
+              label: Image 1
+          image_2:
+            id: 10-image
+            ui:
+              type: image
+              label: Image 2
+          image_3:
+            id: 11-image
+            ui:
+              type: image
+              label: Image 3
+          image_4:
+            id: 12-image
+            ui:
+              type: image
+              label: Image 4
+          image_5:
+            id: 13-image
+            ui:
+              type: image
+              label: Image 5
+          image_6:
+            id: 14-image
+            ui:
+              type: image
+              label: Image 6
+      description: Chọn số lượng hình cần thêm vào quy trình
+  prompt:
+    id: 6-positive
+    ui:
+      type: text
+      label: Prompt
+      description: Câu lệnh chỉnh sửa hình ảnh
+  ratio:
+    id: 16-ratio
+    ui:
+      type: menu
+      label: Ratio
+      description: Tỉ lệ khung hình ảnh output, để None sẽ giử đúng theo tỉ lệ ảnh đầu tiên
+      choices:
+        - None
+        - 1:1
+        - 4:5
+        - 5:4
+        - 2:3
+        - 3:2
+        - 16:9
+        - 9:16
+        - 1:2
+        - 2:1
+      value: None
+  max_size:
+    id: 21-value
+    ui:
+      type: int
+      label: Max Size
+      description: Size ảnh output theo cạnh lớn nhất
+      minimum: 0
+      maximum: 5998
+      step: 1
+      value: 2048
+  seed:
+    id: 15-seed
+    ui:
+      type: seed
+      label: Seed
+      description: Điều chỉnh số cố định nếu muốn kiểm soát kết quả
+      minimum: 0
+      step: 1
+      value: random_seed
+output:
+  anh_ket_qua:
+    id: "8"
+    ui:
+      type: image
+      label: Ảnh kết quả

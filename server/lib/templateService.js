@@ -5,17 +5,19 @@ import YAML from "yaml";
 import { selectWorkflowVariant, workflowVariantEntries, validateVariantFile } from "../../shared/workflowVariants.js";
 import { unusedVariantFiles } from "./workflowVariants.js";
 import { isKnownVipTemplate, vipTemplatesDir } from "./vipTemplates.js";
+import { readDefaultsListing, remoteDefaultsDir } from "./defaultTemplates.js";
 
 export const TEMPLATE_SCOPES = {
   local: "local",
   runninghubWf: "runninghub-wf"
 };
 
-export const LOCAL_DEFAULT_TEMPLATE_ID = "klein-edit-image";
+// Fallback only: the first template of the server's default list wins (defaultTemplates.js).
+export const LOCAL_DEFAULT_TEMPLATE_ID = "qwen-image-2-1-edit";
 export const RH_WF_DEFAULT_TEMPLATE_ID = "klein-edit-image-lora";
 // Bundled templates that were removed: a canvas node keeping one must report it,
 // not silently run the default workflow instead.
-const REMOVED_TEMPLATE_IDS = new Set(["sdvn-klein-upscale-ultimate"]);
+const REMOVED_TEMPLATE_IDS = new Set(["sdvn-klein-upscale-ultimate", "klein-edit-image"]);
 
 export function validateTemplateConfig(config, template, scope = TEMPLATE_SCOPES.local) {
   const errors = [];
@@ -90,7 +92,9 @@ export function createTemplateService({
   const vipDir = vipTemplatesDir(configDir);
   const scopeRoots = {
     [TEMPLATE_SCOPES.local]: [
-      { dir: defaultDir || path.join(configDir, "default"), isDefault: true },
+      // Defaults downloaded from the license server win over the copies bundled with the app.
+      { dir: remoteDefaultsDir(configDir), isDefault: true, remoteDefault: true },
+      { dir: defaultDir || path.join(configDir, "default"), isDefault: true, bundledDefault: true },
       // Downloaded while the aPix key is valid (vipTemplates.js); read-only like defaults.
       { dir: vipDir, isDefault: true, vip: true },
       { dir: templatesDir || path.join(configDir, "templates"), isDefault: false }
@@ -181,9 +185,12 @@ export function createTemplateService({
   async function discoverTemplates(scope = TEMPLATE_SCOPES.local) {
     const normalizedScope = normalizeScope(scope);
     const discovered = [];
+    const listing = normalizedScope === TEMPLATE_SCOPES.local ? await readDefaultsListing(configDir) : null;
     for (const root of scopeRoots[normalizedScope] || []) {
       const yamlPaths = await findTemplateConfigs(root.dir);
       for (const yamlPath of yamlPaths) {
+        // A bundled default the server no longer lists was removed: hide it.
+        if (root.bundledDefault && listing && !listing.includes(path.basename(path.dirname(yamlPath)))) continue;
         try {
           discovered.push({ ...(await loadTemplateDefinition(yamlPath, root.isDefault, normalizedScope)), ...(root.vip ? { vip: true } : {}) });
         } catch (error) {
@@ -198,8 +205,9 @@ export function createTemplateService({
         byId.set(template.id, template);
       }
     }
-    // VIP workflows first (sort is stable: the rest keep their order).
-    return Array.from(byId.values()).sort((a, b) => Number(Boolean(b.vip)) - Number(Boolean(a.vip)));
+    // VIP first, then the defaults in the server's order; the rest keep their order (stable sort).
+    const rank = template => (template.vip ? -1 : template.isDefault && listing?.includes(template.id) ? listing.indexOf(template.id) : Number.MAX_SAFE_INTEGER);
+    return Array.from(byId.values()).sort((a, b) => rank(a) - rank(b));
   }
 
   async function loadTemplateRegistry(scope = TEMPLATE_SCOPES.local) {
@@ -211,7 +219,9 @@ export function createTemplateService({
     const preferredDefaultId = normalizedScope === TEMPLATE_SCOPES.runninghubWf
       ? RH_WF_DEFAULT_TEMPLATE_ID
       : LOCAL_DEFAULT_TEMPLATE_ID;
-    const defaultTemplate = templates.find(template => template.id === preferredDefaultId)
+    const listing = normalizedScope === TEMPLATE_SCOPES.local ? await readDefaultsListing(configDir) : null;
+    const defaultTemplate = templates.find(template => listing?.[0] && template.id === listing[0])
+      || templates.find(template => template.id === preferredDefaultId)
       || templates.find(template => template.isDefault)
       || templates[0]
       || null;

@@ -173,8 +173,14 @@ Local builds use ad-hoc signing on macOS. For wide distribution, use Apple Devel
 
 | Template ID | Description |
 | --- | --- |
-| `klein-edit-image` | Klein image editing (local ComfyUI) |
+| `qwen-image-2-1-edit` | Qwen Image 2.1 Edit (local ComfyUI) |
+| `flux2-klein-edit` | Flux2 Klein Edit (local ComfyUI) |
+| `z-image` | Z Image Generate (local ComfyUI) |
 | `klein-edit-image-lora` | Klein edit with LoRA (RunningHub Workflow) |
+
+ComfyUI defaults are published on the license server (`/v1/defaults/*`, see `license-server/README.md`):
+the app downloads them at start, so they can be added, changed or removed without an app release.
+`config/default/` ships the same set as the offline / first-run fallback.
 
 ### Environment variables
 
@@ -318,8 +324,14 @@ Nếu password có ký tự đặc biệt, hãy URL-encode (ví dụ `@` → `%4
 
 | ID template | Mô tả |
 | --- | --- |
-| `klein-edit-image` | Chỉnh ảnh Klein (ComfyUI local) |
+| `qwen-image-2-1-edit` | Qwen Image 2.1 Edit (ComfyUI local) |
+| `flux2-klein-edit` | Flux2 Klein Edit (ComfyUI local) |
+| `z-image` | Z Image Generate (ComfyUI local) |
 | `klein-edit-image-lora` | Chỉnh ảnh Klein + LoRA (RunningHub Workflow) |
+
+Template ComfyUI mặc định nằm trên license server (`/v1/defaults/*`, xem `license-server/README.md`): app tải
+về khi mở nên thêm / sửa / gỡ được bất cứ lúc nào, không cần ra phiên bản mới. `config/default/` đi kèm app là
+bản dự phòng khi chưa có mạng.
 
 Mỗi template thường gồm:
 
@@ -329,7 +341,7 @@ Mỗi template thường gồm:
 Ví dụ:
 
 ```txt
-config/default/klein-edit-image/
+config/default/qwen-image-2-1-edit/
 ```
 
 Chú thích Markdown trong YAML dùng `ui.type: note`, không cần `id` và không gửi sang ComfyUI.

@@ -1,0 +1,282 @@
+{
+  "1": {
+    "inputs": {
+      "Download": true,
+      "Download_url": "",
+      "Ckpt_url_name": "model.safetensors",
+      "Ckpt_name": "Z_Image_turbo_fp8.safetensors"
+    },
+    "class_type": "SDVN Load Checkpoint",
+    "_meta": {
+      "title": "📀 Load Checkpoint"
+    }
+  },
+  "4": {
+    "inputs": {
+      "Download": true,
+      "Download_url": "",
+      "Lora_url_name": "model.safetensors",
+      "lora_name": "None",
+      "strength_model": 1,
+      "strength_clip": 1,
+      "model": [
+        "1",
+        0
+      ],
+      "clip": [
+        "1",
+        1
+      ]
+    },
+    "class_type": "SDVN Load Lora",
+    "_meta": {
+      "title": "🎨 Load Lora"
+    }
+  },
+  "5": {
+    "inputs": {
+      "ModelType": "Auto",
+      "StepsType": "Denoise",
+      "denoise": 0.65,
+      "steps": 8,
+      "cfg": 8,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "seed": [
+        "14",
+        0
+      ],
+      "Tiled": false,
+      "tile_width": 1024,
+      "tile_height": 1536,
+      "FluxGuidance": 3.5,
+      "model": [
+        "4",
+        0
+      ],
+      "positive": [
+        "7",
+        0
+      ],
+      "latent_image": [
+        "21",
+        0
+      ],
+      "vae": [
+        "1",
+        2
+      ]
+    },
+    "class_type": "SDVN KSampler",
+    "_meta": {
+      "title": "⌛️ KSampler"
+    }
+  },
+  "7": {
+    "inputs": {
+      "positive": [
+        "12",
+        0
+      ],
+      "style": "None",
+      "translate": "None",
+      "seed": [
+        "14",
+        0
+      ],
+      "clip": [
+        "4",
+        1
+      ]
+    },
+    "class_type": "SDVN CLIP Text Encode Simple",
+    "_meta": {
+      "title": "🔡 CLIP Text Encode Simple"
+    }
+  },
+  "8": {
+    "inputs": {
+      "filename_prefix": "SDVN",
+      "image": [
+        "20",
+        0
+      ],
+      "compare_image": [
+        "9",
+        0
+      ]
+    },
+    "class_type": "SDVN Save Image",
+    "_meta": {
+      "title": "💾 Save Image + Compare"
+    }
+  },
+  "9": {
+    "inputs": {
+      "Load_url": true,
+      "Url": "",
+      "image": "None"
+    },
+    "class_type": "SDVN Load Image",
+    "_meta": {
+      "title": "🏞️ Load Image"
+    }
+  },
+  "10": {
+    "inputs": {
+      "pixels": [
+        "16",
+        1
+      ],
+      "vae": [
+        "1",
+        2
+      ]
+    },
+    "class_type": "VAEEncode",
+    "_meta": {
+      "title": "VAE Encode"
+    }
+  },
+  "11": {
+    "inputs": {
+      "model": "base",
+      "mode": "Detailed prompt",
+      "max_new_tokens": 256,
+      "num_beams": 1,
+      "keep_model_loaded": false,
+      "image": [
+        "9",
+        0
+      ]
+    },
+    "class_type": "SDVN Florence PromptGen",
+    "_meta": {
+      "title": "📝 Florence PromptGen"
+    }
+  },
+  "12": {
+    "inputs": {
+      "input": "in1, in2",
+      "output_list": "None",
+      "translate": "None",
+      "seed": [
+        "14",
+        0
+      ],
+      "in1": [
+        "11",
+        0
+      ],
+      "in2": [
+        "13",
+        0
+      ]
+    },
+    "class_type": "SDVN Any Input Type",
+    "_meta": {
+      "title": "🔡 Any Input Type"
+    }
+  },
+  "13": {
+    "inputs": {
+      "value": ""
+    },
+    "class_type": "PrimitiveString",
+    "_meta": {
+      "title": "Prompt"
+    }
+  },
+  "14": {
+    "inputs": {
+      "seed": 0
+    },
+    "class_type": "SeedNode",
+    "_meta": {
+      "title": "Seed"
+    }
+  },
+  "15": {
+    "inputs": {
+      "mode": "Maxsize",
+      "model_name": "None",
+      "scale": 1,
+      "width": [
+        "19",
+        0
+      ],
+      "height": [
+        "19",
+        0
+      ],
+      "image": [
+        "9",
+        0
+      ]
+    },
+    "class_type": "SDVN Upscale Image",
+    "_meta": {
+      "title": "↗️ Upscale Image"
+    }
+  },
+  "16": {
+    "inputs": {
+      "crop_size": 1536,
+      "extend": 1.2,
+      "target_size": true,
+      "image": [
+        "9",
+        0
+      ],
+      "mask": [
+        "9",
+        1
+      ]
+    },
+    "class_type": "SDVN Inpaint Crop",
+    "_meta": {
+      "title": "⚡️ Crop Inpaint"
+    }
+  },
+  "19": {
+    "inputs": {
+      "value": 0
+    },
+    "class_type": "PrimitiveInt",
+    "_meta": {
+      "title": "Max size"
+    }
+  },
+  "20": {
+    "inputs": {
+      "stitchers": [
+        "16",
+        0
+      ],
+      "inpainted_images": [
+        "5",
+        1
+      ]
+    },
+    "class_type": "SDVN Loop Inpaint Stitch",
+    "_meta": {
+      "title": "🔄 Loop Inpaint Stitch"
+    }
+  },
+  "21": {
+    "inputs": {
+      "samples": [
+        "10",
+        0
+      ],
+      "mask": [
+        "16",
+        2
+      ]
+    },
+    "class_type": "SetLatentNoiseMask",
+    "_meta": {
+      "title": "Set Latent Noise Mask"
+    }
+  }
+}

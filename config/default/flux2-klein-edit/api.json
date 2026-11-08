@@ -1,0 +1,214 @@
+{
+  "1": {
+    "inputs": {
+      "Load_url": true,
+      "Url": "",
+      "image": "None"
+    },
+    "class_type": "SDVN Load Image",
+    "_meta": {
+      "title": "🏞️ Image 1"
+    }
+  },
+  "7": {
+    "inputs": {
+      "ModelType": "Auto",
+      "StepsType": "None",
+      "denoise": 1,
+      "steps": 4,
+      "cfg": 1,
+      "sampler_name": "euler_ancestral_cfg_pp",
+      "scheduler": "sgm_uniform",
+      "seed": [
+        "15",
+        0
+      ],
+      "Tiled": false,
+      "tile_width": 1024,
+      "tile_height": 1024,
+      "FluxGuidance": 3.5,
+      "model": [
+        "9",
+        0
+      ],
+      "positive": [
+        "23",
+        0
+      ],
+      "latent_image": [
+        "19",
+        0
+      ],
+      "vae": [
+        "22",
+        2
+      ]
+    },
+    "class_type": "SDVN KSampler",
+    "_meta": {
+      "title": "⌛️ KSampler"
+    }
+  },
+  "8": {
+    "inputs": {
+      "filename_prefix": "SDVN",
+      "image": [
+        "7",
+        1
+      ],
+      "compare_image": [
+        "1",
+        0
+      ]
+    },
+    "class_type": "SDVN Save Image",
+    "_meta": {
+      "title": "💾 Save Image + Compare"
+    }
+  },
+  "9": {
+    "inputs": {
+      "Download": true,
+      "Download_url": "",
+      "Lora_url_name": "model.safetensors",
+      "lora_name": "None",
+      "strength_model": 1,
+      "strength_clip": 1,
+      "model": [
+        "22",
+        0
+      ],
+      "clip": [
+        "22",
+        1
+      ]
+    },
+    "class_type": "SDVN Load Lora",
+    "_meta": {
+      "title": "🎨 Load Lora"
+    }
+  },
+  "15": {
+    "inputs": {
+      "seed": 0
+    },
+    "class_type": "SeedNode",
+    "_meta": {
+      "title": "Seed"
+    }
+  },
+  "16": {
+    "inputs": {
+      "ratio": "None",
+      "position": "top-left",
+      "image": [
+        "1",
+        0
+      ]
+    },
+    "class_type": "SDVN Crop By Ratio",
+    "_meta": {
+      "title": "✂️ Crop By Ratio"
+    }
+  },
+  "19": {
+    "inputs": {
+      "pixels": [
+        "20",
+        0
+      ],
+      "vae": [
+        "22",
+        2
+      ]
+    },
+    "class_type": "VAEEncode",
+    "_meta": {
+      "title": "VAE Encode"
+    }
+  },
+  "20": {
+    "inputs": {
+      "mode": "Maxsize",
+      "model_name": "None",
+      "scale": 1,
+      "width": [
+        "21",
+        0
+      ],
+      "height": [
+        "21",
+        0
+      ],
+      "image": [
+        "16",
+        0
+      ]
+    },
+    "class_type": "SDVN Upscale Image",
+    "_meta": {
+      "title": "↗️ Upscale Image"
+    }
+  },
+  "21": {
+    "inputs": {
+      "value": 2048
+    },
+    "class_type": "PrimitiveInt",
+    "_meta": {
+      "title": "Int"
+    }
+  },
+  "22": {
+    "inputs": {
+      "Download": true,
+      "Download_url": "",
+      "Ckpt_url_name": "model.safetensors",
+      "Ckpt_name": "Flux2-klein-9b.safetensors"
+    },
+    "class_type": "SDVN Load Checkpoint",
+    "_meta": {
+      "title": "📀 Load Checkpoint"
+    }
+  },
+  "23": {
+    "inputs": {
+      "img_size": 0,
+      "conditioning": [
+        "24",
+        0
+      ],
+      "vae": [
+        "22",
+        2
+      ],
+      "image": [
+        "1",
+        0
+      ]
+    },
+    "class_type": "SDVN Apply Kontext Reference",
+    "_meta": {
+      "title": "🌈 Apply Reference"
+    }
+  },
+  "24": {
+    "inputs": {
+      "positive": "make realistic this image",
+      "style": "None",
+      "translate": "None",
+      "seed": [
+        "15",
+        0
+      ],
+      "clip": [
+        "9",
+        1
+      ]
+    },
+    "class_type": "SDVN CLIP Text Encode Simple",
+    "_meta": {
+      "title": "🔡 CLIP Text Encode Simple"
+    }
+  }
+}

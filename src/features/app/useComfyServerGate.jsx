@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Cloud, Loader2, Monitor } from "lucide-react";
 import { useI18n } from "../../i18n/I18nContext";
-import { getSetting } from "../../lib/appSettings.js";
+import { flushAppSettings, getSetting } from "../../lib/appSettings.js";
+import { useComfyLocal } from "../settings/useComfyLocal.js";
 
 const DEFAULT_LOCAL = "http://127.0.0.1:8188";
 const isLocalAddress = address => /^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])(:\d+)?\/?$/i.test(String(address || "").trim());
@@ -48,6 +49,26 @@ export function useComfyServerGate({ enabled, healthStatus, comfyAddress, onRun,
   const runRef = useRef(onRun);
   const colabBaselineRef = useRef(null);
   runRef.current = onRun;
+  // Desktop + ComfyUI folder set (Settings): "local" starts it instead of asking the user to.
+  const { api: comfyLocal, state: comfyLocalState } = useComfyLocal();
+  const [localStarting, setLocalStarting] = useState(false);
+  const localBaselineRef = useRef(null);
+  const localFolder = String(getSetting("connection.local", {})?.folder || "");
+  const canStartLocal = Boolean(comfyLocal && localFolder);
+
+  useEffect(() => {
+    if (!localStarting || comfyLocalState === localBaselineRef.current) return;
+    const phase = comfyLocalState?.phase;
+    if (phase === "ready" && comfyLocalState.address) {
+      setLocalStarting(false);
+      setLocalPending(true); // runs once the app has scanned the server
+      onUseServer?.(comfyLocalState.address);
+    } else if (phase === "error" || phase === "off") {
+      setLocalStarting(false);
+      setPromptOpen(true);
+      setLocal({ status: "failed", address: "", port: String(getSetting("connection.local", {})?.port || "8188"), error: comfyLocalState?.message || "" });
+    }
+  }, [localStarting, comfyLocalState, onUseServer]);
 
   useEffect(() => {
     if (!colab) return undefined;
@@ -81,9 +102,10 @@ export function useComfyServerGate({ enabled, healthStatus, comfyAddress, onRun,
   }, [localPending, healthStatus]);
 
   const handleRun = useCallback(() => {
-    if (pending || localPending) {
-      setPending(false); // second click cancels the wait (Colab keeps running)
+    if (pending || localPending || localStarting) {
+      setPending(false); // second click cancels the wait (Colab / local ComfyUI keep running)
       setLocalPending(false);
+      setLocalStarting(false);
       return undefined;
     }
     if (enabled && healthStatus === "offline") {
@@ -91,7 +113,7 @@ export function useComfyServerGate({ enabled, healthStatus, comfyAddress, onRun,
       return undefined;
     }
     return runRef.current?.();
-  }, [enabled, healthStatus, pending, localPending]);
+  }, [enabled, healthStatus, pending, localPending, localStarting]);
 
   const chooseColab = useCallback(() => {
     setPromptOpen(false);
@@ -119,9 +141,18 @@ export function useComfyServerGate({ enabled, healthStatus, comfyAddress, onRun,
     setLocal({ status: "failed", address, port });
   }, [onUseServer]);
 
-  const chooseLocal = useCallback(() => {
+  const chooseLocal = useCallback(async () => {
+    if (canStartLocal) {
+      setPromptOpen(false);
+      setLocal(null);
+      localBaselineRef.current = comfyLocalState;
+      setLocalStarting(true);
+      await flushAppSettings();
+      void comfyLocal.start();
+      return;
+    }
     void tryLocal(localCandidate(comfyAddress));
-  }, [comfyAddress, tryLocal]);
+  }, [canStartLocal, comfyAddress, comfyLocal, comfyLocalState, tryLocal]);
 
   const retryLocal = useCallback(event => {
     event?.preventDefault();
@@ -167,14 +198,16 @@ export function useComfyServerGate({ enabled, healthStatus, comfyAddress, onRun,
               <small>
                 {local?.status === "checking"
                   ? t("serverGate.localChecking", { address: local.address })
-                  : t("serverGate.localHint", { address: localCandidate(comfyAddress) })}
+                  : canStartLocal
+                    ? t("serverGate.localAutoHint", { folder: localFolder })
+                    : t("serverGate.localHint", { address: localCandidate(comfyAddress) })}
               </small>
             </span>
           </button>
         </div>
         {local?.status === "failed" || (local?.status === "checking" && local.port) ? (
           <form className="serverGateLocalRetry" onSubmit={retryLocal}>
-            <p>{t("serverGate.localFailed", { address: local.address })}</p>
+            <p>{local.error ? t("serverGate.localStartFailed", { error: local.error }) : t("serverGate.localFailed", { address: local.address })}</p>
             <label>
               <span>http://127.0.0.1:</span>
               <input
@@ -202,7 +235,8 @@ export function useComfyServerGate({ enabled, healthStatus, comfyAddress, onRun,
 
   const preparingLabel = pending
     ? (colabState?.message || t("serverGate.colabStarting"))
-    : localPending ? t("serverGate.localConnecting") : "";
+    : localStarting ? (comfyLocalState?.message || t("serverGate.localStarting"))
+      : localPending ? t("serverGate.localConnecting") : "";
 
-  return { handleRun, preparing: pending || localPending, preparingLabel, prompt };
+  return { handleRun, preparing: pending || localPending || localStarting, preparingLabel, prompt };
 }

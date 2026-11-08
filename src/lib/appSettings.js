@@ -359,6 +359,15 @@ function schedulePersistSettings() {
   }, SETTINGS_PERSIST_DEBOUNCE_MS);
 }
 
+/** Writes pending changes now (the desktop main process reads settings from the server). */
+export async function flushAppSettings() {
+  if (store.persistTimer) {
+    globalThis.clearTimeout(store.persistTimer);
+    store.persistTimer = null;
+  }
+  await persistSettings();
+}
+
 export function isSettingsReady() {
   return store.ready && store.loadedFromServer;
 }

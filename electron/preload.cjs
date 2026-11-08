@@ -42,6 +42,18 @@ contextBridge.exposeInMainWorld("apixDesktop", {
       return () => ipcRenderer.removeListener("colab:state", listener);
     }
   },
+  comfyLocal: {
+    start: () => ipcRenderer.invoke("comfy-local:start"),
+    stop: () => ipcRenderer.invoke("comfy-local:stop"),
+    getState: () => ipcRenderer.invoke("comfy-local:get-state"),
+    inspect: (folder, python) => ipcRenderer.invoke("comfy-local:inspect", folder, python),
+    pickFolder: () => ipcRenderer.invoke("comfy-local:pick-folder"),
+    onState: callback => {
+      const listener = (_event, state) => callback(state);
+      ipcRenderer.on("comfy-local:state", listener);
+      return () => ipcRenderer.removeListener("comfy-local:state", listener);
+    }
+  },
   onUseComfyUrl: callback => {
     const listener = (_event, address) => callback(address);
     ipcRenderer.on("app:use-comfy-url", listener);

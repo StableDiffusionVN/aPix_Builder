@@ -453,3 +453,86 @@
 }
 
 .apixKeyInfo a { color: var(--accent); }
+
+/* Settings → ComfyUI Server → ComfyUI on this computer */
+.comfyLocalPanel {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel-soft, rgba(255, 255, 255, 0.03));
+}
+
+.comfyLocalHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.comfyLocalHeader h4 { margin: 0 0 4px; font-size: 13px; }
+.comfyLocalHeader p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.comfyLocalHeader button { flex: none; display: inline-flex; align-items: center; gap: 6px; }
+
+.comfyLocalFolder { display: flex; gap: 8px; }
+.comfyLocalFolder input { flex: 1; min-width: 0; }
+.comfyLocalFolder button { flex: none; display: inline-flex; align-items: center; gap: 6px; }
+
+.comfyLocalGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1.4fr) 90px;
+  gap: 8px;
+}
+
+.comfyLocalGrid label { display: grid; gap: 4px; min-width: 0; }
+.comfyLocalGrid span { color: var(--muted); font-size: 11px; }
+.comfyLocalPanel input { box-sizing: border-box; width: 100%; font-size: 12px; }
+
+.comfyLocalNote {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.comfyLocalNote.isError,
+.comfyLocalStatus.phase-error { color: var(--danger); }
+
+.comfyLocalStatus {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 12px;
+}
+
+.comfyLocalDot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.comfyLocalStatus.phase-ready .comfyLocalDot { background: #22c55e; }
+.comfyLocalStatus.phase-error .comfyLocalDot { background: var(--danger); }
+
+.comfyLocalStatus .linkButton {
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.comfyLocalLog {
+  max-height: 220px;
+  margin: 0;
+  padding: 10px;
+  overflow: auto;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.35);
+  color: var(--muted);
+  font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+}

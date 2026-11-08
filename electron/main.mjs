@@ -7,6 +7,7 @@ import { createSignedRunningHubShortcut, resolveShortcutAssetsDir } from "./runn
 import { guardWebviewHost, registerBrowserIpc } from "./browser-window.mjs";
 import { createColabController } from "./colabControl.mjs";
 import { createColabSession } from "./colabSession.mjs";
+import { createComfyLocalSession } from "./comfyLocal.mjs";
 
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const preloadPath = path.join(appRoot, "electron", "preload.cjs");
@@ -25,6 +26,7 @@ let mainWindow;
 let backend;
 let dismissedUpdateVersion = "";
 let colabSession = null;
+let comfyLocal = null;
 let quittingAfterColab = false;
 
 async function readDismissedUpdateVersion() {
@@ -138,7 +140,19 @@ async function createWindow() {
         if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("colab:state", state);
       }
     });
-    globalThis.apixDesktopBridge = { colab, colabSession };
+    // ComfyUI on this machine (Settings → ComfyUI Server → folder): started / stopped here.
+    comfyLocal = createComfyLocalSession({
+      getConfig: async () => {
+        if (!backend) return {};
+        const response = await fetch(`http://${backend.host}:${backend.port}/api/app-settings`).catch(() => null);
+        const data = response?.ok ? await response.json() : {};
+        return (data.settings || data).connection?.local || {};
+      },
+      onState: state => {
+        if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("comfy-local:state", state);
+      }
+    });
+    globalThis.apixDesktopBridge = { colab, colabSession, comfyLocal };
     const { serverReady } = await import("../server/server.js");
     backend = await serverReady;
   }
@@ -213,6 +227,20 @@ function registerIpcHandlers() {
   ipcMain.handle("colab:stop", () => colabSession?.stop());
   ipcMain.handle("colab:get-state", () => colabSession?.getState() || null);
   ipcMain.handle("colab:configure", (_event, config) => colabSession?.configure(config || {}));
+  ipcMain.handle("comfy-local:start", () => comfyLocal?.start());
+  ipcMain.handle("comfy-local:stop", () => comfyLocal?.stop());
+  ipcMain.handle("comfy-local:get-state", () => comfyLocal?.getState() || null);
+  ipcMain.handle("comfy-local:inspect", async (_event, folder, python) => {
+    try {
+      return { ok: true, ...(await comfyLocal.inspect(folder, python)) };
+    } catch (error) {
+      return { ok: false, error: error.message || String(error) };
+    }
+  });
+  ipcMain.handle("comfy-local:pick-folder", async () => {
+    const result = await dialog.showOpenDialog(mainWindow, { title: "Chọn thư mục ComfyUI", properties: ["openDirectory"] });
+    return result.canceled ? "" : result.filePaths[0] || "";
+  });
   ipcMain.handle("app:get-version", () => app.getVersion());
 
   ipcMain.handle("app:check-for-updates", async () => {
@@ -312,6 +340,7 @@ if (gotSingleInstanceLock) {
   });
 
   app.on("before-quit", event => {
+    comfyLocal?.killNow(); // only the ComfyUI aPix started itself
     // Free the Colab GPU before quitting (best effort, ≤ 15 s).
     if (!quittingAfterColab && colabSession) {
       event.preventDefault();

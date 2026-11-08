@@ -98,6 +98,7 @@ import { useCanvasBridgeClient } from "../canvas/useCanvasBridgeClient.js";
 import { syncDefaultTemplates, syncVipTemplates, TEMPLATES_CHANGED_EVENT } from "../../lib/vipTemplates.js";
 import { ColabSheet, setColabSheet } from "./ColabSheet.jsx";
 import { useComfyServerGate } from "./useComfyServerGate.jsx";
+import { useComfyLocalAutoSwitch } from "../settings/useComfyLocal.js";
 
 const InfiniteCanvas = lazy(() => import("../canvas/InfiniteCanvas.jsx").then(module => ({ default: module.InfiniteCanvas })));
 
@@ -456,6 +457,7 @@ export function AppWorkspace() {
     onRun: runWithBatchExpansion,
     onUseServer: onUseLocalServer
   });
+  useComfyLocalAutoSwitch(onUseLocalServer);
   const handleRunClick = serverGate.handleRun;
   const outputs = useMemo(() => Object.values(config?.output || {}), [config]);
   const currentPresets = useMemo(() => {

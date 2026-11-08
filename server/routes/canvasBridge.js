@@ -1,10 +1,11 @@
 // /api/canvas-bridge/*: MCP / CLI ⇄ the Canvas in the app window (server/lib/canvasBridge.js).
 import { createCanvasBridge, holdCanvasRunForColab } from "../lib/canvasBridge.js";
+import { startableSession } from "./colab.js";
 
 export function createCanvasBridgeRoutes({ readBody, send }) {
   const bridge = createCanvasBridge();
   let held = null;
-  const heldStatus = () => (held ? { state: held.state, error: held.error, colab: globalThis.apixDesktopBridge?.colabSession?.getState() || null } : null);
+  const heldStatus = () => (held ? { state: held.state, error: held.error, colab: (held.session || globalThis.apixDesktopBridge?.colabSession)?.getState() || null } : null);
 
   return async function canvasBridgeRoutes(req, res, url) {
     if (!url.pathname.startsWith("/api/canvas-bridge/")) return false;
@@ -28,13 +29,14 @@ export function createCanvasBridgeRoutes({ readBody, send }) {
         return true;
       }
       if (url.pathname === "/api/canvas-bridge/run-when-colab") {
-        const session = globalThis.apixDesktopBridge?.colabSession;
+        const session = await startableSession();
         if (!session) {
           send(res, 501, { error: "Tự bật Colab chỉ có trên app aPix desktop." });
           return true;
         }
         if (!bridge.hasClient()) throw new Error("Chưa có cửa sổ aPix nào đang mở — mở app aPix để điều khiển Canvas.");
         held = holdCanvasRunForColab({ bridge, session, args: body.args || {} });
+        held.session = session;
         send(res, 200, heldStatus());
         return true;
       }

@@ -299,7 +299,7 @@ async function handle(message) {
       protocolVersion: params.protocolVersion || DEFAULT_PROTOCOL,
       capabilities: { tools: {} },
       serverInfo: SERVER_INFO,
-      instructions: "aPix Builder: chạy workflow sinh ảnh ComfyUI qua app aPix đang mở trên máy. Quy trình: list_templates → get_template → run_template → (wait_for_run lặp lại tới khi xong) → view_output / list_history. Workflow Canvas nhiều node: canvas_list → canvas_open → canvas_get → canvas_set_values → canvas_run → canvas_wait (app phải đang mở). Server ComfyUI chưa chạy: cứ run_template — app desktop tự bật Colab và chạy lệnh khi có link (status waiting-colab → gọi wait_for_run tới khi xong); app tự tắt Colab khi không dùng (hoặc colab_auto stop). Điều khiển chi tiết: colab_open / colab_run / colab_wait_server / colab_stop."
+      instructions: "aPix Builder: chạy workflow sinh ảnh ComfyUI qua app aPix đang mở trên máy. Quy trình: list_templates → get_template → run_template → (wait_for_run lặp lại tới khi xong) → view_output / list_history. Workflow Canvas nhiều node: canvas_list → canvas_open → canvas_get → canvas_set_values → canvas_run → canvas_wait (app phải đang mở). Server ComfyUI chưa chạy: cứ run_template — app desktop tự bật ComfyUI trên máy (nếu đã chọn thư mục ComfyUI trong Settings) hoặc Colab, rồi chạy lệnh khi server sẵn sàng (status waiting-colab → gọi wait_for_run tới khi xong); app tự tắt Colab khi không dùng (hoặc colab_auto stop). Điều khiển chi tiết: colab_open / colab_run / colab_wait_server / colab_stop."
     };
   }
   if (method === "ping") return {};

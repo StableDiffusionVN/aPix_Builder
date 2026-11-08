@@ -15,6 +15,7 @@ import { RunningHubSettings } from "./RunningHubSettings";
 import { StorageSettings } from "./StorageSettings";
 import { AiConnectSettings } from "../features/settings/AiConnectSettings.jsx";
 import { ApixKeySettings } from "../features/settings/ApixKeySettings.jsx";
+import { ComfyLocalSettings } from "../features/settings/ComfyLocalSettings.jsx";
 import { ComfyUiLogomark } from "./icons/ComfyUiIcon";
 import { RunningHubLogomark } from "./icons/RunningHubIcon";
 import {
@@ -267,6 +268,7 @@ export function SettingsModal() {
                   </label>
                 </div>
                 <ConnectionPanel comfyAddress={comfyAddress} serverAddress={serverAddress} onAddressChange={setComfyAddress} />
+                <ComfyLocalSettings />
                 <div className="note serverDiscoverySummary">
                   {discoveryLoading ? (
                     <span>{t("server.scanning")}</span>

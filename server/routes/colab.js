@@ -17,11 +17,11 @@ async function releaseWhenReady({ session, jobs, port }) {
     address = session.getServerAddress?.() || "";
     if (state.phase === "ready" && address) break;
     if (state.phase === "error" || state.phase === "off") {
-      throw new Error(`Không khởi động được Colab: ${state.message || state.phase}`);
+      throw new Error(`Không khởi động được ComfyUI: ${state.message || state.phase}`);
     }
     await new Promise(resolve => setTimeout(resolve, 3000));
   }
-  if (!address) throw new Error("Quá thời gian chờ ComfyUI trên Colab");
+  if (!address) throw new Error("Quá thời gian chờ ComfyUI khởi động");
   const ready = jobs.map(job => ({ ...job, body: { ...job.body, address } }));
   const response = await fetch(`http://127.0.0.1:${port}/api/run-queue/submit`, {
     method: "POST",
@@ -51,6 +51,13 @@ function holdForColab({ session, jobs, port }) {
     }));
 }
 
+/** The ComfyUI to start when none answers: local (folder set in Settings) first, else Colab. */
+export async function startableSession() {
+  const bridge = globalThis.apixDesktopBridge;
+  if (await bridge?.comfyLocal?.isConfigured?.().catch(() => false)) return bridge.comfyLocal;
+  return bridge?.colabSession;
+}
+
 export function createColabRoutes({ readBody, send }) {
   return async function colabRoutes(req, res, url) {
     if (!url.pathname.startsWith("/api/colab/")) return false;
@@ -70,11 +77,13 @@ export function createColabRoutes({ readBody, send }) {
       },
       "POST /api/colab/session/stop": () => session.stop(),
       // ComfyUI not answering: start Colab and run these queue jobs once its link is up.
-      "POST /api/colab/run-when-ready": () => {
+      "POST /api/colab/run-when-ready": async () => {
         const jobs = Array.isArray(body.jobs) ? body.jobs.filter(job => job?.body?.runId) : [];
         if (!jobs.length) throw new Error("Thiếu lệnh chạy");
-        holdForColab({ session, jobs, port: req.socket.localPort });
-        return { acknowledged: true, runIds: jobs.map(job => job.body.runId), colab: session.getState() };
+        // ComfyUI folder set in Settings → start ComfyUI on this machine instead of Colab.
+        const runner = await startableSession();
+        holdForColab({ session: runner, jobs, port: req.socket.localPort });
+        return { acknowledged: true, runIds: jobs.map(job => job.body.runId), colab: runner.getState(), local: runner !== session };
       },
       "GET /api/colab/pending": () => ({ runs: publicPending(), colab: session.getState() }),
       "GET /api/colab/status": () => colab.status(),

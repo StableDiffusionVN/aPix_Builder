@@ -1,0 +1,138 @@
+app:
+  name: Minimax H3 ref2v
+input:
+  model:
+    ui:
+      type: menu-sub
+      label: Model
+      choices:
+        - Base:None
+        - Turbo 4
+          steps:minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors
+      value: minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors
+      sub:
+        None:
+          steps:
+            id: 190-steps
+            ui:
+              type: int
+              label: steps
+              hidden: true
+              minimum: 0
+              step: 1
+              value: 20
+        minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors:
+          steps:
+            id: 190-steps
+            ui:
+              type: int
+              label: steps
+              hidden: true
+              minimum: 0
+              step: 1
+              value: 4
+      menuLabelSyntax: true
+    id: 180-lora_name
+  mode:
+    ui:
+      type: menu-sub
+      label: Mode
+      choices:
+        - 1 Image Ref
+        - 2 Image Ref
+        - 3 Image Ref
+        - 4 Image Ref
+      value: 1 Image Ref
+      sub:
+        1 Image Ref:
+          image_ref_1:
+            id: 221-image
+            ui:
+              type: image
+              label: Image Ref 1
+        2 Image Ref:
+          image_ref_1:
+            id: 221-image
+            ui:
+              type: image
+              label: Image Ref 1
+          image_ref_2:
+            id: 263-image
+            ui:
+              type: image
+              label: Image Ref 2
+        3 Image Ref:
+          image_ref_1:
+            id: 221-image
+            ui:
+              type: image
+              label: Image Ref 1
+          image_ref_2:
+            id: 263-image
+            ui:
+              type: image
+              label: Image Ref 2
+          image_ref_3:
+            id: 264-image
+            ui:
+              type: image
+              label: Image Ref 3
+        4 Image Ref:
+          image_ref_1:
+            id: 221-image
+            ui:
+              type: image
+              label: Image Ref 1
+          image_ref_2:
+            id: 263-image
+            ui:
+              type: image
+              label: Image Ref 2
+          image_ref_3:
+            id: 264-image
+            ui:
+              type: image
+              label: Image Ref 3
+          image_ref_4:
+            id: 265-image
+            ui:
+              type: image
+              label: Image Ref 4
+  prompt:
+    id: 222-prompt
+    ui:
+      type: text
+      label: Prompt
+  video_time_s:
+    id: 184-value
+    ui:
+      type: float
+      label: Video time (s)
+      minimum: 0
+      maximum: 15
+      step: 0.1
+      value: 5
+  video_width:
+    id: 222-width
+    ui:
+      type: int
+      label: Video width
+      minimum: 0
+      maximum: 2048
+      step: 32
+      value: 1280
+  video_height:
+    id: 222-height
+    ui:
+      type: int
+      label: Video height
+      minimum: 0
+      maximum: 2048
+      step: 32
+      value: 768
+output:
+  anh_ket_qua:
+    id: "182"
+    ui:
+      type: image
+      label: Ảnh kết quả

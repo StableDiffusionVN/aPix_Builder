@@ -176,6 +176,8 @@ Local builds use ad-hoc signing on macOS. For wide distribution, use Apple Devel
 | `qwen-image-2-1-edit` | Qwen Image 2.1 Edit (local ComfyUI) |
 | `flux2-klein-edit` | Flux2 Klein Edit (local ComfyUI) |
 | `z-image` | Z Image Generate (local ComfyUI) |
+| `minimax-h3-ref2v` | MiniMax H3 reference → video (local ComfyUI) |
+| `minimax-fl2va` | MiniMax H3 first/last frame → video (local ComfyUI) |
 | `klein-edit-image-lora` | Klein edit with LoRA (RunningHub Workflow) |
 
 ComfyUI defaults are published on the license server (`/v1/defaults/*`, see `license-server/README.md`):
@@ -327,6 +329,8 @@ Nếu password có ký tự đặc biệt, hãy URL-encode (ví dụ `@` → `%4
 | `qwen-image-2-1-edit` | Qwen Image 2.1 Edit (ComfyUI local) |
 | `flux2-klein-edit` | Flux2 Klein Edit (ComfyUI local) |
 | `z-image` | Z Image Generate (ComfyUI local) |
+| `minimax-h3-ref2v` | MiniMax H3 ảnh tham chiếu → video (ComfyUI local) |
+| `minimax-fl2va` | MiniMax H3 khung đầu/cuối → video (ComfyUI local) |
 | `klein-edit-image-lora` | Chỉnh ảnh Klein + LoRA (RunningHub Workflow) |
 
 Template ComfyUI mặc định nằm trên license server (`/v1/defaults/*`, xem `license-server/README.md`): app tải

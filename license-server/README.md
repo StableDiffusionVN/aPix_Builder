@@ -59,7 +59,7 @@ không vào được thì app giữ bản đã tải / bản đóng gói.
 
 ```bash
 set -a; source _local/apix-vps.env; set +a
-D=$(mktemp -d); cp <các file zip> $D/; echo '["qwen-image-2-1-edit","flux2-klein-edit","z-image"]' > $D/order.json
+D=$(mktemp -d); cp <các file zip> $D/; echo '["qwen-image-2-1-edit","flux2-klein-edit","z-image","minimax-h3-ref2v","minimax-fl2va"]' > $D/order.json
 expect website/deploy/upload-tar.exp "$D" /var/lib/apix-license/defaults
 expect website/deploy/ssh-run.exp 'chown -R apix-license:apix-license /var/lib/apix-license/defaults; chmod 755 /var/lib/apix-license/defaults; chmod 644 /var/lib/apix-license/defaults/*'
 ```

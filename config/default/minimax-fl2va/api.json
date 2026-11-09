@@ -1,0 +1,233 @@
+{
+  "92": {
+    "inputs": {
+      "filename_prefix": "video/MiniMax_H3",
+      "format": "auto",
+      "format.codec": "auto",
+      "codec": "auto",
+      "video-preview": "",
+      "video": [
+        "152",
+        0
+      ]
+    },
+    "class_type": "SaveVideo",
+    "_meta": {
+      "title": "Save Video"
+    }
+  },
+  "143": {
+    "inputs": {
+      "samples": [
+        "191",
+        0
+      ],
+      "vae": [
+        "227",
+        0
+      ]
+    },
+    "class_type": "VAEDecodeAudio",
+    "_meta": {
+      "title": "VAE Decode Audio"
+    }
+  },
+  "144": {
+    "inputs": {
+      "samples": [
+        "191",
+        0
+      ],
+      "vae": [
+        "226",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAE Decode"
+    }
+  },
+  "152": {
+    "inputs": {
+      "fps": 24,
+      "bit_depth": 8,
+      "color_space": "sRGB",
+      "chroma_subsampling": "auto",
+      "codec": "none",
+      "images": [
+        "144",
+        0
+      ],
+      "audio": [
+        "143",
+        0
+      ]
+    },
+    "class_type": "CreateVideo",
+    "_meta": {
+      "title": "Create Video"
+    }
+  },
+  "153": {
+    "inputs": {
+      "prompt": "The video begins exactly with the provided image as the first frame. A breathtakingly beautiful young woman in an elegant flowing white traditional Chinese-inspired dress sits gracefully, holding a delicate white vase with fresh green bamboo leaves. Her dark hair is arranged in an elaborate updo adorned with a white pearl headpiece and a translucent flowing veil. Preserve her exact facial identity, delicate makeup, costume, hairstyle, accessories, hand anatomy, and the original serene environment.\n\n**0–2s:** She gazes softly into the camera with a delicate, mysterious smile. A gentle breeze begins to flow through the scene, softly lifting the edges of her translucent white veil and creating subtle ripples in her silk sleeves. Her loose hair strands sway naturally. The camera slowly moves closer.\n\n**2–4s:** She gracefully lowers her eyes toward the bamboo leaves in her hands, blinking gently. Her smile softens as her head tilts slightly to one side. Sunlight delicately illuminates her eyelashes, lips, and smooth skin. The bamboo leaves sway in the breeze.\n\n**4–6s:** She slowly raises her gaze back toward the camera, revealing a captivating, warm smile. Her fingers elegantly adjust their position around the small vase, creating natural movements in the delicate fabric around her wrists. The camera begins a subtle cinematic arc around her face, creating gentle parallax between her and the softly blurred background.",
+      "width": 1280,
+      "height": 736,
+      "length": [
+        "154",
+        1
+      ],
+      "clip": [
+        "225",
+        0
+      ],
+      "vae": [
+        "226",
+        0
+      ],
+      "first_frame": [
+        "228",
+        0
+      ],
+      "last_frame": [
+        "229",
+        0
+      ]
+    },
+    "class_type": "MiniMaxH3ImageToVideo",
+    "_meta": {
+      "title": "MiniMax H3 Image to Video"
+    }
+  },
+  "154": {
+    "inputs": {
+      "expression": "max(5, round(a * 24)) + (5 - (max(5, round(a * 24)) % 17)) % 17",
+      "values.a": [
+        "155",
+        0
+      ]
+    },
+    "class_type": "ComfyMathExpression",
+    "_meta": {
+      "title": "Math Expression"
+    }
+  },
+  "155": {
+    "inputs": {
+      "value": 5
+    },
+    "class_type": "PrimitiveFloat",
+    "_meta": {
+      "title": "Float (duration)"
+    }
+  },
+  "167": {
+    "inputs": {
+      "Download": true,
+      "Download_url": "",
+      "Lora_url_name": "model.safetensors",
+      "lora_name": "minimax_h3_fl2v_turbo_4step_v1.0_768p_comfyui_bf16.safetensors",
+      "strength_model": 1,
+      "strength_clip": 1,
+      "model": [
+        "224",
+        0
+      ]
+    },
+    "class_type": "SDVN Load Lora",
+    "_meta": {
+      "title": "🎨 Load Lora"
+    }
+  },
+  "191": {
+    "inputs": {
+      "ModelType": "None",
+      "StepsType": "None",
+      "denoise": 1,
+      "steps": 4,
+      "cfg": 1,
+      "sampler_name": "res_multistep",
+      "scheduler": "simple",
+      "seed": 579414667527763,
+      "Tiled": false,
+      "tile_width": 1024,
+      "tile_height": 1024,
+      "FluxGuidance": 3.5,
+      "model": [
+        "167",
+        0
+      ],
+      "positive": [
+        "153",
+        0
+      ],
+      "latent_image": [
+        "153",
+        1
+      ]
+    },
+    "class_type": "SDVN KSampler",
+    "_meta": {
+      "title": "⌛️ KSampler"
+    }
+  },
+  "224": {
+    "inputs": {
+      "Model": "minimax_h3_fl2va_pruned_int8_convrot.safetensors"
+    },
+    "class_type": "SDVN AnyDownload List",
+    "_meta": {
+      "title": "📥  AnyDownload List"
+    }
+  },
+  "225": {
+    "inputs": {
+      "Model": "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors"
+    },
+    "class_type": "SDVN AnyDownload List",
+    "_meta": {
+      "title": "📥  AnyDownload List"
+    }
+  },
+  "226": {
+    "inputs": {
+      "Model": "minimax_h3_video_vae_int8_convrot.safetensors"
+    },
+    "class_type": "SDVN AnyDownload List",
+    "_meta": {
+      "title": "📥  AnyDownload List"
+    }
+  },
+  "227": {
+    "inputs": {
+      "Model": "minimax_h3_audio_vae_fp32.safetensors"
+    },
+    "class_type": "SDVN AnyDownload List",
+    "_meta": {
+      "title": "📥  AnyDownload List"
+    }
+  },
+  "228": {
+    "inputs": {
+      "Load_url": true,
+      "Url": "",
+      "image": "None"
+    },
+    "class_type": "SDVN Load Image",
+    "_meta": {
+      "title": "🏞️ Load Image"
+    }
+  },
+  "229": {
+    "inputs": {
+      "Load_url": true,
+      "Url": "",
+      "image": "None"
+    },
+    "class_type": "SDVN Load Image",
+    "_meta": {
+      "title": "🏞️ Load Image"
+    }
+  }
+}

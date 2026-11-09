@@ -1,0 +1,128 @@
+app:
+  name: Minimax H3 fl2va
+input:
+  model:
+    ui:
+      type: menu-sub
+      label: Model
+      choices:
+        - Base:None
+        - Turbo 4
+          steps:minimax_h3_fl2v_turbo_4step_v1.0_768p_comfyui_bf16.safetensors
+        - Turbo 8 steps:minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors
+      value: minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors
+      sub:
+        None:
+          steps:
+            id: 191-steps
+            ui:
+              type: int
+              label: steps
+              hidden: true
+              minimum: 0
+              step: 1
+              value: 20
+        minimax_h3_fl2v_turbo_4step_v1.0_768p_comfyui_bf16.safetensors:
+          steps:
+            id: 191-steps
+            ui:
+              type: int
+              label: steps
+              hidden: true
+              minimum: 0
+              step: 1
+              value: 4
+        minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors:
+          steps:
+            id: 191-steps
+            ui:
+              type: int
+              label: steps
+              hidden: true
+              minimum: 0
+              step: 1
+              value: 8
+      menuLabelSyntax: true
+    id: 167-lora_name
+  prompt:
+    id: 153-prompt
+    ui:
+      type: text
+      label: Prompt
+  mode:
+    ui:
+      type: menu-sub
+      label: Mode
+      choices:
+        - Prompt to video
+        - First frame
+        - Last frame
+        - First - last frame
+      value: Prompt to video
+      sub:
+        Prompt to video: {}
+        First frame:
+          first_frame:
+            id: 228-image
+            ui:
+              type: image
+              label: First frame
+        Last frame:
+          last_frame:
+            id: 229-image
+            ui:
+              type: image
+              label: Last frame
+        First - last frame:
+          first_frame:
+            id: 228-image
+            ui:
+              type: image
+              label: First frame
+          last_frame:
+            id: 229-image
+            ui:
+              type: image
+              label: Last frame
+  video_time_s:
+    id: 155-value
+    ui:
+      type: float
+      label: Video time (s)
+      minimum: 0
+      maximum: 15
+      step: 0.1
+      display: slider
+      value: 5
+  video_width:
+    id: 153-width
+    ui:
+      type: int
+      label: Video width
+      minimum: 512
+      maximum: 2048
+      step: 32
+      value: 1280
+  video_height:
+    id: 153-height
+    ui:
+      type: int
+      label: Video height
+      minimum: 512
+      maximum: 2048
+      step: 32
+      value: 736
+  seed:
+    id: 191-seed
+    ui:
+      type: seed
+      label: Seed
+      minimum: 0
+      step: 1
+      value: random_seed
+output:
+  anh_ket_qua:
+    id: "92"
+    ui:
+      type: image
+      label: Ảnh kết quả

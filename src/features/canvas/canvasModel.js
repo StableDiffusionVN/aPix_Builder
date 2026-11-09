@@ -33,6 +33,7 @@ function nodeById(nodes, nodeId) {
 export function portTypeForUi(uiType) {
   const type = String(uiType || "").toLowerCase();
   if (type === "image" || type === "image_mask" || type === "file") return "image";
+  if (type === "video" || type === "audio") return type;
   if (type === "text" || type === "string") return "text";
   if (type === "int" || type === "float" || type === "number" || type === "slider" || type === "seed") return "number";
   if (type === "checkbox" || type === "boolean") return "boolean";

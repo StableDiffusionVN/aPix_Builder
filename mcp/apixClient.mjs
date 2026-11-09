@@ -516,9 +516,31 @@ function takeValue(values, used, key, item, parentKey = "") {
   return { found: false };
 }
 
+const AV_MIME = {
+  ".mp4": "video/mp4", ".m4v": "video/mp4", ".mov": "video/quicktime", ".webm": "video/webm", ".mkv": "video/x-matroska", ".avi": "video/x-msvideo",
+  ".mp3": "audio/mpeg", ".wav": "audio/wav", ".flac": "audio/flac", ".ogg": "audio/ogg", ".opus": "audio/ogg", ".m4a": "audio/mp4", ".aac": "audio/aac"
+};
+
+/** Video / audio value: local path, http(s) URL or data URL → data URL the server uploads to ComfyUI. */
+async function mediaDataUrl(raw, type) {
+  const text = String(raw ?? "").trim();
+  if (!text || /^data:/i.test(text)) return text;
+  if (/^https?:\/\//i.test(text)) {
+    const response = await fetch(text, { signal: AbortSignal.timeout(120000) });
+    if (!response.ok) throw new ApixError(`Không tải được ${type}: HTTP ${response.status}`);
+    const mime = (response.headers.get("content-type") || `${type}/mp4`).split(";")[0];
+    return `data:${mime};base64,${Buffer.from(await response.arrayBuffer()).toString("base64")}`;
+  }
+  const filePath = path.resolve(text.startsWith("~") ? path.join(os.homedir(), text.slice(1)) : text);
+  if (!existsSync(filePath) || !statSync(filePath).isFile()) throw new ApixError(`Không thấy file ${type}: ${filePath}`);
+  const mime = AV_MIME[path.extname(filePath).toLowerCase()] || (type === "video" ? "video/mp4" : "audio/mpeg");
+  return `data:${mime};base64,${readFileSync(filePath).toString("base64")}`;
+}
+
 async function coerce(item, raw, resolveImage) {
   const ui = item?.ui || {};
   const type = ui.type;
+  if (type === "video" || type === "audio") return mediaDataUrl(raw, type);
   if (MEDIA_TYPES.has(type)) {
     if (Array.isArray(raw)) return Promise.all(raw.map(resolveImage));
     return resolveImage(raw);

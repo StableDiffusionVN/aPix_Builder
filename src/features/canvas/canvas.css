@@ -2455,3 +2455,10 @@
 .alignmentBarBtn:active {
   background-color: rgba(255, 255, 255, 0.2) !important;
 }
+
+/* Canvas: video / audio input field */
+.canvasMediaPreview { display: block; width: 100%; max-height: 160px; margin: 4px 0; border-radius: 8px; background: #000; }
+audio.canvasMediaPreview { height: 34px; background: transparent; }
+.canvasMediaActions { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.canvasMediaActions input[type="file"] { flex: 1; min-width: 0; font-size: 11px; }
+.canvasMiniButton { flex: none; padding: 3px 8px; border: 1px solid var(--border); border-radius: 6px; background: transparent; color: var(--muted); font-size: 11px; cursor: pointer; }

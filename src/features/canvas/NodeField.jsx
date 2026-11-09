@@ -121,6 +121,35 @@ export function NodeField({ port, value, onChange, linked, onContextMenu, sdvnMo
     );
   }
 
+  if (type === "video" || type === "audio") {
+    const hasMedia = typeof value === "string" && value.startsWith("data:");
+    return (
+      <label className="canvasField nodrag" onContextMenu={onContextMenu}>
+        <span className="canvasFieldLabel">{port.label}<FieldInfo text={port.description} /></span>
+        {hasMedia ? (
+          type === "video"
+            ? <video className="canvasMediaPreview nowheel" src={value} controls playsInline preload="metadata" />
+            : <audio className="canvasMediaPreview" src={value} controls preload="metadata" />
+        ) : null}
+        <span className="canvasMediaActions">
+          <input
+            type="file"
+            accept={type === "video" ? "video/*" : "audio/*"}
+            onChange={event => {
+              const file = event.target.files?.[0];
+              event.target.value = "";
+              if (!file) return;
+              const reader = new FileReader();
+              reader.onload = () => onChange(String(reader.result || ""));
+              reader.readAsDataURL(file);
+            }}
+          />
+          {hasMedia ? <button type="button" className="canvasMiniButton" onClick={() => onChange("")}>{t("field.clearMedia")}</button> : null}
+        </span>
+      </label>
+    );
+  }
+
   if (type === "text") {
     return (
       <label className="canvasField nodrag" onContextMenu={onContextMenu}>

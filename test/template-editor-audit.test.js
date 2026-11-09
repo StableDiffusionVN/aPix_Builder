@@ -159,3 +159,27 @@ describe("hidden fields", () => {
     expect(Object.keys(ui.sub.Base)).toEqual(["bravo", "alpha"]);
   });
 });
+
+describe("video / audio inputs", () => {
+  it("the editor recognises LoadVideo / LoadAudio widgets", async () => {
+    const { inferRowType } = await import("../src/features/template-editor/templateEditorModel.js");
+    expect(inferRowType({ field: "file", nodeClass: "LoadVideo", value: "a.mp4" })).toBe("video");
+    expect(inferRowType({ field: "video", nodeClass: "VHS_LoadVideo", value: "a.mp4" })).toBe("video");
+    expect(inferRowType({ field: "audio", nodeClass: "LoadAudio", value: "a.wav" })).toBe("audio");
+    expect(inferRowType({ field: "file", nodeClass: "SomethingElse", value: "x" })).toBe("string");
+  });
+
+  it("a video / audio upload goes to ComfyUI's input folder and the widget gets its name", async () => {
+    const copy = { 5: { class_type: "LoadVideo", inputs: { file: "old.mp4" } }, 6: { class_type: "LoadAudio", inputs: { audio: "old.wav" } } };
+    const uploads = [];
+    const uploadImageToComfy = async (_target, upload) => {
+      uploads.push(upload.mimeType);
+      return { name: `up_${uploads.length}`, subfolder: "", type: "input" };
+    };
+    await setWorkflowValue(copy, "5-file", { kind: "upload", mimeType: "video/mp4", buffer: Buffer.from("v"), index: 0 }, {}, null, { uploadImageToComfy });
+    await setWorkflowValue(copy, "6-audio", { kind: "upload", mimeType: "audio/mpeg", buffer: Buffer.from("a"), index: 1 }, {}, null, { uploadImageToComfy });
+    expect(copy[5].inputs.file).toBe("up_1");
+    expect(copy[6].inputs.audio).toBe("up_2");
+    expect(uploads).toEqual(["video/mp4", "audio/mpeg"]);
+  });
+});

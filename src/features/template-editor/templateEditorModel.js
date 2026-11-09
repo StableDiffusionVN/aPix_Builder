@@ -119,7 +119,7 @@ export function pruneInputRows(rows, workflow) {
 }
 
 export function defaultValueForType(type, fieldValue) {
-  if (type === "image") return "";
+  if (type === "image" || type === "video" || type === "audio") return "";
   if (type === "seed") return "random_seed";
   if (type === "checkbox" || type === "boolean") return Boolean(fieldValue);
   if (type === "int" || type === "float") {
@@ -150,7 +150,18 @@ export function inferValueType(value) {
   return "string";
 }
 
+/** Video / audio loader widgets: LoadVideo + VHS ("file" / "video"), LoadAudio ("audio"). */
+export function inferMediaType(field, nodeClass) {
+  const name = String(field || "").toLowerCase();
+  const node = String(nodeClass || "");
+  if (/load.*video|video.*load/i.test(node) && (name === "file" || name === "video")) return "video";
+  if (/load.*audio|audio.*load/i.test(node) && name === "audio") return "audio";
+  return "";
+}
+
 export function inferRowType({ field, nodeClass, value }, mode = "local") {
+  const media = inferMediaType(field, nodeClass);
+  if (media) return media;
   if (mode === "runninghub-wf") {
     if (String(field || "").toLowerCase().includes("image")) return "image";
     if (Array.isArray(value) && !isLinkValue(value)) return "menu";

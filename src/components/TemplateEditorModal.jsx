@@ -57,8 +57,8 @@ function menuOptsFromRow(row) {
   return menuChoiceOptions(row);
 }
 
-const LOCAL_FIELD_TYPES = ["image", ...DYNAMIC_FIELD_TYPES, "seed", "int", "float", "string", "menu", "checkbox", "boolean"];
-const RH_WF_FIELD_TYPES = ["image", "seed", "int", "float", "string", "text", "menu", "checkbox", "boolean"];
+const LOCAL_FIELD_TYPES = ["image", "video", "audio", ...DYNAMIC_FIELD_TYPES, "seed", "int", "float", "string", "menu", "checkbox", "boolean"];
+const RH_WF_FIELD_TYPES = ["image", "video", "audio", "seed", "int", "float", "string", "text", "menu", "checkbox", "boolean"];
 
 function editorFieldTypes(mode) {
   return mode === "runninghub-wf" ? RH_WF_FIELD_TYPES : LOCAL_FIELD_TYPES;
@@ -317,7 +317,7 @@ function InputDetailPanel({ row, nodes, fieldTypes, onUpdate, onDelete }) {
             </label>
           </>
         ) : null}
-        {row.type !== "image" ? (
+        {!["image", "video", "audio"].includes(row.type) ? (
           <label className="field">
             <span>{t("templateEditor.default")}</span>
             {(row.type === "checkbox" || row.type === "boolean") ? (
@@ -502,7 +502,7 @@ function SubInputEditor({ subRow, nodes, fieldTypes, onUpdate, onDelete, draggin
             </label>
           </>
         ) : null}
-        {subRow.type !== "image" ? (
+        {!["image", "video", "audio"].includes(subRow.type) ? (
           <label className="field">
             <span>{t("templateEditor.default")}</span>
             {(subRow.type === "checkbox" || subRow.type === "boolean") ? (
@@ -913,7 +913,7 @@ function buildInputUiFromRow(row) {
     ui.value = row.value === "" ? "random_seed" : row.value;
   } else if (row.type === "checkbox" || row.type === "boolean") {
     ui.value = booleanValue(row.value);
-  } else if (row.type !== "image" && row.value !== "") {
+  } else if (!["image", "video", "audio"].includes(row.type) && row.value !== "") {
     ui.value = row.type === "int" || row.type === "float" ? numericValue(row.value) : row.value;
   }
   return ui;

@@ -339,6 +339,15 @@ export async function setWorkflowValue(workflow, id, value, target, signal, opti
     return nodeInputs[field];
   }
 
+  // Video / audio for LoadVideo ("file"), VHS LoadVideo ("video"), LoadAudio ("audio"): the file goes
+  // to ComfyUI's input folder and the widget gets its name.
+  if (value?.kind === "upload" && /^(video|audio)\//.test(value.mimeType || "") && field.toLowerCase() !== "url") {
+    const uploaded = await uploadImageToComfy(target, value, signal);
+    const name = uploaded.name || uploaded.filename || uploaded;
+    nodeInputs[field] = uploaded.subfolder ? `${uploaded.subfolder}/${name}` : name;
+    return nodeInputs[field];
+  }
+
   if (value?.kind === "upload") {
     if (section === "inputs" && field.toLowerCase() === "url") {
       if (urlUploadMode === "local_path") {

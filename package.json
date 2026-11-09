@@ -27,8 +27,9 @@
     "preview": "vite preview --host 0.0.0.0",
     "desktop": "npm run build && electron .",
     "sync:brand": "node scripts/sync-brand-assets.mjs",
-    "dist:mac": "npm run sync:brand && npm run build && node scripts/build-mac-dmg.mjs && node scripts/update-release-manifest.mjs",
-    "dist:win": "npm run sync:brand && npm run build && node scripts/build-win-portable.mjs"
+    "dist:mac": "npm run sync:brand && npm run build && node scripts/fetch-ffmpeg.mjs darwin-arm64 && node scripts/build-mac-dmg.mjs && node scripts/update-release-manifest.mjs",
+    "dist:win": "npm run sync:brand && npm run build && node scripts/fetch-ffmpeg.mjs win32-x64 && node scripts/build-win-portable.mjs",
+    "fetch:ffmpeg": "node scripts/fetch-ffmpeg.mjs"
   },
   "dependencies": {
     "@xyflow/react": "^12.11.0",
@@ -91,6 +92,12 @@
             "arm64"
           ]
         }
+      ],
+      "extraResources": [
+        {
+          "from": "vendor/ffmpeg/darwin-${arch}",
+          "to": "ffmpeg"
+        }
       ]
     },
     "dmg": {
@@ -105,6 +112,12 @@
           "arch": [
             "x64"
           ]
+        }
+      ],
+      "extraResources": [
+        {
+          "from": "vendor/ffmpeg/win32-${arch}",
+          "to": "ffmpeg"
         }
       ]
     },

@@ -120,6 +120,11 @@ async function createWindow() {
     // Dev / npm run desktop → repo/user/ · Packaged DMG/exe → OS app data folder
     process.env.APIX_DATA_ROOT = app.isPackaged ? app.getPath("userData") : appRoot;
     process.env.APIX_SERVE_FRONTEND = "1";
+    // ffmpeg bundled with the app (extraResources → Resources/ffmpeg): MOV → MP4 for video inputs.
+    const bundledFfmpeg = path.join(process.resourcesPath || "", "ffmpeg", process.platform === "win32" ? "ffmpeg.exe" : "ffmpeg");
+    if (app.isPackaged && !process.env.APIX_FFMPEG && await fs.access(bundledFfmpeg).then(() => true, () => false)) {
+      process.env.APIX_FFMPEG = bundledFfmpeg;
+    }
     process.env.PORT = "0";
 
     // Desktop-only capabilities the in-process server exposes to MCP (Colab control).

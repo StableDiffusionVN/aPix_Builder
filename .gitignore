@@ -26,3 +26,6 @@ aPix_builder_android_app/
 
 # aPix license server data (hashed keys, usage log)
 license-data/
+
+# ffmpeg bundled with the desktop app (npm run fetch:ffmpeg)
+/vendor/ffmpeg/

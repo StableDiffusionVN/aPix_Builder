@@ -6,6 +6,8 @@
 //       --workflows: workflow VIP được mở khoá ("*" = tất cả — mặc định; vd "sdvn-upscale" hoặc "sdvn-upscale,sdvn-swapface")
 //   devices <id|label> N  (đổi số máy chạy cùng lúc; 0 = không giới hạn)
 //   workflows <id|label> "*" | "sdvn-upscale,…"  (đổi workflow VIP được mở khoá)
+//   import <file.json>  (mảng [{ label, note?, days?, devices?, workflows? }] — label đã có thì chỉ cập nhật
+//                        số máy / workflow, chưa có thì tạo mã mới; in JSON từng dòng { label, action, key? })
 //   list
 //   disable <id|label>   enable <id|label>   delete <id|label>
 //   extend <id|label> --days 30
@@ -74,6 +76,27 @@ switch (command) {
     show(await store.update(args[0], { workflows: parseList(args[1]) }));
     break;
   }
+  case "import": {
+    const entries = JSON.parse(await readFile(args[0], "utf8"));
+    if (!Array.isArray(entries)) throw new Error("File import phải là mảng JSON");
+    const existing = new Map((await store.load()).map(record => [record.label, record]));
+    for (const entry of entries) {
+      const label = String(entry.label || "").trim();
+      if (!label) continue;
+      const devices = Number(entry.devices) > 0 ? Math.floor(Number(entry.devices)) : null;
+      const workflows = Array.isArray(entry.workflows) ? entry.workflows : parseList(entry.workflows || "*");
+      const current = existing.get(label);
+      if (current) {
+        const same = (current.maxDevices ?? null) === devices && JSON.stringify(current.workflows ?? "*") === JSON.stringify(workflows);
+        if (!same) await store.update(current.id, { maxDevices: devices, workflows });
+        console.log(JSON.stringify({ label, id: current.id, action: same ? "unchanged" : "updated", devices, workflows }));
+        continue;
+      }
+      const { key, record } = await store.add({ label, note: entry.note || "", days: Number(entry.days) || null, devices, workflows, models: "*" });
+      console.log(JSON.stringify({ label, id: record.id, action: "created", devices, workflows, key }));
+    }
+    break;
+  }
   case "delete":
     await store.remove(args[0]);
     console.log("Đã xóa.");
@@ -85,5 +108,5 @@ switch (command) {
     break;
   }
   default:
-    console.log("Lệnh: add | list | disable | enable | extend | devices | workflows | delete | usage  (xem đầu file admin.mjs)");
+    console.log("Lệnh: add | import | list | disable | enable | extend | devices | workflows | delete | usage  (xem đầu file admin.mjs)");
 }

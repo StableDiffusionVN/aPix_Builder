@@ -101,7 +101,8 @@ export function createComfyService({ storage, runCoordinator, readBody, send }) 
       uploadMaskToComfy,
       parseDataUrl,
       uploadedImageUrl,
-      urlUploadMode: template.id === "image-adjust" ? "local_path" : "comfy_view_url"
+      urlUploadMode: template.id === "image-adjust" ? "local_path" : "comfy_view_url",
+      onLog: message => console.warn(`[video] ${message}`)
       };
       for (const [id, value] of Object.entries(request)) {
         const patchedValue = await setWorkflowValue(workflow, id, value, target, abortController.signal, patchOptions);

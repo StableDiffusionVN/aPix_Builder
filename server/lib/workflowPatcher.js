@@ -4,6 +4,7 @@ import { imageValueForUi } from "../../shared/cropInpaint.js";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { localFileToUpload } from "./localImageFolder.js";
+import { convertMovToMp4 } from "./videoConvert.js";
 import { localImageRefToUpload, parseLocalImageRef } from "./localImageRef.js";
 import { lookupMenuSubFields, menuChoiceOptions, menuChoiceValue, resolveMenuStoredValue } from "../../shared/menuChoices.js";
 
@@ -342,7 +343,9 @@ export async function setWorkflowValue(workflow, id, value, target, signal, opti
   // Video / audio for LoadVideo ("file"), VHS LoadVideo ("video"), LoadAudio ("audio"): the file goes
   // to ComfyUI's input folder and the widget gets its name.
   if (value?.kind === "upload" && /^(video|audio)\//.test(value.mimeType || "") && field.toLowerCase() !== "url") {
-    const uploaded = await uploadImageToComfy(target, value, signal);
+    // MOV → MP4 first: not every ComfyUI video node reads QuickTime.
+    const media = await convertMovToMp4(value, { onLog: options.onLog });
+    const uploaded = await uploadImageToComfy(target, media, signal);
     const name = uploaded.name || uploaded.filename || uploaded;
     nodeInputs[field] = uploaded.subfolder ? `${uploaded.subfolder}/${name}` : name;
     return nodeInputs[field];

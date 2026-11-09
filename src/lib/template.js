@@ -1,5 +1,6 @@
 // @ts-check
 import { cropInpaintSource, imageValueForUi } from "../../shared/cropInpaint.js";
+import { snapToStep, stepOptions } from "../../shared/numberStep.js";
 import { isDynamicFieldType } from "./dynamicTypes";
 import { lookupMenuSubFields, menuChoiceOptions, resolveMenuStoredValue } from "../../shared/menuChoices.js";
 
@@ -177,7 +178,8 @@ export function requestPayload(items, values) {
             payload[id] = imageValueForUi(Array.isArray(values[key]) ? values[key][index] : values[key], subItem.ui);
           });
         } else {
-          payload[subItem.id] = imageValueForUi(values[key], subItem.ui);
+          const options = stepOptions(subItem.ui);
+          payload[subItem.id] = options ? snapToStep(values[key], options) : imageValueForUi(values[key], subItem.ui);
         }
       }
       continue;
@@ -188,7 +190,8 @@ export function requestPayload(items, values) {
       continue;
     }
     const key = normalizeId(item.id);
-    const value = imageValueForUi(values[key], item.ui);
+    const options = stepOptions(item.ui);
+    const value = options ? snapToStep(values[key], options) : imageValueForUi(values[key], item.ui);
     if (Array.isArray(item.id)) {
       item.id.forEach((id, index) => {
         payload[id] = Array.isArray(value) ? value[index] : value;

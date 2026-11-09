@@ -1,3 +1,4 @@
+import { snapToStep, stepOptions } from "../../../shared/numberStep.js";
 import { RefreshCcw } from "lucide-react";
 import {
   canonicalDynamicType,
@@ -166,6 +167,16 @@ const renderers = {
             step={ui.step || (ui.type === "float" ? 0.1 : 1)}
             value={value}
             onChange={event => onChange(parseNumber(event.target.value))}
+            // Typed value → nearest multiple of the step (when the template sets one).
+            onBlur={() => {
+              const options = stepOptions(ui);
+              if (!options) return;
+              const snapped = snapToStep(value, options);
+              if (snapped !== value) onChange(snapped);
+            }}
+            onKeyDown={event => {
+              if (event.key === "Enter") event.currentTarget.blur();
+            }}
           />
           <button type="button" className="fieldResetButton" onClick={() => onChange(resetValue)} disabled={isAtResetValue} title={t("field.reset")}>
             <RefreshCcw size={13} />

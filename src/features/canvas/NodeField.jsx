@@ -6,6 +6,7 @@ import { canonicalDynamicType, dynamicFieldChoices } from "../../lib/dynamicType
 import { fetchSdvnLibraryNames } from "../../lib/sdvnModels.js";
 import { SearchableSelect } from "../fields/SearchableSelect.jsx";
 import { portTypeForUi } from "./canvasModel.js";
+import { snapToStep, stepOptions } from "../../../shared/numberStep.js";
 import { CanvasImageField } from "./CanvasImageField.jsx";
 import { FieldInfo } from "../fields/FieldInfo.jsx";
 import { useCanvasActions } from "./canvasContext.js";
@@ -104,6 +105,12 @@ export function NodeField({ port, value, onChange, linked, onContextMenu, sdvnMo
           max={port.maximum}
           step={port.step ?? (String(port.uiType || "").toLowerCase() === "float" ? "any" : 1)}
           onChange={event => onChange(event.target.value === "" ? "" : Number(event.target.value))}
+          onBlur={() => {
+            const options = stepOptions({ type: port.uiType, step: port.step, minimum: port.minimum, maximum: port.maximum });
+            if (!options) return;
+            const snapped = snapToStep(value, options);
+            if (snapped !== value) onChange(snapped);
+          }}
         />
       </label>
     );

@@ -105,4 +105,56 @@ describe("aPix license server", () => {
     expect((await post("/v1/session", { key })).status).toBe(401);
     expect((await post("/v1/download-url", { token: "bad.token", url: "x" })).status).toBe(401);
   });
+
+  test("a key installed anywhere runs on one machine at a time", async () => {
+    const { key } = await store.add({ label: "may-don", devices: 1 });
+    const a = (await post("/v1/session", { key, deviceId: "desktop-a" })).body.token;
+    const b = (await post("/v1/session", { key, deviceId: "desktop-b" })).body.token;
+    expect((await post("/v1/lease", { token: a })).status).toBe(200);
+    expect((await post("/v1/lease", { token: a })).status).toBe(200); // renewing is fine
+    const busy = await post("/v1/lease", { token: b });
+    expect(busy.status).toBe(409);
+    expect(busy.body.code).toBe("device_busy");
+    // Model downloads from machine B are refused too; machine A keeps working.
+    const url = "https://huggingface.co/phamhungd/SDVN-Model/resolve/main/x.safetensors";
+    expect((await post("/v1/download-url", { token: b, url })).status).toBe(409);
+    expect((await post("/v1/download-url", { token: a, url })).status).toBe(200);
+    // Older clients without a device id are not limited.
+    const legacy = (await post("/v1/session", { key })).body.token;
+    expect((await post("/v1/lease", { token: legacy })).status).toBe(200);
+  });
+
+  test("key types: no device limit, or N machines at once", async () => {
+    const free = (await store.add({ label: "vo-han" })).key;
+    const two = (await store.add({ label: "hai-may", devices: 2, days: 30 })).key;
+    const lease = async (key, deviceId) => {
+      const token = (await post("/v1/session", { key, deviceId })).body.token;
+      return (await post("/v1/lease", { token })).status;
+    };
+    for (const device of ["m1", "m2", "m3", "m4"]) expect(await lease(free, device)).toBe(200);
+    expect(await lease(two, "m1")).toBe(200);
+    expect(await lease(two, "m2")).toBe(200);
+    const third = await post("/v1/lease", { token: (await post("/v1/session", { key: two, deviceId: "m3" })).body.token });
+    expect(third.status).toBe(409);
+    expect(third.body.error).toMatch(/tối đa 2 máy/);
+  });
+
+  test("the machine slot frees up once the holder stops", async () => {
+    const quick = createLicenseServer({ store, secret: SECRET, hfToken: "hf", leaseMinutes: 0.001, signUrl: async () => "x" });
+    await new Promise(resolve => quick.server.listen(0, "127.0.0.1", resolve));
+    const quickBase = `http://127.0.0.1:${quick.server.address().port}`;
+    const call = async (route, body) => {
+      const response = await fetch(`${quickBase}${route}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+      return response.status;
+    };
+    try {
+      const { key } = await store.add({ label: "may-luan-phien", devices: 1 });
+      const token = async deviceId => (await (await fetch(`${quickBase}/v1/session`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ key, deviceId }) })).json()).token;
+      expect(await call("/v1/lease", { token: await token("desktop-a") })).toBe(200);
+      await new Promise(resolve => setTimeout(resolve, 120));
+      expect(await call("/v1/lease", { token: await token("desktop-b") })).toBe(200);
+    } finally {
+      quick.server.close();
+    }
+  });
 });

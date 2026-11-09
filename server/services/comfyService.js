@@ -29,7 +29,7 @@ import {
   validateWorkflowMappings
 } from "../lib/workflowPatcher.js";
 import { decorateCanvasHistoryItem, mergeCanvasHistoryItem } from "../lib/canvasHistory.js";
-import { pushApixKey } from "../lib/apixLicense.js";
+import { acquireRunLease, pushApixKey } from "../lib/apixLicense.js";
 
 const comfyTimeoutMs = Number(process.env.COMFY_TIMEOUT_MS || 10 * 60 * 1000);
 
@@ -86,6 +86,9 @@ export function createComfyService({ storage, runCoordinator, readBody, send }) 
       const target = normalizeComfyTarget(body.address || server.address);
       const workflow = await assertTemplateWorkflow(config, template, { selectedWorkflow: true });
       run.target = target;
+      // aPix key: one machine runs at a time (installed anywhere). Refused → the run fails with why.
+      await acquireRunLease(storage.getPaths());
+      run.leaseTimer = setInterval(() => { acquireRunLease(storage.getPaths()).catch(() => {}); }, 60000);
       await pushApixKey(target, storage.getPaths());
   
       const normalized = await normalizeValues(body.values || {});
@@ -170,6 +173,7 @@ export function createComfyService({ storage, runCoordinator, readBody, send }) 
       }
       throw error;
     } finally {
+      clearInterval(run.leaseTimer);
       broadcastRunEvent(run, { type: "run_end", data: { runId } });
       for (const client of run.sseClients) {
         try { client.res.end(); } catch {}

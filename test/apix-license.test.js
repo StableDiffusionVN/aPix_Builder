@@ -48,7 +48,7 @@ describe("aPix key push", () => {
     const target = { httpBase: base, headers: { authorization: "Basic abc" } };
     expect(await pushApixKey(target, { personalDataDir: dir })).toMatchObject({ supported: true, ok: true });
     await pushApixKey(target, { personalDataDir: dir });
-    expect(received).toEqual([{ body: { key: "apx_test123" }, auth: "Basic abc" }]);
+    expect(received).toEqual([{ body: { key: "apx_test123", deviceId: expect.stringMatching(/^desktop-/) }, auth: "Basic abc" }]);
   });
 
   test("servers without the SDVN route are skipped quietly", async () => {

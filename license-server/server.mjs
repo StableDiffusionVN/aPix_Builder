@@ -12,7 +12,7 @@ import { readdir, readFile } from "node:fs/promises";
 import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { allowsModel, LicenseStore, signToken, verifyToken } from "./licenseStore.mjs";
+import { allowsModel, allowsWorkflow, LicenseStore, signToken, verifyToken } from "./licenseStore.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const VIP_ZIP = /^[a-z0-9][a-z0-9-]*\.zip$/;
@@ -65,6 +65,7 @@ export function createLicenseServer(options = {}) {
     secret: options.secret ?? process.env.LICENSE_SECRET ?? "",
     protectedRepos: (options.protectedRepos || process.env.PROTECTED_REPOS || "phamhungd/SDVN-Model").split(",").map(item => item.trim()).filter(Boolean),
     sessionMs: (Number(options.sessionHours || process.env.SESSION_HOURS) || 12) * 3600000,
+    leaseMs: (Number(options.leaseMinutes || process.env.LEASE_MINUTES) || 3) * 60000,
     maxLinksPerHour: Number(options.maxLinksPerHour || process.env.MAX_LINKS_PER_HOUR) || 120,
     basePath: (options.basePath ?? process.env.BASE_PATH ?? "").replace(/\/+$/, ""),
     signUrl: options.signUrl || signedHuggingFaceUrl
@@ -103,6 +104,29 @@ export function createLicenseServer(options = {}) {
   // Behind Cloudflare + nginx the socket address is the proxy's.
   const clientIp = req => String(req.headers["cf-connecting-ip"] || req.headers["x-forwarded-for"] || "").split(",")[0].trim() || req.socket.remoteAddress;
 
+  // Keys may be installed on any number of machines; a key with maxDevices N lets at most N machines
+  // run at the same time. A machine holds a slot while it sends runs (renewed by /v1/lease and by
+  // model downloads) until it lapses (LEASE_MINUTES). No maxDevices = no limit. Tokens without a
+  // device id come from older clients and are not limited.
+  const leases = new Map(); // kid → Map(dev → until)
+  function takeLease(record, dev) {
+    const limit = Number(record.maxDevices) || 0;
+    if (!limit || !dev) return true;
+    const now = Date.now();
+    const held = leases.get(record.id) || new Map();
+    for (const [device, until] of held) if (until <= now) held.delete(device);
+    if (!held.has(dev) && held.size >= limit) return false;
+    held.set(dev, now + config.leaseMs);
+    leases.set(record.id, held);
+    return true;
+  }
+  const busyError = record => ({
+    error: Number(record.maxDevices) === 1
+      ? "Mã aPix này đang chạy trên máy khác — mã chỉ cho chạy trên một máy cùng lúc. Thử lại khi máy kia ngừng chạy."
+      : `Mã aPix này đang chạy trên ${record.maxDevices} máy khác — mã chỉ cho chạy tối đa ${record.maxDevices} máy cùng lúc. Thử lại khi một máy ngừng chạy.`,
+    code: "device_busy"
+  });
+
   function overLimit(kid) {
     const now = Date.now();
     const recent = (linkCounts.get(kid) || []).filter(at => now - at < 3600000);
@@ -131,10 +155,32 @@ export function createLicenseServer(options = {}) {
         return;
       }
       const expiresAt = Math.min(Date.now() + config.sessionMs, record.expiresAt ? Date.parse(record.expiresAt) : Infinity);
-      const token = signToken({ kid: record.id, exp: expiresAt }, config.secret);
+      const dev = typeof body.deviceId === "string" ? body.deviceId.slice(0, 80) : "";
+      const token = signToken({ kid: record.id, exp: expiresAt, ...(dev ? { dev } : {}) }, config.secret);
       await store.logUsage({ kid: record.id, action: "session", ip: clientIp(req) });
       // expiresAt: this session (≤ SESSION_HOURS); keyExpiresAt: the key itself (null = never).
       send(res, 200, { token, expiresAt: new Date(expiresAt).toISOString(), keyExpiresAt: record.expiresAt || null, label: record.label || "" });
+      return;
+    }
+
+    if (req.method === "POST" && route === "/v1/lease") {
+      const body = await readJson(req);
+      const session = verifyToken(body.token, config.secret);
+      if (!session) {
+        send(res, 401, { error: "Phiên aPix hết hạn, cần đăng nhập lại bằng mã aPix", code: "session_expired" });
+        return;
+      }
+      const record = await store.byId(session.kid);
+      if (!record || record.disabled || (record.expiresAt && Date.parse(record.expiresAt) <= Date.now())) {
+        send(res, 403, { error: "Mã aPix không còn hiệu lực" });
+        return;
+      }
+      if (!takeLease(record, session.dev)) {
+        await store.logUsage({ kid: record.id, action: "device-busy", ip: clientIp(req) });
+        send(res, 409, busyError(record));
+        return;
+      }
+      send(res, 200, { ok: true, leaseSeconds: Math.round(config.leaseMs / 1000) });
       return;
     }
 
@@ -154,6 +200,11 @@ export function createLicenseServer(options = {}) {
       const record = await store.byId(session.kid);
       if (!record || record.disabled || (record.expiresAt && Date.parse(record.expiresAt) <= Date.now())) {
         send(res, 403, { error: "Mã aPix không còn hiệu lực" });
+        return;
+      }
+      if (!takeLease(record, session.dev)) {
+        await store.logUsage({ kid: record.id, action: "device-busy", ip: clientIp(req) });
+        send(res, 409, busyError(record));
         return;
       }
       if (!allowsModel(record, target.file)) {
@@ -228,7 +279,7 @@ export function createLicenseServer(options = {}) {
       if (route === "/v1/vip/list") {
         const names = await readdir(vipDir).catch(() => []);
         const workflows = [];
-        for (const name of names.filter(item => VIP_ZIP.test(item)).sort()) {
+        for (const name of names.filter(item => VIP_ZIP.test(item) && allowsWorkflow(record, item.replace(/\.zip$/, ""))).sort()) {
           const data = await readFile(path.join(vipDir, name));
           workflows.push({ id: name.replace(/\.zip$/, ""), sha256: createHash("sha256").update(data).digest("hex") });
         }
@@ -238,6 +289,10 @@ export function createLicenseServer(options = {}) {
       const file = `${body.id}.zip`;
       if (!VIP_ZIP.test(file)) {
         send(res, 400, { error: "Workflow không hợp lệ" });
+        return;
+      }
+      if (!allowsWorkflow(record, body.id)) {
+        send(res, 403, { error: "Mã aPix không mở khoá workflow này" });
         return;
       }
       const data = await readFile(path.join(vipDir, file)).catch(() => null);

@@ -105,6 +105,22 @@ describe("VIP workflows", () => {
     expect(response.status).toBe(401);
   });
 
+  test("a key only unlocks the VIP workflows it was made for", async () => {
+    await writeFile(path.join(licenseDir, "vip", "sdvn-upscale.zip"), zip());
+    try {
+      const upscaleOnly = (await store.add({ label: "chi-upscale", workflows: ["sdvn-upscale"] })).key;
+      await saveKey(upscaleOnly);
+      expect((await sync()).workflows.map(item => item.id)).toEqual(["sdvn-upscale"]);
+      const session = await (await fetch(`${url}/v1/session`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ key: upscaleOnly }) })).json();
+      const denied = await fetch(`${url}/v1/vip/download`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ token: session.token, id: "sdvn-swap" }) });
+      expect(denied.status).toBe(403);
+      await saveKey(key); // made without the option: every VIP workflow
+      expect((await sync()).workflows.map(item => item.id).sort()).toEqual(["sdvn-swap", "sdvn-upscale"]);
+    } finally {
+      await rm(path.join(licenseDir, "vip", "sdvn-upscale.zip"), { force: true });
+    }
+  });
+
   test("rejects unsafe paths in a ZIP", async () => {
     const { installVipZip } = await import("../server/lib/vipTemplates.js");
     const bad = Buffer.from(zipSync({ "../evil.txt": strToU8("x"), "app_build.yaml": strToU8(yaml) }));

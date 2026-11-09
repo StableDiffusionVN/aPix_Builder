@@ -24,6 +24,13 @@ Mã **không** đi trong workflow (ComfyUI lưu workflow vào PNG kết quả v�
 ```bash
 apix-license-admin add --label "Nguyễn A" --days 30            # mọi model
 apix-license-admin add --label "Khách B" --models "flux_arin_*,flux_yuu_*"
+# Loại mã (kết hợp tuỳ ý — mã cài trên bao nhiêu máy cũng được):
+apix-license-admin add --label "Vô hạn"                                   # không hạn, không giới hạn máy
+apix-license-admin add --label "Một máy" --devices 1                     # không hạn, chỉ 1 máy CHẠY cùng lúc
+apix-license-admin add --label "Tháng" --days 30 --devices 2             # có hạn + tối đa 2 máy chạy cùng lúc
+apix-license-admin add --label "Chỉ upscale" --workflows "sdvn-upscale"  # chỉ mở khoá workflow VIP này (mặc định "*" = tất cả)
+apix-license-admin devices "Một máy" 3          # đổi số máy chạy cùng lúc (0 = không giới hạn)
+apix-license-admin workflows "Chỉ upscale" "sdvn-upscale,sdvn-swapface"
 apix-license-admin list
 apix-license-admin disable "Nguyễn A"      # enable / delete / extend --days 30
 apix-license-admin usage 50
@@ -42,7 +49,16 @@ Mã chỉ hiện **một lần** khi tạo — gửi cho khách. Khách nhập t
 | `GET /v1/defaults/download?id=` | | file zip (công khai) |
 | `POST /v1/vip/list` | `{ token }` | `{ workflows: [{ id, sha256 }] }` |
 | `POST /v1/vip/download` | `{ token, id }` | file zip |
+| `POST /v1/lease` | `{ token }` | giữ quyền chạy cho máy của phiên (`deviceId` gửi lúc mở phiên) · 409 `device_busy` khi đủ số máy đang chạy |
 | `POST /v1/download-url` | `{ token, url }` | `{ url }` link ký tạm · `{ public: true }` nếu không phải repo riêng · 401/403/429 |
+
+## Giới hạn máy chạy cùng lúc
+
+Client gửi `deviceId` (ngẫu nhiên theo máy) khi mở phiên. Mỗi lệnh chạy giữ một "suất" cho máy đó
+(`/v1/lease`, gia hạn mỗi phút trong lúc chạy, cả khi node SDVN tải model); suất hết sau `LEASE_MINUTES`
+(mặc định 3) kể từ lần gia hạn cuối. Mã có `maxDevices` N: máy thứ N+1 bị từ chối (409) cho tới khi một
+suất hết. Không có `maxDevices` = không giới hạn. Phiên không kèm `deviceId` (client cũ) không bị giới hạn.
+App gửi kèm `deviceId` khi đưa mã cho ComfyUI để node được tính cùng máy.
 
 ## Workflow VIP
 

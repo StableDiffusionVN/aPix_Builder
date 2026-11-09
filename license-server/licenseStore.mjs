@@ -64,7 +64,7 @@ export class LicenseStore {
     await rename(temp, this.keysFile);
   }
 
-  async add({ label = "", models = "*", days = null, note = "" } = {}) {
+  async add({ label = "", models = "*", days = null, note = "", devices = null, workflows = "*" } = {}) {
     const keys = await this.load();
     const key = generateKey();
     const record = {
@@ -75,6 +75,10 @@ export class LicenseStore {
       models,
       createdAt: new Date().toISOString(),
       expiresAt: days ? new Date(Date.now() + days * 86400000).toISOString() : null,
+      // Machines that may run at the same time (installed on any number); null = no limit.
+      maxDevices: Number(devices) > 0 ? Math.floor(Number(devices)) : null,
+      // VIP workflows this key unlocks: "*" = all, or a list of ids (file names in vip/ without .zip).
+      workflows,
       disabled: false
     };
     keys.push(record);
@@ -127,4 +131,12 @@ export function allowsModel(record, file) {
   return list.map(item => item.trim()).filter(Boolean).some(item => (
     item.endsWith("*") ? name.startsWith(item.slice(0, -1)) || file.startsWith(item.slice(0, -1)) : item === name || item === file
   ));
+}
+
+/** Whether a key unlocks a VIP workflow (no field / "*" = all — keys made before the option). */
+export function allowsWorkflow(record, id) {
+  const workflows = record?.workflows ?? "*";
+  if (workflows === "*") return true;
+  const list = Array.isArray(workflows) ? workflows : String(workflows).split(",");
+  return list.map(item => item.trim()).filter(Boolean).includes(id);
 }

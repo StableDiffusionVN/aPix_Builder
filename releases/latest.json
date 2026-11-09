@@ -1,14 +1,15 @@
 {
-  "version": "1.4.3",
-  "label": "v1.4.3",
-  "publishedAt": "2026-10-01T11:09:00.000Z",
+  "version": "2.0.0",
+  "label": "v2.0.0",
+  "publishedAt": "2026-11-09T11:37:12.963Z",
   "notes": [
-    "RunningHub: mất kết nối hoặc mạng chập chờn lúc chờ kết quả không còn làm hỏng cả lệnh — app tiếp tục theo dõi và nạp ảnh khi task trên cloud chạy xong",
-    "Hết cảnh \"app báo thất bại nhưng nhật ký vẫn báo đang chạy\": server tự chốt trạng thái lệnh ngay khi có kết quả, kể cả khi giao diện đã rớt kết nối",
-    "Lỗi thật (sai node, sai API key, task lỗi) vẫn báo ngay như cũ"
+    "Mã aPix mở khoá workflow VIP độc quyền của SDVN (Upscale, Swapface…) — phân phối tại hungdiffusion.com",
+    "Tự bật ComfyUI trên máy từ thư mục clone/portable, tự cài node SDVN; Colab một chạm",
+    "Template mặc định tải từ server (Qwen Image 2.1 Edit, Flux2 Klein Edit, Z Image, Minimax H3…), hỗ trợ video · âm thanh · 3D",
+    "Trình tạo template nâng cấp: trường ẩn, menu-sub kéo thả, model SDVN trong menu-sub"
   ],
-  "downloadUrl": "https://github.com/StableDiffusionVN/aPix_Builder/releases/download/v1.4.3/aPix.Builder-1.4.3-arm64.dmg",
-  "downloadUrlWin": "https://github.com/StableDiffusionVN/aPix_Builder/releases/download/v1.4.3/aPix.Builder-1.4.3-x64-portable.exe",
-  "releasePageUrl": "https://github.com/StableDiffusionVN/aPix_Builder/releases/tag/v1.4.3",
+  "downloadUrl": "https://github.com/StableDiffusionVN/aPix_Builder/releases/download/v2.0.0/aPix.Builder-2.0.0-arm64.dmg",
+  "downloadUrlWin": "https://github.com/StableDiffusionVN/aPix_Builder/releases/download/v2.0.0/aPix.Builder-2.0.0-x64-portable.exe",
+  "releasePageUrl": "https://github.com/StableDiffusionVN/aPix_Builder/releases/tag/v2.0.0",
   "mandatory": false
 }

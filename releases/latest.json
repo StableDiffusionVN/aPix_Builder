@@ -1,15 +1,15 @@
 {
-  "version": "2.0.0",
-  "label": "v2.0.0",
-  "publishedAt": "2026-11-09T11:37:12.963Z",
+  "version": "2.0.1",
+  "label": "v2.0.1",
+  "publishedAt": "2026-11-11T08:40:30.000Z",
   "notes": [
+    "Lịch sử mượt hơn khi có nhiều ảnh lớn: thumbnail nhỏ tạo sẵn, không còn tải ảnh gốc vài MB cho mỗi ô",
     "Mã aPix mở khoá workflow VIP độc quyền của SDVN (Upscale, Swapface…) — phân phối tại hungdiffusion.com",
     "Tự bật ComfyUI trên máy từ thư mục clone/portable, tự cài node SDVN; Colab một chạm",
-    "Template mặc định tải từ server (Qwen Image 2.1 Edit, Flux2 Klein Edit, Z Image, Minimax H3…), hỗ trợ video · âm thanh · 3D",
-    "Trình tạo template nâng cấp: trường ẩn, menu-sub kéo thả, model SDVN trong menu-sub"
+    "Template mặc định tải từ server (Qwen Image 2.1 Edit, Flux2 Klein Edit, Z Image, Minimax H3…), hỗ trợ video · âm thanh · 3D"
   ],
-  "downloadUrl": "https://github.com/StableDiffusionVN/aPix_Builder/releases/download/v2.0.0/aPix.Builder-2.0.0-arm64.dmg",
-  "downloadUrlWin": "https://github.com/StableDiffusionVN/aPix_Builder/releases/download/v2.0.0/aPix.Builder-2.0.0-x64-portable.exe",
-  "releasePageUrl": "https://github.com/StableDiffusionVN/aPix_Builder/releases/tag/v2.0.0",
+  "downloadUrl": "https://github.com/StableDiffusionVN/aPix_Builder/releases/download/v2.0.1/aPix.Builder-2.0.1-arm64.dmg",
+  "downloadUrlWin": "https://github.com/StableDiffusionVN/aPix_Builder/releases/download/v2.0.1/aPix.Builder-2.0.1-x64-portable.exe",
+  "releasePageUrl": "https://github.com/StableDiffusionVN/aPix_Builder/releases/tag/v2.0.1",
   "mandatory": false
 }

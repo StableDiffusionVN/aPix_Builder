@@ -27,6 +27,7 @@ import { fetchRhWebappDetail } from "../lib/rhLibrary.js";
 import { normalizeValues } from "../lib/comfyClient.js";
 import { mapValuesToRequest } from "../lib/workflowPatcher.js";
 import { decorateCanvasHistoryItem, mergeCanvasHistoryItem } from "../lib/canvasHistory.js";
+import { warmOutputThumb } from "../lib/outputThumbs.js";
 
 const runningHubTimeoutMs = Number(process.env.RUNNINGHUB_TIMEOUT_MS || 20 * 60 * 1000);
 
@@ -344,6 +345,7 @@ export function createRunningHubService({ storage, runCoordinator, readBody, sen
         const downloaded = Buffer.from(await response.arrayBuffer());
         const buffer = stitch ? await stitch(downloaded) : downloaded;
         await writeFile(path.join(outputDir, filename), buffer);
+        warmOutputThumb(outputDir, filename);
         archivedOutputs.push({
           nodeId: output.nodeId || "runninghub",
           kind,

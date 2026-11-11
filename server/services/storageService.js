@@ -10,7 +10,7 @@ import { localImageRefToUpload } from "../lib/localImageRef.js";
 import { parseDataUrl } from "../lib/comfyClient.js";
 import { scanLocalImageFolder } from "../lib/localImageFolder.js";
 import { safeFileName } from "../lib/fileNames.js";
-import { getOutputThumb, removeOutputThumbs } from "../lib/outputThumbs.js";
+import { getOutputThumb, removeOutputThumbs, warmOutputThumb } from "../lib/outputThumbs.js";
 import { createTemplateService } from "../lib/templateService.js";
 import { normalizeCanvasHistory } from "../lib/canvasHistory.js";
 import { atomicWriteFile, readJsonFileWithBackup } from "../lib/atomicFile.js";
@@ -1402,6 +1402,7 @@ export function createStorageService({ resourceRoot, dataRoot, readBody, send, h
     const filename = safeFileName(targetOutput.filename);
     await mkdir(outputDir, { recursive: true });
     await writeFile(path.join(outputDir, filename), parsed.buffer);
+    warmOutputThumb(outputDir, filename);
 
     const updatedOutput = {
       ...targetOutput,
@@ -1442,6 +1443,7 @@ export function createStorageService({ resourceRoot, dataRoot, readBody, send, h
     const base = sourceName.replace(/\.[^.]+$/, "") || "output";
     const filename = `${Date.now()}_${runId}_0_${base}_edited.${extension}`;
     await writeFile(path.join(outputDir, filename), parsed.buffer);
+    warmOutputThumb(outputDir, filename);
 
     const outputs = [{
       nodeId: "image-editor",

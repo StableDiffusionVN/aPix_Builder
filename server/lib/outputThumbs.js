@@ -82,3 +82,14 @@ export async function removeOutputThumbs(outputDir, filename) {
     .filter(name => name.startsWith(prefix) && /^\d+-\d+\.jpg$/.test(name.slice(prefix.length)))
     .map(name => rm(path.join(dir, name), { force: true })));
 }
+
+/**
+ * Fire-and-forget: build the thumbnail right after an output is saved, so the
+ * history tile is ready (no blank wait) the first time history is opened.
+ */
+export function warmOutputThumb(outputDir, filename) {
+  if (!outputDir || !SUPPORTED.test(filename || "")) return;
+  stat(path.join(outputDir, filename))
+    .then(fileStat => getOutputThumb(outputDir, filename, fileStat))
+    .catch(() => {});
+}

@@ -30,6 +30,7 @@ import {
 } from "../lib/workflowPatcher.js";
 import { decorateCanvasHistoryItem, mergeCanvasHistoryItem } from "../lib/canvasHistory.js";
 import { acquireRunLease, pushApixKey } from "../lib/apixLicense.js";
+import { warmOutputThumb } from "../lib/outputThumbs.js";
 
 const comfyTimeoutMs = Number(process.env.COMFY_TIMEOUT_MS || 10 * 60 * 1000);
 
@@ -313,6 +314,7 @@ export function createComfyService({ storage, runCoordinator, readBody, send }) 
           const downloaded = Buffer.from(await response.arrayBuffer());
           const buffer = stitch ? await stitch(downloaded) : downloaded;
           await writeFile(path.join(outputDir, filename), buffer);
+          warmOutputThumb(outputDir, filename);
           archivedOutputs.push({
             nodeId,
             kind: media.kind,

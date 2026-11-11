@@ -3,7 +3,7 @@ import { Jimp } from "jimp";
 import { mkdtemp, readdir, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { getOutputThumb, removeOutputThumbs, THUMB_SIZE } from "../server/lib/outputThumbs.js";
+import { getOutputThumb, removeOutputThumbs, THUMB_SIZE, warmOutputThumb } from "../server/lib/outputThumbs.js";
 import { outputThumbUrl } from "../src/lib/mediaKind.js";
 
 describe("output thumbnails", () => {
@@ -23,6 +23,13 @@ describe("output thumbnails", () => {
     expect(Math.min(thumb.bitmap.width, thumb.bitmap.height)).toBe(THUMB_SIZE);
     expect((await stat(a)).size).toBeLessThan(st.size / 5);
 
+    await removeOutputThumbs(dir, "big.png");
+    expect(await readdir(path.join(dir, ".thumbs"))).toEqual([]);
+
+    // Saving an output pre-builds its thumbnail in the background.
+    warmOutputThumb(dir, "big.png");
+    for (let i = 0; i < 100 && !(await readdir(path.join(dir, ".thumbs"))).length; i++) await new Promise(r => setTimeout(r, 50));
+    expect((await readdir(path.join(dir, ".thumbs"))).length).toBe(1);
     await removeOutputThumbs(dir, "big.png");
     expect(await readdir(path.join(dir, ".thumbs"))).toEqual([]);
   }, 30000);

@@ -10,6 +10,7 @@ import { localImageRefToUpload } from "../lib/localImageRef.js";
 import { parseDataUrl } from "../lib/comfyClient.js";
 import { scanLocalImageFolder } from "../lib/localImageFolder.js";
 import { safeFileName } from "../lib/fileNames.js";
+import { getOutputThumb, removeOutputThumbs } from "../lib/outputThumbs.js";
 import { createTemplateService } from "../lib/templateService.js";
 import { normalizeCanvasHistory } from "../lib/canvasHistory.js";
 import { atomicWriteFile, readJsonFileWithBackup } from "../lib/atomicFile.js";
@@ -1345,6 +1346,14 @@ export function createStorageService({ resourceRoot, dataRoot, readBody, send, h
       send(res, 400, { error: "Invalid output image path" });
       return;
     }
+    if (url.searchParams.get("thumb") === "1") {
+      const fileStat = await stat(filePath).catch(() => null);
+      const thumbPath = fileStat?.isFile() ? await getOutputThumb(outputDir, filename, fileStat) : null;
+      if (thumbPath) {
+        await serveLocalImageFile(req, res, thumbPath, path.basename(thumbPath));
+        return;
+      }
+    }
     await serveLocalImageFile(req, res, filePath, filename);
   }
 
@@ -1356,7 +1365,10 @@ export function createStorageService({ resourceRoot, dataRoot, readBody, send, h
     if (targetItem) {
       await Promise.all((targetItem.outputs || []).map(output => (
         output.filename
-          ? rm(path.join(outputDir, safeFileName(output.filename)), { force: true })
+          ? Promise.all([
+            rm(path.join(outputDir, safeFileName(output.filename)), { force: true }),
+            removeOutputThumbs(outputDir, safeFileName(output.filename))
+          ])
           : Promise.resolve()
       )));
     }

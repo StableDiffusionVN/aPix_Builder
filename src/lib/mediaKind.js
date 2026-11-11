@@ -43,3 +43,14 @@ export function isPlayableMedia(url = "") {
 export function isImageOutput(output) {
   return outputMediaKind(output) === "image";
 }
+
+/**
+ * Small cached thumbnail url for a local output image (history tiles). Loading the
+ * full-size file for a 52px tile made history stutter with many large images.
+ * Non-local urls (remote, data:) are returned unchanged.
+ */
+export function outputThumbUrl(url = "") {
+  const value = String(url || "");
+  if (!value.startsWith("/api/output-image?") || /[?&]thumb=1(&|$)/.test(value)) return value;
+  return `${value}&thumb=1`;
+}

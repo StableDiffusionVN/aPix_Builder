@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { ColorPickCursorOverlay } from "./colorPickUi";
 import { useI18n } from "../i18n/I18nContext";
-import { outputMediaKind } from "../lib/mediaKind";
+import { outputMediaKind, outputThumbUrl } from "../lib/mediaKind";
 import { OutputMediaThumb, OutputMediaView } from "./OutputMediaView.jsx";
 import { RunningHubRunningState } from "./RunningHubRunningState";
 import { RunLogPanel } from "./lazyModals";
@@ -265,7 +265,7 @@ export function PreviewPanel({
                   {outputMediaKind(output) !== "image" ? (
                     <OutputMediaThumb output={output} />
                   ) : (
-                    <img src={output.url} alt={output.filename || `Output ${index + 1}`} draggable="false" />
+                    <img src={outputThumbUrl(output.url)} alt={output.filename || `Output ${index + 1}`} draggable="false" decoding="async" />
                   )}
                 </button>
               ))}

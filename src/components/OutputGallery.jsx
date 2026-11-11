@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { Download, Filter, History, Loader2, Star, Workflow, X } from "lucide-react";
 import { useI18n } from "../i18n/I18nContext";
 import { getSetting, setSetting } from "../lib/appSettings.js";
-import { outputMediaKind } from "../lib/mediaKind.js";
+import { outputMediaKind, outputThumbUrl } from "../lib/mediaKind.js";
 import { OutputMediaThumb } from "./OutputMediaView.jsx";
 
 function formatTime(value, locale) {
@@ -231,7 +231,7 @@ export function OutputGallery({
                     <OutputMediaThumb output={primaryOutput} />
                   ) : (
                     <img
-                      src={primaryOutput.url}
+                      src={outputThumbUrl(primaryOutput.url)}
                       alt={primaryOutput.filename || item.templateName}
                       draggable="false"
                       loading="lazy"

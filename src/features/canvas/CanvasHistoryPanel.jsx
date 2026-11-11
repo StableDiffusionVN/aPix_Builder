@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Loader2, RefreshCcw, ScrollText } from "lucide-react";
 import { ImageLightboxOverlay } from "../../components/ImageLightboxOverlay.jsx";
 import { useI18n } from "../../i18n/I18nContext.jsx";
-import { outputMediaKind } from "../../lib/mediaKind.js";
+import { outputMediaKind, outputThumbUrl } from "../../lib/mediaKind.js";
 import { OutputMediaThumb } from "../../components/OutputMediaView.jsx";
 
 function formatTime(value, locale) {
@@ -128,7 +128,7 @@ export function CanvasHistoryPanel({
                       {thumb ? (
                         outputMediaKind(outputs[0]) !== "image"
                           ? <OutputMediaThumb output={outputs[0]} />
-                          : <img src={thumb} alt="" draggable="false" loading="lazy" decoding="async" />
+                          : <img src={outputThumbUrl(thumb)} alt="" draggable="false" loading="lazy" decoding="async" />
                       ) : <div className="canvasHistoryOutputPlaceholder" />}
                       <div className="canvasHistoryOutputMeta">
                         <strong>{outputName}</strong>
